@@ -107,7 +107,36 @@ export const Layout = () =>  {
             icon: <FolderIcon />,
             path: 'products'
         },
-        
+        {
+            key: 'suppliers',
+            label: 'Suppliers', 
+            icon: <People />,
+            path: 'suppliers'
+        },
+        {
+            key: 'purchases',
+            label: 'Purchases', 
+            icon: <ShoppingCart />,
+            path: 'purchases'
+        },
+        {
+            key: 'payments',
+            label: 'Payments', 
+            icon: <Payment />,
+            path: 'payments'
+        },
+        {
+            key: 'reports',
+            label: 'Reports', 
+            icon: <Assessment />,
+            path: 'reports'
+        },
+        {
+            key: 'tally-export',
+            label: 'Tally Export', 
+            icon: <CloudDownload />,
+            path: 'tally-export'
+        },
     ]
 
     useEffect(()=>{
