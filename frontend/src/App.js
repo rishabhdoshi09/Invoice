@@ -28,6 +28,11 @@ function App() {
                 <Route index path={''} element={<ListOrders />} />
                 <Route path={'create'} element={<CreateOrder />} />
               </Route>
+              <Route path={'suppliers'} element={<ListSuppliers />} />
+              <Route path={'purchases'} element={<ListPurchases />} />
+              <Route path={'payments'} element={<ListPayments />} />
+              <Route path={'reports'} element={<OutstandingReports />} />
+              <Route path={'tally-export'} element={<TallyExport />} />
             </Route>
           </Routes>
         </BrowserRouter>
