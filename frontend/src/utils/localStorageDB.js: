@@ -1,0 +1,40 @@
+// src/utils/localStorageDB.js
+
+const localStorageDB = {
+  setItem: (key, value) => {
+    try {
+      const storedValue = typeof value === 'string' ? value : JSON.stringify(value);
+      localStorage.setItem(key, storedValue);
+    } catch (err) {
+      console.error('Error saving to localStorage', err);
+    }
+  },
+
+  getItem: (key) => {
+    try {
+      const value = localStorage.getItem(key);
+      return value ? JSON.parse(value) : null;
+    } catch (err) {
+      console.error('Error reading from localStorage', err);
+      return null;
+    }
+  },
+
+  removeItem: (key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch (err) {
+      console.error('Error removing from localStorage', err);
+    }
+  },
+
+  clearAll: () => {
+    try {
+      localStorage.clear();
+    } catch (err) {
+      console.error('Error clearing localStorage', err);
+    }
+  }
+};
+
+export default localStorageDB;

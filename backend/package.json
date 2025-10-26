@@ -1,0 +1,34 @@
+{
+  "name": "rydeu_email_micro-service",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "migrations": "npx sequelize db:migrate"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.19.0",
+    "compression": "^1.7.4",
+    "cookie-parser": "^1.4.5",
+    "cors": "^2.8.5",
+    "dotenv": "^8.2.0",
+    "express": "^4.17.1",
+    "glob": "^7.1.6",
+    "joi": "^14.3.1",
+    "moment-timezone": "^0.5.34",
+    "morgan": "^1.10.0",
+    "pg": "^8.5.1",
+    "pg-hstore": "^2.3.3",
+    "sequelize": "^5.21.8",
+    "sequelize-cli": "^6.5.2",
+    "serialport": "^12.0.0",
+    "uuid": "^3.3.3",
+    "winston": "^3.7.2",
+    "winston-loggly-bulk": "^3.2.1",
+    "winston-papertrail": "^1.0.5"
+  }
+}
