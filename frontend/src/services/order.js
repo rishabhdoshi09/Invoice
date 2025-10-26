@@ -3,7 +3,7 @@ import axios from "axios";
 
 export const listOrders = async (filters) => {
     try{
-        const { data: { data: { count, rows }}} = await axios.get('http://localhost:9000/api/orders', {
+        const { data: { data: { count, rows }}} = await axios.get('/api/orders', {
             params: filters,
             headers: {
               'Content-Type': 'application/json'
@@ -21,7 +21,7 @@ export const listOrders = async (filters) => {
 
 export const createOrder = async (payload) => {
     try{
-        const response = await axios.post('http://localhost:9000/api/orders', payload, {
+        const response = await axios.post('/api/orders', payload, {
             headers: {
               'Content-Type': 'application/json'
             }
@@ -35,7 +35,7 @@ export const createOrder = async (payload) => {
 
 export const deleteOrder = async (orderId) => {
     try{
-        await axios.delete(`http://localhost:9000/api/orders/${orderId}`, {
+        await axios.delete(`/api/orders/${orderId}`, {
             headers: {
               'Content-Type': 'application/json'
             }
@@ -48,7 +48,7 @@ export const deleteOrder = async (orderId) => {
 
 export const fetchWeights = async () => {
     try{
-        const response = await axios.get('http://localhost:9000/api/weights', {
+        const response = await axios.get('/api/weights', {
             headers: {
               'Content-Type': 'application/json'
             }

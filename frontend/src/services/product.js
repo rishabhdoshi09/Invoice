@@ -3,7 +3,7 @@ import axios from "axios";
 
 export const listProducts = async (filters) => {
     try{
-        const { data: { data: { count, rows }}} = await axios.get('http://localhost:9000/api/products', {
+        const { data: { data: { count, rows }}} = await axios.get('/api/products', {
             headers: {
               'Content-Type': 'application/json'
             }
@@ -20,7 +20,7 @@ export const listProducts = async (filters) => {
 
 export const addProduct = async (payload) => {
     try{
-        await axios.post('http://localhost:9000/api/products', payload, {
+        await axios.post('/api/products', payload, {
             headers: {
               'Content-Type': 'application/json'
             }
@@ -33,7 +33,7 @@ export const addProduct = async (payload) => {
 
 export const updateProduct = async (productId, payload) => {
     try{
-        await axios.put(`http://localhost:9000/api/products/${productId}`, payload, {
+        await axios.put(`/api/products/${productId}`, payload, {
             headers: {
               'Content-Type': 'application/json'
             }
@@ -46,7 +46,7 @@ export const updateProduct = async (productId, payload) => {
 
 export const deleteProduct = async (productId) => {
     try{
-        await axios.delete(`http://localhost:9000/api/products/${productId}`, {
+        await axios.delete(`/api/products/${productId}`, {
             headers: {
               'Content-Type': 'application/json'
             }
@@ -59,7 +59,7 @@ export const deleteProduct = async (productId) => {
 
 export const getProduct = async (productId) => {
     try{
-        const res = await axios.get(`http://localhost:9000/api/products/${productId}`, {
+        const res = await axios.get(`/api/products/${productId}`, {
             headers: {
               'Content-Type': 'application/json'
             }
