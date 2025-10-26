@@ -7,6 +7,11 @@ import { Provider } from "react-redux";
 import store from "./store";
 import { ListOrders } from "./components/admin/orders/list";
 import { CreateOrder } from "./components/admin/orders/create";
+import { ListSuppliers } from "./components/admin/suppliers/list";
+import { ListPurchases } from "./components/admin/purchases/list";
+import { ListPayments } from "./components/admin/payments/list";
+import { OutstandingReports } from "./components/admin/reports/outstanding";
+import { TallyExport } from "./components/admin/tally/export";
 
 
 const theme = createTheme();
