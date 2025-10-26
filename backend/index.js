@@ -22,7 +22,7 @@ app.use(express.urlencoded({ limit: '100mb', extended: false, parameterLimit: 50
 app.use(cookieParser());
 app.use(compression());
 
-const PORT = 9000;
+const PORT = 8001;
 
 app.listen(PORT, () => {
     db.sequelize
