@@ -1,18 +1,25 @@
-import { Box, Button, Card, CardContent, Modal, Paper, TableContainer, Table, TableHead, TableBody, TableCell, TableRow  } from '@mui/material';
+import { Box, Button, Card, CardContent, Modal, Paper, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, Typography, Chip, Divider  } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useState, Children } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CreateProduct } from './create';
 import { EditProduct } from './edit';
 import { deleteProductAction } from '../../../store/products';
+import { Edit as EditIcon } from '@mui/icons-material';
 
 
 export const ListProjects = () => {  
   
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const [editProductId, setEditProductId] = useState('');
   const [open, setOpen] = useState(false);
   
   const { products: { rows} } = useSelector(state => state.productState);
+  
+  // Separate products by price
+  const highValueProducts = Object.values(rows).filter(p => p.pricePerKg >= 300);
+  const regularProducts = Object.values(rows).filter(p => p.pricePerKg < 300);
 
   return (
     <>
