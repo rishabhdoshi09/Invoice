@@ -1,11 +1,11 @@
-import { Box, Button, Card, CardContent, Modal, Paper, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, Typography, Chip, Divider  } from '@mui/material';
+import { Box, Button, Card, CardContent, Modal, Paper, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, Typography, Chip, Divider, TextField, List, ListItem, ListItemButton, ListItemText  } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
-import { useState, Children } from 'react';
+import { useState, Children, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CreateProduct } from './create';
 import { EditProduct } from './edit';
 import { deleteProductAction } from '../../../store/products';
-import { Edit as EditIcon } from '@mui/icons-material';
+import { Edit as EditIcon, Search as SearchIcon } from '@mui/icons-material';
 
 
 export const ListProjects = () => {  
@@ -14,12 +14,41 @@ export const ListProjects = () => {
   const navigate = useNavigate();
   const [editProductId, setEditProductId] = useState('');
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [showResults, setShowResults] = useState(false);
   
   const { products: { rows} } = useSelector(state => state.productState);
   
   // Separate products by price
   const highValueProducts = Object.values(rows).filter(p => p.pricePerKg >= 300);
   const regularProducts = Object.values(rows).filter(p => p.pricePerKg < 300);
+
+  // Search functionality
+  useEffect(() => {
+    if (searchQuery.trim().length > 0) {
+      const allProducts = Object.values(rows);
+      const filtered = allProducts.filter(p => 
+        p.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setSearchResults(filtered);
+      setShowResults(true);
+
+      // Auto-navigate if exactly one match and it's high-value
+      if (filtered.length === 1 && filtered[0].pricePerKg >= 300) {
+        setTimeout(() => {
+          navigate(`/products/edit-price/${filtered[0].id}`);
+        }, 500);
+      }
+    } else {
+      setSearchResults([]);
+      setShowResults(false);
+    }
+  }, [searchQuery, rows, navigate]);
+
+  const handleQuickEdit = (productId) => {
+    navigate(`/products/edit-price/${productId}`);
+  };
 
   return (
     <>
