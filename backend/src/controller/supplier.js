@@ -12,6 +12,11 @@ module.exports = {
                 });
             }
 
+            // Set currentBalance equal to openingBalance if provided
+            if (value.openingBalance !== undefined) {
+                value.currentBalance = value.openingBalance;
+            }
+
             const response = await Services.supplier.createSupplier(value);
 
             return res.status(200).send({
