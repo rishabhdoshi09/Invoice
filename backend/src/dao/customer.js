@@ -35,7 +35,7 @@ module.exports = {
             return res;
         } catch (error) {
             console.log(error);
-            throw new Error(error);
+            throw error;  // Throw the original error, not wrapped
         }
     },
     listCustomers: async (filterObj) => {
