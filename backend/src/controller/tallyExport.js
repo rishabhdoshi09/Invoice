@@ -98,6 +98,90 @@ module.exports = {
         }
     },
 
+    exportSelectedSales: async (req, res) => {
+        try {
+            const { ids } = req.body;
+
+            if (!ids || !Array.isArray(ids) || ids.length === 0) {
+                return res.status(400).send({
+                    status: 400,
+                    message: 'Please provide an array of order IDs to export'
+                });
+            }
+
+            const orders = await db.order.findAll({
+                where: {
+                    id: {
+                        [db.Sequelize.Op.in]: ids
+                    }
+                },
+                include: [{ model: db.orderItems }],
+                order: [['orderDate', 'ASC']]
+            });
+
+            const headers = [
+                'Date', 'Invoice No', 'Customer Name', 'Customer Mobile', 
+                'Item Name', 'Quantity', 'Rate', 'Amount', 
+                'Tax %', 'Tax Amount', 'Total', 
+                'Paid Amount', 'Due Amount', 'Payment Status'
+            ];
+
+            const rows = [];
+            orders.forEach(order => {
+                if (order.orderItems && order.orderItems.length > 0) {
+                    order.orderItems.forEach((item, index) => {
+                        rows.push([
+                            order.orderDate,
+                            index === 0 ? order.orderNumber : '',
+                            index === 0 ? order.customerName || '' : '',
+                            index === 0 ? order.customerMobile || '' : '',
+                            item.name,
+                            item.quantity,
+                            item.productPrice,
+                            item.totalPrice,
+                            index === 0 ? order.taxPercent : '',
+                            index === 0 ? order.tax : '',
+                            index === 0 ? order.total : '',
+                            index === 0 ? (order.paidAmount || 0) : '',
+                            index === 0 ? (order.dueAmount || 0) : '',
+                            index === 0 ? (order.paymentStatus || 'paid') : ''
+                        ]);
+                    });
+                } else {
+                    rows.push([
+                        order.orderDate,
+                        order.orderNumber,
+                        order.customerName || '',
+                        order.customerMobile || '',
+                        '',
+                        '',
+                        '',
+                        '',
+                        order.taxPercent,
+                        order.tax,
+                        order.total,
+                        order.paidAmount || 0,
+                        order.dueAmount || 0,
+                        order.paymentStatus || 'paid'
+                    ]);
+                }
+            });
+
+            const csv = convertToCSV(headers, rows);
+
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename=tally_sales_export.csv');
+            return res.status(200).send(csv);
+
+        } catch (error) {
+            console.log(error);
+            return res.status(500).send({
+                status: 500,
+                message: error.message
+            });
+        }
+    },
+
     exportPurchases: async (req, res) => {
         try {
             const { startDate, endDate } = req.query;
