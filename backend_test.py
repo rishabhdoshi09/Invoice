@@ -295,14 +295,14 @@ class BackendTester:
                     "quantity": 10,
                     "price": 500,
                     "totalPrice": 5000,
-                    "type": "product"
+                    "type": "weighted"
                 },
                 {
                     "name": "Stationery Items",
                     "quantity": 20,
                     "price": 250,
                     "totalPrice": 5000,
-                    "type": "product"
+                    "type": "non-weighted"
                 }
             ]
         }
