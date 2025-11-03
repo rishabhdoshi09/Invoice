@@ -434,6 +434,227 @@ class BackendTester:
             error_msg = response.text if response else "Connection failed"
             self.log_result("Outstanding Payables Report", False, f"Request failed: {error_msg}")
     
+    def test_product_management(self):
+        """Test product management CRUD operations"""
+        print("\n=== TESTING PRODUCT MANAGEMENT ===")
+        
+        # Test 1: Create weighted product
+        product_data = {
+            "name": "Premium Rice",
+            "pricePerKg": 85.50,
+            "type": "weighted"
+        }
+        
+        response = self.make_request('POST', '/products', product_data)
+        if response and response.status_code == 200:
+            response_json = response.json()
+            if response_json.get('status') == 200 and 'data' in response_json:
+                product_id = response_json['data'].get('id')
+                self.log_result("Create Weighted Product", True, "Weighted product created successfully")
+                self.created_products = getattr(self, 'created_products', [])
+                self.created_products.append(product_id)
+            else:
+                self.log_result("Create Weighted Product", False, "Invalid response structure", response_json)
+        else:
+            error_msg = response.text if response else "Connection failed"
+            self.log_result("Create Weighted Product", False, f"Request failed: {error_msg}")
+        
+        # Test 2: Create non-weighted product
+        product_data_nonweighted = {
+            "name": "Notebook Pack",
+            "pricePerKg": 25.00,
+            "type": "non-weighted"
+        }
+        
+        response = self.make_request('POST', '/products', product_data_nonweighted)
+        if response and response.status_code == 200:
+            response_json = response.json()
+            if response_json.get('status') == 200 and 'data' in response_json:
+                product_id = response_json['data'].get('id')
+                self.log_result("Create Non-Weighted Product", True, "Non-weighted product created successfully")
+                self.created_products = getattr(self, 'created_products', [])
+                self.created_products.append(product_id)
+            else:
+                self.log_result("Create Non-Weighted Product", False, "Invalid response structure", response_json)
+        else:
+            error_msg = response.text if response else "Connection failed"
+            self.log_result("Create Non-Weighted Product", False, f"Request failed: {error_msg}")
+        
+        # Test 3: List products
+        response = self.make_request('GET', '/products')
+        if response and response.status_code == 200:
+            response_json = response.json()
+            if response_json.get('status') == 200 and 'data' in response_json:
+                products_count = len(response_json['data'])
+                self.log_result("List Products", True, f"Retrieved {products_count} products")
+            else:
+                self.log_result("List Products", False, "Invalid response structure", response_json)
+        else:
+            error_msg = response.text if response else "Connection failed"
+            self.log_result("List Products", False, f"Request failed: {error_msg}")
+        
+        # Test 4: Get product by ID
+        if hasattr(self, 'created_products') and self.created_products:
+            product_id = self.created_products[0]
+            response = self.make_request('GET', f'/products/{product_id}')
+            if response and response.status_code == 200:
+                response_json = response.json()
+                if response_json.get('status') == 200 and 'data' in response_json:
+                    self.log_result("Get Product by ID", True, "Product retrieved successfully")
+                else:
+                    self.log_result("Get Product by ID", False, "Invalid response structure", response_json)
+            else:
+                error_msg = response.text if response else "Connection failed"
+                self.log_result("Get Product by ID", False, f"Request failed: {error_msg}")
+        
+        # Test 5: Update product
+        if hasattr(self, 'created_products') and self.created_products:
+            product_id = self.created_products[0]
+            update_data = {"name": "Premium Basmati Rice", "pricePerKg": 95.00}
+            response = self.make_request('PUT', f'/products/{product_id}', update_data)
+            if response and response.status_code == 200:
+                response_json = response.json()
+                if response_json.get('status') == 200:
+                    self.log_result("Update Product", True, "Product updated successfully")
+                else:
+                    self.log_result("Update Product", False, "Update failed", response_json)
+            else:
+                error_msg = response.text if response else "Connection failed"
+                self.log_result("Update Product", False, f"Request failed: {error_msg}")
+        
+        # Test 6: Get weights (hardware feature - may not work in container)
+        response = self.make_request('GET', '/weights')
+        if response and response.status_code == 200:
+            response_json = response.json()
+            if response_json.get('status') == 200:
+                weight_value = response_json.get('data', {}).get('weight', 0)
+                self.log_result("Get Weights", True, f"Weight reading: {weight_value}")
+            else:
+                self.log_result("Get Weights", False, "Invalid response structure", response_json)
+        else:
+            error_msg = response.text if response else "Connection failed"
+            self.log_result("Get Weights", False, f"Request failed: {error_msg}")
+    
+    def test_order_management(self):
+        """Test order/sales management"""
+        print("\n=== TESTING ORDER MANAGEMENT ===")
+        
+        # Ensure we have products for order items
+        if not hasattr(self, 'created_products') or not self.created_products:
+            self.log_result("Order Management", False, "No products available for testing orders")
+            return
+        
+        # Test 1: Create order with items
+        order_data = {
+            "orderDate": datetime.now().strftime('%Y-%m-%d'),
+            "customerName": "Retail Customer",
+            "customerMobile": "9876543230",
+            "subTotal": 1000,
+            "total": 1180,  # Including tax
+            "tax": 180,
+            "taxPercent": 18,
+            "paidAmount": 1180,  # Fully paid
+            "orderItems": [
+                {
+                    "productId": self.created_products[0],
+                    "name": "Premium Rice",
+                    "quantity": 5,
+                    "productPrice": 85.50,
+                    "totalPrice": 427.50,
+                    "type": "weighted"
+                },
+                {
+                    "productId": self.created_products[1] if len(self.created_products) > 1 else self.created_products[0],
+                    "name": "Notebook Pack",
+                    "quantity": 23,
+                    "productPrice": 25.00,
+                    "totalPrice": 575.00,
+                    "type": "non-weighted"
+                }
+            ]
+        }
+        
+        response = self.make_request('POST', '/orders', order_data)
+        if response and response.status_code == 200:
+            response_json = response.json()
+            if response_json.get('status') == 200 and 'data' in response_json:
+                order_id = response_json['data'].get('id')
+                payment_status = response_json['data'].get('paymentStatus')
+                self.log_result("Create Order", True, f"Order created successfully with payment status: {payment_status}")
+                self.created_orders = getattr(self, 'created_orders', [])
+                self.created_orders.append(order_id)
+            else:
+                self.log_result("Create Order", False, "Invalid response structure", response_json)
+        else:
+            error_msg = response.text if response else "Connection failed"
+            self.log_result("Create Order", False, f"Request failed: {error_msg}")
+        
+        # Test 2: Create partial payment order
+        order_data_partial = {
+            "orderDate": datetime.now().strftime('%Y-%m-%d'),
+            "customerName": "Credit Customer",
+            "customerMobile": "9876543231",
+            "subTotal": 500,
+            "total": 590,
+            "tax": 90,
+            "taxPercent": 18,
+            "paidAmount": 300,  # Partial payment
+            "orderItems": [
+                {
+                    "productId": self.created_products[0],
+                    "name": "Premium Rice",
+                    "quantity": 2.5,
+                    "productPrice": 85.50,
+                    "totalPrice": 213.75,
+                    "type": "weighted"
+                }
+            ]
+        }
+        
+        response = self.make_request('POST', '/orders', order_data_partial)
+        if response and response.status_code == 200:
+            response_json = response.json()
+            if response_json.get('status') == 200 and 'data' in response_json:
+                order_id = response_json['data'].get('id')
+                payment_status = response_json['data'].get('paymentStatus')
+                due_amount = response_json['data'].get('dueAmount')
+                self.log_result("Create Partial Payment Order", True, f"Order created with payment status: {payment_status}, due: {due_amount}")
+                self.created_orders = getattr(self, 'created_orders', [])
+                self.created_orders.append(order_id)
+            else:
+                self.log_result("Create Partial Payment Order", False, "Invalid response structure", response_json)
+        else:
+            error_msg = response.text if response else "Connection failed"
+            self.log_result("Create Partial Payment Order", False, f"Request failed: {error_msg}")
+        
+        # Test 3: List orders
+        response = self.make_request('GET', '/orders')
+        if response and response.status_code == 200:
+            response_json = response.json()
+            if response_json.get('status') == 200 and 'data' in response_json:
+                orders_count = len(response_json['data'])
+                self.log_result("List Orders", True, f"Retrieved {orders_count} orders")
+            else:
+                self.log_result("List Orders", False, "Invalid response structure", response_json)
+        else:
+            error_msg = response.text if response else "Connection failed"
+            self.log_result("List Orders", False, f"Request failed: {error_msg}")
+        
+        # Test 4: Get order by ID
+        if hasattr(self, 'created_orders') and self.created_orders:
+            order_id = self.created_orders[0]
+            response = self.make_request('GET', f'/orders/{order_id}')
+            if response and response.status_code == 200:
+                response_json = response.json()
+                if response_json.get('status') == 200 and 'data' in response_json:
+                    order_items = response_json['data'].get('orderItems', [])
+                    self.log_result("Get Order by ID", True, f"Order retrieved with {len(order_items)} items")
+                else:
+                    self.log_result("Get Order by ID", False, "Invalid response structure", response_json)
+            else:
+                error_msg = response.text if response else "Connection failed"
+                self.log_result("Get Order by ID", False, f"Request failed: {error_msg}")
+
     def test_tally_export(self):
         """Test Tally export functionality"""
         print("\n=== TESTING TALLY EXPORT ===")
