@@ -38,10 +38,8 @@ export const TallyExport = () => {
     const fetchPurchases = async () => {
         try {
             setLoading(true);
-            const { data } = await axios.get('/api/purchase-bills', {
-                params: dateRange.startDate && dateRange.endDate ? dateRange : {}
-            });
-            setPurchases(data.data.rows || []);
+            const { rows } = await listPurchases(dateRange.startDate && dateRange.endDate ? dateRange : {});
+            setPurchases(rows || []);
         } catch (error) {
             console.error('Error fetching purchases:', error);
         } finally {
