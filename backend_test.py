@@ -741,9 +741,11 @@ class BackendTester:
         print("=" * 60)
         
         # Run tests in priority order
+        self.test_product_management()  # Test products first (needed for orders)
         self.test_supplier_management()
         self.test_customer_management()
         self.test_purchase_bill_management()
+        self.test_order_management()  # Test orders after products are created
         self.test_payment_management()
         self.test_reports()
         self.test_tally_export()
