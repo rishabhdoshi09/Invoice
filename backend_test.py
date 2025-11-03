@@ -363,8 +363,6 @@ class BackendTester:
             "amount": 2500,  # Partial payment
             "paymentDate": datetime.now().strftime('%Y-%m-%d'),
             "referenceType": "advance",  # Using advance since we don't have a specific purchase bill
-            "referenceId": "",
-            "referenceNumber": "",
             "notes": "Partial payment for outstanding bills"
         }
         
