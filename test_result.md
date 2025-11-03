@@ -197,7 +197,7 @@ backend:
 
   - task: "Order Management"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/src/controller/order.js"
     stuck_count: 0
     priority: "medium"
@@ -209,10 +209,13 @@ backend:
         - working: "NA"
           agent: "testing"
           comment: "Not tested in this session - focused on high priority supplier/customer opening balance features and related functionality."
+        - working: true
+          agent: "testing"
+          comment: "✅ COMPREHENSIVE TESTING PASSED: All order management APIs working correctly. CREATE order with full payment (status: paid), CREATE order with partial payment (status: partial, due amount calculated correctly), LIST orders, GET order by ID with order items all working. Payment status logic functioning properly."
 
   - task: "Product Management"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/src/controller/product.js"
     stuck_count: 0
     priority: "low"
@@ -224,6 +227,9 @@ backend:
         - working: "NA"
           agent: "testing"
           comment: "Not tested in this session - focused on high priority supplier/customer opening balance features and related functionality."
+        - working: true
+          agent: "testing"
+          comment: "✅ COMPREHENSIVE TESTING PASSED: All product management APIs working correctly. CREATE weighted product, CREATE non-weighted product, LIST products, GET product by ID, UPDATE product, DELETE product all working. Product types 'weighted' and 'non-weighted' validated. GET weights endpoint working (returns 0 in container environment - hardware feature)."
 
 frontend:
   - task: "Supplier UI"
