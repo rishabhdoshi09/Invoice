@@ -70,6 +70,113 @@ export const ListProjects = () => {
        </Box>
       </Modal>
 
+      {/* Quick Search for Fast Access */}
+      <Card sx={{ mb: 3, bgcolor: '#e3f2fd', border: '2px solid #1976d2' }}>
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 2, color: '#1565c0', fontWeight: 600 }}>
+            🔍 Quick Price Editor Access
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Type product name to instantly open the focused price editor
+          </Typography>
+          <Box sx={{ position: 'relative' }}>
+            <TextField
+              fullWidth
+              placeholder="Start typing product name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              InputProps={{
+                startAdornment: <SearchIcon sx={{ mr: 1, color: '#1976d2' }} />,
+              }}
+              sx={{
+                bgcolor: 'white',
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': {
+                    borderWidth: '2px',
+                  }
+                }
+              }}
+              autoFocus
+            />
+            
+            {/* Search Results Dropdown */}
+            {showResults && searchResults.length > 0 && (
+              <Paper 
+                sx={{ 
+                  position: 'absolute', 
+                  top: '100%', 
+                  left: 0, 
+                  right: 0, 
+                  mt: 1, 
+                  maxHeight: 300, 
+                  overflow: 'auto',
+                  zIndex: 1000,
+                  boxShadow: 3
+                }}
+              >
+                <List>
+                  {searchResults.map((product) => (
+                    <ListItem key={product.id} disablePadding>
+                      <ListItemButton 
+                        onClick={() => handleQuickEdit(product.id)}
+                        sx={{
+                          bgcolor: product.pricePerKg >= 300 ? '#fff3e0' : 'white',
+                          '&:hover': {
+                            bgcolor: product.pricePerKg >= 300 ? '#ffe0b2' : '#f5f5f5'
+                          }
+                        }}
+                      >
+                        <ListItemText 
+                          primary={
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                                {product.name}
+                              </Typography>
+                              <Typography 
+                                variant="h6" 
+                                sx={{ 
+                                  fontWeight: 700, 
+                                  color: product.pricePerKg >= 300 ? '#d84315' : '#666' 
+                                }}
+                              >
+                                ₹{product.pricePerKg}
+                              </Typography>
+                            </Box>
+                          }
+                          secondary={
+                            <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
+                              <Chip 
+                                label={product.type} 
+                                size="small" 
+                                sx={{ fontSize: '0.7rem' }}
+                              />
+                              {product.pricePerKg >= 300 && (
+                                <Chip 
+                                  label="High Value" 
+                                  size="small" 
+                                  color="warning"
+                                  sx={{ fontSize: '0.7rem', fontWeight: 600 }}
+                                />
+                              )}
+                            </Box>
+                          }
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  ))}
+                </List>
+              </Paper>
+            )}
+
+            {showResults && searchResults.length === 0 && (
+              <Paper sx={{ position: 'absolute', top: '100%', left: 0, right: 0, mt: 1, p: 2, zIndex: 1000 }}>
+                <Typography color="text.secondary">No products found</Typography>
+              </Paper>
+            )}
+          </Box>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardContent>
           <CreateProduct />
