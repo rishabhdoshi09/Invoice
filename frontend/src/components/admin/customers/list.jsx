@@ -92,7 +92,8 @@ export const ListCustomers = () => {
                 fetchCustomers();
             } catch (error) {
                 console.error('Error deleting customer:', error);
-                alert('Error deleting customer');
+                const errorMessage = error.response?.data?.message || 'Error deleting customer. Please try again.';
+                alert(errorMessage);
             }
         }
     };
