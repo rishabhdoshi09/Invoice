@@ -49,6 +49,86 @@ export const ListProjects = () => {
 
       <br></br>
 
+      {/* High-Value Products Section (≥300) */}
+      {highValueProducts.length > 0 && (
+        <>
+          <Card sx={{ mb: 3, bgcolor: '#fff3e0', border: '2px solid #ff9800' }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6" sx={{ color: '#e65100', fontWeight: 600 }}>
+                  ⚠️ High-Value Products (₹300+)
+                </Typography>
+                <Chip 
+                  label={`${highValueProducts.length} products`} 
+                  size="small" 
+                  sx={{ ml: 2, bgcolor: '#ff9800', color: 'white' }}
+                />
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                These products need extra attention. Use the focused price editor to avoid mistakes.
+              </Typography>
+              <TableContainer component={Paper}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell><b>Name</b></TableCell>
+                      <TableCell><b>Type</b></TableCell>
+                      <TableCell><b>Price / Kg</b></TableCell>
+                      <TableCell><b>Actions</b></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {
+                      Children.toArray(highValueProducts.map((productObj) => {
+                        return(
+                          <TableRow sx={{ bgcolor: 'white' }}>
+                            <TableCell sx={{ fontWeight: 600 }}>{productObj.name}</TableCell>
+                            <TableCell>{productObj.type.toUpperCase()}</TableCell>
+                            <TableCell>
+                              <Typography variant="body1" sx={{ fontWeight: 700, color: '#d84315', fontSize: '1.1rem' }}>
+                                ₹{productObj.pricePerKg}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Button 
+                                variant='contained' 
+                                color="warning"
+                                startIcon={<EditIcon />}
+                                sx={{ margin: '5px', fontWeight: 600 }} 
+                                onClick={() => navigate(`/products/edit-price/${productObj.id}`)}
+                              >
+                                Edit Price (Focused)
+                              </Button>
+                              <Button 
+                                variant='outlined' 
+                                sx={{margin: '5px'}} 
+                                onClick={()=>{ setEditProductId(productObj.id); setOpen(true)}}
+                              >
+                                Edit Details
+                              </Button>
+                              <Button 
+                                variant='outlined' 
+                                color="error"
+                                sx={{margin: '5px'}} 
+                                onClick={()=>{ dispatch(deleteProductAction(productObj.id))}}
+                              >
+                                Delete
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }))
+                    }
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </CardContent>
+          </Card>
+          <Divider sx={{ my: 3 }} />
+        </>
+      )}
+
+      {/* Regular Products Section */}
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
@@ -61,12 +141,12 @@ export const ListProjects = () => {
           </TableHead>
           <TableBody>
             {
-              Children.toArray(Object.values(rows).map((productObj) => {
+              Children.toArray(regularProducts.map((productObj) => {
                 return(
                   <TableRow>
                     <TableCell>{productObj.name}</TableCell>
                     <TableCell>{productObj.type.toUpperCase()}</TableCell>
-                    <TableCell>{productObj.pricePerKg}</TableCell>
+                    <TableCell>₹{productObj.pricePerKg}</TableCell>
                     <TableCell>
                       <Button variant='outlined' sx={{margin: '5px'}} onClick={()=>{ setEditProductId(productObj.id); setOpen(true)}}>Edit</Button>
                       <Button variant='outlined' sx={{margin: '5px'}} onClick={()=>{ dispatch(deleteProductAction(productObj.id))}}>Delete</Button>
