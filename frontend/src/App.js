@@ -3,6 +3,7 @@ import { createTheme, ThemeProvider } from "@mui/material";
 
 import { Layout } from "./components/admin/layout";
 import { ListProjects } from "./components/admin/products/list";
+import { FocusedPriceEdit } from "./components/admin/products/focused-price-edit";
 import { Provider } from "react-redux";
 import store from "./store";
 import { ListOrders } from "./components/admin/orders/list";
@@ -26,6 +27,7 @@ function App() {
             <Route path={''} element={<Layout />} >
               <Route index element={<Navigate to="/products" replace />} />
               <Route path={'products'} element={<ListProjects />} />
+              <Route path={'products/edit-price/:productId'} element={<FocusedPriceEdit />} />
               <Route path={'orders'}>
                 <Route index path={''} element={<ListOrders />} />
                 <Route path={'create'} element={<CreateOrder />} />
