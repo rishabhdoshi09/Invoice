@@ -138,6 +138,14 @@ module.exports = {
             });
             
         } catch (error) {
+            // Check if it's a foreign key constraint error
+            if (error.name === 'SequelizeForeignKeyConstraintError' || error.original?.code === '23503') {
+                return res.status(400).send({
+                    status: 400,
+                    message: "Cannot delete supplier. This supplier has associated purchase bills. Please delete related purchase bills first."
+                });
+            }
+            
             return res.status(500).send({
                 status: 500,
                 message: error.message
