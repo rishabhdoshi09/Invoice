@@ -258,10 +258,8 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Supplier Management with Opening Balance"
-    - "Customer Management with Opening Balance"
-    - "Purchase Bill Management"
-    - "Payment Management"
+    - "Order Management"
+    - "Product Management"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
