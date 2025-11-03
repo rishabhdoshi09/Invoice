@@ -2,6 +2,7 @@
 import { useDispatch } from "react-redux";
 import { useFormik } from "formik";
 import { Box, Button, Grid, Select, MenuItem, TextField } from "@mui/material";
+import { useRef, useEffect } from "react";
 
 import { addProductAction } from "../../../store/products";
 import { ProductType } from "../../../enums/product";
@@ -9,6 +10,7 @@ import { ProductType } from "../../../enums/product";
 export const CreateProduct = () => {
 
     const dispatch = useDispatch();
+    const priceInputRef = useRef(null);
 
     const formik = useFormik({
         initialValues: {
@@ -30,8 +32,23 @@ export const CreateProduct = () => {
         onSubmit: async (values) => {
             await dispatch(addProductAction(values));
             formik.resetForm();
+            // Auto-focus price field after adding product
+            setTimeout(() => {
+                if (priceInputRef.current) {
+                    priceInputRef.current.focus();
+                }
+            }, 100);
         }
     });
+
+    // Auto-focus price field when name is entered (minimum 2 characters)
+    useEffect(() => {
+        if (formik.values.name.length >= 2 && !formik.values.pricePerKg) {
+            if (priceInputRef.current) {
+                priceInputRef.current.focus();
+            }
+        }
+    }, [formik.values.name, formik.values.pricePerKg]);
 
 
     return (    
@@ -64,6 +81,7 @@ export const CreateProduct = () => {
                         fullWidth
                         error={formik.errors.pricePerKg}
                         helperText={formik.errors.pricePerKg}
+                        inputRef={priceInputRef}
                     />
                 </Grid>
 
