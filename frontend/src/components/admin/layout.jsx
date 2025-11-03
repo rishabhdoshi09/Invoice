@@ -114,6 +114,12 @@ export const Layout = () =>  {
             path: 'suppliers'
         },
         {
+            key: 'customers',
+            label: 'Customers', 
+            icon: <People />,
+            path: 'customers'
+        },
+        {
             key: 'purchases',
             label: 'Purchases', 
             icon: <ShoppingCart />,
