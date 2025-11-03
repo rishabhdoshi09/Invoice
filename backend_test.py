@@ -359,10 +359,12 @@ class BackendTester:
         payment_data = {
             "partyType": "supplier",
             "partyId": self.created_suppliers[0],
+            "partyName": "ABC Traders Ltd",
             "amount": 2500,  # Partial payment
             "paymentDate": datetime.now().strftime('%Y-%m-%d'),
-            "paymentMethod": "bank_transfer",
-            "reference": f"PAY-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+            "referenceType": "advance",  # Using advance since we don't have a specific purchase bill
+            "referenceId": "",
+            "referenceNumber": "",
             "notes": "Partial payment for outstanding bills"
         }
         
