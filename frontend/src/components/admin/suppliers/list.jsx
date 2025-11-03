@@ -92,7 +92,8 @@ export const ListSuppliers = () => {
                 fetchSuppliers();
             } catch (error) {
                 console.error('Error deleting supplier:', error);
-                alert('Error deleting supplier');
+                const errorMessage = error.response?.data?.message || 'Error deleting supplier. Please try again.';
+                alert(errorMessage);
             }
         }
     };
