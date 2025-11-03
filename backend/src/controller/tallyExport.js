@@ -267,6 +267,95 @@ module.exports = {
         }
     },
 
+    exportSelectedPurchases: async (req, res) => {
+        try {
+            const { ids } = req.body;
+
+            if (!ids || !Array.isArray(ids) || ids.length === 0) {
+                return res.status(400).send({
+                    status: 400,
+                    message: 'Please provide an array of purchase bill IDs to export'
+                });
+            }
+
+            const purchases = await db.purchaseBill.findAll({
+                where: {
+                    id: {
+                        [db.Sequelize.Op.in]: ids
+                    }
+                },
+                include: [
+                    { model: db.purchaseItem },
+                    { model: db.supplier }
+                ],
+                order: [['billDate', 'ASC']]
+            });
+
+            const headers = [
+                'Date', 'Bill No', 'Supplier Name', 'Supplier Mobile', 'Supplier GSTIN',
+                'Item Name', 'Quantity', 'Rate', 'Amount', 
+                'Tax %', 'Tax Amount', 'Total', 
+                'Paid Amount', 'Due Amount', 'Payment Status'
+            ];
+
+            const rows = [];
+            purchases.forEach(purchase => {
+                if (purchase.purchaseItems && purchase.purchaseItems.length > 0) {
+                    purchase.purchaseItems.forEach((item, index) => {
+                        rows.push([
+                            purchase.billDate,
+                            index === 0 ? purchase.billNumber : '',
+                            index === 0 ? (purchase.supplier ? purchase.supplier.name : '') : '',
+                            index === 0 ? (purchase.supplier ? purchase.supplier.mobile : '') : '',
+                            index === 0 ? (purchase.supplier ? purchase.supplier.gstin : '') : '',
+                            item.name,
+                            item.quantity,
+                            item.price,
+                            item.totalPrice,
+                            index === 0 ? purchase.taxPercent : '',
+                            index === 0 ? purchase.tax : '',
+                            index === 0 ? purchase.total : '',
+                            index === 0 ? (purchase.paidAmount || 0) : '',
+                            index === 0 ? (purchase.dueAmount || 0) : '',
+                            index === 0 ? (purchase.paymentStatus || 'unpaid') : ''
+                        ]);
+                    });
+                } else {
+                    rows.push([
+                        purchase.billDate,
+                        purchase.billNumber,
+                        purchase.supplier ? purchase.supplier.name : '',
+                        purchase.supplier ? purchase.supplier.mobile : '',
+                        purchase.supplier ? purchase.supplier.gstin : '',
+                        '',
+                        '',
+                        '',
+                        '',
+                        purchase.taxPercent,
+                        purchase.tax,
+                        purchase.total,
+                        purchase.paidAmount || 0,
+                        purchase.dueAmount || 0,
+                        purchase.paymentStatus || 'unpaid'
+                    ]);
+                }
+            });
+
+            const csv = convertToCSV(headers, rows);
+
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename=tally_purchases_export.csv');
+            return res.status(200).send(csv);
+
+        } catch (error) {
+            console.log(error);
+            return res.status(500).send({
+                status: 500,
+                message: error.message
+            });
+        }
+    },
+
     exportPayments: async (req, res) => {
         try {
             const { startDate, endDate, partyType } = req.query;
