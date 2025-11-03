@@ -25,12 +25,10 @@ module.exports = (sequelize, Sequelize) => {
                 type: Sequelize.STRING
             },
             openingBalance: {
-                type: Sequelize.DOUBLE,
-                defaultValue: 0
+                type: Sequelize.DOUBLE
             },
             currentBalance: {
-                type: Sequelize.DOUBLE,
-                defaultValue: 0
+                type: Sequelize.DOUBLE
             }
         }
     );
