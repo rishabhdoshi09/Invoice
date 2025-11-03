@@ -700,6 +700,24 @@ class BackendTester:
         """Clean up test data"""
         print("\n=== CLEANING UP TEST DATA ===")
         
+        # Delete created orders first (they may reference products)
+        if hasattr(self, 'created_orders'):
+            for order_id in self.created_orders:
+                response = self.make_request('DELETE', f'/orders/{order_id}')
+                if response and response.status_code == 200:
+                    self.log_result("Cleanup Order", True, f"Order {order_id} deleted")
+                else:
+                    self.log_result("Cleanup Order", False, f"Failed to delete order {order_id}")
+        
+        # Delete created products
+        if hasattr(self, 'created_products'):
+            for product_id in self.created_products:
+                response = self.make_request('DELETE', f'/products/{product_id}')
+                if response and response.status_code == 200:
+                    self.log_result("Cleanup Product", True, f"Product {product_id} deleted")
+                else:
+                    self.log_result("Cleanup Product", False, f"Failed to delete product {product_id}")
+        
         # Delete created suppliers
         for supplier_id in self.created_suppliers:
             response = self.make_request('DELETE', f'/suppliers/{supplier_id}')
