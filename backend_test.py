@@ -283,21 +283,26 @@ class BackendTester:
         # Test 1: Create purchase bill
         purchase_data = {
             "supplierId": self.created_suppliers[0],
-            "billNumber": f"PB-{datetime.now().strftime('%Y%m%d%H%M%S')}",
             "billDate": datetime.now().strftime('%Y-%m-%d'),
-            "totalAmount": 10000,
-            "items": [
+            "subTotal": 10000,
+            "total": 11800,  # Including tax
+            "tax": 1800,
+            "taxPercent": 18,
+            "paidAmount": 0,
+            "purchaseItems": [
                 {
-                    "description": "Office Supplies",
+                    "name": "Office Supplies",
                     "quantity": 10,
-                    "rate": 500,
-                    "amount": 5000
+                    "price": 500,
+                    "totalPrice": 5000,
+                    "type": "product"
                 },
                 {
-                    "description": "Stationery Items",
+                    "name": "Stationery Items",
                     "quantity": 20,
-                    "rate": 250,
-                    "amount": 5000
+                    "price": 250,
+                    "totalPrice": 5000,
+                    "type": "product"
                 }
             ]
         }
