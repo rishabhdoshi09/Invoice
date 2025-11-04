@@ -1135,8 +1135,8 @@ export const CreateOrder = () => {
                   value={formik.values.productPrice} onChange={onPriceChange} onFocus={onPriceFocus} onBlur={onPriceBlur}
                   onPaste={onPasteHandler}
                   required fullWidth
-                  error={Boolean(isWeightedPriceInvalid) && formik.values.productPrice !== ""}
-                  helperText={isWeighted && formik.values.productPrice !== "" && isWeightedPriceInvalid ? 'Weighted: price must be 200–999' : ''}
+                  error={false}
+                  helperText={''}
                   inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', step: 1 }}
                   onKeyDown={onPriceKeyDown}
                 />
