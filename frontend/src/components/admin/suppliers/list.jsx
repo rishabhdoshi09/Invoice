@@ -86,15 +86,20 @@ export const ListSuppliers = () => {
     };
 
     const handleDelete = async (supplierId) => {
+        console.log('Delete clicked for supplier:', supplierId);
         if (window.confirm('Are you sure you want to delete this supplier?')) {
             try {
+                console.log('Calling deleteSupplier API...');
                 await deleteSupplier(supplierId);
+                console.log('Delete successful, refreshing list...');
                 fetchSuppliers();
             } catch (error) {
                 console.error('Error deleting supplier:', error);
                 const errorMessage = error.response?.data?.message || 'Error deleting supplier. Please try again.';
                 alert(errorMessage);
             }
+        } else {
+            console.log('Delete cancelled by user');
         }
     };
 
