@@ -6,13 +6,16 @@ import { EditProduct } from './edit';
 import { deleteProductAction } from '../../../store/products';
 
 
-export const ListProjects = () => {  
+export const ListProjects = () =>  {
   
   const dispatch = useDispatch();
   const [editProductId, setEditProductId] = useState('');
   const [open, setOpen] = useState(false);
   
   const { products: { rows} } = useSelector(state => state.productState);
+
+  // Check if the product being edited is high-value
+  const isHighValueProduct = editProductId && rows[editProductId] && rows[editProductId].pricePerKg >= 300;
 
   return (
     <>
@@ -24,11 +27,11 @@ export const ListProjects = () => {
           position: 'absolute',
           top: '50%',
           left: '50%',
-          width: "80%",
+          width: isHighValueProduct ? "60%" : "80%",
           transform: 'translate(-50%, -50%)',
-          bgcolor: 'background.paper',
+          bgcolor: isHighValueProduct ? 'white' : 'background.paper',
           boxShadow: 24,
-          p: 4,
+          p: isHighValueProduct ? 0 : 4,
         }}>
        <EditProduct productId={editProductId} />
        </Box>
