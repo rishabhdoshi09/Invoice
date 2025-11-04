@@ -405,7 +405,7 @@ export const CreateOrder = () => {
   });
 
   const isWeighted = (formik.values.type === ProductType.WEIGHTED || String(formik.values.type||'').toLowerCase()==='weighted');
-  const isWeightedPriceInvalid = Boolean(isWeighted && !(Number(formikSafeGet('productPrice')) >= 200 && priceIntPart >= 100 && priceIntPart <= 999));
+  const isWeightedPriceInvalid = false; // Validation removed - allow any valid price
   const isNameAdd = !formik.values.id;
   const isWeightReadOnly = Boolean(isWeighted && fetchedViaScale);
 
