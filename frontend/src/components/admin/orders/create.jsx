@@ -284,9 +284,8 @@ export const CreateOrder = () => {
 
       const priceNumLocal = Number(values?.productPrice) || 0;
       const intPart = Math.floor(Math.abs(priceNumLocal));
-      const invalid = (values?.type === ProductType.WEIGHTED || String(values?.type||'').toLowerCase()==='weighted')
-        && !(priceNumLocal >= 200 && intPart >= 100 && intPart <= 999);
-      if (invalid) { alert('Weighted product price must be 200–999.'); return; }
+      // Price validation removed - allow any valid price
+      if (priceNumLocal <= 0) { alert('Product price must be greater than 0.'); return; }
 
       const price = Number(values?.productPrice) || 0;
       const qty = Number(values?.quantity) || 0;
