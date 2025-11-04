@@ -17,8 +17,6 @@ export const ListSuppliers = () => {
         openingBalance: 0
     });
 
-    console.log('ListSuppliers rendered, suppliers count:', suppliers.length);
-
     const fetchSuppliers = async () => {
         try {
             setLoading(true);
