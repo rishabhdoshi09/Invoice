@@ -415,7 +415,26 @@ export const CreateOrder = () => {
   });
 
   const isWeighted = (formik.values.type === ProductType.WEIGHTED || String(formik.values.type||'').toLowerCase()==='weighted');
-  const isWeightedPriceInvalid = false; // Validation removed - allow any valid price
+  
+  // For weighted products: validate 3-digit price
+  const priceValue = Number(formikSafeGet('productPrice')) || 0;
+  const priceStr = String(priceValue);
+  const isWeightedPriceInvalid = Boolean(
+    isWeighted && 
+    (priceStr.length !== 3 || priceValue < 100 || priceValue > 999)
+  );
+  
+  // Get price range for weighted products (e.g., 250 -> 200-299)
+  const getPriceRange = (price) => {
+    if (!isWeighted || !price) return '';
+    const firstDigit = Math.floor(price / 100);
+    const rangeStart = firstDigit * 100;
+    const rangeEnd = rangeStart + 99;
+    return `${rangeStart}-${rangeEnd}`;
+  };
+  
+  const priceRange = getPriceRange(priceValue);
+  
   const isNameAdd = !formik.values.id;
   const isWeightReadOnly = Boolean(isWeighted && fetchedViaScale);
 
