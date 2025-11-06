@@ -261,7 +261,6 @@ export const CreateOrder = () => {
   function formikSafeGet(field) {
     try { return (formik && formik.values && formik.values[field]) || ""; } catch { return ""; }
   }
-  const priceIntPart = Math.floor(Math.abs(Number(formikSafeGet('productPrice')) || 0));
 
   const formik = useFormik({
     enableReinitialize: true,
