@@ -34,7 +34,10 @@ function App() {
               <Route path={'customers'} element={<ListCustomers />} />
               <Route path={'purchases'} element={<ListPurchases />} />
               <Route path={'payments'} element={<ListPayments />} />
-              <Route path={'reports'} element={<OutstandingReports />} />
+              <Route path={'reports'}>
+                <Route index element={<OutstandingReports />} />
+                <Route path={'outstanding'} element={<OutstandingReports />} />
+              </Route>
               <Route path={'tally-export'} element={<TallyExport />} />
             </Route>
           </Routes>
