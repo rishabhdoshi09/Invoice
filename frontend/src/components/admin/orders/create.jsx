@@ -1160,12 +1160,21 @@ export const CreateOrder = () => {
 
               <Grid item xs={12} md={6}>
                 <TextField
-                  type="number" size="small" id="productPrice" name="productPrice" label="Product Price (3-digit for weighted)"
+                  type="number" size="small" id="productPrice" name="productPrice" 
+                  label={isWeighted ? "Product Price (3-digit: 100-999)" : "Product Price"}
                   value={formik.values.productPrice} onChange={onPriceChange} onFocus={onPriceFocus} onBlur={onPriceBlur}
                   onPaste={onPasteHandler}
                   required fullWidth
-                  error={false}
-                  helperText={''}
+                  error={Boolean(isWeightedPriceInvalid) && formik.values.productPrice !== ""}
+                  helperText={
+                    isWeighted && formik.values.productPrice !== "" 
+                      ? (isWeightedPriceInvalid 
+                          ? 'Must be 3 digits (100-999)' 
+                          : priceRange 
+                            ? `Range: ₹${priceRange}` 
+                            : '')
+                      : ''
+                  }
                   inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', step: 1 }}
                   onKeyDown={onPriceKeyDown}
                 />
