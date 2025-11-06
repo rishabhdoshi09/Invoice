@@ -284,8 +284,18 @@ export const CreateOrder = () => {
 
       const priceNumLocal = Number(values?.productPrice) || 0;
       const intPart = Math.floor(Math.abs(priceNumLocal));
-      // Price validation removed - allow any valid price
-      if (priceNumLocal <= 0) { alert('Product price must be greater than 0.'); return; }
+      
+      // For weighted products: enforce 3-digit price (100-999)
+      const isWeightedProduct = (values?.type === ProductType.WEIGHTED || String(values?.type||'').toLowerCase()==='weighted');
+      if (isWeightedProduct) {
+        const priceStr = String(priceNumLocal);
+        if (priceStr.length !== 3 || priceNumLocal < 100 || priceNumLocal > 999) {
+          alert('Weighted product price must be exactly 3 digits (100-999).');
+          return;
+        }
+      } else {
+        if (priceNumLocal <= 0) { alert('Product price must be greater than 0.'); return; }
+      }
 
       const price = Number(values?.productPrice) || 0;
       const qty = Number(values?.quantity) || 0;
