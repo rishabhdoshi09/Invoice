@@ -282,7 +282,6 @@ export const CreateOrder = () => {
       if (Number(values.quantity) <= 0) { alert("Cannot add product with zero quantity. Please fetch a valid weight."); return; }
 
       const priceNumLocal = Number(values?.productPrice) || 0;
-      const intPart = Math.floor(Math.abs(priceNumLocal));
       
       // For weighted products: enforce 3-digit price (100-999)
       const isWeightedProduct = (values?.type === ProductType.WEIGHTED || String(values?.type||'').toLowerCase()==='weighted');
