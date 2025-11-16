@@ -352,55 +352,9 @@ export const CreateOrder = () => {
 
       try {
         const addedUnitPrice = Number(values.productPrice) || 0;
-        if (!suppressAutoSuggest && addedUnitPrice >= 200 && addedUnitPrice <= 600) {
-          const bowlProduct = productOptions.find(p => (p.label || '').toLowerCase().includes('bowl'));
-          if (bowlProduct && rows && rows[bowlProduct.productId]) {
-            const bowlPrice = rows[bowlProduct.productId].pricePerKg;
-            setTimeout(() => {
-              setSelectedProduct(bowlProduct);
-              setInputValue(bowlProduct.label || bowlProduct.value || '');
-              formik.setFieldValue('id', bowlProduct.productId ?? "");
-              formik.setFieldValue('name', rows[bowlProduct.productId]?.name || 'Bowl');
-              formik.setFieldValue('productPrice', String(bowlPrice));
-              try { firstDigitLockRef.current = String(bowlPrice).charAt(0) || null; } catch {}
-              const currentQty = Number(formik.values.quantity) || 0;
-              formik.setFieldValue('totalPrice', Number((bowlPrice * currentQty).toFixed(2)));
-              setHighlightedQuickProduct('bowl');
-              setSelectedQuick('bowl');
-
-              try {
-                if (Number(bowlPrice) === 300) {
-                  const alreadyAdded = orderProps.orderItems.some(it => String(it.productId) === String(bowlProduct.productId));
-                  if (!alreadyAdded) {
-                    setPriceLock(true);
-                    setPriceLockProductId(bowlProduct.productId);
-                  }
-                }
-              } catch {}
-
-              try {
-                const lab = (rows[bowlProduct.productId]?.name || bowlProduct.label || '').toLowerCase();
-                if (/\bdabba\b/.test(lab)) {
-                  setDabbaLock(true);
-                  setDabbaProductId(bowlProduct.productId);
-                }
-              } catch {}
-
-              try {
-                const bp = Number(bowlPrice) || 0;
-                if (bp >= 100 && bp <= 999) {
-                  setBowlPriceLock(true);
-                  setBowlProductIdLocked(bowlProduct.productId);
-                  try { firstDigitLockRef.current = String(bp).charAt(0) || null; } catch {}
-                }
-              } catch {}
-            }, 60);
-          }
-        }
-      } catch (err) {
-        console.error('Auto-suggest bowl failed', err);
+        // Auto-suggest bowl product feature removed per user request
       }
-
+      
       try {
         const added = Number((price * qty).toFixed(2));
         setLastInvoiceTotal(added);
