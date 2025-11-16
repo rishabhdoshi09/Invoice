@@ -37,6 +37,58 @@ module.exports = {
                 orderItems = orderItems.map(item => { return {...item, orderId: orderId } });
                 await Services.orderItems.addOrderItems(orderItems, transaction);
 
+                // NOTE: 'your-sales-ledger-id' must be replaced with the actual ID of the Sales Ledger in the database.
+                const SALES_LEDGER_ID = 'your-sales-ledger-id';
+                const CASH_BANK_LEDGER_ID = 'your-cash-bank-ledger-id'; // Assuming this is the same as in payment.js
+
+                // Create ledger entries for sale
+                const ledgerEntries = [];
+                
+                // 1. Debit Customer/Receivable (if not fully paid)
+                if (orderObj.dueAmount > 0) {
+                    // Assuming customer has a ledgerId
+                    const customer = await Services.customer.getCustomer({ id: orderObj.customerId });
+                    if (customer) {
+                        ledgerEntries.push({
+                            ledgerId: customer.ledgerId, 
+                            entryDate: orderObj.orderDate,
+                            debit: orderObj.dueAmount, // Receivable is debited (asset increases)
+                            credit: 0,
+                            description: `Sale to ${customer.name} (Due Amount)`,
+                            referenceType: 'order',
+                            referenceId: orderId
+                        });
+                    }
+                }
+
+                // 2. Debit Cash/Bank (if partially or fully paid)
+                if (orderObj.paidAmount > 0) {
+                    ledgerEntries.push({
+                        ledgerId: CASH_BANK_LEDGER_ID, 
+                        entryDate: orderObj.orderDate,
+                        debit: orderObj.paidAmount, // Cash/Bank is debited (asset increases)
+                        credit: 0,
+                        description: `Sale to ${orderObj.customerName} (Paid Amount)`,
+                        referenceType: 'order',
+                        referenceId: orderId
+                    });
+                }
+
+                // 3. Credit Sales
+                ledgerEntries.push({
+                    ledgerId: SALES_LEDGER_ID, 
+                    entryDate: orderObj.orderDate,
+                    debit: 0,
+                    credit: orderObj.total, // Sales is credited (income increases)
+                    description: `Sale to ${orderObj.customerName} (Total)`,
+                    referenceType: 'order',
+                    referenceId: orderId
+                });
+
+                if (ledgerEntries.length > 0) {
+                    await db.ledgerEntry.bulkCreate(ledgerEntries, { transaction });
+                }
+
                 return await Services.order.getOrder({id: orderId });
             });
 

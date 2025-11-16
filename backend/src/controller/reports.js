@@ -4,34 +4,30 @@ const db = require('../models');
 module.exports = {
     getOutstandingReceivables: async (req, res) => {
         try {
-            // Get all orders with due amounts
-            const orders = await db.order.findAll({
+            // Get all customers with outstanding balance (currentBalance > 0)
+            const customers = await db.customer.findAll({
                 where: {
-                    paymentStatus: {
-                        [db.Sequelize.Op.in]: ['unpaid', 'partial']
+                    currentBalance: {
+                        [db.Sequelize.Op.gt]: 0
                     }
                 },
-                attributes: ['id', 'orderNumber', 'orderDate', 'customerName', 'customerMobile', 'total', 'paidAmount', 'dueAmount', 'paymentStatus'],
-                order: [['orderDate', 'DESC']]
+                attributes: ['id', 'name', 'mobile', 'currentBalance'],
+                include: [{
+                    model: db.order,
+                    where: {
+                        paymentStatus: {
+                            [db.Sequelize.Op.in]: ['unpaid', 'partial']
+                        }
+                    },
+                    required: false,
+                    attributes: ['id', 'orderNumber', 'orderDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus']
+                }],
+                order: [['name', 'ASC']]
             });
 
-            // Group by customer
-            const customerOutstanding = {};
             let totalReceivable = 0;
-
-            orders.forEach(order => {
-                const customerKey = order.customerName || 'Walk-in Customer';
-                if (!customerOutstanding[customerKey]) {
-                    customerOutstanding[customerKey] = {
-                        customerName: customerKey,
-                        customerMobile: order.customerMobile || '',
-                        totalDue: 0,
-                        orders: []
-                    };
-                }
-                customerOutstanding[customerKey].totalDue += order.dueAmount || 0;
-                customerOutstanding[customerKey].orders.push(order);
-                totalReceivable += order.dueAmount || 0;
+            customers.forEach(customer => {
+                totalReceivable += customer.currentBalance || 0;
             });
 
             return res.status(200).send({
@@ -39,7 +35,7 @@ module.exports = {
                 message: 'outstanding receivables fetched successfully',
                 data: {
                     totalReceivable,
-                    customers: Object.values(customerOutstanding)
+                    customers: customers
                 }
             });
 
@@ -133,8 +129,8 @@ module.exports = {
                         date: purchase.billDate,
                         type: 'Purchase',
                         referenceNumber: purchase.billNumber,
-                        debit: purchase.total,
-                        credit: 0,
+                        debit: 0,
+                        credit: purchase.total,
                         balance: 0 // Will calculate below
                     });
                 });
@@ -153,8 +149,8 @@ module.exports = {
                         date: payment.paymentDate,
                         type: 'Payment',
                         referenceNumber: payment.paymentNumber,
-                        debit: 0,
-                        credit: payment.amount,
+                        debit: payment.amount,
+                        credit: 0,
                         balance: 0
                     });
                 });
@@ -207,8 +203,8 @@ module.exports = {
                         date: payment.paymentDate,
                         type: 'Payment',
                         referenceNumber: payment.paymentNumber,
-                        debit: 0,
-                        credit: payment.amount,
+                        debit: payment.amount,
+                        credit: 0,
                         balance: 0
                     });
                 });
@@ -220,7 +216,7 @@ module.exports = {
             // Calculate running balance
             let balance = partyType === 'supplier' ? (partyInfo.openingBalance || 0) : 0;
             transactions.forEach(txn => {
-                balance += txn.debit - txn.credit;
+                balance = (partyType === 'supplier') ? balance + txn.credit - txn.debit : balance + txn.debit - txn.credit;
                 txn.balance = balance;
             });
 

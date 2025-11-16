@@ -38,6 +38,31 @@ module.exports = {
 
                 // Update supplier balance
                 const supplier = await Services.supplier.getSupplier({ id: purchaseObj.supplierId });
+
+                // Create ledger entries for purchase
+                // NOTE: 'your-purchase-ledger-id' must be replaced with the actual ID of the Purchase Ledger in the database.
+                const PURCHASE_LEDGER_ID = 'your-purchase-ledger-id'; 
+                const ledgerEntries = [
+                    {
+                        ledgerId: supplier.ledgerId, 
+                        entryDate: purchaseObj.billDate,
+                        debit: 0,
+                        credit: purchaseObj.total, // Supplier is credited (liability increases)
+                        referenceType: 'purchase',
+                        referenceId: purchaseBillId
+                    },
+                    {
+                        ledgerId: PURCHASE_LEDGER_ID, 
+                        entryDate: purchaseObj.billDate,
+                        debit: purchaseObj.total, // Purchase is debited (expense/asset increases)
+                        credit: 0,
+                        referenceType: 'purchase',
+                        referenceId: purchaseBillId
+                    }
+                ];
+                await db.ledgerEntry.bulkCreate(ledgerEntries, { transaction });
+
+                // Update supplier balance
                 if (supplier) {
                     const newBalance = (supplier.currentBalance || 0) + purchaseObj.dueAmount;
                     await Services.supplier.updateSupplier(

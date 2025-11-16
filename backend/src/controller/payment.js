@@ -17,6 +17,64 @@ module.exports = {
             const result = await db.sequelize.transaction(async (transaction) => {
                 const response = await Services.payment.createPayment(value, transaction);
 
+                // NOTE: 'your-cash-bank-ledger-id' must be replaced with the actual ID of the Cash/Bank Ledger in the database.
+                const CASH_BANK_LEDGER_ID = 'your-cash-bank-ledger-id';
+                
+                // Create ledger entries for payment
+                const ledgerEntries = [];
+
+                if (value.partyType === 'customer') {
+                    // Customer payment received: Cash/Bank (Debit) to Customer (Credit)
+                    const customer = await Services.customer.getCustomer({ id: value.partyId });
+                    if (customer) {
+                        ledgerEntries.push({
+                            ledgerId: CASH_BANK_LEDGER_ID,
+                            entryDate: value.paymentDate,
+                            debit: value.amount,
+                            credit: 0,
+                            description: `Payment received from ${customer.name} for ${value.referenceType} ${value.referenceId}`,
+                            referenceType: 'payment',
+                            referenceId: response.id
+                        });
+                        ledgerEntries.push({
+                            ledgerId: customer.ledgerId, // Assuming customer has a ledgerId
+                            entryDate: value.paymentDate,
+                            debit: 0,
+                            credit: value.amount,
+                            description: `Payment received from ${customer.name} for ${value.referenceType} ${value.referenceId}`,
+                            referenceType: 'payment',
+                            referenceId: response.id
+                        });
+                    }
+                } else if (value.partyType === 'supplier') {
+                    // Supplier payment made: Supplier (Debit) to Cash/Bank (Credit)
+                    const supplier = await Services.supplier.getSupplier({ id: value.partyId });
+                    if (supplier) {
+                        ledgerEntries.push({
+                            ledgerId: supplier.ledgerId, // Assuming supplier has a ledgerId
+                            entryDate: value.paymentDate,
+                            debit: value.amount,
+                            credit: 0,
+                            description: `Payment made to ${supplier.name} for ${value.referenceType} ${value.referenceId}`,
+                            referenceType: 'payment',
+                            referenceId: response.id
+                        });
+                        ledgerEntries.push({
+                            ledgerId: CASH_BANK_LEDGER_ID,
+                            entryDate: value.paymentDate,
+                            debit: 0,
+                            credit: value.amount,
+                            description: `Payment made to ${supplier.name} for ${value.referenceType} ${value.referenceId}`,
+                            referenceType: 'payment',
+                            referenceId: response.id
+                        });
+                    }
+                }
+
+                if (ledgerEntries.length > 0) {
+                    await db.ledgerEntry.bulkCreate(ledgerEntries, { transaction });
+                }
+
                 // Update reference (order or purchase) payment status
                 if (value.referenceType === 'order' && value.referenceId) {
                     const order = await Services.order.getOrder({ id: value.referenceId });
@@ -209,6 +267,15 @@ module.exports = {
                             { currentBalance: newBalance }
                         );
                     }
+                    
+                    // Reverse ledger entries for payment
+                    await db.ledgerEntry.destroy({
+                        where: {
+                            referenceType: 'payment',
+                            referenceId: payment.id
+                        },
+                        transaction
+                    });
                 }
             }
 
