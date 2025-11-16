@@ -1053,14 +1053,73 @@ export const CreateOrder = () => {
           <Typography variant="h5" sx={{ mb: 4, textAlign: 'center' }}>
             Product: {rows[highValueProductId]?.name} (₹{rows[highValueProductId]?.pricePerKg})
           </Typography>
-          <Typography variant="h6" sx={{ mb: 6, textAlign: 'center' }}>
+          <Typography variant="h6" sx={{ mb: 2, textAlign: 'center' }}>
             This product has a price of ₹300 or more.
-            <br />
+          </Typography>
+          {/* NEW: Editable Price Field for 300-399 range */}
+          <Box sx={{ mb: 4, width: '100%', maxWidth: 300 }}>
+            <TextField
+              autoFocus
+              type="number"
+              size="small"
+              id="productPrice"
+              name="productPrice"
+              label="Product Price (300-399)"
+              value={formik.values.productPrice}
+              onChange={(e) => {
+                const rawInput = String(e.target.value || '');
+                const numeric = Number(rawInput);
+                // Validation for 300-399 range
+                if (numeric >= 300 && numeric <= 399) {
+                  formik.setFieldValue('productPrice', rawInput);
+                  formik.setFieldValue('totalPrice', Number((numeric * (Number(formik.values.quantity)||0)).toFixed(2)));
+                } else if (rawInput === '') {
+                  formik.setFieldValue('productPrice', '');
+                  formik.setFieldValue('totalPrice', 0);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const numeric = Number(formik.values.productPrice);
+                  if (numeric >= 300 && numeric <= 399) {
+                    // Unlock and add product on Enter if valid
+                    setHighValueLock(false);
+                    setHighValueProductId(null);
+                    // Trigger the add product handler after a small delay to ensure state update
+                    setTimeout(() => addProductHandler(), 50);
+                  }
+                }
+              }}
+              required
+              fullWidth
+              error={Boolean(formik.values.productPrice) && (Number(formik.values.productPrice) < 300 || Number(formik.values.productPrice) > 399)}
+              helperText={Boolean(formik.values.productPrice) && (Number(formik.values.productPrice) < 300 || Number(formik.values.productPrice) > 399) ? 'Price must be between 300 and 399' : 'Press Enter to confirm and add product'}
+            />
+          </Box>
+          <Typography variant="h6" sx={{ mb: 6, textAlign: 'center' }}>
             Press <Box component="span" sx={{ fontWeight: 'bold', color: 'primary.main' }}>Shift + J</Box> to confirm and unlock the product for adding.
           </Typography>
-          <Typography variant="caption" color="textSecondary">
-            (The product will be automatically added once unlocked)
-          </Typography>
+            <Typography variant="caption" color="textSecondary">
+              (The product will be automatically added once unlocked)
+            </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              sx={{ mt: 2 }}
+              onClick={() => {
+                const numeric = Number(formik.values.productPrice);
+                if (numeric >= 300 && numeric <= 399) {
+                  setHighValueLock(false);
+                  setHighValueProductId(null);
+                  setTimeout(() => addProductHandler(), 50);
+                } else {
+                  alert('Please enter a valid price between 300 and 399.');
+                }
+              }}
+              disabled={Number(formik.values.productPrice) < 300 || Number(formik.values.productPrice) > 399}
+            >
+              Confirm Price and Add Product
+            </Button>
         </Box>
       )}
       <Card><CardContent><CreateProduct /></CardContent></Card>
