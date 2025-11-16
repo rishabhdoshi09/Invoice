@@ -45,6 +45,10 @@ module.exports = (sequelize, Sequelize) => {
             paymentStatus: {
                 type: Sequelize.ENUM('paid', 'partial', 'unpaid'),
                 defaultValue: 'paid'
+            },
+            customerId: {
+                type: Sequelize.UUID,
+                allowNull: true // Assuming it can be null if order is not linked to a customer
             }
         }
     );
