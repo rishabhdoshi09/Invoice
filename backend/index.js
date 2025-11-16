@@ -24,23 +24,17 @@ app.use(compression());
 
 const PORT = 8001;
 
-app.listen(PORT, () => {
-    db.sequelize
-      .authenticate()
-      .then(() => {
-        console.log('Connection has been established successfully.');
-        db.sequelize
-          .sync({ force: false })
-          .then(() => {
-            console.log('Database Synced Successfully');
-            console.log(`Server started on port: ${PORT}`);
-          })
-          .catch((err) => {
-            console.log(err);
-          });
-      })
-      .catch((err) => {
-        console.error('Unable to connect to the database:', err);
-      });
-  });
-  
+app.listen(PORT, async () => {
+  try {
+    await db.sequelize.authenticate();
+    console.log('Connection has been established successfully.');
+
+    await db.sequelize.sync({ force: false });
+    console.log('Database Synced Successfully');
+
+    console.log(`Server started on port: ${PORT}`);
+  } catch (err) {
+    console.error('Error during server startup:', err);
+    process.exit(1);
+  }
+});
