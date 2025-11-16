@@ -351,11 +351,6 @@ export const CreateOrder = () => {
       } catch {}
 
       try {
-        const addedUnitPrice = Number(values.productPrice) || 0;
-        // Auto-suggest bowl product feature removed per user request
-      }
-      
-      try {
         const added = Number((price * qty).toFixed(2));
         setLastInvoiceTotal(added);
       } catch {}
