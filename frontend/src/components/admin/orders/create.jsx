@@ -1028,10 +1028,10 @@ export const CreateOrder = () => {
                 }
               }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+                if (e.key === 'Enter' || e.key === '=') {
                   const numeric = Number(formik.values.productPrice);
                   if (numeric >= 300 && numeric <= 399) {
-                    // Unlock and add product on Enter if valid
+                    // Unlock and add product on Enter or '=' if valid
                     setHighValueLock(false);
                     setHighValueProductId(null);
                     // Trigger the add product handler after a small delay to ensure state update
