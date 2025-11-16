@@ -202,6 +202,8 @@ export const CreateOrder = () => {
   const [priceLock, setPriceLock] = useState(false);
   const [priceLockProductId, setPriceLockProductId] = useState(null);
   const [bowlPriceLock, setBowlPriceLock] = useState(false);
+  const [highValueLock, setHighValueLock] = useState(false); // NEW: State for high-value product lock
+  const [highValueProductId, setHighValueProductId] = useState(null); // NEW: State for high-value product ID
   const [bowlProductIdLocked, setBowlProductIdLocked] = useState(null);
 
   const [fetchedViaScale, setFetchedViaScale] = useState(false);
@@ -421,6 +423,7 @@ export const CreateOrder = () => {
     isWeighted && 
     (priceStr.length !== 3 || priceValue < 100 || priceValue > 999)
   );
+  const isHighValueLocked = highValueLock && highValueProductId === formik.values.id; // NEW: Check if the current product is the one locked
   
   // Get price range for weighted products (e.g., 250 -> 200-299)
   const getPriceRange = (price) => {
@@ -508,12 +511,24 @@ export const CreateOrder = () => {
       formik.setFieldValue('totalPrice', Number((((price||0) * (Number(formik.values.quantity)||0))).toFixed(2)));
 
       try {
-        if (Number(price) === 300) {
+        const productPrice = Number(price);
+        // NEW: High-Value Product Lock (Price >= 300)
+        if (productPrice >= 300) {
           const alreadyAdded = orderProps.orderItems.some(it => String(it.productId) === String(productId));
           if (!alreadyAdded) {
-            setPriceLock(true);
-            setPriceLockProductId(productId);
+            setHighValueLock(true);
+            setHighValueProductId(productId);
+            // Also set priceLock for existing logic if price is exactly 300
+            if (productPrice === 300) {
+              setPriceLock(true);
+              setPriceLockProductId(productId);
+            }
           }
+        } else {
+          setHighValueLock(false);
+          setHighValueProductId(null);
+          setPriceLock(false);
+          setPriceLockProductId(null);
         }
       } catch {}
 
@@ -586,7 +601,7 @@ export const CreateOrder = () => {
     }
 
     try { await onProductSelect(null, value); } catch {}
-  }, [dabbaLock, dabbaProductId, priceLock, priceLockProductId, selectedProduct, formik.values.name, formik.values.id, orderProps.orderItems, onProductSelect]);
+  }, [dabbaLock, dabbaProductId, priceLock, priceLockProductId, highValueLock, highValueProductId, selectedProduct, formik.values.name, formik.values.id, orderProps.orderItems, onProductSelect]);
 
   const onPriceFocus = (e) => {
     if (isNameAdd) { firstDigitLockRef.current = null; return; }
@@ -690,6 +705,10 @@ export const CreateOrder = () => {
   };
 
   const addProductHandler = useCallback(async () => {
+    if (isHighValueLocked) {
+      alert('Please unlock the high-value product first by pressing Shift+J.');
+      return;
+    }
     try {
       if (archivedOrderProps || archivedPdfUrl) {
         setArchivedOrderProps(null);
@@ -801,6 +820,17 @@ export const CreateOrder = () => {
 
   useEffect(() => {
     const onKeyDown = (e) => {
+      // NEW: Shift+J Unlock Logic
+      if (e.key === 'J' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (highValueLock) {
+          e.preventDefault();
+          setHighValueLock(false);
+          setHighValueProductId(null);
+          alert('High-value product lock released. You can now add the product.');
+          return;
+        }
+      }
+
       if (e.key !== '1' || e.ctrlKey || e.metaKey || e.altKey) return;
       const t = e.target;
       if (isEditableTarget(t) || isEditableTarget(document.activeElement)) return;
@@ -999,6 +1029,40 @@ export const CreateOrder = () => {
 
   return (
     <>
+      {/* NEW: High-Value Product Lock Modal */}
+      {highValueLock && highValueProductId === formik.values.id && (
+        <Box 
+          sx={{ 
+            position: 'fixed', 
+            top: 0, 
+            left: 0, 
+            width: '100%', 
+            height: '100%', 
+            bgcolor: 'rgba(255, 255, 255, 0.95)', // White background popup
+            zIndex: 9999, 
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            p: 4
+          }}
+        >
+          <Typography variant="h3" color="error" sx={{ mb: 2 }}>
+            HIGH-VALUE PRODUCT ALERT
+          </Typography>
+          <Typography variant="h5" sx={{ mb: 4, textAlign: 'center' }}>
+            Product: {rows[highValueProductId]?.name} (₹{rows[highValueProductId]?.pricePerKg})
+          </Typography>
+          <Typography variant="h6" sx={{ mb: 6, textAlign: 'center' }}>
+            This product has a price of ₹300 or more.
+            <br />
+            Press <Box component="span" sx={{ fontWeight: 'bold', color: 'primary.main' }}>Shift + J</Box> to confirm and unlock the product for adding.
+          </Typography>
+          <Typography variant="caption" color="textSecondary">
+            (The product will be automatically added once unlocked)
+          </Typography>
+        </Box>
+      )}
       <Card><CardContent><CreateProduct /></CardContent></Card>
 
       <br />
@@ -1211,7 +1275,7 @@ export const CreateOrder = () => {
                 </Typography>
                 <Button variant="contained" onClick={createOrder} sx={{ float: "right", margin: "5px" }} disabled={orderProps.orderItems.length === 0}>Submit</Button>
                 <Button variant="contained" onClick={addProductHandler} sx={{ float: "right", margin: "5px" }}
-                  disabled={formik.values.name === "" || (isWeighted && (formik.values.productPrice === "" || isWeightedPriceInvalid))}
+                  disabled={formik.values.name === "" || (isWeighted && (formik.values.productPrice === "" || isWeightedPriceInvalid)) || isHighValueLocked}
                 >
                   Add Product
                 </Button>
