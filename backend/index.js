@@ -6,6 +6,7 @@ const db = require('./src/models');
 const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
+const path = require('path');
 
 const app = express();
 
@@ -21,6 +22,16 @@ app.use(express.json({limit: '100mb'}));
 app.use(express.urlencoded({ limit: '100mb', extended: false, parameterLimit: 5000 }));
 app.use(cookieParser());
 app.use(compression());
+
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, '../frontend/build')));
+
+// The "catchall" handler: for any request that doesn't match one above, send back React's index.html file.
+app.get('*', (req, res) => {
+  if (!req.url.startsWith('/api')) {
+    res.sendFile(path.join(__dirname, '../frontend/build/index.html'));
+  }
+});
 
 const PORT = 8001;
 
