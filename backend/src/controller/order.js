@@ -37,9 +37,18 @@ module.exports = {
                 orderItems = orderItems.map(item => { return {...item, orderId: orderId } });
                 await Services.orderItems.addOrderItems(orderItems, transaction);
 
-                // NOTE: 'your-sales-ledger-id' must be replaced with the actual ID of the Sales Ledger in the database.
-                const SALES_LEDGER_ID = 'your-sales-ledger-id';
-                const CASH_BANK_LEDGER_ID = 'your-cash-bank-ledger-id'; // Assuming this is the same as in payment.js
+                // Dynamically get the Sales and Cash/Bank Ledger IDs
+                const salesLedger = await Services.ledger.getLedgerByName('Sales Account');
+                if (!salesLedger) {
+                    throw new Error('Sales Ledger not found. Please create a ledger named "Sales Account".');
+                }
+                const cashBankLedger = await Services.ledger.getLedgerByName('Cash Account');
+                if (!cashBankLedger) {
+                    throw new Error('Cash Account Ledger not found. Please create a ledger named "Cash Account".');
+                }
+
+                const SALES_LEDGER_ID = salesLedger.id;
+                const CASH_BANK_LEDGER_ID = cashBankLedger.id;
 
                 // Create ledger entries for sale
                 const ledgerEntries = [];

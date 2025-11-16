@@ -40,8 +40,13 @@ module.exports = {
                 const supplier = await Services.supplier.getSupplier({ id: purchaseObj.supplierId });
 
                 // Create ledger entries for purchase
-                // NOTE: 'your-purchase-ledger-id' must be replaced with the actual ID of the Purchase Ledger in the database.
-                const PURCHASE_LEDGER_ID = 'your-purchase-ledger-id'; 
+                // Dynamically get the Purchase Ledger ID
+                const purchaseLedger = await Services.ledger.getLedgerByName('Purchase Account');
+                if (!purchaseLedger) {
+                    throw new Error('Purchase Ledger not found. Please create a ledger named "Purchase Account".');
+                }
+                const PURCHASE_LEDGER_ID = purchaseLedger.id;
+                
                 const ledgerEntries = [
                     {
                         ledgerId: supplier.ledgerId, 
