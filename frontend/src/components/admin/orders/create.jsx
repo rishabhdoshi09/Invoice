@@ -639,9 +639,7 @@ export const CreateOrder = () => {
     }
   };
 
-  const onPriceFocus = (e) => {
-    // No-op for now, but required by the component structure
-  };
+
 
   const onPriceChange = (e) => {
     const rawInput = String(e.target.value || "");
