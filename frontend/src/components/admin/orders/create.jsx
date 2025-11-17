@@ -5,7 +5,7 @@ import { useFormik } from "formik";
 import moment from "moment";
 import pdfMake from "pdfmake/build/pdfmake";
 import pdfFonts from "pdfmake/build/vfs_fonts";
-import { fetchWeightsAction } from "../../services/weighingScale";
+import { fetchWeightsAction } from "../../../services/weighingScale";
 import { ProductType } from "../../../enums/product";
 import { generatePdfDefinition } from "./templates/template1";
 import { generatePdfDefinition2 } from "./templates/template2";
