@@ -159,8 +159,9 @@ export const CreateOrder = () => {
 
   const [suppressAutoSuggest, setSuppressAutoSuggest] = useState(false);
 
-  const [highValueLock, setHighValueLock] = useState(false); // NEW: State for high-value product lock
-  const [highValueProductId, setHighValueProductId] = useState(null); // NEW: State for high-value product ID
+
+
+
 
   const [fetchedViaScale, setFetchedViaScale] = useState(false);
 
@@ -375,15 +376,9 @@ export const CreateOrder = () => {
 
   const isWeighted = (formik.values.type === ProductType.WEIGHTED || String(formik.values.type||"").toLowerCase()==="weighted");
 
-  // For weighted products: validate 3-digit price
-  const priceValue = Number(formikSafeGet("productPrice")) || 0;
-  const priceStr = String(priceValue);
-  const isWeightedPriceInvalid = Boolean(
-    isWeighted &&
-      (priceStr.length !== 3 || priceValue < 100 || priceValue > 999)
-  );
-  const isHighValueLocked =
-    highValueLock && highValueProductId === formik.values.id; // NEW: Check if the current product is the one locked
+
+
+
 
   // Get price range for weighted products (e.g., 250 -> 200-299)
   const getPriceRange = (price) => {
@@ -411,6 +406,14 @@ export const CreateOrder = () => {
     formik.setFieldValue("totalPrice", Number((price * weight).toFixed(2)));
     return true;
   }, [dispatch, formik]);
+
+  const selectAndMaybeAdd = useCallback(
+    (product) => {
+      onProductSelect(null, product);
+      formik.handleSubmit();
+    },
+    [onProductSelect, formik]
+  );
 
   const onProductSelect = useCallback(
     async (e, value) => {
@@ -636,6 +639,10 @@ export const CreateOrder = () => {
     }
   };
 
+  const onPriceFocus = (e) => {
+    // No-op for now, but required by the component structure
+  };
+
   const onPriceChange = (e) => {
     const rawInput = String(e.target.value || "");
     const numericInput = Number(rawInput) || 0;
@@ -788,17 +795,6 @@ export const CreateOrder = () => {
 
   useEffect(() => {
     const onKeyDown = (e) => {
-      // NEW: Shift+J Unlock Logic
-      if (e.key === "J" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        if (highValueLock) {
-          e.preventDefault();
-          setHighValueLock(false);
-          setHighValueProductId(null);
-          alert("High-value product lock released. You can now add the product.");
-          return;
-        }
-      }
-
       if (e.key !== "1" || e.ctrlKey || e.metaKey || e.altKey) return;
       const t = e.target;
       if (isEditableTarget(t) || isEditableTarget(document.activeElement))
@@ -1058,7 +1054,7 @@ export const CreateOrder = () => {
                   options={productOptions}
                   inputValue={inputValue}
                   onInputChange={(e, newValue) => setInputValue(newValue)}
-                  onChange={attemptProductChange}
+                    onChange={onProductSelect}
                   renderInput={(params) => (
                     <TextField {...params} label="Product" />
                   )}
@@ -1081,7 +1077,7 @@ export const CreateOrder = () => {
                   value={formik.values.productPrice}
                   onChange={onPriceChange}
                   onKeyDown={onPriceKeyDown}
-                  onFocus={onPriceFocus}
+                    onFocus={onPriceFocus}
                   onBlur={onPriceBlur}
                   onPaste={onPasteHandler}
                   error={isWeightedPriceInvalid}
@@ -1166,28 +1162,26 @@ export const CreateOrder = () => {
           </Typography>
           <Typography id="high-value-product-modal-description" sx={{ mt: 2 }}>
             This product has a price of 300 or more. You can edit the price
-            between 300 and 399.
-          </Typography>
-          <TextField
-            fullWidth
-            label="Price"
+            between 300 and 3           </Typography>
+          <TextFieldld          fullWidth
+            label="Confirm Price"
+            name="productPrice"
             value={formik.values.productPrice}
             onChange={onPriceChange}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === "=") {
-                const numeric = Number(formik.values.productPrice) || 0;
-                if (numeric >= 300 && numeric <= 399) {
-                  setHighValueLock(false);
-                  setHighValueProductId(null);
-                  addProductHandler();
-                } else {
-                  alert("Price must be between 300 and 399.");
-                }
+                e.prev            onClick={() => {
+              const numeric = Number(formik.values.productPrice);
+              if (numeric >= 300 && numeric <= 999) {
+                setHighValueLock(false);
+                addProductHandler();
+              } else {
+                alert("Price must be between 300 and 999.");
               }
             }}
+            }}
             sx={{ mt: 2 }}
-          />
-          <Button
+          />tton
             onClick={() => {
               const numeric = Number(formik.values.productPrice) || 0;
               if (numeric >= 300 && numeric <= 399) {
