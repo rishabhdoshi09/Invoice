@@ -337,12 +337,16 @@ export const CreateOrder = () => {
 
       const priceNumLocal = Number(values?.productPrice) || 0;
       
-      // For weighted products: enforce 3-digit price (100-399)
+      // For weighted products: enforce 3-digit price (100-399) and block 200
       const isWeightedProduct = (values?.type === ProductType.WEIGHTED || String(values?.type||'').toLowerCase()==='weighted');
       if (isWeightedProduct) {
         const priceStr = String(priceNumLocal);
         if (priceStr.length !== 3 || priceNumLocal < 100 || priceNumLocal > 399) {
           alert('Weighted product price must be exactly 3 digits (100-399).');
+          return;
+        }
+        if (priceNumLocal === 200) {
+          alert('Price 200 is not allowed for weighted products.');
           return;
         }
       } else {
@@ -650,15 +654,6 @@ export const CreateOrder = () => {
       return;
     }
     const val = String(e.target.value ?? '');
-    const currentPrice = Number(val) || 0;
-    const isIn300to399Range = currentPrice >= 300 && currentPrice <= 399;
-    
-    // Disable first digit lock for 300-399 range to allow manual typing
-    if (isIn300to399Range) {
-      firstDigitLockRef.current = null;
-      return;
-    }
-    
     if (!bowlPriceLock) {
       firstDigitLockRef.current = val.length > 0 ? val.charAt(0) : null;
     } else {
@@ -692,11 +687,8 @@ export const CreateOrder = () => {
 
   const onPriceChange = (e) => {
     const rawInput = String(e.target.value || '');
-    const currentPrice = Number(rawInput) || 0;
-    const isIn300to399Range = currentPrice >= 300 && currentPrice <= 399;
-    
     if (!bowlPriceLock) {
-      if (!isNameAdd && !isIn300to399Range) {
+      if (!isNameAdd) {
         if (!(formik.values.name && formik.values.name.toLowerCase() === 'add')) {
           const lock = firstDigitLockRef.current;
           if (lock && rawInput && String(rawInput).charAt(0) !== lock) { e.preventDefault && e.preventDefault(); return; }
@@ -711,17 +703,10 @@ export const CreateOrder = () => {
     const digitsOnly = rawInput.replace(/\D/g, '');
     if (digitsOnly.length > 3) { e.preventDefault && e.preventDefault(); return; }
     const locked = String(firstDigitLockRef.current || '');
-    const numericValue = Number(digitsOnly) || 0;
-    const isInRange = numericValue >= 300 && numericValue <= 399;
-    
-    // Allow manual typing for 300-399 range
-    if (!isInRange && locked && digitsOnly.length > 0 && String(digitsOnly).charAt(0) !== locked) { 
-      e.preventDefault && e.preventDefault(); 
-      return; 
-    }
-    
+    if (locked && digitsOnly.length > 0 && String(digitsOnly).charAt(0) !== locked) { e.preventDefault && e.preventDefault(); return; }
     formik.setFieldValue('productPrice', digitsOnly);
-    formik.setFieldValue('totalPrice', Number((numericValue * (Number(formik.values.quantity)||0)).toFixed(2)));
+    const numeric = Number(digitsOnly) || 0;
+    formik.setFieldValue('totalPrice', Number((numeric * (Number(formik.values.quantity)||0)).toFixed(2)));
   };
 
   const onPriceBlur = () => {};
