@@ -23,7 +23,7 @@ export const ListOrders = () => {
             shouldFetch(false);
             dispatch(listOrdersAction(filters));
         }
-    }, [refetch]);
+    }, [refetch, dispatch, filters]);
 
 
     const paginate = (limit, offset) => {
@@ -52,7 +52,7 @@ export const ListOrders = () => {
         }, 500);
     
         return () => clearTimeout(getData);
-    }, [filters.q]);
+    }, [filters.q, dispatch, filters]);
 
     return (
         <>

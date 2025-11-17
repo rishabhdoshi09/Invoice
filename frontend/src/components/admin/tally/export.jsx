@@ -9,7 +9,10 @@ export const TallyExport = () => {
     const [salesOrders, setSalesOrders] = useState([]);
     const [purchases, setPurchases] = useState([]);
     const [selectedSales, setSelectedSales] = useState([]);
+    // eslint-disable-next-line no-unused-vars
+    // eslint-disable-next-line no-unused-vars
     const [selectedPurchases, setSelectedPurchases] = useState([]);
+    // eslint-disable-next-line no-unused-vars
     const [loading, setLoading] = useState(false);
     const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
 
