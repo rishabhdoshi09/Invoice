@@ -889,25 +889,7 @@ export const CreateOrder = () => {
     }
   }, [dispatch, orderProps, resetOrder, refreshHistory]);
 
-  const selectAndMaybeAdd = useCallback(
-    async (product) => {
-      setSelectedQuick("dabba");
-      setSelectedProduct(product);
-      setInputValue(product?.label || product?.value || "");
-      await attemptProductChange(product);
 
-      try {
-      } catch {}
-
-      try {
-        const p = rows[product.productId];
-        if (p && Number(p.pricePerKg) === 300) {
-          const alreadyAdded = orderProps.orderItems.some(
-            (it) => String(it.productId) === String(product.productId)
-          );
-          if (!alreadyAdded) {
-          }
-        }
       } catch {}
 
       const { weight } = await dispatch(fetchWeightsAction());
