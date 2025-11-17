@@ -6,7 +6,7 @@ import moment from "moment";
 import pdfMake from "pdfmake/build/pdfmake";
 import pdfFonts from "pdfmake/build/vfs_fonts";
 import { fetchWeightsAction } from "../../../services/weighingScale";
-import { createOrderAction } from "../../../services/order";
+import { createOrder } from "../../../services/order";
 import { ProductType } from "../../../enums/product";
 import { generatePdfDefinition } from "./templates/template1";
 import { generatePdfDefinition2 } from "./templates/template2";
@@ -876,7 +876,7 @@ export const CreateOrder = () => {
     setLastSubmitError(null);
     setLastSubmitResponse(null);
     try {
-      const response = await dispatch(createOrderAction(orderProps));
+      const response = await dispatch(createOrder(orderProps));
       if (response.error) {
         setLastSubmitError(response.error);
         alert(`Failed to submit order: ${response.error.message}`);
