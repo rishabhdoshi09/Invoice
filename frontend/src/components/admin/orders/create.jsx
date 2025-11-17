@@ -13,15 +13,21 @@ import { ProductType } from '../../../enums/product';
 /* -------------------------
   Safe font loader for pdfMake
 ------------------------- */
-try {
-  const vfsFonts = require('pdfmake/build/vfs_fonts');
-  if (vfsFonts?.pdfMake?.vfs) {
-    pdfMake.vfs = vfsFonts.pdfMake.vfs;
-  } else if (vfsFonts?.vfs) {
-    pdfMake.vfs = vfsFonts.vfs;
+if (typeof window !== 'undefined') {
+  try {
+    const vfsFonts = require('pdfmake/build/vfs_fonts');
+    if (vfsFonts && typeof vfsFonts === 'object') {
+      if (vfsFonts.pdfMake && vfsFonts.pdfMake.vfs) {
+        pdfMake.vfs = vfsFonts.pdfMake.vfs;
+      } else if (vfsFonts.vfs) {
+        pdfMake.vfs = vfsFonts.vfs;
+      } else {
+        console.warn('pdfMake vfs fonts structure not recognized, using default');
+      }
+    }
+  } catch (e) {
+    console.warn('pdfMake fonts not loaded:', e.message);
   }
-} catch (e) {
-  console.warn('pdfMake fonts not loaded:', e);
 }
 
 /* -------------------------
