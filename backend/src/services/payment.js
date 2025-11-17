@@ -1,17 +1,17 @@
 const Dao = require("../dao");
 
 module.exports = {
-    createPayment: async (payload) => {
+    createPayment: async (payload, transaction = null) => {
         try {
-            const res = await Dao.payment.createPayment(payload);
+            const res = await Dao.payment.createPayment(payload, transaction);
             return res;
         } catch (error) {
             throw error;
         }
     },
-    getPayment: async (payload) => {
+    getPayment: async (payload, transaction = null) => {
         try {
-            const res = await Dao.payment.getPayment(payload);
+            const res = await Dao.payment.getPayment(payload, transaction);
             return res;
         } catch (error) {
             throw error;
@@ -25,9 +25,9 @@ module.exports = {
             throw error;
         }
     },
-    deletePayment: async (payload) => {
+    deletePayment: async (payload, transaction = null) => {
         try {
-            const res = await Dao.payment.deletePayment(payload);
+            const res = await Dao.payment.deletePayment(payload, transaction);
             return res;
         } catch (error) {
             throw error;

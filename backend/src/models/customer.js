@@ -29,12 +29,21 @@ module.exports = (sequelize, Sequelize) => {
             },
             currentBalance: {
                 type: Sequelize.DOUBLE
+            },
+            ledgerId: {
+                type: Sequelize.UUID,
+                allowNull: true,
+                references: {
+                    model: 'ledgers',
+                    key: 'id'
+                }
             }
         }
     );
 
     customer.associate = (models) => {
         models.customer.hasMany(models.order, { foreignKey: 'customerId' });
+        models.customer.belongsTo(models.ledger, { foreignKey: 'ledgerId', as: 'ledger' });
     };
 
     return customer;

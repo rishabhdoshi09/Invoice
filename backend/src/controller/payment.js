@@ -5,147 +5,177 @@ const db = require('../models');
 
 module.exports = {
     createPayment: async (req, res) => {
+        const transaction = await db.sequelize.transaction();
+        
         try {
             const { error, value } = Validations.payment.validateCreatePaymentObj({ ...req.body, paymentNumber: `PAY-${uuidv4().split('-')[0].toUpperCase()}` });
             if (error) {
+                await transaction.rollback();
                 return res.status(400).send({
                     status: 400,
                     message: error.details[0].message
                 });
             }
 
-            const result = await db.sequelize.transaction(async (transaction) => {
-                const response = await Services.payment.createPayment(value, transaction);
+            // Create payment record
+            const response = await Services.payment.createPayment(value, transaction);
 
-                // Dynamically get the Cash/Bank Ledger ID
-                const cashBankLedger = await Services.ledger.getLedgerByName('Cash Account');
-                if (!cashBankLedger) {
-                    throw new Error('Cash Account Ledger not found. Please create a ledger named "Cash Account".');
-                }
-                const CASH_BANK_LEDGER_ID = cashBankLedger.id;
-                
-                // Create ledger entries for payment
-                const ledgerEntries = [];
+            // Ensure Cash Account ledger exists using findOrCreate
+            const cashBankLedger = await Services.ledger.findOrCreateByName(
+                'Cash Account',
+                { ledgerType: 'asset', openingBalance: 0, currentBalance: 0 },
+                transaction
+            );
+            const CASH_BANK_LEDGER_ID = cashBankLedger.id;
+            
+            // Create ledger entries for payment
+            const ledgerEntries = [];
 
-                if (value.partyType === 'customer') {
-                    // Customer payment received: Cash/Bank (Debit) to Customer (Credit)
-                    const customer = await Services.customer.getCustomer({ id: value.partyId });
-                    if (customer) {
-                        ledgerEntries.push({
-                            ledgerId: CASH_BANK_LEDGER_ID,
-                            entryDate: value.paymentDate,
-                            debit: value.amount,
-                            credit: 0,
-                            description: `Payment received from ${customer.name} for ${value.referenceType} ${value.referenceId}`,
-                            referenceType: 'payment',
-                            referenceId: response.id
-                        });
-                        ledgerEntries.push({
-                            ledgerId: customer.ledgerId, // Assuming customer has a ledgerId
-                            entryDate: value.paymentDate,
-                            debit: 0,
-                            credit: value.amount,
-                            description: `Payment received from ${customer.name} for ${value.referenceType} ${value.referenceId}`,
-                            referenceType: 'payment',
-                            referenceId: response.id
-                        });
+            if (value.partyType === 'customer') {
+                // Customer payment received: Cash/Bank (Debit) to Customer (Credit)
+                const customer = await Services.customer.getCustomer({ id: value.partyId });
+                if (customer) {
+                    // If customer doesn't have a ledger, create one
+                    if (!customer.ledgerId) {
+                        const customerLedger = await db.ledger.create({
+                            ledgerName: `Customer: ${customer.name}`,
+                            ledgerType: 'asset',
+                            openingBalance: customer.openingBalance || 0,
+                            currentBalance: customer.currentBalance || 0
+                        }, { transaction });
+                        
+                        await customer.update({ ledgerId: customerLedger.id }, { transaction });
+                        customer.ledgerId = customerLedger.id;
                     }
-                } else if (value.partyType === 'supplier') {
-                    // Supplier payment made: Supplier (Debit) to Cash/Bank (Credit)
-                    const supplier = await Services.supplier.getSupplier({ id: value.partyId });
+
+                    ledgerEntries.push({
+                        ledgerId: CASH_BANK_LEDGER_ID,
+                        entryDate: value.paymentDate,
+                        debit: value.amount,
+                        credit: 0,
+                        description: `Payment received from ${customer.name} for ${value.referenceType} ${value.referenceId || 'advance'}`,
+                        referenceType: 'payment',
+                        referenceId: response.id
+                    });
+                    ledgerEntries.push({
+                        ledgerId: customer.ledgerId,
+                        entryDate: value.paymentDate,
+                        debit: 0,
+                        credit: value.amount,
+                        description: `Payment received from ${customer.name} for ${value.referenceType} ${value.referenceId || 'advance'}`,
+                        referenceType: 'payment',
+                        referenceId: response.id
+                    });
+                }
+            } else if (value.partyType === 'supplier') {
+                // Supplier payment made: Supplier (Debit) to Cash/Bank (Credit)
+                const supplier = await Services.supplier.getSupplier({ id: value.partyId });
+                if (supplier) {
+                    // If supplier doesn't have a ledger, create one
+                    if (!supplier.ledgerId) {
+                        const supplierLedger = await db.ledger.create({
+                            ledgerName: `Supplier: ${supplier.name}`,
+                            ledgerType: 'liability',
+                            openingBalance: supplier.openingBalance || 0,
+                            currentBalance: supplier.currentBalance || 0
+                        }, { transaction });
+                        
+                        await supplier.update({ ledgerId: supplierLedger.id }, { transaction });
+                        supplier.ledgerId = supplierLedger.id;
+                    }
+
+                    ledgerEntries.push({
+                        ledgerId: supplier.ledgerId,
+                        entryDate: value.paymentDate,
+                        debit: value.amount,
+                        credit: 0,
+                        description: `Payment made to ${supplier.name} for ${value.referenceType} ${value.referenceId || 'advance'}`,
+                        referenceType: 'payment',
+                        referenceId: response.id
+                    });
+                    ledgerEntries.push({
+                        ledgerId: CASH_BANK_LEDGER_ID,
+                        entryDate: value.paymentDate,
+                        debit: 0,
+                        credit: value.amount,
+                        description: `Payment made to ${supplier.name} for ${value.referenceType} ${value.referenceId || 'advance'}`,
+                        referenceType: 'payment',
+                        referenceId: response.id
+                    });
+                }
+            }
+
+            if (ledgerEntries.length > 0) {
+                await db.ledgerEntry.bulkCreate(ledgerEntries, { transaction });
+            }
+
+            // Update reference (order or purchase) payment status
+            if (value.referenceType === 'order' && value.referenceId) {
+                const order = await Services.order.getOrder({ id: value.referenceId });
+                if (order) {
+                    const newPaidAmount = (order.paidAmount || 0) + value.amount;
+                    const newDueAmount = order.total - newPaidAmount;
+                    let paymentStatus = 'unpaid';
+                    
+                    if (newPaidAmount >= order.total) {
+                        paymentStatus = 'paid';
+                    } else if (newPaidAmount > 0) {
+                        paymentStatus = 'partial';
+                    }
+
+                    await Services.order.updateOrder(
+                        { id: value.referenceId },
+                        { 
+                            paidAmount: newPaidAmount, 
+                            dueAmount: newDueAmount,
+                            paymentStatus: paymentStatus
+                        }
+                    );
+                }
+            } else if (value.referenceType === 'purchase' && value.referenceId) {
+                const purchase = await Services.purchaseBill.getPurchaseBill({ id: value.referenceId });
+                if (purchase) {
+                    const newPaidAmount = (purchase.paidAmount || 0) + value.amount;
+                    const newDueAmount = purchase.total - newPaidAmount;
+                    let paymentStatus = 'unpaid';
+                    
+                    if (newPaidAmount >= purchase.total) {
+                        paymentStatus = 'paid';
+                    } else if (newPaidAmount > 0) {
+                        paymentStatus = 'partial';
+                    }
+
+                    await Services.purchaseBill.updatePurchaseBill(
+                        { id: value.referenceId },
+                        { 
+                            paidAmount: newPaidAmount, 
+                            dueAmount: newDueAmount,
+                            paymentStatus: paymentStatus
+                        }
+                    );
+
+                    // Update supplier balance
+                    const supplier = await Services.supplier.getSupplier({ id: purchase.supplierId });
                     if (supplier) {
-                        ledgerEntries.push({
-                            ledgerId: supplier.ledgerId, // Assuming supplier has a ledgerId
-                            entryDate: value.paymentDate,
-                            debit: value.amount,
-                            credit: 0,
-                            description: `Payment made to ${supplier.name} for ${value.referenceType} ${value.referenceId}`,
-                            referenceType: 'payment',
-                            referenceId: response.id
-                        });
-                        ledgerEntries.push({
-                            ledgerId: CASH_BANK_LEDGER_ID,
-                            entryDate: value.paymentDate,
-                            debit: 0,
-                            credit: value.amount,
-                            description: `Payment made to ${supplier.name} for ${value.referenceType} ${value.referenceId}`,
-                            referenceType: 'payment',
-                            referenceId: response.id
-                        });
-                    }
-                }
-
-                if (ledgerEntries.length > 0) {
-                    await db.ledgerEntry.bulkCreate(ledgerEntries, { transaction });
-                }
-
-                // Update reference (order or purchase) payment status
-                if (value.referenceType === 'order' && value.referenceId) {
-                    const order = await Services.order.getOrder({ id: value.referenceId });
-                    if (order) {
-                        const newPaidAmount = (order.paidAmount || 0) + value.amount;
-                        const newDueAmount = order.total - newPaidAmount;
-                        let paymentStatus = 'unpaid';
-                        
-                        if (newPaidAmount >= order.total) {
-                            paymentStatus = 'paid';
-                        } else if (newPaidAmount > 0) {
-                            paymentStatus = 'partial';
-                        }
-
-                        await Services.order.updateOrder(
-                            { id: value.referenceId },
-                            { 
-                                paidAmount: newPaidAmount, 
-                                dueAmount: newDueAmount,
-                                paymentStatus: paymentStatus
-                            }
+                        const newBalance = (supplier.currentBalance || 0) - value.amount;
+                        await Services.supplier.updateSupplier(
+                            { id: purchase.supplierId },
+                            { currentBalance: newBalance }
                         );
                     }
-                } else if (value.referenceType === 'purchase' && value.referenceId) {
-                    const purchase = await Services.purchaseBill.getPurchaseBill({ id: value.referenceId });
-                    if (purchase) {
-                        const newPaidAmount = (purchase.paidAmount || 0) + value.amount;
-                        const newDueAmount = purchase.total - newPaidAmount;
-                        let paymentStatus = 'unpaid';
-                        
-                        if (newPaidAmount >= purchase.total) {
-                            paymentStatus = 'paid';
-                        } else if (newPaidAmount > 0) {
-                            paymentStatus = 'partial';
-                        }
-
-                        await Services.purchaseBill.updatePurchaseBill(
-                            { id: value.referenceId },
-                            { 
-                                paidAmount: newPaidAmount, 
-                                dueAmount: newDueAmount,
-                                paymentStatus: paymentStatus
-                            }
-                        );
-
-                        // Update supplier balance
-                        const supplier = await Services.supplier.getSupplier({ id: purchase.supplierId });
-                        if (supplier) {
-                            const newBalance = (supplier.currentBalance || 0) - value.amount;
-                            await Services.supplier.updateSupplier(
-                                { id: purchase.supplierId },
-                                { currentBalance: newBalance }
-                            );
-                        }
-                    }
                 }
+            }
 
-                return response;
-            });
+            await transaction.commit();
 
             return res.status(200).send({
                 status: 200,
                 message: 'payment recorded successfully',
-                data: result
+                data: response
             });
 
         } catch (error) {
+            await transaction.rollback();
             console.log(error);
             return res.status(500).send({
                 status: 500,
@@ -207,10 +237,13 @@ module.exports = {
     },
     
     deletePayment: async (req, res) => {
+        const transaction = await db.sequelize.transaction();
+        
         try {
-            const payment = await Services.payment.getPayment({ id: req.params.paymentId });
+            const payment = await Services.payment.getPayment({ id: req.params.paymentId }, transaction);
             
             if (!payment) {
+                await transaction.rollback();
                 return res.status(400).send({
                     status: 400,
                     message: "payment doesn't exist"
@@ -271,19 +304,22 @@ module.exports = {
                             { currentBalance: newBalance }
                         );
                     }
-                    
-                    // Reverse ledger entries for payment
-                    await db.ledgerEntry.destroy({
-                        where: {
-                            referenceType: 'payment',
-                            referenceId: payment.id
-                        },
-                        transaction
-                    });
                 }
             }
+            
+            // Delete ledger entries for payment
+            await db.ledgerEntry.destroy({
+                where: {
+                    referenceType: 'payment',
+                    referenceId: payment.id
+                },
+                transaction
+            });
 
-            const response = await Services.payment.deletePayment({ id: req.params.paymentId });
+            // Delete payment
+            const response = await Services.payment.deletePayment({ id: req.params.paymentId }, transaction);
+            
+            await transaction.commit();
             
             if (response) {
                 return res.status(200).send({
@@ -294,6 +330,7 @@ module.exports = {
             }
             
         } catch (error) {
+            await transaction.rollback();
             console.log(error);
             return res.status(500).send({
                 status: 500,
