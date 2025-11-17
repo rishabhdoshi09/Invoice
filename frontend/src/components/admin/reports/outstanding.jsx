@@ -108,10 +108,10 @@ export const OutstandingReports = () => {
                                         </TableRow>
                                     ) : (
                                         receivables.customers.map((customer, index) => (
-                                            <TableRow key={index}>
-                                                <TableCell>{customer.customerName}</TableCell>
-                                                <TableCell>{customer.customerMobile}</TableCell>
-                                                <TableCell align="right">₹{customer.totalDue}</TableCell>
+                                            <TableRow key={customer.id || index}>
+                                                <TableCell>{customer.name}</TableCell>
+                                                <TableCell>{customer.mobile}</TableCell>
+                                                <TableCell align="right">₹{customer.currentBalance}</TableCell>
                                                 <TableCell align="right">{customer.orders?.length || 0}</TableCell>
                                             </TableRow>
                                         ))
