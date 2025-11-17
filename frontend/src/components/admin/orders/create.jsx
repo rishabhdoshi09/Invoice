@@ -480,8 +480,8 @@ export const CreateOrder = () => {
 
         try {
           const productPrice = Number(price);
-          // NEW: High-Value Product Lock (Price 300-399)
-          const isHighValue = productPrice >= 300 && productPrice <= 399;
+          // NEW: High-Value Product Lock (Price 300-999)
+          const isHighValue = productPrice >= 300 && productPrice <= 999;
 
           if (isHighValue) {
             const alreadyAdded = orderProps.orderItems.some(
@@ -1164,12 +1164,12 @@ export const CreateOrder = () => {
           />tton
             onClick={() => {
               const numeric = Number(formik.values.productPrice) || 0;
-              if (numeric >= 300 && numeric <= 399) {
+              if (numeric >= 300 && numeric <= 999) {
                 setHighValueLock(false);
                 setHighValueProductId(null);
                 addProductHandler();
               } else {
-                alert("Price must be between 300 and 399.");
+                  alert("Price must be between 300 and 999.");
               }
             }}
             sx={{ mt: 2 }}
