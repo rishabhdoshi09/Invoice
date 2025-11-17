@@ -197,11 +197,7 @@ export const CreateOrder = () => {
 
   const [suppressAutoSuggest, setSuppressAutoSuggest] = useState(false);
 
-  const [dabbaLock, setDabbaLock] = useState(false);
-  const [dabbaProductId, setDabbaProductId] = useState(null);
-  const [priceLock, setPriceLock] = useState(false);
-  const [priceLockProductId, setPriceLockProductId] = useState(null);
-  const [bowlPriceLock, setBowlPriceLock] = useState(false);
+
   const [highValueLock, setHighValueLock] = useState(false); // NEW: State for high-value product lock
   const [highValueProductId, setHighValueProductId] = useState(null); // NEW: State for high-value product ID
   const [bowlProductIdLocked, setBowlProductIdLocked] = useState(null);
@@ -327,28 +323,11 @@ export const CreateOrder = () => {
 
       lastAddSucceededRef.current = true;
 
-      try {
-        if (values?.id && dabbaProductId && String(values.id) === String(dabbaProductId)) {
-          setDabbaLock(false);
-          setDabbaProductId(null);
-          alert('Dabba product added — product toggling unlocked.');
-        }
-      } catch {}
 
-      try {
-        if (values?.id && priceLockProductId && String(values.id) === String(priceLockProductId)) {
-          setPriceLock(false);
-          setPriceLockProductId(null);
-          alert('Product with price 300 added — product toggling unlocked.');
-        }
-      } catch {}
 
-      try {
-        if (values?.id && bowlProductIdLocked && String(values.id) === String(bowlProductIdLocked)) {
-          setBowlPriceLock(false);
-          setBowlProductIdLocked(null);
-        }
-      } catch {}
+
+
+
 
       try {
         const added = Number((price * qty).toFixed(2));
@@ -413,14 +392,8 @@ export const CreateOrder = () => {
       return '';
     };
 
-    if (dabbaLock && value && value.productId !== dabbaProductId) {
-      alert('Product switching is locked because you selected dabba. Add the dabba product first. After it is added press Shift+J to unlock.');
-      return;
-    }
-    if (priceLock && value && value.productId !== priceLockProductId) {
-      alert('Product switching is locked because selected product has price 300. Add it first or press Shift+J to unlock.');
-      return;
-    }
+
+
 
     if (
       selectedProduct &&
@@ -528,17 +501,11 @@ export const CreateOrder = () => {
       setBowlProductIdLocked(null);
       clearQuickHighlight();
     }
-  }, [dabbaLock, dabbaProductId, priceLock, priceLockProductId, selectedProduct, formik, rows, orderProps.orderItems, weighingScaleHandler]);
+  }, [selectedProduct, formik, rows, orderProps.orderItems, weighingScaleHandler]);
 
   const attemptProductChange = useCallback(async (value) => {
-    if (dabbaLock && value && value.productId !== dabbaProductId) {
-      alert('Product switching is locked because you selected dabba. Add the dabba product first. After it is added press Shift+J to unlock.');
-      return;
-    }
-    if (priceLock && value && value.productId !== priceLockProductId) {
-      alert('Product switching is locked because selected product has price 300. Add it first or press Shift+J to unlock.');
-      return;
-    }
+
+
 
     const currentlySelected = selectedProduct;
     const currentNameFilled = !!(formik.values.name);
@@ -550,7 +517,7 @@ export const CreateOrder = () => {
     }
 
     try { await onProductSelect(null, value); } catch {}
-  }, [dabbaLock, dabbaProductId, priceLock, priceLockProductId, highValueLock, highValueProductId, selectedProduct, formik.values.name, formik.values.id, orderProps.orderItems, onProductSelect]);
+  }, [highValueLock, highValueProductId, selectedProduct, formik.values.name, formik.values.id, orderProps.orderItems, onProductSelect]);
 
   const onPriceFocus = (e) => {
     if (isNameAdd) { firstDigitLockRef.current = null; return; }
@@ -591,8 +558,15 @@ export const CreateOrder = () => {
   };
 
   const onPriceChange = (e) => {
-    const rawInput = String(e.target.value || '');
-    if (!bowlPriceLock) {
+    const rawInput = String(e.target.value || 
+    '');
+    const numericInput = Number(rawInput) || 0;
+    
+    // NEW: Prevent typing 200 for weighted products
+    if (isWeighted && rawInput.length === 3 && numericInput === 200) {
+      e.preventDefault && e.preventDefault();
+      return;
+    }if (!bowlPriceLock) {
       if (!isNameAdd) {
         if (!(formik.values.name && formik.values.name.toLowerCase() === 'add')) {
           const lock = firstDigitLockRef.current;
@@ -709,20 +683,7 @@ export const CreateOrder = () => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  useEffect(() => {
-    const handleShiftJ = (e) => {
-      const key = (e.key || '').toLowerCase();
-      if (e.shiftKey && (key === 'j')) {
-        let didUnlock = false;
-        if (dabbaLock) { setDabbaLock(false); setDabbaProductId(null); didUnlock = true; }
-        if (priceLock) { setPriceLock(false); setPriceLockProductId(null); didUnlock = true; }
-        if (bowlPriceLock) { setBowlPriceLock(false); setBowlProductIdLocked(null); didUnlock = true; }
-        if (didUnlock) { alert('Product toggling unlocked.'); }
-      }
-    };
-    window.addEventListener('keydown', handleShiftJ);
-    return () => window.removeEventListener('keydown', handleShiftJ);
-  }, [dabbaLock, priceLock, bowlPriceLock]);
+
 
   const isEditableTarget = (el) => {
     if (!el) return false;
