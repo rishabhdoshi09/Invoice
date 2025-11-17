@@ -1,5 +1,7 @@
 'use strict';
 
+const { v4: uuidv4 } = require('uuid');
+
 module.exports = {
     up: async (queryInterface, Sequelize) => {
         // Check if Cash Account ledger already exists
@@ -10,7 +12,7 @@ module.exports = {
         // Only create if it doesn't exist
         if (!existing || existing.length === 0) {
             await queryInterface.bulkInsert('ledgers', [{
-                id: Sequelize.literal('uuid_generate_v4()'),
+                id: uuidv4(),
                 ledgerName: 'Cash Account',
                 ledgerType: 'asset',
                 openingBalance: 0,
