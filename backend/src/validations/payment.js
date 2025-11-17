@@ -10,7 +10,7 @@ module.exports = {
             partyType: Joi.string().trim().valid('customer', 'supplier').required(),
             amount: Joi.number().greater(0).required(),
             referenceType: Joi.string().trim().valid('order', 'purchase', 'advance').required(),
-            referenceId: Joi.string().trim().allow("").optional(),
+            referenceId: Joi.string().trim().allow("").allow(null).optional(),
             referenceNumber: Joi.string().trim().allow("").optional(),
             notes: Joi.string().trim().allow("").optional()
         });

@@ -17,6 +17,11 @@ module.exports = {
                 });
             }
 
+            // Convert empty string to null for UUID fields
+            if (value.referenceId === '' || value.referenceId === undefined) {
+                value.referenceId = null;
+            }
+
             // Create payment record
             const response = await Services.payment.createPayment(value, transaction);
 
