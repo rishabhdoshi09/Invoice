@@ -350,6 +350,7 @@ export const CreateOrder = () => {
     return false;
   }, [formik, rows]);
 
+  // eslint-disable-next-line no-unused-vars
   const onProductSelect = useCallback(async (event, value) => {
     const productId = value?.productId;
     setSelectedProduct(value);
@@ -625,7 +626,8 @@ export const CreateOrder = () => {
     }
   }, [isFormValid, isNameAdd, isAddProduct, formik.values, orderProps, generatePdf, resetForm]);
 
-  const removeProductHandler = useCallback((index) => {
+  // eslint-disable-next-line no-unused-vars
+  const removeItem = useCallback((index) => {
     const newItems = orderProps.orderItems.filter((_, i) => i !== index);
     const newOrderProps = { ...orderProps, orderItems: newItems };
     const totals = recomputeTotals(newOrderProps);
@@ -842,7 +844,7 @@ export const CreateOrder = () => {
   const generatePdfWithDeps = useCallback(() => generatePdf(orderProps), [orderProps, generatePdf]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const removeProductHandlerWithDeps = useCallback((index) => removeProductHandler(index), [removeProductHandler]);
+  const removeProductHandlerWithDeps = useCallback((index) => removeItem(index), [removeItem]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const saveOrderHandlerWithDeps = useCallback(() => saveOrderHandler(), [saveOrderHandler]);
@@ -1090,7 +1092,7 @@ export const CreateOrder = () => {
                       <Button
                         color="error"
                         size="small"
-                        onClick={() => removeProductHandler(index)}
+                        onClick={() => removeItem(index)}
                       >
                         <Delete fontSize="small" />
                       </Button>
@@ -1142,7 +1144,7 @@ export const CreateOrder = () => {
               <Select
                 fullWidth
                 value={template}
-                onChange={(e) => setTemplate(e.target.value)}
+                onChange={onTemplateChange}
                 displayEmpty
                 inputProps={{ 'aria-label': 'Without label' }}
               >
@@ -1200,7 +1202,7 @@ export const CreateOrder = () => {
                   color="error"
                   onClick={() => {
                     setShowHighValueModal(false);
-                    removeProductHandler(orderProps.orderItems.length - 1);
+                    removeItem(orderProps.orderItems.length - 1);
                   }}
                 >
                   Cancel (Esc)

@@ -147,7 +147,7 @@ export const Layout = () =>  {
 
     useEffect(()=>{
         dispatch(listProductsAction());
-    }, [])
+    }, [dispatch])
 
     return (
         <>
