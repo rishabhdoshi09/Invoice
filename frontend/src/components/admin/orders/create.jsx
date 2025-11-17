@@ -6,6 +6,7 @@ import moment from "moment";
 import pdfMake from "pdfmake/build/pdfmake";
 import pdfFonts from "pdfmake/build/vfs_fonts";
 import { fetchWeightsAction } from "../../../services/weighingScale";
+import { createOrderAction } from "../../../services/order";
 import { ProductType } from "../../../enums/product";
 import { generatePdfDefinition } from "./templates/template1";
 import { generatePdfDefinition2 } from "./templates/template2";
@@ -24,6 +25,16 @@ const getTodayGrandTotal = () => {
   } catch {
     return 0;
   }
+};
+
+const isEditableTarget = (el) => {
+  if (!el) return false;
+  const tagName = el.tagName.toLowerCase();
+  return (
+    tagName === "input" ||
+    tagName === "textarea" ||
+    el.contentEditable === "true"
+  );
 };
 
 const toNumber = (v) => {
