@@ -493,7 +493,7 @@ export const CreateOrder = () => {
         const lab = (rows[productId]?.name || '').toLowerCase();
         if ((lab || '').includes('bowl')) {
           const bp = Number(rows[productId]?.pricePerKg) || 0;
-          if (bp >= 100 && bp <= 999 && bp !== 200) {
+          if (bp >= 100 && bp <= 399 && bp !== 200) {
             setBowlPriceLock(true);
             setBowlProductIdLocked(productId);
             try { firstDigitLockRef.current = String(bp).charAt(0) || null; } catch {}
