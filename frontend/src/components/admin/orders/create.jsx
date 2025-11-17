@@ -272,9 +272,9 @@ export const CreateOrder = () => {
         const currentIsBowl = Boolean(values && (String(values.name || '').toLowerCase().includes('bowl') || (bowlProductIdLocked && String(values.id) === String(bowlProductIdLocked))));
         if (currentIsBowl || bowlPriceLock) {
           const valStr = String(values.productPrice || '').replace(/\D/g,'');
-          if (valStr.length !== 3) { alert('Bowl price must be exactly 3 digits (100–999).'); return; }
+          if (valStr.length < 1 || valStr.length > 3) { alert('Bowl price must be between 1 and 3 digits (1–999).'); return; }
           const numeric = Number(valStr);
-          if (numeric < 100 || numeric > 999) { alert('Bowl price must be between 100 and 999.'); return; }
+          if (numeric < 1 || numeric > 999) { alert('Bowl price must be between 1 and 999.'); return; }
           values.productPrice = valStr;
         }
       } catch {}
@@ -283,10 +283,14 @@ export const CreateOrder = () => {
 
       const priceNumLocal = Number(values?.productPrice) || 0;
       
-      // For weighted products: enforce 3-digit price (100-999)
+      // For weighted products: enforce 3-digit price (100-999) and prevent 200
       const isWeightedProduct = (values?.type === ProductType.WEIGHTED || String(values?.type||'').toLowerCase()==='weighted');
       if (isWeightedProduct) {
         const priceStr = String(priceNumLocal);
+        if (priceNumLocal === 200) {
+          alert('Weighted product price cannot be 200.');
+          return;
+        }
         if (priceStr.length !== 3 || priceNumLocal < 100 || priceNumLocal > 999) {
           alert('Weighted product price must be exactly 3 digits (100-999).');
           return;
@@ -350,7 +354,7 @@ export const CreateOrder = () => {
 
       try {
         const addedUnitPrice = Number(values.productPrice) || 0;
-        if (!suppressAutoSuggest && addedUnitPrice >= 200 && addedUnitPrice <= 600) {
+        if (!suppressAutoSuggest && addedUnitPrice >= 300 && addedUnitPrice <= 999) {
           const bowlProduct = productOptions.find(p => (p.label || '').toLowerCase().includes('bowl'));
           if (bowlProduct && rows && rows[bowlProduct.productId]) {
             const bowlPrice = rows[bowlProduct.productId].pricePerKg;
@@ -741,20 +745,7 @@ export const CreateOrder = () => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  useEffect(() => {
-    const handleShiftJ = (e) => {
-      const key = (e.key || '').toLowerCase();
-      if (e.shiftKey && (key === 'j')) {
-        let didUnlock = false;
-        if (dabbaLock) { setDabbaLock(false); setDabbaProductId(null); didUnlock = true; }
-        if (priceLock) { setPriceLock(false); setPriceLockProductId(null); didUnlock = true; }
-        if (bowlPriceLock) { setBowlPriceLock(false); setBowlProductIdLocked(null); didUnlock = true; }
-        if (didUnlock) { alert('Product toggling unlocked.'); }
-      }
-    };
-    window.addEventListener('keydown', handleShiftJ);
-    return () => window.removeEventListener('keydown', handleShiftJ);
-  }, [dabbaLock, priceLock, bowlPriceLock]);
+  // Shift+J locking logic removed as per user request.
 
   const isEditableTarget = (el) => {
     if (!el) return false;
@@ -799,18 +790,7 @@ export const CreateOrder = () => {
     }
   }, [dispatch, formik, rows, orderProps.orderItems, attemptProductChange, archivedOrderProps, archivedPdfUrl]);
 
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if (e.key !== '1' || e.ctrlKey || e.metaKey || e.altKey) return;
-      const t = e.target;
-      if (isEditableTarget(t) || isEditableTarget(document.activeElement)) return;
-      e.preventDefault();
-      const product = productOptions.find(p => p.label.toLowerCase().includes('dabba'));
-      if (product) { selectAndMaybeAdd(product); }
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [productOptions, selectAndMaybeAdd]);
+  useE  // Auto-add bowl feature on key '1' removed as per user request.ndMaybeAdd]);
 
   useEffect(() => { generatePdf(orderProps); }, [template, generatePdf, orderProps]);
 
