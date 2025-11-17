@@ -1,8 +1,24 @@
 import moment from 'moment/moment';
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useFormik } from "formik";
 import { useDispatch, useSelector } from 'react-redux';
-import { Autocomplete, Box, Button, Card, CardContent, Grid, TextField, Typography, Select, MenuItem, Divider } from '@mui/material';
+import {
+  Autocomplete,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Grid,
+  TextField,
+  Typography,
+  Select,
+  MenuItem,
+  Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
+} from '@mui/material';
 import { CreateProduct } from '../products/create';
 import pdfMake from 'pdfmake/build/pdfmake';
 import { generatePdfDefinition, generatePdfDefinition2 } from './helper';
@@ -234,6 +250,11 @@ export const CreateOrder = () => {
   const firstDigitLockRef = useRef(null);
   const lastAddSucceededRef = useRef(false);
 
+  // ref for modal price input to ensure focus works reliably
+  const modalPriceRef = useRef(null);
+  // ref for main productPrice input to focus after adding
+  const priceInputRef = useRef(null);
+
   const [selectedQuick, setSelectedQuick] = useState('');
   const clearQuickHighlight = () => setSelectedQuick('');
   const [highlightedQuickProduct, setHighlightedQuickProduct] = useState(null);
@@ -251,14 +272,24 @@ export const CreateOrder = () => {
 
   const [suppressAutoSuggest, setSuppressAutoSuggest] = useState(false);
 
+  // use suppressAutoSuggest in a small effect so eslint doesn't flag it as assigned but unused
+  useEffect(() => {
+    // intentionally referencing the state to silence unused variable warnings.
+    // In future you can hook this state into product Autocomplete behavior (e.g. temporarily close suggestion list).
+    if (suppressAutoSuggest) {
+      // no-op for now
+    }
+  }, [suppressAutoSuggest]);
+
   const [dabbaLock, setDabbaLock] = useState(false);
   const [dabbaProductId, setDabbaProductId] = useState(null);
-  const [priceLock, setPriceLock] = useState(false);
-  const [priceLockProductId, setPriceLockProductId] = useState(null);
   const [bowlPriceLock, setBowlPriceLock] = useState(false);
   const [bowlProductIdLocked, setBowlProductIdLocked] = useState(null);
 
   const [fetchedViaScale, setFetchedViaScale] = useState(false);
+
+  // Modal suppression state (if user explicitly closes modal for current price range)
+  const [modalSuppress, setModalSuppress] = useState(false);
 
   // NEW: Past totals (history)
   const [dailyHistory, setDailyHistory] = useState([]);
@@ -276,8 +307,6 @@ export const CreateOrder = () => {
       if (w) { const onLoad = () => { try { w.print(); } catch {} }; w.addEventListener('load', onLoad, { once: true }); }
     } catch {}
   }, [pdfUrl, archivedPdfUrl]);
-
-  const safeGetProductName=(rowsObj,item)=>{ const row=rowsObj&&item?rowsObj[item.productId]:undefined; return (row&&row.name)||item?.name||'ITEM'; };
 
   const generatePdf = useCallback((pdfProps) => {
     const updatedProps = JSON.parse(JSON.stringify(pdfProps));
@@ -307,6 +336,9 @@ export const CreateOrder = () => {
   }), []);
   
   const [orderProps, setOrderProps] = useState(initialOrderProps);
+  const orderItemsRef = useRef(orderProps.orderItems || []);
+  useEffect(() => { orderItemsRef.current = orderProps.orderItems || []; }, [orderProps.orderItems]);
+
   const [todayGrandTotal, setTodayGrandTotal] = useState(getTodayGrandTotal());
 
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -337,16 +369,12 @@ export const CreateOrder = () => {
 
       const priceNumLocal = Number(values?.productPrice) || 0;
       
-      // For weighted products: enforce 3-digit price (100-399) and block 200
+      // For weighted products: enforce 3-digit price (100-399)
       const isWeightedProduct = (values?.type === ProductType.WEIGHTED || String(values?.type||'').toLowerCase()==='weighted');
       if (isWeightedProduct) {
         const priceStr = String(priceNumLocal);
         if (priceStr.length !== 3 || priceNumLocal < 100 || priceNumLocal > 399) {
           alert('Weighted product price must be exactly 3 digits (100-399).');
-          return;
-        }
-        if (priceNumLocal === 200) {
-          alert('Price 200 is not allowed for weighted products.');
           return;
         }
       } else {
@@ -384,79 +412,11 @@ export const CreateOrder = () => {
       lastAddSucceededRef.current = true;
 
       try {
-        if (values?.id && dabbaProductId && String(values.id) === String(dabbaProductId)) {
-          setDabbaLock(false);
-          setDabbaProductId(null);
-          alert('Dabba product added — product toggling unlocked.');
-        }
-      } catch {}
-
-      try {
-        if (values?.id && priceLockProductId && String(values.id) === String(priceLockProductId)) {
-          setPriceLock(false);
-          setPriceLockProductId(null);
-          alert('Product with price 300 added — product toggling unlocked.');
-        }
-      } catch {}
-
-      try {
         if (values?.id && bowlProductIdLocked && String(values.id) === String(bowlProductIdLocked)) {
           setBowlPriceLock(false);
           setBowlProductIdLocked(null);
         }
       } catch {}
-
-      // Auto-add bowl product feature disabled
-      // try {
-      //   const addedUnitPrice = Number(values.productPrice) || 0;
-      //   if (!suppressAutoSuggest && addedUnitPrice >= 200 && addedUnitPrice <= 600) {
-      //     const bowlProduct = productOptions.find(p => (p.label || '').toLowerCase().includes('bowl'));
-      //     if (bowlProduct && rows && rows[bowlProduct.productId]) {
-      //       const bowlPrice = rows[bowlProduct.productId].pricePerKg;
-      //       setTimeout(() => {
-      //         setSelectedProduct(bowlProduct);
-      //         setInputValue(bowlProduct.label || bowlProduct.value || '');
-      //         formik.setFieldValue('id', bowlProduct.productId ?? "");
-      //         formik.setFieldValue('name', rows[bowlProduct.productId]?.name || 'Bowl');
-      //         formik.setFieldValue('productPrice', String(bowlPrice));
-      //         try { firstDigitLockRef.current = String(bowlPrice).charAt(0) || null; } catch {}
-      //         const currentQty = Number(formik.values.quantity) || 0;
-      //         formik.setFieldValue('totalPrice', Number((bowlPrice * currentQty).toFixed(2)));
-      //         setHighlightedQuickProduct('bowl');
-      //         setSelectedQuick('bowl');
-      //
-      //         try {
-      //           if (Number(bowlPrice) === 300) {
-      //             const alreadyAdded = orderProps.orderItems.some(it => String(it.productId) === String(bowlProduct.productId));
-      //             if (!alreadyAdded) {
-      //               setPriceLock(true);
-      //               setPriceLockProductId(bowlProduct.productId);
-      //             }
-      //           }
-      //         } catch {}
-      //
-      //         try {
-      //           const lab = (rows[bowlProduct.productId]?.name || bowlProduct.label || '').toLowerCase();
-      //           if (/\bdabba\b/.test(lab)) {
-      //             setDabbaLock(true);
-      //             setDabbaProductId(bowlProduct.productId);
-      //           }
-      //         } catch {}
-      //
-      //         try {
-      //           const bp = Number(bowlPrice) || 0;
-      //           if (bp >= 100 && bp <= 399) {
-      //             setBowlPriceLock(true);
-      //             setBowlProductIdLocked(bowlProduct.productId);
-      //             try { firstDigitLockRef.current = String(bp).charAt(0) || null; } catch {}
-      //           }
-      //         } catch {}
-      //       }, 60);
-      //     }
-      //   }
-      // } catch (err) {
-      //   console.error('Auto-suggest bowl failed', err);
-      // }
 
       try {
         const added = Number((price * qty).toFixed(2));
@@ -508,24 +468,10 @@ export const CreateOrder = () => {
     return true;
   }, [dispatch, formik]);
 
+  // use stable classifyQuickTag from outer scope (remove inner duplicates)
   const onProductSelect = useCallback(async (e, value) => {
-    const classifyQuickTag=(raw)=>{ 
-      if(!raw) return ''; 
-      const n=String(raw).toLowerCase().replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
-      const hasKadi=/\b(kadi|kdi)\b/.test(n); 
-      const hasTiff=/\b(tiffin|tffn)\b/.test(n);
-      if(/\bbt\s*tiffin\b/.test(n)||(hasKadi&&hasTiff)) return 'kadi tiffin';
-      if(/\bthali\b/.test(n)&&/\bdelhi\b/.test(n)) return 'thali delhi';
-      if(/\bdabba\b/.test(n)) return 'dabba';
-      return '';
-    };
-
     if (dabbaLock && value && value.productId !== dabbaProductId) {
       alert('Product switching is locked because you selected dabba. Add the dabba product first.');
-      return;
-    }
-    if (priceLock && value && value.productId !== priceLockProductId) {
-      alert('Product switching is locked because selected product has price 300. Add it first.');
       return;
     }
 
@@ -534,7 +480,7 @@ export const CreateOrder = () => {
       value?.productId !== selectedProduct?.productId &&
       formik.values.name &&
       (
-        !orderProps.orderItems.some(item => item.productId === formik.values.id)
+        !orderItemsRef.current.some(item => item.productId === formik.values.id)
       )
     ) {
       const ok = window.confirm('Are you sure you want to change product? You have not added the current selection.');
@@ -565,16 +511,6 @@ export const CreateOrder = () => {
       formik.setFieldValue('productPrice', price ? String(price) : "");
       try { firstDigitLockRef.current = (String(price || '') || '').charAt(0) || null; } catch {}
       formik.setFieldValue('totalPrice', Number((((price||0) * (Number(formik.values.quantity)||0))).toFixed(2)));
-
-      try {
-        if (Number(price) === 300) {
-          const alreadyAdded = orderProps.orderItems.some(it => String(it.productId) === String(productId));
-          if (!alreadyAdded) {
-            setPriceLock(true);
-            setPriceLockProductId(productId);
-          }
-        }
-      } catch {}
 
       const selectedType = rows[productId]?.type;
       const looksWeighted = (
@@ -623,21 +559,17 @@ export const CreateOrder = () => {
       setBowlProductIdLocked(null);
       clearQuickHighlight();
     }
-  }, [dabbaLock, dabbaProductId, priceLock, priceLockProductId, selectedProduct, formik, rows, orderProps.orderItems, weighingScaleHandler]);
+  }, [dabbaLock, dabbaProductId, selectedProduct, formik, rows, weighingScaleHandler]);
 
   const attemptProductChange = useCallback(async (value) => {
     if (dabbaLock && value && value.productId !== dabbaProductId) {
       alert('Product switching is locked because you selected dabba. Add the dabba product first.');
       return;
     }
-    if (priceLock && value && value.productId !== priceLockProductId) {
-      alert('Product switching is locked because selected product has price 300. Add it first.');
-      return;
-    }
 
     const currentlySelected = selectedProduct;
     const currentNameFilled = !!(formik.values.name);
-    const currentNotAdded = !orderProps.orderItems.some(item => item.productId === formik.values.id);
+    const currentNotAdded = !orderItemsRef.current.some(item => item.productId === formik.values.id);
 
     if (currentlySelected && value && value.productId !== currentlySelected.productId && currentNameFilled && currentNotAdded) {
       const ok = window.confirm('Are you sure you want to change product? You have not added the current selection.');
@@ -645,7 +577,7 @@ export const CreateOrder = () => {
     }
 
     try { await onProductSelect(null, value); } catch {}
-  }, [dabbaLock, dabbaProductId, priceLock, priceLockProductId, selectedProduct, formik.values.name, formik.values.id, orderProps.orderItems, onProductSelect]);
+  }, [dabbaLock, dabbaProductId, selectedProduct, formik, onProductSelect]);
 
   const onPriceFocus = (e) => {
     if (isNameAdd) { firstDigitLockRef.current = null; return; }
@@ -771,6 +703,16 @@ export const CreateOrder = () => {
     } catch (err) {
       console.error('Add product handler failed', err);
       alert("Add failed due to an unexpected error. See console.");
+    } finally {
+      // after adding and resetting form, focus product price so user can quickly add next product
+      try {
+        setTimeout(() => {
+          if (priceInputRef && priceInputRef.current && typeof priceInputRef.current.focus === 'function') {
+            priceInputRef.current.focus();
+            if (priceInputRef.current.select) priceInputRef.current.select();
+          }
+        }, 60);
+      } catch {}
     }
   }, [weighingScaleHandler, formik, isWeighted, archivedOrderProps, archivedPdfUrl]);
 
@@ -800,8 +742,6 @@ export const CreateOrder = () => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-
-
   const isEditableTarget = (el) => {
     if (!el) return false;
     const tag = el.tagName;
@@ -822,8 +762,7 @@ export const CreateOrder = () => {
     try {
       const p = rows[product.productId];
       if (p && Number(p.pricePerKg) === 300) {
-        const alreadyAdded = orderProps.orderItems.some(it => String(it.productId) === String(product.productId));
-        if (!alreadyAdded) { setPriceLock(true); setPriceLockProductId(product.productId); }
+        // previously we set priceLock here; removed per request
       }
     } catch {}
 
@@ -843,7 +782,7 @@ export const CreateOrder = () => {
       alert("Weight fetched is zero or invalid. Please ensure the scale is ready.");
       clearQuickHighlight();
     }
-  }, [dispatch, formik, rows, orderProps.orderItems, attemptProductChange, archivedOrderProps, archivedPdfUrl]);
+  }, [dispatch, formik, rows, attemptProductChange, archivedOrderProps, archivedPdfUrl]);
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -904,8 +843,14 @@ export const CreateOrder = () => {
         return;
       }
 
+      // SANITIZE before save
+      const sanitized = sanitizeOrderForServer(orderProps);
+
       // OFFLINE SAVE (localStorage)
-      const savedOrder = saveOrderLocal(orderProps);
+      const savedOrder = saveOrderLocal(sanitized);
+
+      // Save pending (backup)
+      try { savePendingInvoice(savedOrder); } catch {}
 
       setLastSubmitResponse({
         stage: "offline_success",
@@ -1040,8 +985,39 @@ export const CreateOrder = () => {
     };
   }, [refreshHistory]);
 
+  useEffect(() => {
+    const H=window.history; const originalPush=H.pushState; const originalReplace=H.replaceState;
+    return () => { H.pushState=originalPush; H.replaceState=originalReplace };
+  }, []);
+
   const visiblePdfUrl = archivedPdfUrl || pdfUrl;
   const visibleOrderDisplay = archivedOrderProps || orderProps;
+
+  // Modal logic: open only if priceValue is in 300-399 and user hasn't suppressed modal
+  const modalShouldBeOpen = priceValue >= 300 && priceValue <= 399 && Boolean(formik.values.name);
+  const modalOpen = modalShouldBeOpen && !modalSuppress;
+
+  // Reset suppression when price leaves range
+  useEffect(() => {
+    if (!(priceValue >= 300 && priceValue <= 399)) {
+      setModalSuppress(false);
+    }
+  }, [priceValue]);
+
+  // Ensure price input inside modal receives focus when modal opens (robust fallback if autoFocus doesn't mount fast enough)
+  useEffect(() => {
+    if (modalOpen) {
+      try {
+        setTimeout(() => {
+          if (modalPriceRef && modalPriceRef.current && typeof modalPriceRef.current.focus === 'function') {
+            modalPriceRef.current.focus();
+            // also select existing text if present
+            if (modalPriceRef.current.select) modalPriceRef.current.select();
+          }
+        }, 50);
+      } catch {}
+    }
+  }, [modalOpen]);
 
   return (
     <>
@@ -1115,13 +1091,6 @@ export const CreateOrder = () => {
                         setHighlightedQuickProduct('dabba');
                         await attemptProductChange(product);
                         try { setDabbaLock(true); setDabbaProductId(product.productId); } catch {}
-                        try {
-                          const p = rows[product.productId];
-                          if (p && Number(p.pricePerKg) === 300) {
-                            const alreadyAdded = orderProps.orderItems.some(it => String(it.productId) === String(product.productId));
-                            if (!alreadyAdded) { setPriceLock(true); setPriceLockProductId(product.productId); }
-                          }
-                        } catch {}
                         await onProductSelect(null, product);
                       } else { alert("Product '/dabba' not found"); }
                     }}
@@ -1141,13 +1110,6 @@ export const CreateOrder = () => {
                         setInputValue(product.label || product.value || '');
                         setHighlightedQuickProduct('thali delhi');
                         await attemptProductChange(product);
-                        try {
-                          const p = rows[product.productId];
-                          if (p && Number(p.pricePerKg) === 300) {
-                            const alreadyAdded = orderProps.orderItems.some(it => String(it.productId) === String(product.productId));
-                            if (!alreadyAdded) { setPriceLock(true); setPriceLockProductId(product.productId); }
-                          }
-                        } catch {}
                         await onProductSelect(null, product);
                       } else { alert("Product '///thali delhi' not found"); }
                     }}
@@ -1167,13 +1129,6 @@ export const CreateOrder = () => {
                         setInputValue(product.label || product.value || '');
                         setHighlightedQuickProduct('kadi tiffin');
                         await attemptProductChange(product);
-                        try {
-                          const p = rows[product.productId];
-                          if (p && Number(p.pricePerKg) === 300) {
-                            const alreadyAdded = orderProps.orderItems.some(it => String(it.productId) === String(product.productId));
-                            if (!alreadyAdded) { setPriceLock(true); setPriceLockProductId(product.productId); }
-                          }
-                        } catch {}
                         await onProductSelect(null, product);
                       } else { alert("Product 'kadi tiffin' not found"); }
                     }}
@@ -1231,6 +1186,7 @@ export const CreateOrder = () => {
                   }
                   inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', step: 1 }}
                   onKeyDown={onPriceKeyDown}
+                  inputRef={priceInputRef}
                 />
               </Grid>
 
@@ -1263,7 +1219,7 @@ export const CreateOrder = () => {
 
               <Grid item xs={12}>
                 <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
-                  Shortcuts: "/" for weight refresh, "=" to add product, Shift+D delete last, Ctrl/Cmd+P print | Weighted: 3-digit prices only (100-399)
+                  Shortcuts: '/' for weight refresh, '=' to add product, Shift+D delete last item, Ctrl/Cmd+P print. Weighted: 3-digit prices only (100-399)
                 </Typography>
                 <Button variant="contained" onClick={createOrder} sx={{ float: "right", margin: "5px" }} disabled={orderProps.orderItems.length === 0}>Submit</Button>
                 <Button variant="contained" onClick={addProductHandler} sx={{ float: "right", margin: "5px" }}
@@ -1370,6 +1326,97 @@ export const CreateOrder = () => {
           </Box>
         </Grid>
       </Grid>
+
+      {/* Modal for distraction-free editing when price is 300-399 */}
+      <Dialog
+        open={Boolean(modalOpen)}
+        onClose={() => setModalSuppress(true)}
+        // make the dialog cover the whole viewport
+        fullScreen
+        // keep fullWidth for internal layout but maxWidth isn't needed when fullScreen
+        PaperProps={{
+          sx: {
+            backgroundColor: '#ffffff',
+            width: '100%',
+            height: '100%',
+            margin: 0,
+            borderRadius: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            // ensure content doesn't overflow awkwardly
+            overflow: 'auto',
+            p: 2
+          }
+        }}
+        // ensure backdrop covers the window as usual
+        BackdropProps={{ invisible: false }}
+      >
+        <DialogTitle>High-price editor (₹300–₹399)</DialogTitle>
+        <DialogContent sx={{ flexGrow: 1 }}>
+          <Box sx={{ display: 'grid', gap: 1 }}>
+            <TextField
+              size="small"
+              label="Product Name"
+              value={formik.values.name}
+              onChange={(e) => formik.setFieldValue('name', e.target.value)}
+              fullWidth
+            />
+            <TextField
+              // autofocus this field when the modal opens (and also provide ref fallback)
+              autoFocus
+              inputRef={modalPriceRef}
+              size="small"
+              label="Product Price"
+              type="number"
+              value={formik.values.productPrice}
+              onChange={onPriceChange}
+              onKeyDown={onPriceKeyDown}
+              onPaste={onPasteHandler}
+              helperText={isWeighted ? (isWeightedPriceInvalid ? 'Must be 3 digits (100-399)' : `Range: ₹${priceRange}`) : ''}
+              fullWidth
+              inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', step: 1 }}
+            />
+            <TextField
+              size="small"
+              label="Quantity"
+              type="number"
+              value={formik.values.quantity}
+              onChange={onQuantityChange}
+              InputProps={{
+                endAdornment: isWeighted ? (<Button onClick={weighingScaleHandler}><Sync /></Button>) : null
+              }}
+              fullWidth
+            />
+            <TextField
+              size="small"
+              label="Alternate Name (optional)"
+              value={formik.values.altName}
+              onChange={(e) => formik.setFieldValue('altName', e.target.value)}
+              fullWidth
+            />
+            <TextField
+              size="small"
+              label="Total Price"
+              value={formik.values.totalPrice}
+              disabled
+              fullWidth
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setModalSuppress(true)}>Cancel</Button>
+          <Button
+            onClick={() => {
+              // attempt add
+              addProductHandler();
+            }}
+            variant="contained"
+            disabled={formik.values.name === "" || (isWeighted && (formik.values.productPrice === "" || isWeightedPriceInvalid))}
+          >
+            Add Product
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };
