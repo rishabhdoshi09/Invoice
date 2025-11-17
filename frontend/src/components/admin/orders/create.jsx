@@ -402,56 +402,57 @@ export const CreateOrder = () => {
         }
       } catch {}
 
-      try {
-        const addedUnitPrice = Number(values.productPrice) || 0;
-        if (!suppressAutoSuggest && addedUnitPrice >= 200 && addedUnitPrice <= 600) {
-          const bowlProduct = productOptions.find(p => (p.label || '').toLowerCase().includes('bowl'));
-          if (bowlProduct && rows && rows[bowlProduct.productId]) {
-            const bowlPrice = rows[bowlProduct.productId].pricePerKg;
-            setTimeout(() => {
-              setSelectedProduct(bowlProduct);
-              setInputValue(bowlProduct.label || bowlProduct.value || '');
-              formik.setFieldValue('id', bowlProduct.productId ?? "");
-              formik.setFieldValue('name', rows[bowlProduct.productId]?.name || 'Bowl');
-              formik.setFieldValue('productPrice', String(bowlPrice));
-              try { firstDigitLockRef.current = String(bowlPrice).charAt(0) || null; } catch {}
-              const currentQty = Number(formik.values.quantity) || 0;
-              formik.setFieldValue('totalPrice', Number((bowlPrice * currentQty).toFixed(2)));
-              setHighlightedQuickProduct('bowl');
-              setSelectedQuick('bowl');
-
-              try {
-                if (Number(bowlPrice) === 300) {
-                  const alreadyAdded = orderProps.orderItems.some(it => String(it.productId) === String(bowlProduct.productId));
-                  if (!alreadyAdded) {
-                    setPriceLock(true);
-                    setPriceLockProductId(bowlProduct.productId);
-                  }
-                }
-              } catch {}
-
-              try {
-                const lab = (rows[bowlProduct.productId]?.name || bowlProduct.label || '').toLowerCase();
-                if (/\bdabba\b/.test(lab)) {
-                  setDabbaLock(true);
-                  setDabbaProductId(bowlProduct.productId);
-                }
-              } catch {}
-
-              try {
-                const bp = Number(bowlPrice) || 0;
-                if (bp >= 100 && bp <= 999) {
-                  setBowlPriceLock(true);
-                  setBowlProductIdLocked(bowlProduct.productId);
-                  try { firstDigitLockRef.current = String(bp).charAt(0) || null; } catch {}
-                }
-              } catch {}
-            }, 60);
-          }
-        }
-      } catch (err) {
-        console.error('Auto-suggest bowl failed', err);
-      }
+      // Auto-add bowl product feature disabled
+      // try {
+      //   const addedUnitPrice = Number(values.productPrice) || 0;
+      //   if (!suppressAutoSuggest && addedUnitPrice >= 200 && addedUnitPrice <= 600) {
+      //     const bowlProduct = productOptions.find(p => (p.label || '').toLowerCase().includes('bowl'));
+      //     if (bowlProduct && rows && rows[bowlProduct.productId]) {
+      //       const bowlPrice = rows[bowlProduct.productId].pricePerKg;
+      //       setTimeout(() => {
+      //         setSelectedProduct(bowlProduct);
+      //         setInputValue(bowlProduct.label || bowlProduct.value || '');
+      //         formik.setFieldValue('id', bowlProduct.productId ?? "");
+      //         formik.setFieldValue('name', rows[bowlProduct.productId]?.name || 'Bowl');
+      //         formik.setFieldValue('productPrice', String(bowlPrice));
+      //         try { firstDigitLockRef.current = String(bowlPrice).charAt(0) || null; } catch {}
+      //         const currentQty = Number(formik.values.quantity) || 0;
+      //         formik.setFieldValue('totalPrice', Number((bowlPrice * currentQty).toFixed(2)));
+      //         setHighlightedQuickProduct('bowl');
+      //         setSelectedQuick('bowl');
+      //
+      //         try {
+      //           if (Number(bowlPrice) === 300) {
+      //             const alreadyAdded = orderProps.orderItems.some(it => String(it.productId) === String(bowlProduct.productId));
+      //             if (!alreadyAdded) {
+      //               setPriceLock(true);
+      //               setPriceLockProductId(bowlProduct.productId);
+      //             }
+      //           }
+      //         } catch {}
+      //
+      //         try {
+      //           const lab = (rows[bowlProduct.productId]?.name || bowlProduct.label || '').toLowerCase();
+      //           if (/\bdabba\b/.test(lab)) {
+      //             setDabbaLock(true);
+      //             setDabbaProductId(bowlProduct.productId);
+      //           }
+      //         } catch {}
+      //
+      //         try {
+      //           const bp = Number(bowlPrice) || 0;
+      //           if (bp >= 100 && bp <= 999) {
+      //             setBowlPriceLock(true);
+      //             setBowlProductIdLocked(bowlProduct.productId);
+      //             try { firstDigitLockRef.current = String(bp).charAt(0) || null; } catch {}
+      //           }
+      //         } catch {}
+      //       }, 60);
+      //     }
+      //   }
+      // } catch (err) {
+      //   console.error('Auto-suggest bowl failed', err);
+      // }
 
       try {
         const added = Number((price * qty).toFixed(2));
@@ -516,11 +517,11 @@ export const CreateOrder = () => {
     };
 
     if (dabbaLock && value && value.productId !== dabbaProductId) {
-      alert('Product switching is locked because you selected dabba. Add the dabba product first. After it is added press Shift+J to unlock.');
+      alert('Product switching is locked because you selected dabba. Add the dabba product first.');
       return;
     }
     if (priceLock && value && value.productId !== priceLockProductId) {
-      alert('Product switching is locked because selected product has price 300. Add it first or press Shift+J to unlock.');
+      alert('Product switching is locked because selected product has price 300. Add it first.');
       return;
     }
 
@@ -622,11 +623,11 @@ export const CreateOrder = () => {
 
   const attemptProductChange = useCallback(async (value) => {
     if (dabbaLock && value && value.productId !== dabbaProductId) {
-      alert('Product switching is locked because you selected dabba. Add the dabba product first. After it is added press Shift+J to unlock.');
+      alert('Product switching is locked because you selected dabba. Add the dabba product first.');
       return;
     }
     if (priceLock && value && value.productId !== priceLockProductId) {
-      alert('Product switching is locked because selected product has price 300. Add it first or press Shift+J to unlock.');
+      alert('Product switching is locked because selected product has price 300. Add it first.');
       return;
     }
 
@@ -795,20 +796,7 @@ export const CreateOrder = () => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  useEffect(() => {
-    const handleShiftJ = (e) => {
-      const key = (e.key || '').toLowerCase();
-      if (e.shiftKey && (key === 'j')) {
-        let didUnlock = false;
-        if (dabbaLock) { setDabbaLock(false); setDabbaProductId(null); didUnlock = true; }
-        if (priceLock) { setPriceLock(false); setPriceLockProductId(null); didUnlock = true; }
-        if (bowlPriceLock) { setBowlPriceLock(false); setBowlProductIdLocked(null); didUnlock = true; }
-        if (didUnlock) { alert('Product toggling unlocked.'); }
-      }
-    };
-    window.addEventListener('keydown', handleShiftJ);
-    return () => window.removeEventListener('keydown', handleShiftJ);
-  }, [dabbaLock, priceLock, bowlPriceLock]);
+
 
   const isEditableTarget = (el) => {
     if (!el) return false;
@@ -1261,7 +1249,7 @@ export const CreateOrder = () => {
 
               <Grid item xs={12}>
                 <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
-                  Shortcuts: "/" for weight refresh, "=" to add product, Shift+D delete last, Shift+J unlock, Ctrl/Cmd+P print | Weighted: 3-digit prices only (100-999)
+                  Shortcuts: "/" for weight refresh, "=" to add product, Shift+D delete last, Ctrl/Cmd+P print | Weighted: 3-digit prices only (100-999)
                 </Typography>
                 <Button variant="contained" onClick={createOrder} sx={{ float: "right", margin: "5px" }} disabled={orderProps.orderItems.length === 0}>Submit</Button>
                 <Button variant="contained" onClick={addProductHandler} sx={{ float: "right", margin: "5px" }}
