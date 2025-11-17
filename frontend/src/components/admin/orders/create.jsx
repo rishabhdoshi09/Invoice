@@ -461,10 +461,10 @@ export const CreateOrder = () => {
 
       try {
         const productPrice = Number(price);
-        // NEW: High-Value Product Lock (Weighted Product Price 300-399)
-        const isWeightedAndHighValue = looksWeighted && productPrice >= 300 && productPrice <= 399;
+        // NEW: High-Value Product Lock (Price 300-399)
+        const isHighValue = productPrice >= 300 && productPrice <= 399;
 
-        if (isWeightedAndHighValue) {
+        if (isHighValue) {
           const alreadyAdded = orderProps.orderItems.some(it => String(it.productId) === String(productId));
           if (!alreadyAdded) {
             setHighValueLock(true);
