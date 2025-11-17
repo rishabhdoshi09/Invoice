@@ -326,9 +326,9 @@ export const CreateOrder = () => {
         const currentIsBowl = Boolean(values && (String(values.name || '').toLowerCase().includes('bowl') || (bowlProductIdLocked && String(values.id) === String(bowlProductIdLocked))));
         if (currentIsBowl || bowlPriceLock) {
           const valStr = String(values.productPrice || '').replace(/\D/g,'');
-          if (valStr.length !== 3) { alert('Bowl price must be exactly 3 digits (100–999).'); return; }
+          if (valStr.length !== 3) { alert('Bowl price must be exactly 3 digits (100–399).'); return; }
           const numeric = Number(valStr);
-          if (numeric < 100 || numeric > 999) { alert('Bowl price must be between 100 and 999.'); return; }
+          if (numeric < 100 || numeric > 399) { alert('Bowl price must be between 100 and 399.'); return; }
           values.productPrice = valStr;
         }
       } catch {}
@@ -337,12 +337,12 @@ export const CreateOrder = () => {
 
       const priceNumLocal = Number(values?.productPrice) || 0;
       
-      // For weighted products: enforce 3-digit price (100-999)
+      // For weighted products: enforce 3-digit price (100-399)
       const isWeightedProduct = (values?.type === ProductType.WEIGHTED || String(values?.type||'').toLowerCase()==='weighted');
       if (isWeightedProduct) {
         const priceStr = String(priceNumLocal);
-        if (priceStr.length !== 3 || priceNumLocal < 100 || priceNumLocal > 999) {
-          alert('Weighted product price must be exactly 3 digits (100-999).');
+        if (priceStr.length !== 3 || priceNumLocal < 100 || priceNumLocal > 399) {
+          alert('Weighted product price must be exactly 3 digits (100-399).');
           return;
         }
       } else {
@@ -441,7 +441,7 @@ export const CreateOrder = () => {
       //
       //         try {
       //           const bp = Number(bowlPrice) || 0;
-      //           if (bp >= 100 && bp <= 999) {
+      //           if (bp >= 100 && bp <= 399) {
       //             setBowlPriceLock(true);
       //             setBowlProductIdLocked(bowlProduct.productId);
       //             try { firstDigitLockRef.current = String(bp).charAt(0) || null; } catch {}
@@ -474,7 +474,7 @@ export const CreateOrder = () => {
   const priceStr = String(priceValue);
   const isWeightedPriceInvalid = Boolean(
     isWeighted && 
-    (priceStr.length !== 3 || priceValue < 100 || priceValue > 999)
+    (priceStr.length !== 3 || priceValue < 100 || priceValue > 399)
   );
   
   // Get price range for weighted products (e.g., 250 -> 200-299)
@@ -584,7 +584,7 @@ export const CreateOrder = () => {
         const lab = (rows[productId]?.name || '').toLowerCase();
         if ((lab || '').includes('bowl')) {
           const bp = Number(rows[productId]?.pricePerKg) || 0;
-          if (bp >= 100 && bp <= 999) {
+          if (bp >= 100 && bp <= 399) {
             setBowlPriceLock(true);
             setBowlProductIdLocked(productId);
             try { firstDigitLockRef.current = String(bp).charAt(0) || null; } catch {}
@@ -650,6 +650,15 @@ export const CreateOrder = () => {
       return;
     }
     const val = String(e.target.value ?? '');
+    const currentPrice = Number(val) || 0;
+    const isIn300to399Range = currentPrice >= 300 && currentPrice <= 399;
+    
+    // Disable first digit lock for 300-399 range to allow manual typing
+    if (isIn300to399Range) {
+      firstDigitLockRef.current = null;
+      return;
+    }
+    
     if (!bowlPriceLock) {
       firstDigitLockRef.current = val.length > 0 ? val.charAt(0) : null;
     } else {
@@ -683,8 +692,11 @@ export const CreateOrder = () => {
 
   const onPriceChange = (e) => {
     const rawInput = String(e.target.value || '');
+    const currentPrice = Number(rawInput) || 0;
+    const isIn300to399Range = currentPrice >= 300 && currentPrice <= 399;
+    
     if (!bowlPriceLock) {
-      if (!isNameAdd) {
+      if (!isNameAdd && !isIn300to399Range) {
         if (!(formik.values.name && formik.values.name.toLowerCase() === 'add')) {
           const lock = firstDigitLockRef.current;
           if (lock && rawInput && String(rawInput).charAt(0) !== lock) { e.preventDefault && e.preventDefault(); return; }
@@ -699,10 +711,17 @@ export const CreateOrder = () => {
     const digitsOnly = rawInput.replace(/\D/g, '');
     if (digitsOnly.length > 3) { e.preventDefault && e.preventDefault(); return; }
     const locked = String(firstDigitLockRef.current || '');
-    if (locked && digitsOnly.length > 0 && String(digitsOnly).charAt(0) !== locked) { e.preventDefault && e.preventDefault(); return; }
+    const numericValue = Number(digitsOnly) || 0;
+    const isInRange = numericValue >= 300 && numericValue <= 399;
+    
+    // Allow manual typing for 300-399 range
+    if (!isInRange && locked && digitsOnly.length > 0 && String(digitsOnly).charAt(0) !== locked) { 
+      e.preventDefault && e.preventDefault(); 
+      return; 
+    }
+    
     formik.setFieldValue('productPrice', digitsOnly);
-    const numeric = Number(digitsOnly) || 0;
-    formik.setFieldValue('totalPrice', Number((numeric * (Number(formik.values.quantity)||0)).toFixed(2)));
+    formik.setFieldValue('totalPrice', Number((numericValue * (Number(formik.values.quantity)||0)).toFixed(2)));
   };
 
   const onPriceBlur = () => {};
@@ -1046,7 +1065,17 @@ export const CreateOrder = () => {
       <br />
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6}>
-          <Box component={"form"} noValidate autoComplete="off">
+          <Box 
+            component={"form"} 
+            noValidate 
+            autoComplete="off"
+            sx={{
+              backgroundColor: (priceValue >= 300 && priceValue <= 399) ? '#ffffff' : 'transparent',
+              padding: (priceValue >= 300 && priceValue <= 399) ? 2 : 0,
+              borderRadius: (priceValue >= 300 && priceValue <= 399) ? 1 : 0,
+              transition: 'all 0.3s ease'
+            }}
+          >
             <Grid container spacing={2}>
               <Grid item xs={12} md={4}>
                 <TextField size="small" id="customerName" name="customerName" label="Customer Name" value={orderProps.customerName} onChange={(e)=>{ const { id, value } = e.target; const obj = {}; if (id === 'taxPercent') { const taxPct = Number(value) || 0; obj['taxPercent'] = taxPct; const subTotal = orderProps.subTotal; obj['tax'] = Math.round(subTotal * (taxPct / 100)); obj['total'] = subTotal + obj['tax']; } setOrderProps((prevProps) => ({ ...prevProps, [id]: value, ...obj })); }} required fullWidth />
@@ -1201,7 +1230,7 @@ export const CreateOrder = () => {
               <Grid item xs={12} md={6}>
                 <TextField
                   type="number" size="small" id="productPrice" name="productPrice" 
-                  label={isWeighted ? "Product Price (3-digit: 100-999)" : "Product Price"}
+                  label={isWeighted ? "Product Price (3-digit: 100-399)" : "Product Price"}
                   value={formik.values.productPrice} onChange={onPriceChange} onFocus={onPriceFocus} onBlur={onPriceBlur}
                   onPaste={onPasteHandler}
                   required fullWidth
@@ -1209,7 +1238,7 @@ export const CreateOrder = () => {
                   helperText={
                     isWeighted && formik.values.productPrice !== "" 
                       ? (isWeightedPriceInvalid 
-                          ? 'Must be 3 digits (100-999)' 
+                          ? 'Must be 3 digits (100-399)' 
                           : priceRange 
                             ? `Range: ₹${priceRange}` 
                             : '')
@@ -1249,7 +1278,7 @@ export const CreateOrder = () => {
 
               <Grid item xs={12}>
                 <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
-                  Shortcuts: "/" for weight refresh, "=" to add product, Shift+D delete last, Ctrl/Cmd+P print | Weighted: 3-digit prices only (100-999)
+                  Shortcuts: "/" for weight refresh, "=" to add product, Shift+D delete last, Ctrl/Cmd+P print | Weighted: 3-digit prices only (100-399)
                 </Typography>
                 <Button variant="contained" onClick={createOrder} sx={{ float: "right", margin: "5px" }} disabled={orderProps.orderItems.length === 0}>Submit</Button>
                 <Button variant="contained" onClick={addProductHandler} sx={{ float: "right", margin: "5px" }}
