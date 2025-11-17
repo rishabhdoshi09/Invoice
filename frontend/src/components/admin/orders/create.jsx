@@ -5,6 +5,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Autocomplete, Box, Button, Card, CardContent, Grid, TextField, Typography, Select, MenuItem, Divider } from '@mui/material';
 import { CreateProduct } from '../products/create';
 import pdfMake from 'pdfmake/build/pdfmake';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
 import { generatePdfDefinition, generatePdfDefinition2 } from './helper';
 import { Delete, Sync } from '@mui/icons-material';
 import { fetchWeightsAction } from '../../../store/orders';
@@ -13,21 +14,10 @@ import { ProductType } from '../../../enums/product';
 /* -------------------------
   Safe font loader for pdfMake
 ------------------------- */
-if (typeof window !== 'undefined') {
-  try {
-    const vfsFonts = require('pdfmake/build/vfs_fonts');
-    if (vfsFonts && typeof vfsFonts === 'object') {
-      if (vfsFonts.pdfMake && vfsFonts.pdfMake.vfs) {
-        pdfMake.vfs = vfsFonts.pdfMake.vfs;
-      } else if (vfsFonts.vfs) {
-        pdfMake.vfs = vfsFonts.vfs;
-      } else {
-        console.warn('pdfMake vfs fonts structure not recognized, using default');
-      }
-    }
-  } catch (e) {
-    console.warn('pdfMake fonts not loaded:', e.message);
-  }
+if (pdfFonts && pdfFonts.pdfMake && pdfFonts.pdfMake.vfs) {
+  pdfMake.vfs = pdfFonts.pdfMake.vfs;
+} else if (pdfFonts && pdfFonts.vfs) {
+  pdfMake.vfs = pdfFonts.vfs;
 }
 
 /* -------------------------
