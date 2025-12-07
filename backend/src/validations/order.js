@@ -27,7 +27,7 @@ module.exports = {
             paymentStatus: Joi.string().trim().valid('paid', 'partial', 'unpaid').optional(),
             orderItems: Joi.array().items(orderItems).required()
         });
-        return Joi.validate(orderObj, schema);
+        return Joi.validate(orderObj, schema, { convert: true });
     },
     
     validateListOrdersObj: (orderObj) => {
