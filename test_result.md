@@ -197,11 +197,11 @@ backend:
 
   - task: "Order Management"
     implemented: true
-    working: true
+    working: false
     file: "/app/backend/src/controller/order.js"
-    stuck_count: 0
-    priority: "medium"
-    needs_retesting: false
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: true
     status_history:
         - working: "NA"
           agent: "main"
@@ -212,6 +212,9 @@ backend:
         - working: true
           agent: "testing"
           comment: "✅ COMPREHENSIVE TESTING PASSED: All order management APIs working correctly. CREATE order with full payment (status: paid), CREATE order with partial payment (status: partial, due amount calculated correctly), LIST orders, GET order by ID with order items all working. Payment status logic functioning properly."
+        - working: false
+          agent: "user"
+          comment: "User reports 400 Bad Request error when creating orders via frontend. Console shows 'Failed to load resource: the server responded with a status of 400' for POST /api/orders. Error happening in orders.js:56 (createOrderAction). Need to debug validation issue - checking what payload is being sent and what validation is failing."
 
   - task: "Product Management"
     implemented: true
