@@ -116,13 +116,8 @@ module.exports = {
     },
     listOrders: async (req, res) => {
         try {
-            console.log('=== LIST ORDERS REQUEST ===');
-            console.log('Query params:', JSON.stringify(req.query, null, 2));
-
             const { error, value } = Validations.order.validateListOrdersObj(req.query);
             if (error) {
-                console.log('Validation error:', error.details[0].message);
-                console.log('Full validation error:', JSON.stringify(error.details, null, 2));
                 return res.status(400).send({
                     status: 400,
                     message: error.details[0].message
