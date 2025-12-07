@@ -1,7 +1,7 @@
 
 import { createSlice } from '@reduxjs/toolkit';
 import { setNotification, startLoading, stopLoading } from "./application"
-import { createOrder, fetchWeights, listOrders, deleteOrder } from '../services/order';
+import { createOrder, fetchWeights, listOrders, deleteOrder, getOrder } from '../services/order';
 
 
 const initialState = {
