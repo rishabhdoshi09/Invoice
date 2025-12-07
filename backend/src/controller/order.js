@@ -7,13 +7,8 @@ const db = require('../models');
 module.exports = {
     createOrder: async (req, res) => {
         try {
-            console.log('=== CREATE ORDER REQUEST ===');
-            console.log('Request body:', JSON.stringify(req.body, null, 2));
-            
             const { error, value } = Validations.order.validateCreateOrderObj({ ...req.body, orderNumber: `ORD-${uuidv4().split('-')[0].toUpperCase()}` });
             if (error) {
-                console.log('Validation error:', error.details[0].message);
-                console.log('Full validation error:', JSON.stringify(error.details, null, 2));
                 return res.status(400).send({
                     status: 400,
                     message: error.details[0].message
