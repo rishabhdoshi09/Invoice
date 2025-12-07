@@ -29,6 +29,7 @@ function App() {
               <Route path={'orders'}>
                 <Route index path={''} element={<ListOrders />} />
                 <Route path={'create'} element={<CreateOrder />} />
+                <Route path={'edit/:orderId'} element={<CreateOrder />} />
               </Route>
               <Route path={'suppliers'} element={<ListSuppliers />} />
               <Route path={'customers'} element={<ListCustomers />} />
