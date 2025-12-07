@@ -78,6 +78,23 @@ export const deleteOrderAction = (orderId) => {
     }
 }
 
+export const getOrderAction = (orderId) => {
+    return async(dispatch) => {
+        try{
+            dispatch(startLoading());
+            const { data: { data }} = await getOrder(orderId);
+            dispatch(stopLoading());
+            return data;
+        }
+        catch(error){
+            console.log(error);
+            dispatch(stopLoading());
+            dispatch(setNotification({ open: true, severity: 'error', message: 'Failed to fetch order details.'}));
+            return null;
+        }
+    }
+}
+
 export const fetchWeightsAction = () => {
     return async(dispatch) => {
         try{
