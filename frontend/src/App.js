@@ -7,6 +7,7 @@ import { Provider } from "react-redux";
 import store from "./store";
 import { ListOrders } from "./components/admin/orders/list";
 import { CreateOrder } from "./components/admin/orders/create";
+import { EditOrder } from "./components/admin/orders/edit";
 import { ListSuppliers } from "./components/admin/suppliers/list";
 import { ListCustomers } from "./components/admin/customers/list";
 import { ListPurchases } from "./components/admin/purchases/list";
