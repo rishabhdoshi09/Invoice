@@ -36,6 +36,6 @@ module.exports = {
             limit: Joi.number().optional(),
             offset: Joi.number().optional()
         });
-        return Joi.validate(orderObj, schema);
+        return Joi.validate(orderObj, schema, { convert: true });
     },
 };
