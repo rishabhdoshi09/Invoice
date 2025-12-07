@@ -89,7 +89,10 @@ export const ListOrders = () => {
                                         <TableCell>{orderObj.subTotal}</TableCell>
                                         <TableCell>{orderObj.tax} ({orderObj.taxPercent}%)</TableCell>
                                         <TableCell>{orderObj.total}</TableCell>
-                                        <TableCell><Button variant='outlined' sx={{margin: '5px'}} onClick={()=>{ dispatch(deleteOrderAction(orderObj.id))}}>Delete</Button></TableCell>
+                                        <TableCell>
+                                            <Button variant='outlined' sx={{margin: '5px'}} onClick={()=>{ navigate(`edit/${orderObj.id}`)}}>Edit</Button>
+                                            <Button variant='outlined' sx={{margin: '5px'}} onClick={()=>{ dispatch(deleteOrderAction(orderObj.id))}}>Delete</Button>
+                                        </TableCell>
                                     </TableRow>
                                 );
                             }))
