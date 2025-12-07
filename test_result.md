@@ -199,7 +199,7 @@ backend:
     implemented: true
     working: true
     file: "/app/backend/src/controller/order.js"
-    stuck_count: 1
+    stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
@@ -218,6 +218,9 @@ backend:
         - working: true
           agent: "testing"
           comment: "✅ QUERY PARAMETER FIX VERIFIED: Tested GET /api/orders with query parameters limit=25, offset=0, q='' - returns HTTP 200 OK with proper JSON response. The Joi validation fix with { convert: true } option successfully converts string query parameters to numbers. Fixed infrastructure issues: installed PostgreSQL, configured database, corrected supervisor configuration from uvicorn to node. Order List API working correctly."
+        - working: true
+          agent: "main"
+          comment: "✅ FIXED: The 400 error was caused by Joi validation failing on query parameters. Query params come as strings from URL (limit='25', offset='0') but validation expected numbers. Fixed by adding { convert: true } option to Joi.validate() in both validateListOrdersObj and validateCreateOrderObj functions. This enables automatic type conversion from strings to numbers. Testing agent confirmed fix works - GET /api/orders with query params now returns 200 OK."
 
   - task: "Product Management"
     implemented: true
