@@ -33,6 +33,21 @@ export const createOrder = async (payload) => {
     }
 }
 
+export const getOrder = async (orderId) => {
+    try{
+        const response = await axios.get(`/api/orders/${orderId}`, {
+            headers: {
+              'Content-Type': 'application/json'
+            }
+        });
+        return response;
+    }
+    catch(error){
+        console.error('Error fetching order:', error);
+        throw error;
+    }
+}
+
 export const deleteOrder = async (orderId) => {
     try{
         await axios.delete(`/api/orders/${orderId}`, {
