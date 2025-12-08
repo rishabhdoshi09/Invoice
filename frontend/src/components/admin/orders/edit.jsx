@@ -118,6 +118,12 @@ export const EditOrder = () => {
     try {
       setSaving(true);
       
+      dispatch(setNotification({
+        open: true,
+        severity: 'info',
+        message: 'Saving order... Please wait.'
+      }));
+      
       // Prepare updated order items
       const updatedOrderItems = Object.values(editedItems).map(item => ({
         id: item.id,
@@ -148,7 +154,8 @@ export const EditOrder = () => {
       };
       
       await axios.put(`/api/orders/${orderId}`, payload, {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000 // 10 second timeout
       });
       
       dispatch(setNotification({
@@ -161,6 +168,15 @@ export const EditOrder = () => {
       const refreshedData = await dispatch(getOrderAction(orderId));
       if (refreshedData) {
         setOrderData(refreshedData);
+        // Re-initialize edited items
+        const itemsMap = {};
+        refreshedData.orderItems?.forEach(item => {
+          itemsMap[item.id] = {
+            ...item,
+            originalTotal: item.totalPrice
+          };
+        });
+        setEditedItems(itemsMap);
       }
       
       setSaving(false);
@@ -169,7 +185,7 @@ export const EditOrder = () => {
       dispatch(setNotification({
         open: true,
         severity: 'error',
-        message: 'Failed to save order. Please try again.'
+        message: error.response?.data?.message || 'Failed to save order. Please try again.'
       }));
       setSaving(false);
     }
