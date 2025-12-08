@@ -169,38 +169,50 @@ module.exports = {
             const orderId = req.params.orderId;
             const { orderItems, ...orderData } = req.body;
             
+            console.log(`Updating order ${orderId}...`);
+            
             // Update order in transaction
             const result = await db.sequelize.transaction(async (transaction) => {
-                // Update order basic info
+                // Update order basic info (exclude orderItems from update)
+                const { orderItems: _, ...updateFields } = orderData;
                 await Services.order.updateOrder(
                     { id: orderId },
-                    orderData
+                    updateFields
                 );
                 
                 // Update order items if provided
                 if (orderItems && orderItems.length > 0) {
-                    // Delete existing items
-                    await db.orderItems.destroy({
-                        where: { orderId: orderId },
-                        transaction
+                    // Bulk update existing items instead of delete + insert
+                    const updatePromises = orderItems.map(item => {
+                        return db.orderItems.update(
+                            {
+                                quantity: item.quantity,
+                                productPrice: item.productPrice,
+                                totalPrice: item.totalPrice
+                            },
+                            {
+                                where: { id: item.id },
+                                transaction
+                            }
+                        );
                     });
                     
-                    // Create updated items
-                    const items = orderItems.map(item => ({
-                        ...item,
-                        orderId: orderId
-                    }));
-                    await Services.orderItems.addOrderItems(items, transaction);
+                    await Promise.all(updatePromises);
                 }
                 
-                // Return updated order with items
-                return await Services.order.getOrder({ id: orderId });
+                // Return updated order with items (fetch outside transaction for speed)
+                return orderId;
             });
+            
+            // Fetch complete order data after transaction
+            const completeOrder = await Services.order.getOrder({ id: result });
+            
+            console.log(`Order ${orderId} updated successfully`);
             
             return res.status(200).send({
                 status: 200,
                 message: 'order updated successfully',
-                data: result
+                data: completeOrder
             });
             
         }catch(error){
