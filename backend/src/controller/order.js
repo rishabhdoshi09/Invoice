@@ -174,8 +174,7 @@ module.exports = {
                 // Update order basic info
                 await Services.order.updateOrder(
                     { id: orderId },
-                    orderData,
-                    transaction
+                    orderData
                 );
                 
                 // Update order items if provided
