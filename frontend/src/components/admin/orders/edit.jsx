@@ -211,7 +211,31 @@ export const EditOrder = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: 3, position: 'relative' }}>
+      {/* Loading Overlay */}
+      {saving && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999
+          }}
+        >
+          <CircularProgress size={60} sx={{ color: 'white' }} />
+          <Typography variant="h6" sx={{ color: 'white', mt: 2 }}>
+            Saving order changes...
+          </Typography>
+        </Box>
+      )}
+
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Edit Order</Typography>
         <Box>
@@ -221,11 +245,11 @@ export const EditOrder = () => {
             onClick={handleSaveOrder}
             disabled={saving || editingItemId !== null}
             sx={{ mr: 2 }}
-            startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
+            startIcon={<SaveIcon />}
           >
-            {saving ? 'Saving...' : 'Save Order'}
+            Save Order
           </Button>
-          <Button variant="outlined" onClick={() => navigate('/orders')}>
+          <Button variant="outlined" onClick={() => navigate('/orders')} disabled={saving}>
             Back to Orders
           </Button>
         </Box>
