@@ -61,6 +61,120 @@ export const EditOrder = () => {
     }
   }, [orderId, dispatch]);
 
+  const handleEditItem = (itemId) => {
+    setEditingItemId(itemId);
+  };
+
+  const handleCancelEdit = (itemId) => {
+    // Reset to original values
+    setEditedItems(prev => ({
+      ...prev,
+      [itemId]: {
+        ...orderData.orderItems.find(item => item.id === itemId),
+        originalTotal: prev[itemId].originalTotal
+      }
+    }));
+    setEditingItemId(null);
+  };
+
+  const handleItemChange = (itemId, field, value) => {
+    const numValue = parseFloat(value) || 0;
+    setEditedItems(prev => {
+      const item = prev[itemId];
+      const updated = { ...item, [field]: numValue };
+      
+      // Recalculate the other field to maintain total
+      if (field === 'quantity' && numValue > 0) {
+        updated.productPrice = parseFloat((item.originalTotal / numValue).toFixed(2));
+      } else if (field === 'productPrice' && numValue > 0) {
+        updated.quantity = parseFloat((item.originalTotal / numValue).toFixed(2));
+      }
+      
+      // Ensure total remains the same
+      updated.totalPrice = item.originalTotal;
+      
+      return { ...prev, [itemId]: updated };
+    });
+  };
+
+  const handleSaveItem = (itemId) => {
+    const item = editedItems[itemId];
+    const calculatedTotal = parseFloat((item.quantity * item.productPrice).toFixed(2));
+    
+    // Validate that the total matches (with small tolerance for floating point)
+    if (Math.abs(calculatedTotal - item.originalTotal) > 0.01) {
+      dispatch(setNotification({
+        open: true,
+        severity: 'error',
+        message: `Total must remain ${item.originalTotal}. Current: ${calculatedTotal}`
+      }));
+      return;
+    }
+    
+    setEditingItemId(null);
+  };
+
+  const handleSaveOrder = async () => {
+    try {
+      setSaving(true);
+      
+      // Prepare updated order items
+      const updatedOrderItems = Object.values(editedItems).map(item => ({
+        id: item.id,
+        productId: item.productId,
+        name: item.name,
+        quantity: item.quantity,
+        productPrice: item.productPrice,
+        totalPrice: item.originalTotal, // Keep original total
+        type: item.type
+      }));
+      
+      // Verify grand total hasn't changed
+      const newSubTotal = updatedOrderItems.reduce((sum, item) => sum + item.totalPrice, 0);
+      if (Math.abs(newSubTotal - orderData.subTotal) > 0.01) {
+        dispatch(setNotification({
+          open: true,
+          severity: 'error',
+          message: 'Grand total cannot be changed!'
+        }));
+        setSaving(false);
+        return;
+      }
+      
+      // Update order in backend
+      const payload = {
+        ...orderData,
+        orderItems: updatedOrderItems
+      };
+      
+      await axios.put(`/api/orders/${orderId}`, payload, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      dispatch(setNotification({
+        open: true,
+        severity: 'success',
+        message: 'Order updated successfully!'
+      }));
+      
+      // Refresh order data
+      const refreshedData = await dispatch(getOrderAction(orderId));
+      if (refreshedData) {
+        setOrderData(refreshedData);
+      }
+      
+      setSaving(false);
+    } catch (error) {
+      console.error('Error saving order:', error);
+      dispatch(setNotification({
+        open: true,
+        severity: 'error',
+        message: 'Failed to save order. Please try again.'
+      }));
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
@@ -83,11 +197,28 @@ export const EditOrder = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Order Details</Typography>
-        <Button variant="outlined" onClick={() => navigate('/orders')}>
-          Back to Orders
-        </Button>
+        <Typography variant="h4">Edit Order</Typography>
+        <Box>
+          <Button 
+            variant="contained" 
+            color="primary"
+            onClick={handleSaveOrder}
+            disabled={saving || editingItemId !== null}
+            sx={{ mr: 2 }}
+            startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
+          >
+            {saving ? 'Saving...' : 'Save Order'}
+          </Button>
+          <Button variant="outlined" onClick={() => navigate('/orders')}>
+            Back to Orders
+          </Button>
+        </Box>
       </Box>
+
+      <Alert severity="info" sx={{ mb: 3 }}>
+        You can adjust price and quantity for each item, but the item total and grand total will remain locked.
+        For example: 2×3=6 can become 6×1=6 or 1×6=6
+      </Alert>
 
       <Card sx={{ mb: 3 }}>
         <CardContent>
@@ -103,6 +234,7 @@ export const EditOrder = () => {
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
+                size="small"
                 label="Customer Name"
                 value={orderData.customerName || ''}
                 InputProps={{ readOnly: true }}
@@ -111,6 +243,7 @@ export const EditOrder = () => {
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
+                size="small"
                 label="Customer Mobile"
                 value={orderData.customerMobile || ''}
                 InputProps={{ readOnly: true }}
@@ -119,7 +252,8 @@ export const EditOrder = () => {
             <Grid item xs={12} md={3}>
               <TextField
                 fullWidth
-                label="Subtotal"
+                size="small"
+                label="Subtotal (Locked)"
                 value={`₹${orderData.subTotal}`}
                 InputProps={{ readOnly: true }}
               />
@@ -127,6 +261,7 @@ export const EditOrder = () => {
             <Grid item xs={12} md={3}>
               <TextField
                 fullWidth
+                size="small"
                 label="Tax"
                 value={`₹${orderData.tax} (${orderData.taxPercent}%)`}
                 InputProps={{ readOnly: true }}
@@ -135,14 +270,22 @@ export const EditOrder = () => {
             <Grid item xs={12} md={3}>
               <TextField
                 fullWidth
-                label="Total"
+                size="small"
+                label="Grand Total (Locked)"
                 value={`₹${orderData.total}`}
                 InputProps={{ readOnly: true }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    backgroundColor: '#f0f0f0',
+                    fontWeight: 'bold'
+                  }
+                }}
               />
             </Grid>
             <Grid item xs={12} md={3}>
               <TextField
                 fullWidth
+                size="small"
                 label="Payment Status"
                 value={orderData.paymentStatus || 'N/A'}
                 InputProps={{ readOnly: true }}
@@ -162,24 +305,92 @@ export const EditOrder = () => {
                   <TableCell><b>Product Name</b></TableCell>
                   <TableCell align="right"><b>Quantity</b></TableCell>
                   <TableCell align="right"><b>Price</b></TableCell>
-                  <TableCell align="right"><b>Total</b></TableCell>
+                  <TableCell align="right"><b>Total (Locked)</b></TableCell>
                   <TableCell><b>Type</b></TableCell>
+                  <TableCell align="center"><b>Actions</b></TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {orderData.orderItems && orderData.orderItems.length > 0 ? (
-                  orderData.orderItems.map((item, index) => (
-                    <TableRow key={index}>
-                      <TableCell>{item.name}</TableCell>
-                      <TableCell align="right">{item.quantity}</TableCell>
-                      <TableCell align="right">₹{item.productPrice}</TableCell>
-                      <TableCell align="right">₹{item.totalPrice}</TableCell>
-                      <TableCell>{item.type}</TableCell>
-                    </TableRow>
-                  ))
+                  orderData.orderItems.map((item) => {
+                    const isEditing = editingItemId === item.id;
+                    const editedItem = editedItems[item.id] || item;
+                    
+                    return (
+                      <TableRow key={item.id}>
+                        <TableCell>{item.name}</TableCell>
+                        <TableCell align="right">
+                          {isEditing ? (
+                            <TextField
+                              type="number"
+                              size="small"
+                              value={editedItem.quantity}
+                              onChange={(e) => handleItemChange(item.id, 'quantity', e.target.value)}
+                              inputProps={{ min: 0.01, step: 0.01 }}
+                              sx={{ width: 100 }}
+                            />
+                          ) : (
+                            editedItem.quantity
+                          )}
+                        </TableCell>
+                        <TableCell align="right">
+                          {isEditing ? (
+                            <TextField
+                              type="number"
+                              size="small"
+                              value={editedItem.productPrice}
+                              onChange={(e) => handleItemChange(item.id, 'productPrice', e.target.value)}
+                              inputProps={{ min: 0.01, step: 0.01 }}
+                              sx={{ width: 100 }}
+                            />
+                          ) : (
+                            `₹${editedItem.productPrice}`
+                          )}
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold', backgroundColor: '#f9f9f9' }}>
+                          ₹{editedItem.originalTotal || item.totalPrice}
+                        </TableCell>
+                        <TableCell>{item.type}</TableCell>
+                        <TableCell align="center">
+                          {isEditing ? (
+                            <Box>
+                              <Tooltip title="Save">
+                                <IconButton 
+                                  size="small" 
+                                  color="primary"
+                                  onClick={() => handleSaveItem(item.id)}
+                                >
+                                  <SaveIcon />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Cancel">
+                                <IconButton 
+                                  size="small" 
+                                  color="default"
+                                  onClick={() => handleCancelEdit(item.id)}
+                                >
+                                  <CancelIcon />
+                                </IconButton>
+                              </Tooltip>
+                            </Box>
+                          ) : (
+                            <Tooltip title="Edit item">
+                              <IconButton 
+                                size="small" 
+                                color="primary"
+                                onClick={() => handleEditItem(item.id)}
+                              >
+                                <EditIcon />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} align="center">
+                    <TableCell colSpan={6} align="center">
                       No items found
                     </TableCell>
                   </TableRow>
