@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
+import axios from 'axios';
 import {
   Box,
   Button,
@@ -16,9 +17,14 @@ import {
   TableHead,
   TableRow,
   Paper,
-  CircularProgress
+  CircularProgress,
+  Alert,
+  IconButton,
+  Tooltip
 } from '@mui/material';
+import { Edit as EditIcon, Save as SaveIcon, Cancel as CancelIcon } from '@mui/icons-material';
 import { getOrderAction } from '../../../store/orders';
+import { setNotification } from '../../../store/application';
 
 export const EditOrder = () => {
   const { orderId } = useParams();
@@ -27,6 +33,9 @@ export const EditOrder = () => {
   
   const [orderData, setOrderData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editedItems, setEditedItems] = useState({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const fetchOrderData = async () => {
@@ -34,6 +43,15 @@ export const EditOrder = () => {
       const data = await dispatch(getOrderAction(orderId));
       if (data) {
         setOrderData(data);
+        // Initialize edited items with original data
+        const itemsMap = {};
+        data.orderItems?.forEach(item => {
+          itemsMap[item.id] = {
+            ...item,
+            originalTotal: item.totalPrice
+          };
+        });
+        setEditedItems(itemsMap);
       }
       setLoading(false);
     };
