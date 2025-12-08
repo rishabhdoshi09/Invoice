@@ -164,6 +164,54 @@ module.exports = {
             });
         }
     },
+    updateOrder: async(req, res) => {
+        try{
+            const orderId = req.params.orderId;
+            const { orderItems, ...orderData } = req.body;
+            
+            // Update order in transaction
+            const result = await db.sequelize.transaction(async (transaction) => {
+                // Update order basic info
+                await Services.order.updateOrder(
+                    { id: orderId },
+                    orderData,
+                    transaction
+                );
+                
+                // Update order items if provided
+                if (orderItems && orderItems.length > 0) {
+                    // Delete existing items
+                    await db.orderItems.destroy({
+                        where: { orderId: orderId },
+                        transaction
+                    });
+                    
+                    // Create updated items
+                    const items = orderItems.map(item => ({
+                        ...item,
+                        orderId: orderId
+                    }));
+                    await Services.orderItems.addOrderItems(items, transaction);
+                }
+                
+                // Return updated order with items
+                return await Services.order.getOrder({ id: orderId });
+            });
+            
+            return res.status(200).send({
+                status: 200,
+                message: 'order updated successfully',
+                data: result
+            });
+            
+        }catch(error){
+            console.error('Update order error:', error);
+            return res.status(500).send({
+                status: 500,
+                message: error.message || error
+            })            
+        }
+    },
     deleteOrder: async(req, res) => {
         try{
             const response = await Services.order.deleteOrder({ id: req.params.orderId });
