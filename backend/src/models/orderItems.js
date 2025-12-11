@@ -13,6 +13,10 @@ module.exports = (sequelize, Sequelize) => {
             name: {
                 type: Sequelize.TEXT
             },
+            altName: {
+                type: Sequelize.TEXT,
+                allowNull: true
+            },
             quantity: {
                 type: Sequelize.DOUBLE
             },
