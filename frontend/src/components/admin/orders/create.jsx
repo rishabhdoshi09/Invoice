@@ -164,6 +164,7 @@ const isRestrictedPrice = (price) => {
   Minimal offline DB (self-contained)
 ------------------------- */
 function toNumber(n){ const x = Number(n); return Number.isFinite(x) ? x : 0; }
+// eslint-disable-next-line no-unused-vars
 function recomputeTotals(order) {
   const sub = (order.orderItems || []).reduce((s, it) => s + toNumber(it.totalPrice), 0);
   const tax = Math.round(sub * (toNumber(order.taxPercent) / 100));
