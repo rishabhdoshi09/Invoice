@@ -107,7 +107,7 @@ export const CreateProduct = () => {
                         name="pricePerKg"
                         label="Product Price (per Kg)"
                         value={formik.values.pricePerKg}
-                        onChange={formik.handleChange}
+                        onChange={handlePriceChange}
                         required
                         fullWidth
                         error={formik.errors.pricePerKg}
