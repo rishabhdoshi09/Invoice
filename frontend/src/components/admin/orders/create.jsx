@@ -627,8 +627,11 @@ export const CreateOrder = () => {
   const onPriceChange = (e) => {
     const rawInput = String(e.target.value || '');
     
-    // Block restricted price ranges (200-209 and 301-309)
-    if (isRestrictedPrice(rawInput)) {
+    // Check if current product is weighted
+    const currentIsWeighted = (formik.values.type === ProductType.WEIGHTED || String(formik.values.type||'').toLowerCase()==='weighted');
+    
+    // Block restricted price ranges (200-209 and 301-309) only for weighted products
+    if (currentIsWeighted && isRestrictedPrice(rawInput)) {
       e.preventDefault && e.preventDefault();
       return;
     }
@@ -649,8 +652,8 @@ export const CreateOrder = () => {
     const digitsOnly = rawInput.replace(/\D/g, '');
     if (digitsOnly.length > 3) { e.preventDefault && e.preventDefault(); return; }
     
-    // Block restricted price ranges for bowl price lock mode too
-    if (isRestrictedPrice(digitsOnly)) {
+    // Block restricted price ranges for bowl price lock mode too (only for weighted)
+    if (currentIsWeighted && isRestrictedPrice(digitsOnly)) {
       e.preventDefault && e.preventDefault();
       return;
     }
