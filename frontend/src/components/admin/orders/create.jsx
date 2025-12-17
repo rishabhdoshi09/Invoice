@@ -115,6 +115,13 @@ const toNum = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
+
+// Helper function to check if a price is in restricted ranges (200-209 or 301-309)
+const isRestrictedPrice = (price) => {
+  const numPrice = parseFloat(price);
+  if (isNaN(numPrice)) return false;
+  return (numPrice >= 200 && numPrice <= 209) || (numPrice >= 301 && numPrice <= 309);
+};
 const sanitizeOrderForServer = (props) => {
   const { orderItems = [], ...rest } = props || {};
   const clean = orderItems.map((it) => {
