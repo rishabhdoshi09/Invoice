@@ -13,17 +13,18 @@ import {
   Typography,
   Select,
   MenuItem,
-  Divider,
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  Switch,
+  FormControlLabel
 } from '@mui/material';
 import { CreateProduct } from '../products/create';
 import pdfMake from 'pdfmake/build/pdfmake';
 import { generatePdfDefinition, generatePdfDefinition2 } from './helper';
 import { Delete, Sync } from '@mui/icons-material';
-import { fetchWeightsAction } from '../../../store/orders';
+import { fetchWeightsAction, createOrderAction } from '../../../store/orders';
 import { ProductType } from '../../../enums/product';
 
 /* -------------------------
@@ -116,29 +117,46 @@ const toNum = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-// Helper function to check if a price is in restricted ranges (200-209 or 301-309)
-const isRestrictedPrice = (price) => {
-  const numPrice = parseFloat(price);
-  if (isNaN(numPrice)) return false;
-  return (numPrice >= 200 && numPrice <= 209) || (numPrice >= 301 && numPrice <= 309);
-};
-const sanitizeOrderForServer = (props) => {
-  const { orderItems = [], ...rest } = props || {};
+/**
+ * IMPORTANT: Backend order validation is strict and only accepts:
+ * orderDate, customerName, customerMobile, subTotal, tax, taxPercent, total, orderItems[]
+ * So we must strip extra UI-only properties like `customer`, `notes`, `orderNumber`, etc.
+ */
+const sanitizeOrderForServer = (props = {}) => {
+  const { orderItems = [] } = props;
+
   const clean = orderItems.map((it) => {
     const { altName, ...cpy } = it || {};
+    cpy.productId = String(cpy.productId || cpy.id || '').trim();
+    cpy.name = String(cpy.name || '').trim();
+    cpy.type = String(cpy.type || '').trim();
     cpy.quantity = toNum(cpy.quantity);
     cpy.productPrice = toNum(cpy.productPrice);
     cpy.totalPrice = toNum(cpy.totalPrice);
     return cpy;
   });
+
   return {
-    ...rest,
-    subTotal: toNum(rest.subTotal),
-    tax: toNum(rest.tax),
-    taxPercent: toNum(rest.taxPercent),
-    total: toNum(rest.total),
+    orderDate: props.orderDate || getTodayStr(),
+    customerName: props.customerName || '',
+    customerMobile: props.customerMobile || '',
+    subTotal: toNum(props.subTotal),
+    tax: toNum(props.tax),
+    taxPercent: toNum(props.taxPercent),
+    total: toNum(props.total),
     orderItems: clean,
   };
+};
+
+/* Helper: detect name "add" (case-insensitive) */
+const isAddName = (name) =>
+  String(name || '').trim().toLowerCase() === 'add';
+
+/* Helper: check if price is in restricted ranges (200-209 or 301-309) for weighted products */
+const isRestrictedPrice = (price) => {
+  const numPrice = Number(price);
+  if (!Number.isFinite(numPrice)) return false;
+  return (numPrice >= 200 && numPrice <= 209) || (numPrice >= 301 && numPrice <= 309);
 };
 
 /* -------------------------
@@ -234,8 +252,8 @@ export const CreateOrder = () => {
     (s) => s?.applicationState?.customers || [],
     (a, b) => {
       if (a === b) return true;
-      if (!Array.isArray(a) || !Array.isArray(b)) return false;
-      return a.length === b.length && a.every((item, i) => item === b[i]);
+      if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+      return a.every((item, i) => item === b[i]);
     }
   );
 
@@ -259,7 +277,7 @@ export const CreateOrder = () => {
 
   // ref for modal price input to ensure focus works reliably
   const modalPriceRef = useRef(null);
-  // ref for main productPrice input to focus after adding
+  // ref for main productPrice input to focus after adding / selecting product
   const priceInputRef = useRef(null);
 
   const [selectedQuick, setSelectedQuick] = useState('');
@@ -279,17 +297,17 @@ export const CreateOrder = () => {
 
   const [suppressAutoSuggest, setSuppressAutoSuggest] = useState(false);
 
+  // NEW: switch to control whether product named "add" is allowed
+  const [allowAddProductName, setAllowAddProductName] = useState(false);
+
   // use suppressAutoSuggest in a small effect so eslint doesn't flag it as assigned but unused
   useEffect(() => {
-    // intentionally referencing the state to silence unused variable warnings.
-    // In future you can hook this state into product Autocomplete behavior (e.g. temporarily close suggestion list).
     if (suppressAutoSuggest) {
-      // no-op for now
+      // reserved for future behavior
     }
   }, [suppressAutoSuggest]);
 
-  const [dabbaLock, setDabbaLock] = useState(false);
-  const [dabbaProductId, setDabbaProductId] = useState(null);
+  // bowl lock only
   const [bowlPriceLock, setBowlPriceLock] = useState(false);
   const [bowlProductIdLocked, setBowlProductIdLocked] = useState(null);
 
@@ -297,9 +315,12 @@ export const CreateOrder = () => {
 
   // Modal suppression state (if user explicitly closes modal for current price range)
   const [modalSuppress, setModalSuppress] = useState(false);
+  // Explicit open state so modal doesn't close while typing
+  const [modalOpen, setModalOpen] = useState(false);
 
   // NEW: Past totals (history)
   const [dailyHistory, setDailyHistory] = useState([]);
+  const [selectedHistoryDate, setSelectedHistoryDate] = useState('');
   const refreshHistory = useCallback(() => {
     const inv = loadAllInvoices();
     setDailyHistory(computeDailyTotalsFromInvoices(inv));
@@ -350,6 +371,7 @@ export const CreateOrder = () => {
 
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [inputValue, setInputValue] = useState('');
+  const [recentlyDeleted, setRecentlyDeleted] = useState([]);
 
   function formikSafeGet(field) {
     try { return (formik && formik.values && formik.values[field]) || ""; } catch { return ""; }
@@ -361,6 +383,12 @@ export const CreateOrder = () => {
     onSubmit: async (values) => {
       lastAddSucceededRef.current = false;
 
+      // HARD BLOCK: do not allow product "add" if switch is OFF
+      if (!allowAddProductName && isAddName(values?.name)) {
+        alert("Product 'add' is disabled. Turn ON the switch to use it.");
+        return;
+      }
+
       try {
         const currentIsBowl = Boolean(values && (String(values.name || '').toLowerCase().includes('bowl') || (bowlProductIdLocked && String(values.id) === String(bowlProductIdLocked))));
         if (currentIsBowl || bowlPriceLock) {
@@ -368,7 +396,7 @@ export const CreateOrder = () => {
           if (valStr.length !== 3) { alert('Bowl price must be exactly 3 digits (100–399).'); return; }
           const numeric = Number(valStr);
           if (numeric < 100 || numeric > 399) { alert('Bowl price must be between 100 and 399.'); return; }
-          // Block restricted ranges (200-209 and 301-309) for weighted/bowl
+          // Block restricted ranges (200-209, 301-309) for weighted/bowl
           if (isRestrictedPrice(numeric)) { alert('Price cannot be in ranges 200-209 or 301-309 for weighted products.'); return; }
           values.productPrice = valStr;
         }
@@ -378,10 +406,14 @@ export const CreateOrder = () => {
 
       const priceNumLocal = Number(values?.productPrice) || 0;
       
-      // For weighted products: enforce 3-digit price (100-399) and block restricted ranges (200-209, 301-309)
-      const isWeightedProduct = (values?.type === ProductType.WEIGHTED || String(values?.type||'').toLowerCase()==='weighted');
+      // For weighted products: enforce 3-digit price (100-399) and forbid restricted ranges
+      // IMPORTANT: 'add' must be treated as NON-weighted and bypass these restrictions
+      const isWeightedProduct =
+        !isAddName(values?.name) &&
+        (values?.type === ProductType.WEIGHTED || String(values?.type||'').toLowerCase()==='weighted');
       if (isWeightedProduct) {
         const priceStr = String(priceNumLocal);
+        // Block restricted ranges (200-209, 301-309)
         if (isRestrictedPrice(priceNumLocal)) {
           alert('Price cannot be in ranges 200-209 or 301-309 for weighted products.');
           return;
@@ -444,7 +476,13 @@ export const CreateOrder = () => {
     }
   });
 
-  const isWeighted = (formik.values.type === ProductType.WEIGHTED || String(formik.values.type||'').toLowerCase()==='weighted');
+  // SPECIAL: correctly detect name "add" instead of using "!id"
+  const isNameAdd = isAddName(formik.values.name);
+
+  const isWeighted = !isNameAdd && (
+    formik.values.type === ProductType.WEIGHTED ||
+    String(formik.values.type||'').toLowerCase()==='weighted'
+  );
   
   // For weighted products: validate 3-digit price
   const priceValue = Number(formikSafeGet('productPrice')) || 0;
@@ -463,10 +501,9 @@ export const CreateOrder = () => {
     return `${rangeStart}-${rangeEnd}`;
   };
   
-  const priceRange = getPriceRange(priceValue);
+  const computedPriceRange = getPriceRange(priceValue);
   
-  const isNameAdd = !formik.values.id;
-  const isWeightReadOnly = Boolean(isWeighted && fetchedViaScale);
+  const isWeightReadOnly = Boolean((isWeighted && fetchedViaScale));
 
   const weighingScaleHandler = useCallback(async () => {
     const { weight } = await dispatch(fetchWeightsAction());
@@ -481,31 +518,115 @@ export const CreateOrder = () => {
     return true;
   }, [dispatch, formik]);
 
-  // use stable classifyQuickTag from outer scope (remove inner duplicates)
-  const onProductSelect = useCallback(async (e, value) => {
-    if (dabbaLock && value && value.productId !== dabbaProductId) {
-      alert('Product switching is locked because you selected dabba. Add the dabba product first.');
-      return;
-    }
+  // Helper: focus main price input, with 2xx last-two-digit selection
+  const focusMainPriceInput = useCallback(() => {
+    try {
+      setTimeout(() => {
+        const el = priceInputRef && priceInputRef.current;
+        if (!el || typeof el.focus !== 'function') return;
+        el.focus();
+        const val = String(el.value || '');
+               const len = val.length;
+        if (typeof el.setSelectionRange === 'function') {
+          const num = Number(val);
+          if (Number.isFinite(num) && num >= 200 && num <= 299 && len >= 3) {
+            el.setSelectionRange(len - 2, len);
+          } else {
+            el.setSelectionRange(0, len);
+          }
+        } else if (typeof el.select === 'function') {
+          el.select();
+        }
+      }, 80);
+    } catch {}
+  }, []);
 
+  // Helper: virtual keypad digit writer (main + modal)
+  const applyDigitToPrice = (digit, targetRefOverride = null) => {
+    const targetRef = targetRefOverride || (modalOpen ? modalPriceRef : priceInputRef);
+    const el = targetRef && targetRef.current;
+    const dStr = String(digit);
+
+    if (el) {
+      const val = String(el.value || '');
+      const start = el.selectionStart != null ? el.selectionStart : val.length;
+      const end = el.selectionEnd != null ? el.selectionEnd : val.length;
+      const newVal = val.slice(0, start) + dStr + val.slice(end);
+
+      onPriceChange({ target: { value: newVal }, preventDefault: () => {} });
+
+      setTimeout(() => {
+        try {
+          el.focus();
+          const pos = start + dStr.length;
+          if (el.setSelectionRange) el.setSelectionRange(pos, pos);
+        } catch {}
+      }, 0);
+    } else {
+      const cur = String(formik.values.productPrice || '');
+      const newVal = cur + dStr;
+      onPriceChange({ target: { value: newVal }, preventDefault: () => {} });
+    }
+  };
+
+  // Helper: up/down counter for price (used by buttons + ArrowUp/ArrowDown)
+  const adjustPriceByStep = (delta, targetRefOverride = null) => {
+    const current = Number(formik.values.productPrice || 0) || 0;
+    let next = current + delta;
+    if (next < 0) next = 0;
+    const newVal = String(next);
+
+    onPriceChange({ target: { value: newVal }, preventDefault: () => {} });
+
+    const targetRef = targetRefOverride || (modalOpen ? modalPriceRef : priceInputRef);
+    const el = targetRef && targetRef.current;
+    if (el) {
+      setTimeout(() => {
+        try {
+          const len = (el.value || '').length;
+          el.focus();
+          if (el.setSelectionRange) el.setSelectionRange(len, len);
+        } catch {}
+      }, 0);
+    }
+  };
+
+  // use stable classifyQuickTag from outer scope
+  const onProductSelect = useCallback(async (e, value) => {
     if (
       selectedProduct &&
       value?.productId !== selectedProduct?.productId &&
       formik.values.name &&
-      (
-        !orderItemsRef.current.some(item => item.productId === formik.values.id)
-      )
+      !orderItemsRef.current.some(item => item.productId === formik.values.id)
     ) {
       const ok = window.confirm('Are you sure you want to change product? You have not added the current selection.');
       if (!ok) return;
     }
 
-    const rawName = (rows && value && value.productId && rows[value.productId]?.name) ? rows[value.productId].name : (value?.label || value?.value || '');
+    const rawName = (rows && value && value.productId && rows[value.productId]?.name)
+      ? rows[value.productId].name
+      : (value?.label || value?.value || '');
     setSelectedQuick(classifyQuickTag(rawName));
     setSelectedProduct(value);
 
     if (value) {
       const { productId } = value;
+      const resolvedName = (rows && productId && rows[productId]?.name)
+        ? rows[productId].name
+        : (value?.value || value?.label || '');
+
+      const isAddSpecial = isAddName(resolvedName);
+
+      // HARD BLOCK at selection level as well
+      if (!allowAddProductName && isAddSpecial) {
+        alert("Product 'add' is disabled. Turn ON the switch to use it.");
+        formik.resetForm();
+        setSelectedProduct(null);
+        setInputValue('');
+        clearQuickHighlight();
+        return;
+      }
+
       if (!rows || !productId || !rows[productId]) {
         formik.setFieldValue('id', productId ?? "");
         formik.setFieldValue('name', value?.value || "");
@@ -514,6 +635,9 @@ export const CreateOrder = () => {
         formik.setFieldValue('totalPrice', 0);
         setBowlPriceLock(false);
         setBowlProductIdLocked(null);
+
+        // focus price even for custom products (with 2xx selection logic)
+        focusMainPriceInput();
         setTimeout(() => clearQuickHighlight(), 100);
         return;
       }
@@ -526,7 +650,9 @@ export const CreateOrder = () => {
       formik.setFieldValue('totalPrice', Number((((price||0) * (Number(formik.values.quantity)||0))).toFixed(2)));
 
       const selectedType = rows[productId]?.type;
-      const looksWeighted = (
+
+      // 'add' must NOT behave as weighted, even if DB type says weighted
+      const looksWeighted = !isAddSpecial && (
         selectedType === ProductType.WEIGHTED ||
         String(selectedType || '').toLowerCase() === 'weighted' ||
         rows[productId]?.weighted === true ||
@@ -562,6 +688,12 @@ export const CreateOrder = () => {
           return;
         }
       }
+
+      // After product selection (and weight fetch if any), focus the productPrice input with 2xx logic
+      if (!modalOpen) {
+        focusMainPriceInput();
+      }
+
       setTimeout(() => clearQuickHighlight(), 100);
     } else {
       formik.resetForm();
@@ -572,13 +704,11 @@ export const CreateOrder = () => {
       setBowlProductIdLocked(null);
       clearQuickHighlight();
     }
-  }, [dabbaLock, dabbaProductId, selectedProduct, formik, rows, weighingScaleHandler]);
+  }, [selectedProduct, formik, rows, weighingScaleHandler, allowAddProductName, modalOpen, focusMainPriceInput]);
 
   const attemptProductChange = useCallback(async (value) => {
-    if (dabbaLock && value && value.productId !== dabbaProductId) {
-      alert('Product switching is locked because you selected dabba. Add the dabba product first.');
-      return;
-    }
+    // Whenever user tries to change product, allow modal to show again for the new selection
+    setModalSuppress(false);
 
     const currentlySelected = selectedProduct;
     const currentNameFilled = !!(formik.values.name);
@@ -590,14 +720,11 @@ export const CreateOrder = () => {
     }
 
     try { await onProductSelect(null, value); } catch {}
-  }, [dabbaLock, dabbaProductId, selectedProduct, formik, onProductSelect]);
+  }, [selectedProduct, formik, onProductSelect]);
 
   const onPriceFocus = (e) => {
+    // For 'add', remove first-digit lock entirely so it's totally free
     if (isNameAdd) { firstDigitLockRef.current = null; return; }
-    if (formik.values.name && formik.values.name.toLowerCase() === 'add') {
-      firstDigitLockRef.current = null;
-      return;
-    }
     const val = String(e.target.value ?? '');
     if (!bowlPriceLock) {
       firstDigitLockRef.current = val.length > 0 ? val.charAt(0) : null;
@@ -607,7 +734,17 @@ export const CreateOrder = () => {
   };
 
   const onPriceKeyDown = (e) => {
-    const navKeys = ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Tab','Home','End'];
+    const isUp = e.key === 'ArrowUp';
+    const isDown = e.key === 'ArrowDown';
+
+    // Physical keyboard counter support
+    if (isUp || isDown) {
+      e.preventDefault();
+      adjustPriceByStep(isUp ? 1 : -1, modalOpen ? modalPriceRef : priceInputRef);
+      return;
+    }
+
+    const navKeys = ['ArrowLeft','ArrowRight','Tab','Home','End'];
     if (navKeys.includes(e.key)) return;
 
     if (bowlPriceLock) {
@@ -618,7 +755,9 @@ export const CreateOrder = () => {
       }
     }
 
+    // For 'add', no extra blocking here
     if (isNameAdd) return;
+
     const isBackspace = e.key === 'Backspace';
     const isDelete = e.key === 'Delete';
     if (!isBackspace && !isDelete) return;
@@ -643,10 +782,11 @@ export const CreateOrder = () => {
         }
       }
       
-      // Block restricted price ranges (200-209 and 301-309) only for weighted products
-      // Only block when we have a complete 3-digit price
       const numeric = Number(rawInput) || 0;
-      if (isWeighted && rawInput.length === 3 && isRestrictedPrice(numeric)) {
+      
+      // Block restricted ranges (200-209, 301-309) only for weighted products
+      // Only block when it's a complete 3-digit value in restricted range
+      if (isWeighted && String(rawInput).length >= 3 && isRestrictedPrice(numeric)) {
         e.preventDefault && e.preventDefault();
         return;
       }
@@ -661,10 +801,11 @@ export const CreateOrder = () => {
     const locked = String(firstDigitLockRef.current || '');
     if (!isNameAdd && locked && digitsOnly.length > 0 && String(digitsOnly).charAt(0) !== locked) { e.preventDefault && e.preventDefault(); return; }
     
-    // Block restricted price ranges (200-209 and 301-309) for bowl/weighted products
-    // Only block when we have a complete 3-digit price
     const numeric = Number(digitsOnly) || 0;
-    if (isWeighted && digitsOnly.length === 3 && isRestrictedPrice(numeric)) {
+    
+    // Block restricted ranges (200-209, 301-309) for weighted products (including bowl path)
+    // Only block when it's a complete 3-digit value in restricted range
+    if (isWeighted && digitsOnly.length >= 3 && isRestrictedPrice(numeric)) {
       e.preventDefault && e.preventDefault();
       return;
     }
@@ -682,7 +823,7 @@ export const CreateOrder = () => {
         if (digits.length !== String(clip).length) { e.preventDefault(); return; }
         if (digits.length > 3) { e.preventDefault(); return; }
         const locked = String(firstDigitLockRef.current || '');
-        if (locked && digits.length > 0 && String(digits).charAt(0) !== locked) { e.preventDefault(); return; }
+        if (!isNameAdd && locked && digits.length > 0 && String(digits).charAt(0) !== locked) { e.preventDefault(); return; }
       } else {
         if (!isNameAdd) {
           const lock = firstDigitLockRef.current;
@@ -721,6 +862,12 @@ export const CreateOrder = () => {
 
       lastAddSucceededRef.current = false;
 
+      // Extra guard for 'add' on manual Add button too
+      if (!allowAddProductName && isAddName(formik.values.name)) {
+        alert("Product 'add' is disabled. Turn ON the switch to use it.");
+        return;
+      }
+
       if (isWeighted) {
         const success = await weighingScaleHandler();
         if (!success) { alert("Failed to fetch weight. Product not added."); return; }
@@ -732,35 +879,36 @@ export const CreateOrder = () => {
       await new Promise(r => setTimeout(r, 40));
 
       if (!lastAddSucceededRef.current) { alert("Add failed — product was not added. Please try again."); return; }
+
+      // whenever a product is successfully added, auto-close the high-price modal
+      // and reset suppression so it can open again for the next high-price item.
+      setModalOpen(false);
+      setModalSuppress(false);
     } catch (err) {
       console.error('Add product handler failed', err);
       alert("Add failed due to an unexpected error. See console.");
     } finally {
       // after adding and resetting form, focus product price so user can quickly add next product
-      try {
-        setTimeout(() => {
-          if (priceInputRef && priceInputRef.current && typeof priceInputRef.current.focus === 'function') {
-            priceInputRef.current.focus();
-            if (priceInputRef.current.select) priceInputRef.current.select();
-          }
-        }, 60);
-      } catch {}
+      if (!modalOpen) {
+        focusMainPriceInput();
+      }
     }
-  }, [weighingScaleHandler, formik, isWeighted, archivedOrderProps, archivedPdfUrl]);
+  }, [weighingScaleHandler, formik, isWeighted, archivedOrderProps, archivedPdfUrl, allowAddProductName, modalOpen, focusMainPriceInput]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === "=" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const valid = Boolean(
           formik.values.name &&
-          (!isWeighted || (formik.values.productPrice && !isWeightedPriceInvalid))
+          (!isWeighted || (formik.values.productPrice && !isWeightedPriceInvalid)) &&
+          (allowAddProductName || !isAddName(formik.values.name))
         );
         if (valid) { e.preventDefault(); addProductHandler(); }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [formik, isWeighted, isWeightedPriceInvalid, addProductHandler]);
+  }, [formik, isWeighted, isWeightedPriceInvalid, addProductHandler, allowAddProductName]);
 
   const fetchWeightLatestRef = useRef(weighingScaleHandler);
   useEffect(() => { fetchWeightLatestRef.current = weighingScaleHandler; });
@@ -789,12 +937,10 @@ export const CreateOrder = () => {
     setInputValue(product?.label || product?.value || '');
     await attemptProductChange(product);
 
-    try { if (product && product.productId) { setDabbaLock(true); setDabbaProductId(product.productId); } } catch {}
-
     try {
       const p = rows[product.productId];
       if (p && Number(p.pricePerKg) === 300) {
-        // previously we set priceLock here; removed per request
+        // previously we set priceLock here; removed
       }
     } catch {}
 
@@ -831,20 +977,52 @@ export const CreateOrder = () => {
 
   useEffect(() => { generatePdf(orderProps); }, [template, generatePdf, orderProps]);
 
+  const restoreDeletedItem = useCallback((idx) => {
+    setRecentlyDeleted(prev => {
+      const item = prev[idx];
+      if (!item) return prev;
+      setOrderProps(prevOrder => {
+        const subTotal = Number((prevOrder.subTotal + (item.totalPrice || 0)).toFixed(2));
+        const tax = Number((subTotal * (prevOrder.taxPercent / 100)).toFixed(2));
+        const next = {
+          ...prevOrder,
+          subTotal,
+          tax,
+          total: subTotal + tax,
+          orderItems: [...prevOrder.orderItems, item]
+        };
+        try { generatePdf(next); } catch {}
+        return next;
+      });
+      return prev.filter((_, i) => i !== idx);
+    });
+  }, [generatePdf]);
+
   const removeItem = useCallback((index) => {
     if (window.confirm('Are you sure, you want to delete ?')) {
       setOrderProps((prev) => {
-        const item = prev.orderItems[index]; if (!item) return prev;
+        const item = prev.orderItems[index]; 
+        if (!item) return prev;
+
+        // Track recently deleted items (keep latest 5)
+        setRecentlyDeleted(prevDeleted => [{ ...item }, ...prevDeleted].slice(0, 5));
+
         const subTotal = Number((prev.subTotal - (item?.totalPrice || 0)).toFixed(2));
         const tax = Number((subTotal * (prev.taxPercent / 100)).toFixed(2));
-        const next = { ...prev, subTotal, tax, total: subTotal + tax, orderItems: prev.orderItems.filter((_, i) => i !== index) };
+        const next = { 
+          ...prev, 
+          subTotal, 
+          tax, 
+          total: subTotal + tax, 
+          orderItems: prev.orderItems.filter((_, i) => i !== index) 
+        };
         try { generatePdf(next); } catch {}
         return next;
       });
     }
   }, [generatePdf]);
 
-  // MAIN createOrder — offline-first (saves locally), with PDF + totals handling
+  // MAIN createOrder — now ONLINE-first (server)
   const createOrder = async () => {
     setSuppressAutoSuggest(true);
     try {
@@ -878,15 +1056,12 @@ export const CreateOrder = () => {
       // SANITIZE before save
       const sanitized = sanitizeOrderForServer(orderProps);
 
-      // OFFLINE SAVE (localStorage)
-      const savedOrder = saveOrderLocal(sanitized);
-
-      // Save pending (backup)
-      try { savePendingInvoice(savedOrder); } catch {}
+      // ONLINE SAVE (Server)
+      const savedOrder = await dispatch(createOrderAction(sanitized));
 
       setLastSubmitResponse({
-        stage: "offline_success",
-        note: "Order saved locally (offline mode)",
+        stage: "online_success",
+        note: "Order saved to server",
         orderNumber: savedOrder.orderNumber,
         total: savedOrder.total,
         timestamp: new Date().toISOString(),
@@ -904,11 +1079,13 @@ export const CreateOrder = () => {
       // refresh history panel
       refreshHistory();
 
-      alert(`✅ Order created successfully (Offline Mode)!\nOrder #: ${savedOrder.orderNumber}\nTotal: ₹${savedOrder.total}`);
+      alert(`✅ Order created successfully!\nOrder #: ${savedOrder.orderNumber}\nTotal: ₹${savedOrder.total}`);
 
       setOrderProps(initialOrderProps);
       formik.resetForm();
       setFetchedViaScale(false);
+      setRecentlyDeleted([]);
+      setSelectedHistoryDate('');
     } catch (err) {
       console.error("createOrder unexpected error:", err);
       setLastSubmitError({ type: "unexpected", message: String(err?.message || err), raw: err });
@@ -1025,31 +1202,64 @@ export const CreateOrder = () => {
   const visiblePdfUrl = archivedPdfUrl || pdfUrl;
   const visibleOrderDisplay = archivedOrderProps || orderProps;
 
-  // Modal logic: open only if priceValue is in 300-399 and user hasn't suppressed modal
-  const modalShouldBeOpen = priceValue >= 300 && priceValue <= 399 && Boolean(formik.values.name);
-  const modalOpen = modalShouldBeOpen && !modalSuppress;
+  // When price enters 300–399 (and name is set) and user hasn't suppressed, open the modal.
+  useEffect(() => {
+    if (!modalSuppress && priceValue >= 300 && priceValue <= 399 && Boolean(formik.values.name)) {
+      setModalOpen(true);
+    }
+  }, [priceValue, formik.values.name, modalSuppress]);
 
-  // Reset suppression when price leaves range
+  // Reset suppression when price leaves range so it can open again for future products
   useEffect(() => {
     if (!(priceValue >= 300 && priceValue <= 399)) {
       setModalSuppress(false);
     }
   }, [priceValue]);
 
-  // Ensure price input inside modal receives focus when modal opens (robust fallback if autoFocus doesn't mount fast enough)
+  // Helper: focus price input inside modal and select last 2 digits
+  const focusModalPriceInput = useCallback(() => {
+    try {
+      const el = modalPriceRef && modalPriceRef.current;
+      if (!el || typeof el.focus !== 'function') return;
+      el.focus();
+      const val = String(el.value || '');
+      const len = val.length;
+      if (typeof el.setSelectionRange === 'function') {
+        if (len >= 3) {
+          // lock first digit, select last 2
+          el.setSelectionRange(len - 2, len);
+        } else if (len >= 1) {
+          el.setSelectionRange(0, len);
+        } else if (el.select) {
+          el.select();
+        }
+      } else if (el.select) {
+        el.select();
+      }
+    } catch {}
+  }, []);
+
+  // When modal opens, focus modal price
   useEffect(() => {
     if (modalOpen) {
-      try {
-        setTimeout(() => {
-          if (modalPriceRef && modalPriceRef.current && typeof modalPriceRef.current.focus === 'function') {
-            modalPriceRef.current.focus();
-            // also select existing text if present
-            if (modalPriceRef.current.select) modalPriceRef.current.select();
-          }
-        }, 50);
-      } catch {}
+      setTimeout(() => {
+        focusModalPriceInput();
+      }, 150);
     }
-  }, [modalOpen]);
+  }, [modalOpen, focusModalPriceInput]);
+
+  // When product changes and modal is not open, focus main price
+  useEffect(() => {
+    if (selectedProduct && !modalOpen) {
+      focusMainPriceInput();
+    }
+  }, [selectedProduct, modalOpen, focusMainPriceInput]);
+
+  const show200sKeypad = isWeighted && priceValue >= 200 && priceValue <= 299;
+
+  const selectedHistoryRow = selectedHistoryDate
+    ? dailyHistory.find((r) => r.date === selectedHistoryDate)
+    : null;
 
   return (
     <>
@@ -1106,13 +1316,39 @@ export const CreateOrder = () => {
                 />
               </Grid>
 
+              {/* Switch to control usage of product named 'add' */}
+              <Grid item xs={12}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={allowAddProductName}
+                      onChange={(e) => setAllowAddProductName(e.target.checked)}
+                      color="primary"
+                    />
+                  }
+                  label="Allow using product named 'add'"
+                />
+              </Grid>
+
               <Grid item xs={12}>
                 <Typography variant="subtitle2" sx={{ mt: 1, mb: 1 }}>Quick Select:</Typography>
 
-                <Box sx={{ display: 'flex', flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', overflowX: 'auto', whiteSpace: 'nowrap', py: 0.5 }}>
+                {/* Only /dabba button, centered */}
+                <Box
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    py: 0.5
+                  }}
+                >
                   <Button
-                    size="medium" variant={quickVariant('dabba')}
-                    sx={{ mr: '320px', p: 1.5, ...(selectedQuick==='dabba' && HIGHLIGHT_SX) }}
+                    size="large"
+                    variant={quickVariant('dabba')}
+                    sx={{
+                      px: 4,
+                      py: 1.5,
+                      ...(selectedQuick === 'dabba' && HIGHLIGHT_SX)
+                    }}
                     color="success"
                     onClick={async () => {
                       const product = productOptions.find(p => p.label.toLowerCase().includes('dabba'));
@@ -1122,49 +1358,12 @@ export const CreateOrder = () => {
                         setInputValue(product.label || product.value || '');
                         setHighlightedQuickProduct('dabba');
                         await attemptProductChange(product);
-                        try { setDabbaLock(true); setDabbaProductId(product.productId); } catch {}
                         await onProductSelect(null, product);
                       } else { alert("Product '/dabba' not found"); }
                     }}
-                  >{'1. /dabba'}</Button>
-
-                  <Divider orientation="vertical" flexItem sx={{ mx: 2, borderColor: 'grey.600', borderWidth: 2, height: 44 }} />
-
-                  <Button
-                    size="medium" variant={quickVariant('thali delhi')}
-                    sx={{ mr: 1, p: 1.5, ...(selectedQuick==='thali delhi' && HIGHLIGHT_SX) }}
-                    color="error"
-                    onClick={async () => {
-                      const product = productOptions.find(p => p.label.toLowerCase().includes('thali delhi'));
-                      if (product) {
-                        setSelectedQuick('thali delhi');
-                        setSelectedProduct(product);
-                        setInputValue(product.label || product.value || '');
-                        setHighlightedQuickProduct('thali delhi');
-                        await attemptProductChange(product);
-                        await onProductSelect(null, product);
-                      } else { alert("Product '///thali delhi' not found"); }
-                    }}
-                  >{'2. ///thali delhi'}</Button>
-
-                  <Button
-                    size="medium" variant={quickVariant('kadi tiffin')}
-                    sx={{ mr: 1, p: 1.5, ...(selectedQuick==='kadi tiffin' && HIGHLIGHT_SX) }}
-                    onClick={async () => {
-                      const product = productOptions.find(p => {
-                        const lab = p.label.toLowerCase().replace(/[^a-z0-9]+/g,' ');
-                        return lab.includes('kadi tiffin') || (/\bkdi\b/.test(lab) && /\btffn\b/.test(lab)) || /\bbt\s*tiffin\b/.test(lab);
-                      });
-                      if (product) {
-                        setSelectedQuick('kadi tiffin');
-                        setSelectedProduct(product);
-                        setInputValue(product.label || product.value || '');
-                        setHighlightedQuickProduct('kadi tiffin');
-                        await attemptProductChange(product);
-                        await onProductSelect(null, product);
-                      } else { alert("Product 'kadi tiffin' not found"); }
-                    }}
-                  >{'3. kadi tiffin'}</Button>
+                  >
+                    {'1. /dabba'}
+                  </Button>
                 </Box>
               </Grid>
 
@@ -1201,25 +1400,69 @@ export const CreateOrder = () => {
 
               <Grid item xs={12} md={6}>
                 <TextField
-                  type="number" size="small" id="productPrice" name="productPrice" 
+                  type="text"
+                  size="small"
+                  id="productPrice"
+                  name="productPrice" 
                   label={isWeighted ? "Product Price (3-digit: 100-399)" : "Product Price"}
-                  value={formik.values.productPrice} onChange={onPriceChange} onFocus={onPriceFocus} onBlur={onPriceBlur}
+                  value={formik.values.productPrice}
+                  onChange={onPriceChange}
+                  onFocus={onPriceFocus}
+                  onBlur={onPriceBlur}
                   onPaste={onPasteHandler}
-                  required fullWidth
+                  required
+                  fullWidth
                   error={Boolean(isWeightedPriceInvalid) && formik.values.productPrice !== ""}
                   helperText={
                     isWeighted && formik.values.productPrice !== "" 
                       ? (isWeightedPriceInvalid 
                           ? 'Must be 3 digits (100-399)' 
-                          : priceRange 
-                            ? `Range: ₹${priceRange}` 
+                          : computedPriceRange 
+                            ? `Range: ₹${computedPriceRange}` 
                             : '')
                       : ''
                   }
                   inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', step: 1 }}
                   onKeyDown={onPriceKeyDown}
                   inputRef={priceInputRef}
+                  InputProps={{
+                    endAdornment: (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.3 }}>
+                        <Button
+                          size="small"
+                          variant="text"
+                          onClick={() => adjustPriceByStep(1, priceInputRef)}
+                          sx={{ minWidth: 0, p: 0, lineHeight: 1, fontSize: '0.65rem' }}
+                        >
+                          ▲
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="text"
+                          onClick={() => adjustPriceByStep(-1, priceInputRef)}
+                          sx={{ minWidth: 0, p: 0, lineHeight: 1, fontSize: '0.65rem' }}
+                        >
+                          ▼
+                        </Button>
+                      </Box>
+                    )
+                  }}
                 />
+                {/* Virtual keypad for 200–299 range: digits 6,7,8,9 */}
+                {show200sKeypad && !modalOpen && (
+                  <Box sx={{ mt: 0.5, display: 'flex', gap: 1 }}>
+                    {[6, 7, 8, 9].map((d) => (
+                      <Button
+                        key={d}
+                        size="small"
+                        variant="outlined"
+                        onClick={() => applyDigitToPrice(d, priceInputRef)}
+                      >
+                        {d}
+                      </Button>
+                    ))}
+                  </Box>
+                )}
               </Grid>
 
               <Grid item xs={12} md={6}>
@@ -1234,9 +1477,17 @@ export const CreateOrder = () => {
 
               <Grid item xs={12} md={6}>
                 <TextField
-                  size="small" type="number" id="quantity" name="quantity" label="Quantity (Kg)"
-                  value={formik.values.quantity} onChange={onQuantityChange} required fullWidth
-                  error={Boolean(formik.errors?.quantity)} helperText={formik.errors?.quantity}
+                  size="small"
+                  type="number"
+                  id="quantity"
+                  name="quantity"
+                  label="Quantity (Kg)"
+                  value={formik.values.quantity}
+                  onChange={onQuantityChange}
+                  required
+                  fullWidth
+                  error={Boolean(formik.errors?.quantity)}
+                  helperText={formik.errors?.quantity}
                   InputProps={{
                     endAdornment: isWeighted ? (<Button onClick={weighingScaleHandler}><Sync /></Button>) : null,
                     readOnly: Boolean((isWeightReadOnly) || (selectedProduct && ((selectedProduct.label || selectedProduct.value || '').toLowerCase().includes('bowl') || (rows && selectedProduct.productId && (rows[selectedProduct.productId]?.name || '').toLowerCase().includes('bowl'))) && fetchedViaScale))
@@ -1254,8 +1505,15 @@ export const CreateOrder = () => {
                   Shortcuts: '/' for weight refresh, '=' to add product, Shift+D delete last item, Ctrl/Cmd+P print. Weighted: 3-digit prices only (100-399)
                 </Typography>
                 <Button variant="contained" onClick={createOrder} sx={{ float: "right", margin: "5px" }} disabled={orderProps.orderItems.length === 0}>Submit</Button>
-                <Button variant="contained" onClick={addProductHandler} sx={{ float: "right", margin: "5px" }}
-                  disabled={formik.values.name === "" || (isWeighted && (formik.values.productPrice === "" || isWeightedPriceInvalid))}
+                <Button
+                  variant="contained"
+                  onClick={addProductHandler}
+                  sx={{ float: "right", margin: "5px" }}
+                  disabled={
+                    formik.values.name === "" ||
+                    (!allowAddProductName && isAddName(formik.values.name)) ||
+                    (isWeighted && (formik.values.productPrice === "" || isWeightedPriceInvalid))
+                  }
                 >
                   Add Product
                 </Button>
@@ -1314,6 +1572,35 @@ export const CreateOrder = () => {
               </Grid>
             </Card>
           ))}
+
+          {/* Recently deleted items list */}
+          {recentlyDeleted.length > 0 && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Recently deleted items
+              </Typography>
+              {recentlyDeleted.map((item, idx) => (
+                <Card key={idx} sx={{ padding: '4px 10px', margin: '3px 1px', backgroundColor: '#fff8e1' }}>
+                  <Grid container alignItems="center">
+                    <Grid item xs={8}>
+                      <Typography variant="body2">
+                        {safeGetProductName(rows, item)} | Qty: {item.quantity} | Price: {item.totalPrice}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={4} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => restoreDeletedItem(idx)}
+                      >
+                        Restore
+                      </Button>
+                    </Grid>
+                  </Grid>
+                </Card>
+              ))}
+            </Box>
+          )}
         </Grid>
 
         <Grid item xs={12} sm={6}>
@@ -1331,7 +1618,7 @@ export const CreateOrder = () => {
               <iframe ref={pdfRef} src={visiblePdfUrl} title='Invoice' />
             </Box>
 
-            {/* NEW: Past Totals Panel */}
+            {/* Past Totals Panel (now privacy-friendly dropdown) */}
             <Card sx={{ mt: 1 }}>
               <CardContent sx={{ py: 1.5 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
@@ -1339,19 +1626,38 @@ export const CreateOrder = () => {
                   <Button size="small" onClick={refreshHistory}>Refresh</Button>
                 </Box>
                 {dailyHistory.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">No past invoices found.</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    No past invoices found.
+                  </Typography>
                 ) : (
-                  <Box sx={{ maxHeight: 220, overflowY: 'auto', pr: 1 }}>
-                    {dailyHistory.map((row) => (
-                      <Grid key={row.date} container sx={{ py: 0.5, borderBottom: '1px dashed #eee' }}>
-                        <Grid item xs={5}><Typography variant="body2">{row.date}</Typography></Grid>
-                        <Grid item xs={3}><Typography variant="body2">Bills: {row.count}</Typography></Grid>
-                        <Grid item xs={4} sx={{ textAlign: 'right' }}>
-                          <Typography variant="body2">₹ {Number(row.total).toLocaleString('en-IN')}</Typography>
-                        </Grid>
-                      </Grid>
-                    ))}
-                  </Box>
+                  <>
+                    <Select
+                      size="small"
+                      fullWidth
+                      displayEmpty
+                      value={selectedHistoryDate}
+                      onChange={(e) => setSelectedHistoryDate(e.target.value)}
+                      sx={{ mt: 0.5, mb: 1 }}
+                    >
+                      <MenuItem value="" disabled>
+                        Select date to view total
+                      </MenuItem>
+                      {dailyHistory.map((row) => (
+                        <MenuItem key={row.date} value={row.date}>
+                          {row.date}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                    {selectedHistoryRow && (
+                      <Box sx={{ mt: 1 }}>
+                        <Typography variant="body2">Date: {selectedHistoryRow.date}</Typography>
+                        <Typography variant="body2">Bills: {selectedHistoryRow.count}</Typography>
+                        <Typography variant="body2">
+                          Total: ₹ {Number(selectedHistoryRow.total).toLocaleString('en-IN')}
+                        </Typography>
+                      </Box>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -1362,10 +1668,11 @@ export const CreateOrder = () => {
       {/* Modal for distraction-free editing when price is 300-399 */}
       <Dialog
         open={Boolean(modalOpen)}
-        onClose={() => setModalSuppress(true)}
-        // make the dialog cover the whole viewport
+        onClose={() => {
+          setModalOpen(false);
+          setModalSuppress(true);
+        }}
         fullScreen
-        // keep fullWidth for internal layout but maxWidth isn't needed when fullScreen
         PaperProps={{
           sx: {
             backgroundColor: '#ffffff',
@@ -1375,13 +1682,17 @@ export const CreateOrder = () => {
             borderRadius: 0,
             display: 'flex',
             flexDirection: 'column',
-            // ensure content doesn't overflow awkwardly
             overflow: 'auto',
             p: 2
           }
         }}
-        // ensure backdrop covers the window as usual
         BackdropProps={{ invisible: false }}
+        TransitionProps={{
+          onEntered: () => {
+            // When the dialog transition finishes, force focus on price input
+            focusModalPriceInput();
+          }
+        }}
       >
         <DialogTitle>High-price editor (₹300–₹399)</DialogTitle>
         <DialogContent sx={{ flexGrow: 1 }}>
@@ -1394,20 +1705,55 @@ export const CreateOrder = () => {
               fullWidth
             />
             <TextField
-              // autofocus this field when the modal opens (and also provide ref fallback)
-              autoFocus
               inputRef={modalPriceRef}
               size="small"
               label="Product Price"
-              type="number"
+              type="text"
               value={formik.values.productPrice}
               onChange={onPriceChange}
               onKeyDown={onPriceKeyDown}
               onPaste={onPasteHandler}
-              helperText={isWeighted ? (isWeightedPriceInvalid ? 'Must be 3 digits (100-399)' : `Range: ₹${priceRange}`) : ''}
+              helperText={isWeighted ? (isWeightedPriceInvalid ? 'Must be 3 digits (100-399)' : (computedPriceRange ? `Range: ₹${computedPriceRange}` : '')) : ''}
               fullWidth
               inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', step: 1 }}
+              InputProps={{
+                endAdornment: (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.3 }}>
+                    <Button
+                      size="small"
+                      variant="text"
+                      onClick={() => adjustPriceByStep(1, modalPriceRef)}
+                      sx={{ minWidth: 0, p: 0, lineHeight: 1, fontSize: '0.65rem' }}
+                    >
+                      ▲
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="text"
+                      onClick={() => adjustPriceByStep(-1, modalPriceRef)}
+                      sx={{ minWidth: 0, p: 0, lineHeight: 1, fontSize: '0.65rem' }}
+                    >
+                      ▼
+                    </Button>
+                  </Box>
+                )
+              }}
             />
+            {/* Virtual keypad in modal for 300–399: digits 6,7,8,9 */}
+            {priceValue >= 300 && priceValue <= 399 && (
+              <Box sx={{ mt: 0.5, mb: 1, display: 'flex', gap: 1 }}>
+                {[6, 7, 8, 9].map((d) => (
+                  <Button
+                    key={d}
+                    size="small"
+                    variant="outlined"
+                    onClick={() => applyDigitToPrice(d, modalPriceRef)}
+                  >
+                    {d}
+                  </Button>
+                ))}
+              </Box>
+            )}
             <TextField
               size="small"
               label="Quantity"
@@ -1436,14 +1782,26 @@ export const CreateOrder = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setModalSuppress(true)}>Cancel</Button>
           <Button
             onClick={() => {
-              // attempt add
+              setModalOpen(false);
+              setModalSuppress(true);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
               addProductHandler();
+              setModalOpen(false);
+              setModalSuppress(false);
             }}
             variant="contained"
-            disabled={formik.values.name === "" || (isWeighted && (formik.values.productPrice === "" || isWeightedPriceInvalid))}
+            disabled={
+              formik.values.name === "" ||
+              (!allowAddProductName && isAddName(formik.values.name)) ||
+              (isWeighted && (formik.values.productPrice === "" || isWeightedPriceInvalid))
+            }
           >
             Add Product
           </Button>
