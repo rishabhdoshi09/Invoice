@@ -368,6 +368,8 @@ export const CreateOrder = () => {
           if (valStr.length !== 3) { alert('Bowl price must be exactly 3 digits (100–399).'); return; }
           const numeric = Number(valStr);
           if (numeric < 100 || numeric > 399) { alert('Bowl price must be between 100 and 399.'); return; }
+          // Block restricted ranges (200-209 and 301-309) for weighted/bowl
+          if (isRestrictedPrice(numeric)) { alert('Price cannot be in ranges 200-209 or 301-309 for weighted products.'); return; }
           values.productPrice = valStr;
         }
       } catch {}
