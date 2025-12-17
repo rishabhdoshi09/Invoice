@@ -2,10 +2,17 @@
 import { useDispatch } from "react-redux";
 import { useFormik } from "formik";
 import { Box, Button, Grid, Select, MenuItem, TextField } from "@mui/material";
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 
 import { addProductAction } from "../../../store/products";
 import { ProductType } from "../../../enums/product";
+
+// Helper function to check if a price is in restricted ranges (200-209 or 301-309)
+const isRestrictedPrice = (price) => {
+    const numPrice = parseFloat(price);
+    if (isNaN(numPrice)) return false;
+    return (numPrice >= 200 && numPrice <= 209) || (numPrice >= 301 && numPrice <= 309);
+};
 
 export const CreateProduct = () => {
 
@@ -26,6 +33,10 @@ export const CreateProduct = () => {
             if (values.pricePerKg === "") {
                 errors.pricePerKg = "Product price is required"
             }
+            // Additional validation for restricted price ranges
+            if (isRestrictedPrice(values.pricePerKg)) {
+                errors.pricePerKg = "Price cannot be in ranges 200-209 or 301-309"
+            }
             return errors;
         },
         validateOnBlur: true,
@@ -40,6 +51,26 @@ export const CreateProduct = () => {
             }, 100);
         }
     });
+
+    // Custom price change handler that prevents restricted price ranges
+    const handlePriceChange = useCallback((e) => {
+        const newValue = e.target.value;
+        
+        // Allow empty value (for clearing/backspace)
+        if (newValue === "") {
+            formik.setFieldValue("pricePerKg", "");
+            return;
+        }
+        
+        // Check if the new value would be in a restricted range
+        if (isRestrictedPrice(newValue)) {
+            // Don't update the value if it's in a restricted range
+            return;
+        }
+        
+        // Update the value if it's not restricted
+        formik.setFieldValue("pricePerKg", newValue);
+    }, [formik]);
 
     // Auto-focus price field when name is entered (minimum 2 characters)
     useEffect(() => {
