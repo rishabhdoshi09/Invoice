@@ -633,12 +633,6 @@ export const CreateOrder = () => {
   const onPriceChange = (e) => {
     const rawInput = String(e.target.value || '');
 
-    // Block restricted price ranges (200-209 and 301-309) only for weighted products
-    if (isWeighted && isRestrictedPrice(rawInput)) {
-      e.preventDefault && e.preventDefault();
-      return;
-    }
-
     if (!bowlPriceLock) {
       // For 'add', do not enforce first-digit lock or weighted rules here
       if (!isNameAdd) {
@@ -648,8 +642,16 @@ export const CreateOrder = () => {
           return;
         }
       }
-      formik.setFieldValue('productPrice', rawInput);
+      
+      // Block restricted price ranges (200-209 and 301-309) only for weighted products
+      // Only block when we have a complete 3-digit price
       const numeric = Number(rawInput) || 0;
+      if (isWeighted && rawInput.length === 3 && isRestrictedPrice(numeric)) {
+        e.preventDefault && e.preventDefault();
+        return;
+      }
+      
+      formik.setFieldValue('productPrice', rawInput);
       formik.setFieldValue('totalPrice', Number((numeric * (Number(formik.values.quantity)||0)).toFixed(2)));
       return;
     }
@@ -658,8 +660,16 @@ export const CreateOrder = () => {
     if (digitsOnly.length > 3) { e.preventDefault && e.preventDefault(); return; }
     const locked = String(firstDigitLockRef.current || '');
     if (!isNameAdd && locked && digitsOnly.length > 0 && String(digitsOnly).charAt(0) !== locked) { e.preventDefault && e.preventDefault(); return; }
-    formik.setFieldValue('productPrice', digitsOnly);
+    
+    // Block restricted price ranges (200-209 and 301-309) for bowl/weighted products
+    // Only block when we have a complete 3-digit price
     const numeric = Number(digitsOnly) || 0;
+    if (isWeighted && digitsOnly.length === 3 && isRestrictedPrice(numeric)) {
+      e.preventDefault && e.preventDefault();
+      return;
+    }
+    
+    formik.setFieldValue('productPrice', digitsOnly);
     formik.setFieldValue('totalPrice', Number((numeric * (Number(formik.values.quantity)||0)).toFixed(2)));
   };
 
