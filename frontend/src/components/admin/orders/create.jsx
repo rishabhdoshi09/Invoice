@@ -626,6 +626,13 @@ export const CreateOrder = () => {
 
   const onPriceChange = (e) => {
     const rawInput = String(e.target.value || '');
+    
+    // Block restricted price ranges (200-209 and 301-309)
+    if (isRestrictedPrice(rawInput)) {
+      e.preventDefault && e.preventDefault();
+      return;
+    }
+    
     if (!bowlPriceLock) {
       if (!isNameAdd) {
         if (!(formik.values.name && formik.values.name.toLowerCase() === 'add')) {
@@ -641,6 +648,13 @@ export const CreateOrder = () => {
 
     const digitsOnly = rawInput.replace(/\D/g, '');
     if (digitsOnly.length > 3) { e.preventDefault && e.preventDefault(); return; }
+    
+    // Block restricted price ranges for bowl price lock mode too
+    if (isRestrictedPrice(digitsOnly)) {
+      e.preventDefault && e.preventDefault();
+      return;
+    }
+    
     const locked = String(firstDigitLockRef.current || '');
     if (locked && digitsOnly.length > 0 && String(digitsOnly).charAt(0) !== locked) { e.preventDefault && e.preventDefault(); return; }
     formik.setFieldValue('productPrice', digitsOnly);
