@@ -378,10 +378,14 @@ export const CreateOrder = () => {
 
       const priceNumLocal = Number(values?.productPrice) || 0;
       
-      // For weighted products: enforce 3-digit price (100-399)
+      // For weighted products: enforce 3-digit price (100-399) and block restricted ranges (200-209, 301-309)
       const isWeightedProduct = (values?.type === ProductType.WEIGHTED || String(values?.type||'').toLowerCase()==='weighted');
       if (isWeightedProduct) {
         const priceStr = String(priceNumLocal);
+        if (isRestrictedPrice(priceNumLocal)) {
+          alert('Price cannot be in ranges 200-209 or 301-309 for weighted products.');
+          return;
+        }
         if (priceStr.length !== 3 || priceNumLocal < 100 || priceNumLocal > 399) {
           alert('Weighted product price must be exactly 3 digits (100-399).');
           return;
