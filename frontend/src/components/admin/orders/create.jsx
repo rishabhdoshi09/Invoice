@@ -82,6 +82,7 @@ const subtractFromTodayGrandTotal=(amt)=>{ const t=getTodayStr(); const d=getSto
 const msToNextMidnight=()=>{ const now=new Date(); const next=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1,0,0,0,0); return next.getTime()-now.getTime(); };
 
 const PENDING_INVOICES_KEY = 'pendingInvoices_v1';
+// eslint-disable-next-line no-unused-vars
 const savePendingInvoice = (payload) => {
   try {
     const cur = JSON.parse(localStorage.getItem(PENDING_INVOICES_KEY) || '[]');
