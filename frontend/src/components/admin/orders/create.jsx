@@ -626,21 +626,20 @@ export const CreateOrder = () => {
 
   const onPriceChange = (e) => {
     const rawInput = String(e.target.value || '');
-    
-    // Check if current product is weighted
-    const currentIsWeighted = (formik.values.type === ProductType.WEIGHTED || String(formik.values.type||'').toLowerCase()==='weighted');
-    
+
     // Block restricted price ranges (200-209 and 301-309) only for weighted products
-    if (currentIsWeighted && isRestrictedPrice(rawInput)) {
+    if (isWeighted && isRestrictedPrice(rawInput)) {
       e.preventDefault && e.preventDefault();
       return;
     }
-    
+
     if (!bowlPriceLock) {
+      // For 'add', do not enforce first-digit lock or weighted rules here
       if (!isNameAdd) {
-        if (!(formik.values.name && formik.values.name.toLowerCase() === 'add')) {
-          const lock = firstDigitLockRef.current;
-          if (lock && rawInput && String(rawInput).charAt(0) !== lock) { e.preventDefault && e.preventDefault(); return; }
+        const lock = firstDigitLockRef.current;
+        if (lock && rawInput && String(rawInput).charAt(0) !== lock) {
+          e.preventDefault && e.preventDefault();
+          return;
         }
       }
       formik.setFieldValue('productPrice', rawInput);
@@ -651,15 +650,8 @@ export const CreateOrder = () => {
 
     const digitsOnly = rawInput.replace(/\D/g, '');
     if (digitsOnly.length > 3) { e.preventDefault && e.preventDefault(); return; }
-    
-    // Block restricted price ranges for bowl price lock mode too (only for weighted)
-    if (currentIsWeighted && isRestrictedPrice(digitsOnly)) {
-      e.preventDefault && e.preventDefault();
-      return;
-    }
-    
     const locked = String(firstDigitLockRef.current || '');
-    if (locked && digitsOnly.length > 0 && String(digitsOnly).charAt(0) !== locked) { e.preventDefault && e.preventDefault(); return; }
+    if (!isNameAdd && locked && digitsOnly.length > 0 && String(digitsOnly).charAt(0) !== locked) { e.preventDefault && e.preventDefault(); return; }
     formik.setFieldValue('productPrice', digitsOnly);
     const numeric = Number(digitsOnly) || 0;
     formik.setFieldValue('totalPrice', Number((numeric * (Number(formik.values.quantity)||0)).toFixed(2)));
