@@ -171,6 +171,7 @@ function recomputeTotals(order) {
   const total = sub + tax;
   return { subTotal: sub, tax, total };
 }
+// eslint-disable-next-line no-unused-vars
 function saveOrderLocal(orderProps) {
   // Ensure order number + standardize dates
   const localOrderNo = String(nextOrderNumberForToday());
