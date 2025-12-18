@@ -153,6 +153,12 @@ const sanitizeOrderForServer = (props = {}) => {
 const isAddName = (name) =>
   String(name || '').trim().toLowerCase() === 'add';
 
+/* Helper: detect products that should NOT use original price (Y, PRODUCT X) */
+const isNoPriceProduct = (name) => {
+  const n = String(name || '').trim().toLowerCase();
+  return n === 'y' || n === 'product x';
+};
+
 /* Helper: check if price is in restricted ranges (200-209 or 301-309) for weighted products */
 const isRestrictedPrice = (price) => {
   const numPrice = Number(price);
