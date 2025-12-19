@@ -658,20 +658,20 @@ export const CreateOrder = () => {
       formik.setFieldValue('name', rows[productId]?.name || "");
       formik.setFieldValue('type', rows[productId]?.type || "");
       const price = rows[productId]?.pricePerKg || 0;
-      
-      // For products "Y" and "PRODUCT X", don't auto-fill price - force manual entry
       const productName = rows[productId]?.name || "";
-      const skipOriginalPrice = isNoPriceProduct(productName);
       
-      if (skipOriginalPrice) {
-        formik.setFieldValue('productPrice', "");
+      // For products "Y" and "PRODUCT X", track original price for validation
+      if (isNoPriceProduct(productName)) {
+        setOriginalPriceForSpecial(price);
+        setAllowOriginalPrice(false); // Default: must change price
         firstDigitLockRef.current = null; // No first-digit lock for these products
-        formik.setFieldValue('totalPrice', 0);
       } else {
-        formik.setFieldValue('productPrice', price ? String(price) : "");
+        setOriginalPriceForSpecial(null);
         try { firstDigitLockRef.current = (String(price || '') || '').charAt(0) || null; } catch {}
-        formik.setFieldValue('totalPrice', Number((((price||0) * (Number(formik.values.quantity)||0))).toFixed(2)));
       }
+      
+      formik.setFieldValue('productPrice', price ? String(price) : "");
+      formik.setFieldValue('totalPrice', Number((((price||0) * (Number(formik.values.quantity)||0))).toFixed(2)));
 
       const selectedType = rows[productId]?.type;
 
