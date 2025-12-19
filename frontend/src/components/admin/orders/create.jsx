@@ -1737,6 +1737,28 @@ export const CreateOrder = () => {
               onChange={(e) => formik.setFieldValue('name', e.target.value)}
               fullWidth
             />
+            
+            {/* Toggle for "Y" and "PRODUCT X" to allow/block original price */}
+            {isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && (
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={allowOriginalPrice}
+                    onChange={(e) => setAllowOriginalPrice(e.target.checked)}
+                    color="warning"
+                  />
+                }
+                label={`Allow Original Price (₹${originalPriceForSpecial})`}
+                sx={{ 
+                  backgroundColor: allowOriginalPrice ? '#fff3e0' : '#ffebee',
+                  borderRadius: 1,
+                  px: 1,
+                  py: 0.5,
+                  border: allowOriginalPrice ? '1px solid #ff9800' : '1px solid #f44336'
+                }}
+              />
+            )}
+            
             <TextField
               inputRef={modalPriceRef}
               size="small"
@@ -1746,7 +1768,12 @@ export const CreateOrder = () => {
               onChange={onPriceChange}
               onKeyDown={onPriceKeyDown}
               onPaste={onPasteHandler}
-              helperText={isWeighted ? (isWeightedPriceInvalid ? 'Must be 3 digits (100-399)' : (computedPriceRange ? `Range: ₹${computedPriceRange}` : '')) : ''}
+              helperText={
+                isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && !allowOriginalPrice && Number(formik.values.productPrice) === originalPriceForSpecial
+                  ? `⚠️ Cannot use original price (₹${originalPriceForSpecial}) - please edit`
+                  : isWeighted ? (isWeightedPriceInvalid ? 'Must be 3 digits (100-399)' : (computedPriceRange ? `Range: ₹${computedPriceRange}` : '')) : ''
+              }
+              error={isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && !allowOriginalPrice && Number(formik.values.productPrice) === originalPriceForSpecial}
               fullWidth
               inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', step: 1 }}
               InputProps={{
