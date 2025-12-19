@@ -327,6 +327,10 @@ export const CreateOrder = () => {
   // Explicit open state so modal doesn't close while typing
   const [modalOpen, setModalOpen] = useState(false);
 
+  // For "Y" and "PRODUCT X": track original price and toggle to allow/block using it
+  const [originalPriceForSpecial, setOriginalPriceForSpecial] = useState(null);
+  const [allowOriginalPrice, setAllowOriginalPrice] = useState(false);
+
   // NEW: Past totals (history)
   const [dailyHistory, setDailyHistory] = useState([]);
   const [selectedHistoryDate, setSelectedHistoryDate] = useState('');
