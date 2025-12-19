@@ -735,6 +735,8 @@ export const CreateOrder = () => {
       try { setFetchedViaScale(false); } catch {}
       setBowlPriceLock(false);
       setBowlProductIdLocked(null);
+      setOriginalPriceForSpecial(null);
+      setAllowOriginalPrice(false);
       clearQuickHighlight();
     }
   }, [selectedProduct, formik, rows, weighingScaleHandler, allowAddProductName, modalOpen, focusMainPriceInput]);
