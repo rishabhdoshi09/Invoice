@@ -402,6 +402,15 @@ export const CreateOrder = () => {
         return;
       }
 
+      // BLOCK: For "Y" and "PRODUCT X", if toggle is OFF, cannot use original price
+      if (isNoPriceProduct(values?.name) && originalPriceForSpecial !== null && !allowOriginalPrice) {
+        const currentPrice = Number(values?.productPrice) || 0;
+        if (currentPrice === originalPriceForSpecial) {
+          alert(`Cannot use original price (${originalPriceForSpecial}) for this product. Please edit the price or turn ON "Allow Original Price".`);
+          return;
+        }
+      }
+
       try {
         const currentIsBowl = Boolean(values && (String(values.name || '').toLowerCase().includes('bowl') || (bowlProductIdLocked && String(values.id) === String(bowlProductIdLocked))));
         if (currentIsBowl || bowlPriceLock) {
