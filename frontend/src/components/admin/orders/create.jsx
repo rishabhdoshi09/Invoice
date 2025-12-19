@@ -1431,6 +1431,29 @@ export const CreateOrder = () => {
                 />
               </Grid>
 
+              {/* Toggle for "Y" and "PRODUCT X" to allow/block original price - shown in main form */}
+              {isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && (
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={allowOriginalPrice}
+                        onChange={(e) => setAllowOriginalPrice(e.target.checked)}
+                        color="warning"
+                      />
+                    }
+                    label={`Allow Original Price (₹${originalPriceForSpecial})`}
+                    sx={{ 
+                      backgroundColor: allowOriginalPrice ? '#fff3e0' : '#ffebee',
+                      borderRadius: 1,
+                      px: 1,
+                      py: 0.5,
+                      border: allowOriginalPrice ? '1px solid #ff9800' : '1px solid #f44336'
+                    }}
+                  />
+                </Grid>
+              )}
+
               <Grid item xs={12} md={6}>
                 <TextField
                   type="text"
@@ -1445,15 +1468,20 @@ export const CreateOrder = () => {
                   onPaste={onPasteHandler}
                   required
                   fullWidth
-                  error={Boolean(isWeightedPriceInvalid) && formik.values.productPrice !== ""}
+                  error={
+                    (Boolean(isWeightedPriceInvalid) && formik.values.productPrice !== "") ||
+                    (isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && !allowOriginalPrice && Number(formik.values.productPrice) === originalPriceForSpecial)
+                  }
                   helperText={
-                    isWeighted && formik.values.productPrice !== "" 
-                      ? (isWeightedPriceInvalid 
-                          ? 'Must be 3 digits (100-399)' 
-                          : computedPriceRange 
-                            ? `Range: ₹${computedPriceRange}` 
-                            : '')
-                      : ''
+                    isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && !allowOriginalPrice && Number(formik.values.productPrice) === originalPriceForSpecial
+                      ? `⚠️ Cannot use original price (₹${originalPriceForSpecial}) - please edit`
+                      : isWeighted && formik.values.productPrice !== "" 
+                        ? (isWeightedPriceInvalid 
+                            ? 'Must be 3 digits (100-399)' 
+                            : computedPriceRange 
+                              ? `Range: ₹${computedPriceRange}` 
+                              : '')
+                        : ''
                   }
                   inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', step: 1 }}
                   onKeyDown={onPriceKeyDown}
