@@ -18,6 +18,7 @@ import { ListPayments } from "./components/admin/payments/list";
 import { OutstandingReports } from "./components/admin/reports/outstanding";
 import { TallyExport } from "./components/admin/tally/export";
 import { AdminDashboard } from "./components/admin/dashboard/AdminDashboard";
+import { UserManagement } from "./components/admin/users/UserManagement";
 import { CircularProgress, Box } from "@mui/material";
 
 const theme = createTheme();
