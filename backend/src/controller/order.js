@@ -3,11 +3,28 @@ const uuidv4 = require('uuid/v4');
 const Services = require('../services');
 const Validations = require('../validations');
 const db = require('../models');
+const { createAuditLog } = require('../middleware/auditLogger');
+
+// Helper to get client IP
+const getClientIP = (req) => {
+    return req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+           req.headers['x-real-ip'] ||
+           req.connection?.remoteAddress ||
+           req.socket?.remoteAddress ||
+           'unknown';
+};
 
 module.exports = {
     createOrder: async (req, res) => {
         try {
-            const { error, value } = Validations.order.validateCreateOrderObj({ ...req.body, orderNumber: `ORD-${uuidv4().split('-')[0].toUpperCase()}` });
+            // Generate server-side invoice number (tamper-proof)
+            const invoiceInfo = await Services.invoiceSequence.generateInvoiceNumber();
+            
+            const { error, value } = Validations.order.validateCreateOrderObj({ 
+                ...req.body, 
+                orderNumber: invoiceInfo.invoiceNumber 
+            });
+            
             if (error) {
                 return res.status(400).send({
                     status: 400,
@@ -29,6 +46,12 @@ module.exports = {
                 orderObj.paymentStatus = 'partial';
             }
 
+            // Add created by user info
+            if (req.user) {
+                orderObj.createdBy = req.user.id;
+                orderObj.createdByName = req.user.name || req.user.username;
+            }
+
             const result = await db.sequelize.transaction(async (transaction) => {
                 
                 const response = await Services.order.createOrder(orderObj, transaction);
@@ -36,6 +59,14 @@ module.exports = {
 
                 orderItems = orderItems.map(item => { return {...item, orderId: orderId } });
                 await Services.orderItems.addOrderItems(orderItems, transaction);
+
+                // Update daily summary
+                try {
+                    await Services.dailySummary.recordOrderCreated(response, transaction);
+                } catch (summaryError) {
+                    console.error('Failed to update daily summary:', summaryError);
+                    // Don't fail the order creation for summary issues
+                }
 
                 // Dynamically get the Sales and Cash/Bank Ledger IDs
                 const salesLedger = await Services.ledger.getLedgerByName('Sales Account');
@@ -101,6 +132,30 @@ module.exports = {
                 return await Services.order.getOrder({id: orderId });
             });
 
+            // Audit log for order creation
+            await createAuditLog({
+                userId: req.user?.id,
+                userName: req.user?.name || req.user?.username || 'Anonymous',
+                userRole: req.user?.role || 'unknown',
+                action: 'CREATE',
+                entityType: 'ORDER',
+                entityId: result.id,
+                entityName: result.orderNumber,
+                newValues: {
+                    orderNumber: result.orderNumber,
+                    total: result.total,
+                    customerName: result.customerName,
+                    itemCount: orderItems.length
+                },
+                description: `Created order ${result.orderNumber} for ₹${result.total}`,
+                ipAddress: getClientIP(req),
+                userAgent: req.headers['user-agent'],
+                metadata: {
+                    invoiceSequence: invoiceInfo.globalSequence,
+                    dailySequence: invoiceInfo.dailySequence
+                }
+            });
+
             return res.status(200).send({
                 status: 200,
                 message: 'order created successfully',
@@ -108,12 +163,14 @@ module.exports = {
             });
 
         } catch (error) {
+            console.error('Create order error:', error);
             return res.status(500).send({
                 status: 500,
-                message: error
+                message: error.message || error
             });
         }
     },
+    
     listOrders: async (req, res) => {
         try {
             const { error, value } = Validations.order.validateListOrdersObj(req.query);
@@ -140,6 +197,7 @@ module.exports = {
             });
         }
     },
+    
     getOrder: async (req, res) => {
         try {
             const response = await Services.order.getOrder({ id: req.params.orderId });
@@ -164,10 +222,28 @@ module.exports = {
             });
         }
     },
+    
     updateOrder: async(req, res) => {
-        try{
+        try {
+            // Check if user has permission to edit
+            if (req.user && req.user.role !== 'admin') {
+                return res.status(403).send({
+                    status: 403,
+                    message: 'Only administrators can edit orders'
+                });
+            }
+
             const orderId = req.params.orderId;
             const { orderItems, ...orderData } = req.body;
+            
+            // Get original order for audit
+            const originalOrder = await Services.order.getOrder({ id: orderId });
+            if (!originalOrder) {
+                return res.status(400).send({
+                    status: 400,
+                    message: "order doesn't exist"
+                });
+            }
             
             console.log(`Updating order ${orderId}...`);
             
@@ -175,6 +251,13 @@ module.exports = {
             const result = await db.sequelize.transaction(async (transaction) => {
                 // Update order basic info (exclude orderItems from update)
                 const { orderItems: _, ...updateFields } = orderData;
+                
+                // Add modified by info
+                if (req.user) {
+                    updateFields.modifiedBy = req.user.id;
+                    updateFields.modifiedByName = req.user.name || req.user.username;
+                }
+                
                 await Services.order.updateOrder(
                     { id: orderId },
                     updateFields
@@ -207,6 +290,30 @@ module.exports = {
             // Fetch complete order data after transaction
             const completeOrder = await Services.order.getOrder({ id: result });
             
+            // Audit log for order update
+            await createAuditLog({
+                userId: req.user?.id,
+                userName: req.user?.name || req.user?.username || 'Anonymous',
+                userRole: req.user?.role || 'unknown',
+                action: 'UPDATE',
+                entityType: 'ORDER',
+                entityId: orderId,
+                entityName: originalOrder.orderNumber,
+                oldValues: {
+                    total: originalOrder.total,
+                    customerName: originalOrder.customerName,
+                    paymentStatus: originalOrder.paymentStatus
+                },
+                newValues: {
+                    total: completeOrder.total,
+                    customerName: completeOrder.customerName,
+                    paymentStatus: completeOrder.paymentStatus
+                },
+                description: `Updated order ${originalOrder.orderNumber}`,
+                ipAddress: getClientIP(req),
+                userAgent: req.headers['user-agent']
+            });
+            
             console.log(`Order ${orderId} updated successfully`);
             
             return res.status(200).send({
@@ -215,36 +322,93 @@ module.exports = {
                 data: completeOrder
             });
             
-        }catch(error){
+        } catch(error) {
             console.error('Update order error:', error);
             return res.status(500).send({
                 status: 500,
                 message: error.message || error
-            })            
+            });
         }
     },
+    
     deleteOrder: async(req, res) => {
-        try{
-            const response = await Services.order.deleteOrder({ id: req.params.orderId });
+        try {
+            // Check if user has permission to delete
+            if (req.user && req.user.role !== 'admin') {
+                return res.status(403).send({
+                    status: 403,
+                    message: 'Only administrators can delete orders'
+                });
+            }
+
+            const orderId = req.params.orderId;
             
-            if(response){
+            // Get order details before deletion for audit
+            const order = await Services.order.getOrder({ id: orderId });
+            if (!order) {
+                return res.status(400).send({
+                    status: 400,
+                    message: "order doesn't exist"
+                });
+            }
+
+            // Update daily summary to subtract deleted order
+            try {
+                await Services.dailySummary.recordOrderDeleted(order);
+            } catch (summaryError) {
+                console.error('Failed to update daily summary for deletion:', summaryError);
+            }
+
+            const response = await Services.order.deleteOrder({ id: orderId });
+            
+            if(response) {
+                // Audit log for order deletion
+                await createAuditLog({
+                    userId: req.user?.id,
+                    userName: req.user?.name || req.user?.username || 'Anonymous',
+                    userRole: req.user?.role || 'unknown',
+                    action: 'DELETE',
+                    entityType: 'ORDER',
+                    entityId: orderId,
+                    entityName: order.orderNumber,
+                    oldValues: {
+                        orderNumber: order.orderNumber,
+                        total: order.total,
+                        customerName: order.customerName,
+                        orderDate: order.orderDate,
+                        items: order.orderItems?.map(i => ({
+                            name: i.name,
+                            quantity: i.quantity,
+                            price: i.productPrice
+                        }))
+                    },
+                    description: `DELETED order ${order.orderNumber} (₹${order.total}) - Customer: ${order.customerName}`,
+                    ipAddress: getClientIP(req),
+                    userAgent: req.headers['user-agent'],
+                    metadata: {
+                        deletedAt: new Date().toISOString(),
+                        reason: req.body.reason || 'No reason provided'
+                    }
+                });
+                
                 return res.status(200).send({
-                    status:200,
+                    status: 200,
                     message: 'order deleted successfully',
                     data: response
-                })
+                });
             }
 
             return res.status(400).send({
-                status:400,
+                status: 400,
                 message: "order doesn't exist"
-            })
+            });
             
-        }catch(error){
+        } catch(error) {
+            console.error('Delete order error:', error);
             return res.status(500).send({
-                status:500,
-                message: error
-            })            
+                status: 500,
+                message: error.message || error
+            });
         }
     },
 }
