@@ -102,7 +102,7 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Invoice application with Tally-like accounting features including suppliers, customers, purchases, payments, ledger management, and CSV export capabilities."
+user_problem_statement: "Invoice application with Tally-like accounting features including suppliers, customers, purchases, payments, ledger management, CSV export capabilities, AND security features (authentication, role-based access, audit trail, daily summaries)."
 
 backend:
   - task: "Supplier Management with Opening Balance"
