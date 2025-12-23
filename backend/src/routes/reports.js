@@ -1,15 +1,16 @@
 const Controller = require('../controller');
+const { authenticate } = require('../middleware/auth');
 
 module.exports = (router) => {
     router
         .route('/reports/outstanding-receivables')
-        .get(Controller.reports.getOutstandingReceivables);
+        .get(authenticate, Controller.reports.getOutstandingReceivables);
 
     router
         .route('/reports/outstanding-payables')
-        .get(Controller.reports.getOutstandingPayables);
+        .get(authenticate, Controller.reports.getOutstandingPayables);
 
     router
         .route('/reports/party-statement/:partyType/:partyId')
-        .get(Controller.reports.getPartyStatement);
+        .get(authenticate, Controller.reports.getPartyStatement);
 };

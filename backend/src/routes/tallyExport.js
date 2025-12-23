@@ -1,21 +1,23 @@
 const Controller = require('../controller');
+const { authenticate, authorize } = require('../middleware/auth');
 
 module.exports = (router) => {
+    // All export routes require admin access
     router
         .route('/export/tally/sales')
-        .get(Controller.tallyExport.exportSales)
-        .post(Controller.tallyExport.exportSelectedSales);
+        .get(authenticate, authorize('admin'), Controller.tallyExport.exportSales)
+        .post(authenticate, authorize('admin'), Controller.tallyExport.exportSelectedSales);
 
     router
         .route('/export/tally/purchases')
-        .get(Controller.tallyExport.exportPurchases)
-        .post(Controller.tallyExport.exportSelectedPurchases);
+        .get(authenticate, authorize('admin'), Controller.tallyExport.exportPurchases)
+        .post(authenticate, authorize('admin'), Controller.tallyExport.exportSelectedPurchases);
 
     router
         .route('/export/tally/payments')
-        .get(Controller.tallyExport.exportPayments);
+        .get(authenticate, authorize('admin'), Controller.tallyExport.exportPayments);
 
     router
         .route('/export/tally/outstanding')
-        .get(Controller.tallyExport.exportOutstanding);
+        .get(authenticate, authorize('admin'), Controller.tallyExport.exportOutstanding);
 };
