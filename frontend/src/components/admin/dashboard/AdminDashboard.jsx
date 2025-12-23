@@ -35,8 +35,8 @@ import {
     Lock,
     LockOpen
 } from '@mui/icons-material';
-import { useAuth } from '../../context/AuthContext';
-import * as dashboardService from '../../services/dashboard';
+import { useAuth } from '../../../context/AuthContext';
+import * as dashboardService from '../../../services/dashboard';
 import moment from 'moment';
 
 const TabPanel = ({ children, value, index }) => (
