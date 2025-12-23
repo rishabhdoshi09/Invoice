@@ -48,7 +48,41 @@ module.exports = (sequelize, Sequelize) => {
             },
             customerId: {
                 type: Sequelize.UUID,
-                allowNull: true // Assuming it can be null if order is not linked to a customer
+                allowNull: true
+            },
+            // Track who created/modified
+            createdBy: {
+                type: Sequelize.UUID,
+                allowNull: true
+            },
+            createdByName: {
+                type: Sequelize.STRING,
+                allowNull: true
+            },
+            modifiedBy: {
+                type: Sequelize.UUID,
+                allowNull: true
+            },
+            modifiedByName: {
+                type: Sequelize.STRING,
+                allowNull: true
+            },
+            // Soft delete fields
+            isDeleted: {
+                type: Sequelize.BOOLEAN,
+                defaultValue: false
+            },
+            deletedAt: {
+                type: Sequelize.DATE,
+                allowNull: true
+            },
+            deletedBy: {
+                type: Sequelize.UUID,
+                allowNull: true
+            },
+            deletedByName: {
+                type: Sequelize.STRING,
+                allowNull: true
             }
         }
     );
