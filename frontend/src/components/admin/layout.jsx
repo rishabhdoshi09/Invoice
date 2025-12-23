@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { styled, useTheme } from '@mui/material/styles';
-import { Box, CssBaseline, Divider, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, AppBar as MuiAppBar, Drawer as MuiDrawer, Toolbar, Typography,  } from '@mui/material';
-import { ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, Folder as FolderIcon, Menu as MenuIcon, Shop, People, ShoppingCart, Payment, Assessment, CloudDownload } from '@mui/icons-material';
+import { Box, CssBaseline, Divider, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, AppBar as MuiAppBar, Drawer as MuiDrawer, Toolbar, Typography, Button, Chip, Menu, MenuItem } from '@mui/material';
+import { ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, Folder as FolderIcon, Menu as MenuIcon, Shop, People, ShoppingCart, Payment, Assessment, CloudDownload, Dashboard, Logout, AccountCircle } from '@mui/icons-material';
 import { useSelector, useDispatch } from 'react-redux';
 
 import { Loader } from '../common/loader';
@@ -10,6 +10,7 @@ import { LoaderState } from '../../enums/loader';
 import { NotificationBar } from '../common/notification';
 
 import { listProductsAction } from '../../store/products';
+import { useAuth } from '../../context/AuthContext';
 
 const drawerWidth = 240;
 
@@ -81,10 +82,12 @@ export const Layout = () =>  {
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const { loadingState } = useSelector(state => state.applicationState);
+    const { user, isAdmin, logout } = useAuth();
 
     const theme = useTheme();
 
     const [open, setOpen] = useState(false);
+    const [anchorEl, setAnchorEl] = useState(null);
 
     const handleDrawerOpen = () => {
         setOpen(true);
@@ -92,6 +95,20 @@ export const Layout = () =>  {
 
     const handleDrawerClose = () => {
         setOpen(false);
+    };
+
+    const handleMenuOpen = (event) => {
+        setAnchorEl(event.currentTarget);
+    };
+
+    const handleMenuClose = () => {
+        setAnchorEl(null);
+    };
+
+    const handleLogout = async () => {
+        handleMenuClose();
+        await logout();
+        navigate('/login');
     };
 
     const pages = [
@@ -143,11 +160,21 @@ export const Layout = () =>  {
             icon: <CloudDownload />,
             path: 'tally-export'
         },
-    ]
+    ];
+
+    // Add admin dashboard for admins
+    if (isAdmin) {
+        pages.push({
+            key: 'admin-dashboard',
+            label: 'Admin Dashboard', 
+            icon: <Dashboard />,
+            path: 'admin-dashboard'
+        });
+    }
 
     useEffect(()=>{
         dispatch(listProductsAction());
-    }, [])
+    }, [dispatch])
 
     return (
         <>
@@ -168,9 +195,54 @@ export const Layout = () =>  {
                     >
                         <MenuIcon />
                     </IconButton>
-                    <Typography variant="h6" noWrap component="div">
+                    <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
                         { "Customer Invoicing".toUpperCase() }
                     </Typography>
+                    
+                    {/* User info and logout */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Chip 
+                            label={user?.role === 'admin' ? '👑 Admin' : '👤 Staff'} 
+                            size="small"
+                            color={user?.role === 'admin' ? 'warning' : 'default'}
+                            sx={{ color: 'white', borderColor: 'white' }}
+                            variant="outlined"
+                        />
+                        <Button
+                            color="inherit"
+                            onClick={handleMenuOpen}
+                            startIcon={<AccountCircle />}
+                        >
+                            {user?.name || user?.username}
+                        </Button>
+                        <Menu
+                            anchorEl={anchorEl}
+                            open={Boolean(anchorEl)}
+                            onClose={handleMenuClose}
+                        >
+                            <MenuItem disabled>
+                                <Typography variant="body2" color="text.secondary">
+                                    Logged in as: {user?.username}
+                                </Typography>
+                            </MenuItem>
+                            <MenuItem disabled>
+                                <Typography variant="body2" color="text.secondary">
+                                    Role: {user?.role}
+                                </Typography>
+                            </MenuItem>
+                            <Divider />
+                            {isAdmin && (
+                                <MenuItem onClick={() => { handleMenuClose(); navigate('/admin-dashboard'); }}>
+                                    <ListItemIcon><Dashboard fontSize="small" /></ListItemIcon>
+                                    Admin Dashboard
+                                </MenuItem>
+                            )}
+                            <MenuItem onClick={handleLogout}>
+                                <ListItemIcon><Logout fontSize="small" /></ListItemIcon>
+                                Logout
+                            </MenuItem>
+                        </Menu>
+                    </Box>
                 </Toolbar>
             </AppBar>
             <Drawer variant="permanent" open={open}>
@@ -215,4 +287,3 @@ export const Layout = () =>  {
         </>
     );
 }
-
