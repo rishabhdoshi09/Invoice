@@ -165,6 +165,12 @@ export const Layout = () =>  {
     // Add admin dashboard for admins
     if (isAdmin) {
         pages.push({
+            key: 'users',
+            label: 'Users', 
+            icon: <Group />,
+            path: 'users'
+        });
+        pages.push({
             key: 'admin-dashboard',
             label: 'Admin Dashboard', 
             icon: <Dashboard />,
