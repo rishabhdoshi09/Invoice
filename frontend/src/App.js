@@ -89,6 +89,14 @@ const AppContent = () => {
             </ProtectedRoute>
           } 
         />
+        <Route 
+          path="users" 
+          element={
+            <ProtectedRoute adminOnly>
+              <UserManagement />
+            </ProtectedRoute>
+          } 
+        />
       </Route>
       <Route path="login" element={<Login />} />
     </Routes>
