@@ -1,13 +1,32 @@
 const Controller = require('../controller');
+const { authenticate, canModify } = require('../middleware/auth');
+const { auditMiddleware, captureOriginal } = require('../middleware/auditLogger');
+const db = require('../models');
 
 module.exports = (router) => {
     router
         .route('/purchases')
-        .post(Controller.purchaseBill.createPurchaseBill)
-        .get(Controller.purchaseBill.listPurchaseBills)
+        .post(
+            authenticate,
+            auditMiddleware('PURCHASE'),
+            Controller.purchaseBill.createPurchaseBill
+        )
+        .get(
+            authenticate,
+            Controller.purchaseBill.listPurchaseBills
+        );
 
     router
         .route('/purchases/:purchaseId')
-        .get(Controller.purchaseBill.getPurchaseBill)
-        .delete(Controller.purchaseBill.deletePurchaseBill)
+        .get(
+            authenticate,
+            Controller.purchaseBill.getPurchaseBill
+        )
+        .delete(
+            authenticate,
+            canModify,
+            captureOriginal(db.purchaseBill, 'purchaseId'),
+            auditMiddleware('PURCHASE'),
+            Controller.purchaseBill.deletePurchaseBill
+        );
 };

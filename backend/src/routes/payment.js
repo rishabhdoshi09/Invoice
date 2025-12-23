@@ -1,13 +1,32 @@
 const Controller = require('../controller');
+const { authenticate, canModify } = require('../middleware/auth');
+const { auditMiddleware, captureOriginal } = require('../middleware/auditLogger');
+const db = require('../models');
 
 module.exports = (router) => {
     router
         .route('/payments')
-        .post(Controller.payment.createPayment)
-        .get(Controller.payment.listPayments)
+        .post(
+            authenticate,
+            auditMiddleware('PAYMENT'),
+            Controller.payment.createPayment
+        )
+        .get(
+            authenticate,
+            Controller.payment.listPayments
+        );
 
     router
         .route('/payments/:paymentId')
-        .get(Controller.payment.getPayment)
-        .delete(Controller.payment.deletePayment)
+        .get(
+            authenticate,
+            Controller.payment.getPayment
+        )
+        .delete(
+            authenticate,
+            canModify,
+            captureOriginal(db.payment, 'paymentId'),
+            auditMiddleware('PAYMENT'),
+            Controller.payment.deletePayment
+        );
 };

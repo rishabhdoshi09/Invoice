@@ -1,15 +1,39 @@
 const Controller = require('../controller');
+const { authenticate, canModify } = require('../middleware/auth');
+const { auditMiddleware, captureOriginal } = require('../middleware/auditLogger');
+const db = require('../models');
 
 module.exports = (router) => {
     router
         .route('/customers')
-        .post(Controller.customer.createCustomer)
-        .get(Controller.customer.listCustomers)
+        .post(
+            authenticate,
+            auditMiddleware('CUSTOMER'),
+            Controller.customer.createCustomer
+        )
+        .get(
+            authenticate,
+            Controller.customer.listCustomers
+        );
 
     router
         .route('/customers/:customerId')
-        .get(Controller.customer.getCustomer)
-        .put(Controller.customer.updateCustomer)
-        .delete(Controller.customer.deleteCustomer)
+        .get(
+            authenticate,
+            Controller.customer.getCustomer
+        )
+        .put(
+            authenticate,
+            canModify,
+            captureOriginal(db.customer, 'customerId'),
+            auditMiddleware('CUSTOMER'),
+            Controller.customer.updateCustomer
+        )
+        .delete(
+            authenticate,
+            canModify,
+            captureOriginal(db.customer, 'customerId'),
+            auditMiddleware('CUSTOMER'),
+            Controller.customer.deleteCustomer
+        );
 };
-
