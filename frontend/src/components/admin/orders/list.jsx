@@ -1,14 +1,17 @@
-import { Button, Paper, TextField, Typography, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, } from '@mui/material';
+import { Button, Paper, TextField, Typography, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, Chip, Tooltip } from '@mui/material';
 import { useNavigate } from 'react-router';
 import { useDispatch, useSelector } from 'react-redux';
 import { useEffect, useState, Children } from 'react';
 import { listOrdersAction, deleteOrderAction  } from '../../../store/orders';
 import { Pagination } from '../../common/pagination';
+import { useAuth } from '../../../context/AuthContext';
+import { Note } from '@mui/icons-material';
 
 export const ListOrders = () => {
 
     const dispatch = useDispatch();
     const navigate = useNavigate();
+    const { isAdmin } = useAuth();
     const { orders: { count, rows } } = useSelector(state => state.orderState);
 
     const [refetch, shouldFetch] = useState(true);
@@ -74,6 +77,7 @@ export const ListOrders = () => {
                             <TableCell><b>Subtotal</b></TableCell>
                             <TableCell><b>Tax</b></TableCell>
                             <TableCell><b>Total</b></TableCell>
+                            <TableCell><b>Notes</b></TableCell>
                             <TableCell><b>Action</b></TableCell>
                         </TableRow>
                     </TableHead>
@@ -81,7 +85,7 @@ export const ListOrders = () => {
                         {
                             Children.toArray(Object.values(rows).map((orderObj) => {
                                 return (
-                                    <TableRow>
+                                    <TableRow sx={orderObj.staffNotes ? { bgcolor: '#fff8e1' } : {}}>
                                         <TableCell>{orderObj.orderNumber}</TableCell>
                                         <TableCell>{orderObj.orderDate}</TableCell>
                                         <TableCell>{orderObj.customerName}</TableCell>
@@ -90,8 +94,26 @@ export const ListOrders = () => {
                                         <TableCell>{orderObj.tax} ({orderObj.taxPercent}%)</TableCell>
                                         <TableCell>{orderObj.total}</TableCell>
                                         <TableCell>
-                                            <Button variant='outlined' sx={{margin: '5px'}} onClick={()=>{ navigate(`edit/${orderObj.id}`)}}>Edit</Button>
-                                            <Button variant='outlined' sx={{margin: '5px'}} onClick={()=>{ dispatch(deleteOrderAction(orderObj.id))}}>Delete</Button>
+                                            {orderObj.staffNotes ? (
+                                                <Tooltip title={orderObj.staffNotes.split('\n').slice(-1)[0]}>
+                                                    <Chip 
+                                                        icon={<Note />} 
+                                                        label="Has Notes" 
+                                                        size="small" 
+                                                        color="warning"
+                                                    />
+                                                </Tooltip>
+                                            ) : (
+                                                <Typography variant="caption" color="text.secondary">-</Typography>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Button variant='outlined' sx={{margin: '5px'}} onClick={()=>{ navigate(`edit/${orderObj.id}`)}}>
+                                                {isAdmin ? 'Edit' : 'View/Note'}
+                                            </Button>
+                                            {isAdmin && (
+                                                <Button variant='outlined' sx={{margin: '5px'}} onClick={()=>{ dispatch(deleteOrderAction(orderObj.id))}}>Delete</Button>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 );
