@@ -147,11 +147,7 @@ module.exports = {
                 },
                 description: `Created order ${result.orderNumber} for ₹${result.total}`,
                 ipAddress: getClientIP(req),
-                userAgent: req.headers['user-agent'],
-                metadata: {
-                    invoiceSequence: invoiceInfo.globalSequence,
-                    dailySequence: invoiceInfo.dailySequence
-                }
+                userAgent: req.headers['user-agent']
             });
 
             return res.status(200).send({
