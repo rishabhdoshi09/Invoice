@@ -20,22 +20,27 @@ import {
   CircularProgress,
   Alert,
   IconButton,
-  Tooltip
+  Tooltip,
+  Divider
 } from '@mui/material';
-import { Edit as EditIcon, Save as SaveIcon, Cancel as CancelIcon } from '@mui/icons-material';
+import { Edit as EditIcon, Save as SaveIcon, Cancel as CancelIcon, NoteAdd, Send } from '@mui/icons-material';
 import { getOrderAction } from '../../../store/orders';
 import { setNotification } from '../../../store/application';
+import { useAuth } from '../../../context/AuthContext';
 
 export const EditOrder = () => {
   const { orderId } = useParams();
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { user, isAdmin } = useAuth();
   
   const [orderData, setOrderData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editingItemId, setEditingItemId] = useState(null);
   const [editedItems, setEditedItems] = useState({});
   const [saving, setSaving] = useState(false);
+  const [newNote, setNewNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
 
   useEffect(() => {
     const fetchOrderData = async () => {
