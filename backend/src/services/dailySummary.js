@@ -69,6 +69,13 @@ module.exports = {
             }
             
             const orderIds = summary.orderIds || [];
+            
+            // Prevent double entry - check if order already exists
+            if (orderIds.includes(order.id)) {
+                console.log(`Order ${order.id} already recorded in daily summary, skipping`);
+                return summary;
+            }
+            
             orderIds.push(order.id);
             
             await summary.update({
