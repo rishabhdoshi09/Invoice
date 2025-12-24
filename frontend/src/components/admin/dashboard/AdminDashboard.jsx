@@ -208,7 +208,7 @@ export const AdminDashboard = () => {
                         </CardContent>
                     </Card>
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid item xs={12} sm={6} md={4}>
                     <Card>
                         <CardContent>
                             <Typography color="text.secondary" gutterBottom>
@@ -220,7 +220,7 @@ export const AdminDashboard = () => {
                         </CardContent>
                     </Card>
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid item xs={12} sm={6} md={4}>
                     <Card sx={{ bgcolor: todaySummary?.isClosed ? '#ffebee' : '#e8f5e9' }}>
                         <CardContent>
                             <Typography color="text.secondary" gutterBottom>
