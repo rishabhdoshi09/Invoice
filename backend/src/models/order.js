@@ -83,6 +83,19 @@ module.exports = (sequelize, Sequelize) => {
             deletedByName: {
                 type: Sequelize.STRING,
                 allowNull: true
+            },
+            // Staff notes (for billing staff to communicate issues)
+            staffNotes: {
+                type: Sequelize.TEXT,
+                allowNull: true
+            },
+            staffNotesUpdatedAt: {
+                type: Sequelize.DATE,
+                allowNull: true
+            },
+            staffNotesUpdatedBy: {
+                type: Sequelize.STRING,
+                allowNull: true
             }
         }
     );
