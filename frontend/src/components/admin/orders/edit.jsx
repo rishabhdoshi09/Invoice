@@ -491,6 +491,77 @@ export const EditOrder = () => {
           </TableContainer>
         </CardContent>
       </Card>
+
+      {/* Staff Notes Section */}
+      <Card sx={{ mt: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+            <NoteAdd color="primary" />
+            <Typography variant="h6">
+              Staff Notes
+              {!isAdmin && (
+                <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+                  (Use this to report any issues with this order)
+                </Typography>
+              )}
+            </Typography>
+          </Box>
+
+          {/* Existing Notes */}
+          {orderData.staffNotes ? (
+            <Paper 
+              variant="outlined" 
+              sx={{ 
+                p: 2, 
+                mb: 2, 
+                bgcolor: '#fffde7',
+                maxHeight: 200,
+                overflow: 'auto'
+              }}
+            >
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Notes History:
+              </Typography>
+              {orderData.staffNotes.split('\n').map((note, idx) => (
+                <Typography key={idx} variant="body2" sx={{ mb: 0.5, fontFamily: 'monospace' }}>
+                  {note}
+                </Typography>
+              ))}
+            </Paper>
+          ) : (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              No notes yet. {!isAdmin && 'Add a note if you need to report any issues with this order.'}
+            </Alert>
+          )}
+
+          {/* Add New Note */}
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" gutterBottom>
+            Add New Note:
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <TextField
+              fullWidth
+              multiline
+              rows={2}
+              placeholder="Enter your note here... (e.g., Wrong quantity, customer complaint, etc.)"
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+              disabled={savingNote}
+              size="small"
+            />
+            <Button
+              variant="contained"
+              onClick={handleAddNote}
+              disabled={savingNote || !newNote.trim()}
+              sx={{ minWidth: 100 }}
+              startIcon={savingNote ? <CircularProgress size={16} /> : <Send />}
+            >
+              {savingNote ? 'Saving...' : 'Add'}
+            </Button>
+          </Box>
+        </CardContent>
+      </Card>
     </Box>
   );
 };
