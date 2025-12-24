@@ -7,6 +7,7 @@ module.exports = {
         const orderItems = Joi.object().keys({
             productId: Joi.string().trim().required(),
             name: Joi.string().trim().required(),
+            altName: Joi.string().trim().allow("").optional(),
             quantity: Joi.number().greater(0).required(),
             productPrice: Joi.number().greater(0).required(),
             totalPrice: Joi.number().greater(0).required(),
@@ -14,7 +15,7 @@ module.exports = {
         });
         
         const schema = Joi.object().keys({
-            orderNumber: Joi.string().trim().required(),
+            orderNumber: Joi.string().trim().optional(), // Now optional - generated server-side
             orderDate: Joi.string().trim().required(),
             customerName: Joi.string().trim().allow("").optional(),
             customerMobile: Joi.string().trim().allow("").optional(),
