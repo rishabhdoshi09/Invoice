@@ -411,4 +411,79 @@ module.exports = {
             });
         }
     },
+
+    // Add staff notes to order (accessible by both admin and billing_staff)
+    addStaffNote: async(req, res) => {
+        try {
+            const orderId = req.params.orderId;
+            const { note } = req.body;
+
+            if (!note || !note.trim()) {
+                return res.status(400).send({
+                    status: 400,
+                    message: 'Note cannot be empty'
+                });
+            }
+
+            // Get order
+            const order = await Services.order.getOrder({ id: orderId });
+            if (!order) {
+                return res.status(400).send({
+                    status: 400,
+                    message: "Order doesn't exist"
+                });
+            }
+
+            // Append new note with timestamp
+            const timestamp = new Date().toISOString();
+            const userName = req.user?.name || req.user?.username || 'Unknown';
+            const newNote = `[${timestamp}] ${userName}: ${note.trim()}`;
+            
+            const existingNotes = order.staffNotes || '';
+            const updatedNotes = existingNotes 
+                ? `${existingNotes}\n${newNote}`
+                : newNote;
+
+            // Update order with new note
+            await Services.order.updateOrder(
+                { id: orderId },
+                { 
+                    staffNotes: updatedNotes,
+                    staffNotesUpdatedAt: new Date(),
+                    staffNotesUpdatedBy: userName
+                }
+            );
+
+            // Audit log
+            await createAuditLog({
+                userId: req.user?.id,
+                userName: userName,
+                userRole: req.user?.role || 'unknown',
+                action: 'UPDATE',
+                entityType: 'ORDER_NOTE',
+                entityId: orderId,
+                entityName: order.orderNumber,
+                newValues: { note: note.trim() },
+                description: `Added note to order ${order.orderNumber}`,
+                ipAddress: getClientIP(req),
+                userAgent: req.headers['user-agent']
+            });
+
+            // Get updated order
+            const updatedOrder = await Services.order.getOrder({ id: orderId });
+
+            return res.status(200).send({
+                status: 200,
+                message: 'Note added successfully',
+                data: updatedOrder
+            });
+
+        } catch(error) {
+            console.error('Add staff note error:', error);
+            return res.status(500).send({
+                status: 500,
+                message: error.message || error
+            });
+        }
+    },
 }
