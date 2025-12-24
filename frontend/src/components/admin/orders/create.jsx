@@ -1672,7 +1672,6 @@ export const CreateOrder = () => {
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
               <Typography variant="subtitle2">Order #: {visibleOrderDisplay?.orderNumber}</Typography>
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                <Typography variant="subtitle2">Today's Total: ₹ {Number(todayGrandTotal).toLocaleString('en-IN')}</Typography>
                 <Typography variant="subtitle2">Last Invoice: {lastInvoiceTotal != null ? `₹ ${Number(lastInvoiceTotal).toLocaleString('en-IN')}` : '—'}</Typography>
               </Box>
               <Button size="small" variant="outlined" onClick={printPdf}>Print PDF</Button>
