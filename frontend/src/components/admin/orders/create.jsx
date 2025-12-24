@@ -127,9 +127,10 @@ const sanitizeOrderForServer = (props = {}) => {
   const { orderItems = [] } = props;
 
   const clean = orderItems.map((it) => {
-    const { altName, ...cpy } = it || {};
+    const cpy = { ...it } || {};
     cpy.productId = String(cpy.productId || cpy.id || '').trim();
     cpy.name = String(cpy.name || '').trim();
+    cpy.altName = String(cpy.altName || '').trim();
     cpy.type = String(cpy.type || '').trim();
     cpy.quantity = toNum(cpy.quantity);
     cpy.productPrice = toNum(cpy.productPrice);
