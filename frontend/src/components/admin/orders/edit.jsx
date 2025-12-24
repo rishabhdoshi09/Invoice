@@ -196,6 +196,48 @@ export const EditOrder = () => {
     }
   };
 
+  const handleAddNote = async () => {
+    if (!newNote.trim()) {
+      dispatch(setNotification({
+        open: true,
+        severity: 'warning',
+        message: 'Please enter a note'
+      }));
+      return;
+    }
+
+    try {
+      setSavingNote(true);
+      
+      await axios.post(`/api/orders/${orderId}/notes`, {
+        note: newNote.trim()
+      });
+
+      dispatch(setNotification({
+        open: true,
+        severity: 'success',
+        message: 'Note added successfully!'
+      }));
+
+      // Refresh order data to show updated notes
+      const refreshedData = await dispatch(getOrderAction(orderId));
+      if (refreshedData) {
+        setOrderData(refreshedData);
+      }
+
+      setNewNote('');
+      setSavingNote(false);
+    } catch (error) {
+      console.error('Error adding note:', error);
+      dispatch(setNotification({
+        open: true,
+        severity: 'error',
+        message: error.response?.data?.message || 'Failed to add note'
+      }));
+      setSavingNote(false);
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
