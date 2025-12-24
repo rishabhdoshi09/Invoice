@@ -37,4 +37,12 @@ module.exports = (router) => {
             auditMiddleware('ORDER'),
             Controller.order.deleteOrder
         );
+
+    // Staff notes - accessible by both admin and billing_staff
+    router
+        .route('/orders/:orderId/notes')
+        .post(
+            authenticate,           // Any authenticated user can add notes
+            Controller.order.addStaffNote
+        );
 };
