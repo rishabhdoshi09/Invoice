@@ -17,13 +17,8 @@ const getClientIP = (req) => {
 module.exports = {
     createOrder: async (req, res) => {
         try {
-            // Generate server-side invoice number (tamper-proof)
-            const invoiceInfo = await Services.invoiceSequence.generateInvoiceNumber();
-            
-            const { error, value } = Validations.order.validateCreateOrderObj({ 
-                ...req.body, 
-                orderNumber: invoiceInfo.invoiceNumber 
-            });
+            // Validate first WITHOUT invoice number
+            const { error, value } = Validations.order.validateCreateOrderObj(req.body);
             
             if (error) {
                 return res.status(400).send({
@@ -53,6 +48,9 @@ module.exports = {
             }
 
             const result = await db.sequelize.transaction(async (transaction) => {
+                // Generate invoice number INSIDE transaction (only if everything else is valid)
+                const invoiceInfo = await Services.invoiceSequence.generateInvoiceNumber(transaction);
+                orderObj.orderNumber = invoiceInfo.invoiceNumber;
                 
                 const response = await Services.order.createOrder(orderObj, transaction);
                 const orderId = response.id;
