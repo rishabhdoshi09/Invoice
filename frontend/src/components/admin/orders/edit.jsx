@@ -343,6 +343,7 @@ export const EditOrder = () => {
               <TableHead>
                 <TableRow>
                   <TableCell><b>Product Name</b></TableCell>
+                  <TableCell><b>Alt Name</b></TableCell>
                   <TableCell align="right"><b>Quantity</b></TableCell>
                   <TableCell align="right"><b>Price</b></TableCell>
                   <TableCell align="right"><b>Total (Locked)</b></TableCell>
@@ -359,6 +360,9 @@ export const EditOrder = () => {
                     return (
                       <TableRow key={item.id}>
                         <TableCell>{item.name}</TableCell>
+                        <TableCell sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
+                          {item.altName || '-'}
+                        </TableCell>
                         <TableCell align="right">
                           {isEditing ? (
                             <TextField
