@@ -1086,6 +1086,7 @@ export const CreateOrder = () => {
         setLastSubmitError({ type: "validation", details: invalids });
         alert("Cannot create invoice — some items are invalid. See console or debug area for details.");
         setSuppressAutoSuggest(false);
+        setIsSubmitting(false);
         return;
       }
 
