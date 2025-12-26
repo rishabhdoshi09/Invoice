@@ -196,9 +196,27 @@ export const AdminDashboard = () => {
                 <Grid item xs={12} sm={6} md={3}>
                     <Card sx={{ bgcolor: '#e3f2fd' }}>
                         <CardContent>
-                            <Typography color="text.secondary" gutterBottom>
-                                💰 Today's Sales
-                            </Typography>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <Typography color="text.secondary" gutterBottom>
+                                    💰 Today's Sales
+                                </Typography>
+                                <Button 
+                                    size="small" 
+                                    onClick={async () => {
+                                        const today = new Date().toISOString().split('T')[0];
+                                        try {
+                                            await dashboardService.recalculateSummary(today);
+                                            fetchData();
+                                            alert('✅ Today\'s totals recalculated!');
+                                        } catch (err) {
+                                            alert('Failed to recalculate: ' + err);
+                                        }
+                                    }}
+                                    sx={{ minWidth: 'auto', p: 0.5, fontSize: '0.7rem' }}
+                                >
+                                    🔄 Recalc
+                                </Button>
+                            </Box>
                             <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#1565c0' }}>
                                 ₹{todaySummary?.totalSales?.toLocaleString('en-IN') || 0}
                             </Typography>
