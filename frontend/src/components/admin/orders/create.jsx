@@ -1052,6 +1052,13 @@ export const CreateOrder = () => {
 
   // MAIN createOrder — now ONLINE-first (server)
   const createOrder = async () => {
+    // Prevent double submission
+    if (isSubmitting) {
+      console.log('Order submission already in progress, ignoring duplicate click');
+      return;
+    }
+    
+    setIsSubmitting(true);
     setSuppressAutoSuggest(true);
     try {
       setLastSubmitError(null);
@@ -1060,6 +1067,7 @@ export const CreateOrder = () => {
       if (!orderProps.orderItems || orderProps.orderItems.length === 0) {
         alert("Cannot create invoice: no items in the order.");
         setSuppressAutoSuggest(false);
+        setIsSubmitting(false);
         return;
       }
 
