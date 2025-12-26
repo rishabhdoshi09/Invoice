@@ -76,8 +76,11 @@ const nextOrderNumberForToday = () => {
 const getStoredDayTotal=()=>{ try{const raw=localStorage.getItem(DAY_TOTAL_KEY); return raw?JSON.parse(raw):{};}catch{return{}} };
 const setStoredDayTotal=(o)=>{ try{localStorage.setItem(DAY_TOTAL_KEY,JSON.stringify(o));}catch{} };
 const ensureTodayRecord=()=>{ const t=getTodayStr(); const d=getStoredDayTotal(); if(!d||d.date!==t){const p={date:t,total:0}; setStoredDayTotal(p); return 0;} return Number(d.total||0); };
+// eslint-disable-next-line no-unused-vars
 const getTodayGrandTotal=()=>ensureTodayRecord();
+// eslint-disable-next-line no-unused-vars
 const addToTodayGrandTotal=(amt)=>{ const t=getTodayStr(); const d=getStoredDayTotal(); const base=(d&&d.date===t)?Number(d.total||0):0; const total=base+Number(amt||0); setStoredDayTotal({date:t,total}); try{window.dispatchEvent(new CustomEvent('DAY_TOTAL_UPDATED',{detail:total}))}catch{}; return total; };
+// eslint-disable-next-line no-unused-vars
 const subtractFromTodayGrandTotal=(amt)=>{ const t=getTodayStr(); const d=getStoredDayTotal(); const base=(d&&d.date===t)?Number(d.total||0):0; const total=Math.max(0,base-Number(amt||0)); setStoredDayTotal({date:t,total}); try{window.dispatchEvent(new CustomEvent('DAY_TOTAL_UPDATED',{detail:total}))}catch{}; return total; };
 const msToNextMidnight=()=>{ const now=new Date(); const next=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1,0,0,0,0); return next.getTime()-now.getTime(); };
 
