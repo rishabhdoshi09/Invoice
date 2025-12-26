@@ -375,6 +375,7 @@ export const CreateOrder = () => {
   const orderItemsRef = useRef(orderProps.orderItems || []);
   useEffect(() => { orderItemsRef.current = orderProps.orderItems || []; }, [orderProps.orderItems]);
 
+  // eslint-disable-next-line no-unused-vars
   const [todayGrandTotal, setTodayGrandTotal] = useState(getTodayGrandTotal());
   const [isSubmitting, setIsSubmitting] = useState(false); // Prevent double submission
 
