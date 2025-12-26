@@ -193,7 +193,22 @@ export const AdminDashboard = () => {
 
             {/* Summary Cards */}
             <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid item xs={12} sm={6} md={3}>
+                    <Card sx={{ bgcolor: '#e3f2fd' }}>
+                        <CardContent>
+                            <Typography color="text.secondary" gutterBottom>
+                                💰 Today's Sales
+                            </Typography>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#1565c0' }}>
+                                ₹{todaySummary?.totalSales?.toLocaleString('en-IN') || 0}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                {todaySummary?.totalOrders || 0} orders
+                            </Typography>
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
                     <Card>
                         <CardContent>
                             <Typography color="text.secondary" gutterBottom>
