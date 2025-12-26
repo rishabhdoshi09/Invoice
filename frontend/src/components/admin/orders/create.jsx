@@ -1128,6 +1128,7 @@ export const CreateOrder = () => {
       alert("Something went wrong while creating the order. Check console / debug area.");
     } finally {
       setSuppressAutoSuggest(false);
+      setIsSubmitting(false);
     }
   };
 
