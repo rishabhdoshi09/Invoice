@@ -199,16 +199,7 @@ function saveOrderLocal(orderProps) {
   const totals = recomputeTotals(withItems);
   const finalObj = { ...withItems, ...totals };
 
-  try {
-    const cur = JSON.parse(localStorage.getItem(INVOICES_KEY) || '[]');
-    cur.push({ ...finalObj, savedAt: new Date().toISOString() });
-    localStorage.setItem(INVOICES_KEY, JSON.stringify(cur));
-    try {
-      window.dispatchEvent(new CustomEvent('INVOICES_UPDATED'));
-    } catch {}
-  } catch (e) {
-    console.warn('Failed to persist invoice locally', e);
-  }
+  // Note: Invoices are now stored server-side only
   return finalObj;
 }
 
