@@ -1103,8 +1103,7 @@ export const CreateOrder = () => {
         timestamp: new Date().toISOString(),
       });
 
-      const newGT = addToTodayGrandTotal(savedOrder.total);
-      setTodayGrandTotal(newGT);
+      // Note: Daily totals are now tracked server-side only to prevent duplicates
 
       // Generate and archive PDF
       try { generatePdf(savedOrder); } catch {}
