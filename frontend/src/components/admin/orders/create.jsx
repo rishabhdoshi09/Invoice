@@ -1569,7 +1569,9 @@ export const CreateOrder = () => {
                 <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
                   Shortcuts: '/' for weight refresh, '=' to add product, Shift+D delete last item, Ctrl/Cmd+P print. Weighted: 3-digit prices only (100-399)
                 </Typography>
-                <Button variant="contained" onClick={createOrder} sx={{ float: "right", margin: "5px" }} disabled={orderProps.orderItems.length === 0}>Submit</Button>
+                <Button variant="contained" onClick={createOrder} sx={{ float: "right", margin: "5px" }} disabled={orderProps.orderItems.length === 0 || isSubmitting}>
+                  {isSubmitting ? 'Submitting...' : 'Submit'}
+                </Button>
                 <Button
                   variant="contained"
                   onClick={addProductHandler}
