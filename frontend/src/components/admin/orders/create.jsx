@@ -373,6 +373,7 @@ export const CreateOrder = () => {
   useEffect(() => { orderItemsRef.current = orderProps.orderItems || []; }, [orderProps.orderItems]);
 
   const [todayGrandTotal, setTodayGrandTotal] = useState(getTodayGrandTotal());
+  const [isSubmitting, setIsSubmitting] = useState(false); // Prevent double submission
 
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [inputValue, setInputValue] = useState('');
