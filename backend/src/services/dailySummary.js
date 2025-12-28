@@ -16,6 +16,7 @@ module.exports = {
             summary = await db.dailySummary.create({
                 id: uuidv4(),
                 date: today,
+                openingBalance: 0,
                 totalSales: 0,
                 totalOrders: 0,
                 totalPurchases: 0,
@@ -23,6 +24,40 @@ module.exports = {
                 totalPaymentsMade: 0,
                 lastInvoiceNumber: 0,
                 orderIds: []
+            });
+        }
+        
+        return summary;
+    },
+
+    // Set opening balance for today
+    setOpeningBalance: async (amount, setBy) => {
+        const today = moment().format('YYYY-MM-DD');
+        
+        let summary = await db.dailySummary.findOne({
+            where: { date: today }
+        });
+        
+        if (!summary) {
+            summary = await db.dailySummary.create({
+                id: uuidv4(),
+                date: today,
+                openingBalance: amount,
+                openingBalanceSetAt: new Date(),
+                openingBalanceSetBy: setBy,
+                totalSales: 0,
+                totalOrders: 0,
+                totalPurchases: 0,
+                totalPaymentsReceived: 0,
+                totalPaymentsMade: 0,
+                lastInvoiceNumber: 0,
+                orderIds: []
+            });
+        } else {
+            await summary.update({
+                openingBalance: amount,
+                openingBalanceSetAt: new Date(),
+                openingBalanceSetBy: setBy
             });
         }
         
