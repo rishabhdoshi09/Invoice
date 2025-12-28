@@ -240,6 +240,18 @@ backend:
           agent: "testing"
           comment: "✅ COMPREHENSIVE TESTING PASSED: All product management APIs working correctly. CREATE weighted product, CREATE non-weighted product, LIST products, GET product by ID, UPDATE product, DELETE product all working. Product types 'weighted' and 'non-weighted' validated. GET weights endpoint working (returns 0 in container environment - hardware feature)."
 
+  - task: "Daily Payments API"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/src/controller/payment.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "NEW FEATURE: Added date filtering to payments list API (date, startDate, endDate params) and new /api/payments/daily-summary endpoint that returns total payments for a given date with breakdown by party type and reference type."
+
 frontend:
   - task: "Supplier UI"
     implemented: true
