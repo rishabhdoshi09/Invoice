@@ -17,6 +17,13 @@ module.exports = (router) => {
         );
 
     router
+        .route('/payments/daily-summary')
+        .get(
+            authenticate,
+            Controller.payment.getDailySummary
+        );
+
+    router
         .route('/payments/:paymentId')
         .get(
             authenticate,
