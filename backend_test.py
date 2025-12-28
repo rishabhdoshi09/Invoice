@@ -47,7 +47,6 @@ class BackendTester:
             headers['Authorization'] = f'Bearer {self.auth_token}'
             
         try:
-            print(f"Making {method} request to: {url}")
             if method.upper() == 'GET':
                 response = requests.get(url, params=params, headers=headers, timeout=30)
             elif method.upper() == 'POST':
@@ -59,10 +58,8 @@ class BackendTester:
             else:
                 raise ValueError(f"Unsupported method: {method}")
             
-            print(f"Response status: {response.status_code}")
             return response
         except requests.exceptions.RequestException as e:
-            print(f"Request exception: {e}")
             return None, str(e)
     
     def test_supplier_management(self):
