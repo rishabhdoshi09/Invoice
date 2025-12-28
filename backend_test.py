@@ -680,7 +680,8 @@ class BackendTester:
                 setup_data = {
                     "username": "admin",
                     "password": "admin123",
-                    "role": "admin"
+                    "name": "Administrator",
+                    "email": "admin@example.com"
                 }
                 
                 setup_response = self.make_request('POST', '/auth/setup', setup_data)
