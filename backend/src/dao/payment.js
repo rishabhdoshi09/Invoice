@@ -47,6 +47,23 @@ module.exports = {
                 whereClause.partyType = filterObj.partyType;
             }
 
+            // Date filtering - for daily payments
+            if (filterObj.date) {
+                whereClause.paymentDate = filterObj.date;
+            } else if (filterObj.startDate && filterObj.endDate) {
+                whereClause.paymentDate = {
+                    [db.Sequelize.Op.between]: [filterObj.startDate, filterObj.endDate]
+                };
+            } else if (filterObj.startDate) {
+                whereClause.paymentDate = {
+                    [db.Sequelize.Op.gte]: filterObj.startDate
+                };
+            } else if (filterObj.endDate) {
+                whereClause.paymentDate = {
+                    [db.Sequelize.Op.lte]: filterObj.endDate
+                };
+            }
+
             const res = await db.payment.findAndCountAll({ 
                 where: whereClause,
                 order: [['createdAt', 'DESC']], 
