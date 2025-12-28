@@ -92,6 +92,41 @@ export const TallyExport = () => {
         }
     };
 
+    // Export ALL records without needing to select
+    const handleExportAll = async (type) => {
+        const items = type === 'sales' ? salesOrders : purchases;
+        
+        if (items.length === 0) {
+            alert('No items to export');
+            return;
+        }
+
+        const ids = items.map(item => item.id);
+
+        try {
+            const response = await axios.post(`/api/export/tally/${type}`, 
+                { ids },
+                { 
+                    responseType: 'blob',
+                    headers: { 'Content-Type': 'application/json' }
+                }
+            );
+
+            const blob = new Blob([response.data], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `tally_${type}_ALL_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error exporting:', error);
+            alert('Error exporting data. Please try again.');
+        }
+    };
+
     const handleExportSelected = async (type) => {
         const ids = type === 'sales' ? selectedSales : selectedPurchases;
         
