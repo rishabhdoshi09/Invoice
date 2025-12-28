@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 const db = require('../models');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d'; // Extended to 7 days
 
 // Generate JWT token
 const generateToken = (user) => {
