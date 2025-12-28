@@ -662,7 +662,189 @@ class BackendTester:
                 error_msg = response.text if response else "Connection failed"
                 self.log_result("Get Order by ID", False, f"Request failed: {error_msg}")
 
-    def test_tally_export(self):
+    def test_authentication(self):
+        """Test authentication and get JWT token"""
+        print("\n=== TESTING AUTHENTICATION ===")
+        
+        # Try to login with admin credentials
+        login_data = {
+            "username": "admin",
+            "password": "admin123"
+        }
+        
+        response = self.make_request('POST', '/auth/login', login_data)
+        if response and response.status_code == 200:
+            response_json = response.json()
+            if response_json.get('status') == 200 and 'token' in response_json:
+                self.auth_token = response_json['token']
+                self.log_result("Authentication Login", True, "Successfully logged in and obtained JWT token")
+                return True
+            else:
+                self.log_result("Authentication Login", False, "Login response missing token", response_json)
+        else:
+            # Try to create admin user first
+            register_data = {
+                "username": "admin",
+                "password": "admin123",
+                "role": "admin"
+            }
+            
+            register_response = self.make_request('POST', '/auth/register', register_data)
+            if register_response and register_response.status_code == 200:
+                self.log_result("User Registration", True, "Admin user created successfully")
+                
+                # Now try login again
+                response = self.make_request('POST', '/auth/login', login_data)
+                if response and response.status_code == 200:
+                    response_json = response.json()
+                    if response_json.get('status') == 200 and 'token' in response_json:
+                        self.auth_token = response_json['token']
+                        self.log_result("Authentication Login", True, "Successfully logged in after registration")
+                        return True
+                    else:
+                        self.log_result("Authentication Login", False, "Login failed after registration", response_json)
+                else:
+                    error_msg = response.text if response else "Connection failed"
+                    self.log_result("Authentication Login", False, f"Login request failed: {error_msg}")
+            else:
+                error_msg = register_response.text if register_response else "Connection failed"
+                self.log_result("User Registration", False, f"Registration failed: {error_msg}")
+        
+        return False
+
+    def test_daily_payments_api(self):
+        """Test Daily Payments API endpoints"""
+        print("\n=== TESTING DAILY PAYMENTS API ===")
+        
+        if not self.auth_token:
+            self.log_result("Daily Payments API", False, "No authentication token available")
+            return
+        
+        # Test 1: Daily Summary Endpoint with today's date (default)
+        response = self.make_request('GET', '/payments/daily-summary')
+        if response and response.status_code == 200:
+            response_json = response.json()
+            if response_json.get('status') == 200 and 'data' in response_json:
+                data = response_json['data']
+                required_fields = ['date', 'totalCount', 'totalAmount', 'summary', 'byReferenceType', 'payments']
+                
+                if all(field in data for field in required_fields):
+                    # Check summary structure
+                    summary = data.get('summary', {})
+                    by_ref_type = data.get('byReferenceType', {})
+                    
+                    if ('customers' in summary and 'suppliers' in summary and 
+                        'orders' in by_ref_type and 'purchases' in by_ref_type and 'advances' in by_ref_type):
+                        self.log_result("Daily Summary - Default Date", True, 
+                                      f"Daily summary retrieved successfully for {data['date']} - Total: {data['totalCount']} payments, Amount: {data['totalAmount']}")
+                    else:
+                        self.log_result("Daily Summary - Default Date", False, 
+                                      "Response missing required summary structure", response_json)
+                else:
+                    missing_fields = [f for f in required_fields if f not in data]
+                    self.log_result("Daily Summary - Default Date", False, 
+                                  f"Response missing required fields: {missing_fields}", response_json)
+            else:
+                self.log_result("Daily Summary - Default Date", False, "Invalid response structure", response_json)
+        else:
+            error_msg = response.text if response else "Connection failed"
+            self.log_result("Daily Summary - Default Date", False, f"Request failed: {error_msg}")
+        
+        # Test 2: Daily Summary with specific date parameter
+        test_date = "2025-01-26"
+        response = self.make_request('GET', '/payments/daily-summary', params={'date': test_date})
+        if response and response.status_code == 200:
+            response_json = response.json()
+            if response_json.get('status') == 200 and 'data' in response_json:
+                data = response_json['data']
+                if data.get('date') == test_date:
+                    self.log_result("Daily Summary - Specific Date", True, 
+                                  f"Daily summary retrieved for specific date {test_date} - Total: {data['totalCount']} payments")
+                else:
+                    self.log_result("Daily Summary - Specific Date", False, 
+                                  f"Expected date {test_date} but got {data.get('date')}", response_json)
+            else:
+                self.log_result("Daily Summary - Specific Date", False, "Invalid response structure", response_json)
+        else:
+            error_msg = response.text if response else "Connection failed"
+            self.log_result("Daily Summary - Specific Date", False, f"Request failed: {error_msg}")
+        
+        # Test 3: Payments List with date filtering
+        response = self.make_request('GET', '/payments', params={'date': test_date})
+        if response and response.status_code == 200:
+            response_json = response.json()
+            if response_json.get('status') == 200 and 'data' in response_json:
+                payments = response_json['data']
+                self.log_result("Payments List - Date Filter", True, 
+                              f"Payments list with date filter retrieved successfully - {len(payments)} payments for {test_date}")
+            else:
+                self.log_result("Payments List - Date Filter", False, "Invalid response structure", response_json)
+        else:
+            error_msg = response.text if response else "Connection failed"
+            self.log_result("Payments List - Date Filter", False, f"Request failed: {error_msg}")
+        
+        # Test 4: Payments List with date range filtering
+        start_date = "2025-01-01"
+        end_date = "2025-01-26"
+        response = self.make_request('GET', '/payments', params={'startDate': start_date, 'endDate': end_date})
+        if response and response.status_code == 200:
+            response_json = response.json()
+            if response_json.get('status') == 200 and 'data' in response_json:
+                payments = response_json['data']
+                self.log_result("Payments List - Date Range Filter", True, 
+                              f"Payments list with date range filter retrieved successfully - {len(payments)} payments from {start_date} to {end_date}")
+            else:
+                self.log_result("Payments List - Date Range Filter", False, "Invalid response structure", response_json)
+        else:
+            error_msg = response.text if response else "Connection failed"
+            self.log_result("Payments List - Date Range Filter", False, f"Request failed: {error_msg}")
+        
+        # Test 5: Create a test payment to verify the daily summary works with actual data
+        if self.created_suppliers:
+            payment_data = {
+                "partyType": "supplier",
+                "partyId": self.created_suppliers[0],
+                "partyName": "Test Supplier for Daily Payments",
+                "amount": 1500,
+                "paymentDate": test_date,
+                "referenceType": "advance",
+                "notes": "Test payment for daily summary verification"
+            }
+            
+            response = self.make_request('POST', '/payments', payment_data)
+            if response and response.status_code == 200:
+                response_json = response.json()
+                if response_json.get('status') == 200 and 'data' in response_json:
+                    payment_id = response_json['data'].get('id')
+                    self.created_payments.append(payment_id)
+                    self.log_result("Create Test Payment for Daily Summary", True, "Test payment created successfully")
+                    
+                    # Now test daily summary again to see if it includes our test payment
+                    response = self.make_request('GET', '/payments/daily-summary', params={'date': test_date})
+                    if response and response.status_code == 200:
+                        response_json = response.json()
+                        if response_json.get('status') == 200 and 'data' in response_json:
+                            data = response_json['data']
+                            # Check if our payment is included
+                            test_payment_found = any(p.get('id') == payment_id for p in data.get('payments', []))
+                            if test_payment_found:
+                                self.log_result("Daily Summary - With Test Data", True, 
+                                              f"Daily summary correctly includes test payment - Total: {data['totalCount']} payments, Amount: {data['totalAmount']}")
+                            else:
+                                self.log_result("Daily Summary - With Test Data", False, 
+                                              "Daily summary does not include the test payment", response_json)
+                        else:
+                            self.log_result("Daily Summary - With Test Data", False, "Invalid response structure", response_json)
+                    else:
+                        error_msg = response.text if response else "Connection failed"
+                        self.log_result("Daily Summary - With Test Data", False, f"Request failed: {error_msg}")
+                else:
+                    self.log_result("Create Test Payment for Daily Summary", False, "Invalid response structure", response_json)
+            else:
+                error_msg = response.text if response else "Connection failed"
+                self.log_result("Create Test Payment for Daily Summary", False, f"Request failed: {error_msg}")
+        else:
+            self.log_result("Create Test Payment for Daily Summary", False, "No suppliers available for creating test payment")
         """Test Tally export functionality"""
         print("\n=== TESTING TALLY EXPORT ===")
         
