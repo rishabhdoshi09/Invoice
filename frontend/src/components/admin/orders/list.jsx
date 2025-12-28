@@ -191,7 +191,14 @@ export const ListOrders = () => {
                                                 {isAdmin ? 'Edit' : 'View/Note'}
                                             </Button>
                                             {isAdmin && (
-                                                <Button variant='outlined' sx={{margin: '5px'}} onClick={()=>{ dispatch(deleteOrderAction(orderObj.id))}}>Delete</Button>
+                                                <Button 
+                                                    variant='outlined' 
+                                                    color="error"
+                                                    sx={{margin: '5px'}} 
+                                                    onClick={() => handleDeleteClick(orderObj)}
+                                                >
+                                                    Delete
+                                                </Button>
                                             )}
                                         </TableCell>
                                     </TableRow>
