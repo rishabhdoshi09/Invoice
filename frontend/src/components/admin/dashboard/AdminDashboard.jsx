@@ -63,6 +63,10 @@ export const AdminDashboard = () => {
     
     // Dialog states
     const [detailDialog, setDetailDialog] = useState({ open: false, data: null });
+    
+    // Opening balance state
+    const [openingBalanceInput, setOpeningBalanceInput] = useState('');
+    const [savingOpeningBalance, setSavingOpeningBalance] = useState(false);
 
     const fetchData = async () => {
         if (!isAdmin) return;
