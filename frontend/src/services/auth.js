@@ -28,6 +28,29 @@ export const initAuth = () => {
     return false;
 };
 
+// Setup axios interceptor to handle 401 errors
+export const setupAxiosInterceptor = () => {
+    axios.interceptors.response.use(
+        (response) => response,
+        (error) => {
+            if (error.response?.status === 401) {
+                // Token expired or invalid
+                const currentPath = window.location.pathname;
+                if (currentPath !== '/login') {
+                    alert('Session expired. Please login again.');
+                    setToken(null);
+                    localStorage.removeItem('user');
+                    window.location.href = '/login';
+                }
+            }
+            return Promise.reject(error);
+        }
+    );
+};
+
+// Initialize interceptor
+setupAxiosInterceptor();
+
 // Check if initial setup is required
 export const checkSetup = async () => {
     try {
