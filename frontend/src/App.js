@@ -15,6 +15,7 @@ import { ListSuppliers } from "./components/admin/suppliers/list";
 import { ListCustomers } from "./components/admin/customers/list";
 import { ListPurchases } from "./components/admin/purchases/list";
 import { ListPayments } from "./components/admin/payments/list";
+import { DailyPayments } from "./components/admin/dailyPayments/DailyPayments";
 import { OutstandingReports } from "./components/admin/reports/outstanding";
 import { TallyExport } from "./components/admin/tally/export";
 import { AdminDashboard } from "./components/admin/dashboard/AdminDashboard";
