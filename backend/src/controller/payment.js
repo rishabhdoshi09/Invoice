@@ -300,5 +300,73 @@ module.exports = {
                 message: error.message
             });            
         }
+    },
+
+    getDailySummary: async (req, res) => {
+        try {
+            const date = req.query.date || new Date().toISOString().split('T')[0];
+            
+            // Get all payments for the specific date
+            const { rows: payments } = await Services.payment.listPayments({
+                date: date,
+                limit: 1000,
+                offset: 0
+            });
+
+            // Calculate summaries
+            const totalAmount = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+            const customerPayments = payments.filter(p => p.partyType === 'customer');
+            const supplierPayments = payments.filter(p => p.partyType === 'supplier');
+            
+            const customerTotal = customerPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+            const supplierTotal = supplierPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+            // Group by reference type
+            const orderPayments = payments.filter(p => p.referenceType === 'order');
+            const purchasePayments = payments.filter(p => p.referenceType === 'purchase');
+            const advancePayments = payments.filter(p => p.referenceType === 'advance');
+
+            return res.status(200).send({
+                status: 200,
+                message: 'daily summary fetched successfully',
+                data: {
+                    date: date,
+                    totalCount: payments.length,
+                    totalAmount: totalAmount,
+                    summary: {
+                        customers: {
+                            count: customerPayments.length,
+                            amount: customerTotal
+                        },
+                        suppliers: {
+                            count: supplierPayments.length,
+                            amount: supplierTotal
+                        }
+                    },
+                    byReferenceType: {
+                        orders: {
+                            count: orderPayments.length,
+                            amount: orderPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
+                        },
+                        purchases: {
+                            count: purchasePayments.length,
+                            amount: purchasePayments.reduce((sum, p) => sum + (p.amount || 0), 0)
+                        },
+                        advances: {
+                            count: advancePayments.length,
+                            amount: advancePayments.reduce((sum, p) => sum + (p.amount || 0), 0)
+                        }
+                    },
+                    payments: payments
+                }
+            });
+
+        } catch (error) {
+            console.log(error);
+            return res.status(500).send({
+                status: 500,
+                message: error.message
+            });
+        }
     }
 };
