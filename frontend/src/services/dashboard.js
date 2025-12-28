@@ -124,6 +124,16 @@ export const recalculateSummary = async (date) => {
     }
 };
 
+// Set opening balance (admin only)
+export const setOpeningBalance = async (amount) => {
+    try {
+        const response = await axios.post(`${API_URL}/api/dashboard/summary/opening-balance`, { amount });
+        return response.data.data;
+    } catch (error) {
+        throw error.response?.data?.message || 'Failed to set opening balance';
+    }
+};
+
 // Get invoice sequence info
 export const getInvoiceSequence = async () => {
     try {
