@@ -13,6 +13,19 @@ module.exports = (sequelize, Sequelize) => {
                 allowNull: false,
                 unique: true
             },
+            // Opening balance for the day (cash in drawer at start)
+            openingBalance: {
+                type: Sequelize.DOUBLE,
+                defaultValue: 0
+            },
+            openingBalanceSetAt: {
+                type: Sequelize.DATE,
+                allowNull: true
+            },
+            openingBalanceSetBy: {
+                type: Sequelize.STRING,
+                allowNull: true
+            },
             totalSales: {
                 type: Sequelize.DOUBLE,
                 defaultValue: 0
@@ -54,6 +67,11 @@ module.exports = (sequelize, Sequelize) => {
             },
             closedBy: {
                 type: Sequelize.UUID,
+                allowNull: true
+            },
+            // Closing balance (calculated: opening + sales - expenses)
+            closingBalance: {
+                type: Sequelize.DOUBLE,
                 allowNull: true
             },
             notes: {
