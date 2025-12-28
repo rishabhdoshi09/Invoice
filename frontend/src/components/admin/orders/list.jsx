@@ -1,18 +1,23 @@
 import { Button, Paper, TextField, Typography, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, Chip, Tooltip } from '@mui/material';
-import { useNavigate } from 'react-router';
+import { useNavigate, useLocation } from 'react-router';
 import { useDispatch, useSelector } from 'react-redux';
-import { useEffect, useState, Children } from 'react';
+import { useEffect, useState, Children, useRef } from 'react';
 import { listOrdersAction, deleteOrderAction  } from '../../../store/orders';
 import { Pagination } from '../../common/pagination';
 import { useAuth } from '../../../context/AuthContext';
 import { Note } from '@mui/icons-material';
 
+// Key for storing scroll position
+const SCROLL_POSITION_KEY = 'orders_scroll_position';
+
 export const ListOrders = () => {
 
     const dispatch = useDispatch();
     const navigate = useNavigate();
+    const location = useLocation();
     const { isAdmin } = useAuth();
     const { orders: { count, rows } } = useSelector(state => state.orderState);
+    const tableRef = useRef(null);
 
     const [refetch, shouldFetch] = useState(true);
     const [filters, setFilters] = useState({
@@ -28,6 +33,17 @@ export const ListOrders = () => {
         }
     }, [refetch, dispatch, filters]);
 
+    // Restore scroll position when coming back from edit page
+    useEffect(() => {
+        const savedPosition = sessionStorage.getItem(SCROLL_POSITION_KEY);
+        if (savedPosition && rows.length > 0) {
+            // Small delay to ensure the table is rendered
+            setTimeout(() => {
+                window.scrollTo(0, parseInt(savedPosition, 10));
+                sessionStorage.removeItem(SCROLL_POSITION_KEY);
+            }, 100);
+        }
+    }, [rows]);
 
     const paginate = (limit, offset) => {
         shouldFetch(true);
@@ -57,6 +73,12 @@ export const ListOrders = () => {
         return () => clearTimeout(getData);
     }, [filters.q, dispatch, filters]);
 
+    // Save scroll position and navigate to edit
+    const handleEditClick = (orderId) => {
+        sessionStorage.setItem(SCROLL_POSITION_KEY, window.scrollY.toString());
+        navigate(`edit/${orderId}`);
+    };
+
     return (
         <>
             <Typography component={'div'}>
@@ -66,7 +88,7 @@ export const ListOrders = () => {
 
             <br></br>
 
-            <TableContainer component={Paper}>
+            <TableContainer component={Paper} ref={tableRef}>
                 <Table>
                     <TableHead>
                         <TableRow>
@@ -85,7 +107,7 @@ export const ListOrders = () => {
                         {
                             Children.toArray(Object.values(rows).map((orderObj) => {
                                 return (
-                                    <TableRow sx={orderObj.staffNotes ? { bgcolor: '#fff8e1' } : {}}>
+                                    <TableRow sx={orderObj.staffNotes ? { bgcolor: '#fff8e1' } : {}} id={`order-row-${orderObj.id}`}>
                                         <TableCell>{orderObj.orderNumber}</TableCell>
                                         <TableCell>{orderObj.orderDate}</TableCell>
                                         <TableCell>{orderObj.customerName}</TableCell>
@@ -108,7 +130,7 @@ export const ListOrders = () => {
                                             )}
                                         </TableCell>
                                         <TableCell>
-                                            <Button variant='outlined' sx={{margin: '5px'}} onClick={()=>{ navigate(`edit/${orderObj.id}`)}}>
+                                            <Button variant='outlined' sx={{margin: '5px'}} onClick={() => handleEditClick(orderObj.id)}>
                                                 {isAdmin ? 'Edit' : 'View/Note'}
                                             </Button>
                                             {isAdmin && (
