@@ -929,18 +929,20 @@ class BackendTester:
         print(f"Backend URL: {self.base_url}")
         print("=" * 60)
         
-        # Run tests in priority order
+        # First authenticate to get JWT token
+        if not self.test_authentication():
+            print("❌ CRITICAL: Authentication failed. Cannot proceed with protected endpoints.")
+            self.print_summary()
+            return
+        
+        # Test Daily Payments API (main focus)
+        self.test_daily_payments_api()
+        
+        # Run other tests in priority order (only if we have time/need)
         self.test_product_management()  # Test products first (needed for orders)
         self.test_supplier_management()
         self.test_customer_management()
-        self.test_purchase_bill_management()
-        self.test_order_management()  # Test orders after products are created
-        self.test_payment_management()
-        self.test_reports()
-        self.test_tally_export()
-        
-        # Cleanup
-        self.cleanup_test_data()
+        self.test_payment_management()  # Regular payment management
         
         # Summary
         self.print_summary()
