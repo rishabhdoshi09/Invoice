@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Box, Button, Card, CardContent, Typography, Grid, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Checkbox, Tabs, Tab, TextField, Alert } from '@mui/material';
-import { Download, Refresh } from '@mui/icons-material';
+import { Box, Button, Card, CardContent, Typography, Grid, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Checkbox, Tabs, Tab, TextField, Alert, Chip, CircularProgress } from '@mui/material';
+import { Download, Refresh, CheckCircle } from '@mui/icons-material';
 import axios from 'axios';
 import { listPurchases } from '../../../services/purchase';
 
@@ -15,6 +15,8 @@ export const TallyExport = () => {
     // eslint-disable-next-line no-unused-vars
     const [loading, setLoading] = useState(false);
     const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
+    const [totalSalesCount, setTotalSalesCount] = useState(0);
+    const [totalPurchasesCount, setTotalPurchasesCount] = useState(0);
 
     useEffect(() => {
         if (activeTab === 0) {
@@ -27,10 +29,15 @@ export const TallyExport = () => {
     const fetchSalesOrders = async () => {
         try {
             setLoading(true);
-            const { data } = await axios.get('/api/orders', {
-                params: dateRange.startDate && dateRange.endDate ? dateRange : {}
-            });
+            // Fetch ALL orders by setting a very high limit
+            const params = {
+                limit: 10000, // High limit to get all records
+                offset: 0,
+                ...(dateRange.startDate && dateRange.endDate ? dateRange : {})
+            };
+            const { data } = await axios.get('/api/orders', { params });
             setSalesOrders(data.data.rows || []);
+            setTotalSalesCount(data.data.count || 0);
         } catch (error) {
             console.error('Error fetching sales orders:', error);
         } finally {
@@ -41,8 +48,15 @@ export const TallyExport = () => {
     const fetchPurchases = async () => {
         try {
             setLoading(true);
-            const { rows } = await listPurchases(dateRange.startDate && dateRange.endDate ? dateRange : {});
+            // Fetch ALL purchases by setting a very high limit
+            const params = {
+                limit: 10000, // High limit to get all records
+                offset: 0,
+                ...(dateRange.startDate && dateRange.endDate ? dateRange : {})
+            };
+            const { rows, count } = await listPurchases(params);
             setPurchases(rows || []);
+            setTotalPurchasesCount(count || 0);
         } catch (error) {
             console.error('Error fetching purchases:', error);
         } finally {
