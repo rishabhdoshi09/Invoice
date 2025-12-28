@@ -214,6 +214,38 @@ export const ListOrders = () => {
                 count={count}
                 updateFilters={paginate}
             />
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog
+                open={deleteDialogOpen}
+                onClose={handleCancelDelete}
+                aria-labelledby="delete-dialog-title"
+                aria-describedby="delete-dialog-description"
+            >
+                <DialogTitle id="delete-dialog-title" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Warning color="error" />
+                    Confirm Delete
+                </DialogTitle>
+                <DialogContent>
+                    <DialogContentText id="delete-dialog-description">
+                        Are you sure you want to delete order <strong>{orderToDelete?.orderNumber}</strong>?
+                        <br /><br />
+                        <strong>Customer:</strong> {orderToDelete?.customerName}
+                        <br />
+                        <strong>Total:</strong> ₹{orderToDelete?.total}
+                        <br /><br />
+                        This action cannot be undone.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <Button onClick={handleCancelDelete} variant="outlined">
+                        Cancel
+                    </Button>
+                    <Button onClick={handleConfirmDelete} variant="contained" color="error" autoFocus>
+                        Delete Order
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </>
     );
 }
