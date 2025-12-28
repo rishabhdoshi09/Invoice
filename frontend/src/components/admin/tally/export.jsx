@@ -323,6 +323,15 @@ export const TallyExport = () => {
                             <Box sx={{ flexGrow: 1 }} />
                             <Button 
                                 variant="contained" 
+                                color="success"
+                                startIcon={<Download />}
+                                onClick={() => handleExportAll('purchases')}
+                                disabled={purchases.length === 0}
+                            >
+                                Export ALL ({purchases.length})
+                            </Button>
+                            <Button 
+                                variant="outlined" 
                                 startIcon={<Download />}
                                 onClick={() => handleExportSelected('purchases')}
                                 disabled={selectedPurchases.length === 0}
