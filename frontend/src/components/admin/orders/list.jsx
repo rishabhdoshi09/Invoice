@@ -37,6 +37,31 @@ export const ListOrders = () => {
 
     const [refetch, shouldFetch] = useState(true);
     const [filters, setFilters] = useState(getSavedFilters);
+    
+    // Delete confirmation dialog state
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [orderToDelete, setOrderToDelete] = useState(null);
+
+    // Handle delete button click - open confirmation dialog
+    const handleDeleteClick = (order) => {
+        setOrderToDelete(order);
+        setDeleteDialogOpen(true);
+    };
+
+    // Confirm delete
+    const handleConfirmDelete = () => {
+        if (orderToDelete) {
+            dispatch(deleteOrderAction(orderToDelete.id));
+        }
+        setDeleteDialogOpen(false);
+        setOrderToDelete(null);
+    };
+
+    // Cancel delete
+    const handleCancelDelete = () => {
+        setDeleteDialogOpen(false);
+        setOrderToDelete(null);
+    };
 
     // Save filters whenever they change
     useEffect(() => {
