@@ -149,6 +149,12 @@ export const Layout = () =>  {
             path: 'payments'
         },
         {
+            key: 'daily-payments',
+            label: 'Daily Payments', 
+            icon: <Today />,
+            path: 'daily-payments'
+        },
+        {
             key: 'reports',
             label: 'Reports', 
             icon: <Assessment />,
