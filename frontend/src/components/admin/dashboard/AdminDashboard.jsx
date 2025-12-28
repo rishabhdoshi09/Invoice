@@ -198,6 +198,65 @@ export const AdminDashboard = () => {
                 </Alert>
             )}
 
+            {/* Opening Balance Section */}
+            <Paper sx={{ p: 2, mb: 3, bgcolor: '#fff3e0' }}>
+                <Typography variant="h6" gutterBottom>
+                    💵 Start of Day - Opening Balance
+                </Typography>
+                <Grid container spacing={2} alignItems="center">
+                    <Grid item xs={12} sm={4}>
+                        <Box>
+                            <Typography variant="body2" color="text.secondary">
+                                Current Opening Balance:
+                            </Typography>
+                            <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#e65100' }}>
+                                ₹{todaySummary?.openingBalance?.toLocaleString('en-IN') || 0}
+                            </Typography>
+                            {todaySummary?.openingBalanceSetAt && (
+                                <Typography variant="caption" color="text.secondary">
+                                    Set by {todaySummary?.openingBalanceSetBy} at {moment(todaySummary?.openingBalanceSetAt).format('hh:mm A')}
+                                </Typography>
+                            )}
+                        </Box>
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                        <Box>
+                            <Typography variant="body2" color="text.secondary">
+                                Expected Cash in Drawer:
+                            </Typography>
+                            <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
+                                ₹{((todaySummary?.openingBalance || 0) + (todaySummary?.totalSales || 0)).toLocaleString('en-IN')}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                                Opening (₹{todaySummary?.openingBalance || 0}) + Sales (₹{todaySummary?.totalSales || 0})
+                            </Typography>
+                        </Box>
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                            <TextField
+                                label="Set Opening Balance"
+                                type="number"
+                                size="small"
+                                value={openingBalanceInput}
+                                onChange={(e) => setOpeningBalanceInput(e.target.value)}
+                                placeholder="Enter amount"
+                                InputProps={{ startAdornment: '₹' }}
+                                disabled={savingOpeningBalance}
+                            />
+                            <Button
+                                variant="contained"
+                                onClick={handleSetOpeningBalance}
+                                disabled={savingOpeningBalance || !openingBalanceInput}
+                                sx={{ minWidth: 80 }}
+                            >
+                                {savingOpeningBalance ? '...' : 'Set'}
+                            </Button>
+                        </Box>
+                    </Grid>
+                </Grid>
+            </Paper>
+
             {/* Alerts Section */}
             {suspiciousActivity?.alerts?.length > 0 && (
                 <Alert severity="warning" sx={{ mb: 3 }}>
