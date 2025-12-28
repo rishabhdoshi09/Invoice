@@ -20,6 +20,7 @@ class BackendTester:
         self.created_customers = []
         self.created_purchases = []
         self.created_payments = []
+        self.auth_token = None
         
     def log_result(self, test_name, success, message, response_data=None):
         """Log test result"""
