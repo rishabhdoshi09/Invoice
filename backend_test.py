@@ -687,7 +687,10 @@ class BackendTester:
                 if setup_response and setup_response.status_code == 200:
                     self.log_result("System Setup", True, "Admin user setup completed successfully")
                 else:
-                    error_msg = setup_response.text if setup_response else "Connection failed"
+                    if setup_response:
+                        error_msg = f"Status {setup_response.status_code}: {setup_response.text}"
+                    else:
+                        error_msg = "Connection failed"
                     self.log_result("System Setup", False, f"Setup failed: {error_msg}")
                     return False
         
