@@ -40,15 +40,21 @@ class BackendTester:
     def make_request(self, method, endpoint, data=None, params=None):
         """Make HTTP request with error handling"""
         url = f"{self.base_url}{endpoint}"
+        headers = {}
+        
+        # Add authentication header if token is available
+        if self.auth_token:
+            headers['Authorization'] = f'Bearer {self.auth_token}'
+            
         try:
             if method.upper() == 'GET':
-                response = requests.get(url, params=params, timeout=30)
+                response = requests.get(url, params=params, headers=headers, timeout=30)
             elif method.upper() == 'POST':
-                response = requests.post(url, json=data, timeout=30)
+                response = requests.post(url, json=data, headers=headers, timeout=30)
             elif method.upper() == 'PUT':
-                response = requests.put(url, json=data, timeout=30)
+                response = requests.put(url, json=data, headers=headers, timeout=30)
             elif method.upper() == 'DELETE':
-                response = requests.delete(url, timeout=30)
+                response = requests.delete(url, headers=headers, timeout=30)
             else:
                 raise ValueError(f"Unsupported method: {method}")
             
