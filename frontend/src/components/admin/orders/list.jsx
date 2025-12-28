@@ -1,7 +1,7 @@
 import { Button, Paper, TextField, Typography, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, Chip, Tooltip } from '@mui/material';
 import { useNavigate, useLocation } from 'react-router';
 import { useDispatch, useSelector } from 'react-redux';
-import { useEffect, useState, Children, useRef } from 'react';
+import { useEffect, useState, Children, useRef, useLayoutEffect } from 'react';
 import { listOrdersAction, deleteOrderAction  } from '../../../store/orders';
 import { Pagination } from '../../common/pagination';
 import { useAuth } from '../../../context/AuthContext';
@@ -9,6 +9,7 @@ import { Note } from '@mui/icons-material';
 
 // Key for storing scroll position
 const SCROLL_POSITION_KEY = 'orders_scroll_position';
+const SCROLL_FILTERS_KEY = 'orders_filters';
 
 export const ListOrders = () => {
 
@@ -18,13 +19,29 @@ export const ListOrders = () => {
     const { isAdmin } = useAuth();
     const { orders: { count, rows } } = useSelector(state => state.orderState);
     const tableRef = useRef(null);
+    const scrollRestoredRef = useRef(false);
+    const isInitialLoadRef = useRef(true);
+
+    // Try to restore filters from sessionStorage on initial load
+    const getSavedFilters = () => {
+        try {
+            const savedFilters = sessionStorage.getItem(SCROLL_FILTERS_KEY);
+            if (savedFilters) {
+                return JSON.parse(savedFilters);
+            }
+        } catch (e) {
+            console.error('Error parsing saved filters:', e);
+        }
+        return { limit: 25, offset: 0, q: "" };
+    };
 
     const [refetch, shouldFetch] = useState(true);
-    const [filters, setFilters] = useState({
-        limit: 25,
-        offset: 0,
-        q: ""
-    });
+    const [filters, setFilters] = useState(getSavedFilters);
+
+    // Save filters whenever they change
+    useEffect(() => {
+        sessionStorage.setItem(SCROLL_FILTERS_KEY, JSON.stringify(filters));
+    }, [filters]);
 
     useEffect(() => {
         if (refetch) {
@@ -33,20 +50,27 @@ export const ListOrders = () => {
         }
     }, [refetch, dispatch, filters]);
 
-    // Restore scroll position when coming back from edit page
-    useEffect(() => {
-        const savedPosition = sessionStorage.getItem(SCROLL_POSITION_KEY);
-        if (savedPosition && rows.length > 0) {
-            // Small delay to ensure the table is rendered
-            setTimeout(() => {
-                window.scrollTo(0, parseInt(savedPosition, 10));
-                sessionStorage.removeItem(SCROLL_POSITION_KEY);
-            }, 100);
+    // Restore scroll position after data is loaded - use useLayoutEffect for sync scroll restoration
+    useLayoutEffect(() => {
+        if (rows.length > 0 && !scrollRestoredRef.current) {
+            const savedPosition = sessionStorage.getItem(SCROLL_POSITION_KEY);
+            if (savedPosition) {
+                // Use requestAnimationFrame to ensure DOM is fully rendered
+                requestAnimationFrame(() => {
+                    window.scrollTo(0, parseInt(savedPosition, 10));
+                    sessionStorage.removeItem(SCROLL_POSITION_KEY);
+                    scrollRestoredRef.current = true;
+                });
+            }
+            isInitialLoadRef.current = false;
         }
     }, [rows]);
 
     const paginate = (limit, offset) => {
         shouldFetch(true);
+        // Clear scroll position when changing pages
+        sessionStorage.removeItem(SCROLL_POSITION_KEY);
+        scrollRestoredRef.current = false;
         setFilters((prevState) => {
             return {
                 ...prevState,
@@ -57,6 +81,9 @@ export const ListOrders = () => {
     };
 
     const filterChangeHandler = (e) => {
+        // Clear scroll position when filtering
+        sessionStorage.removeItem(SCROLL_POSITION_KEY);
+        scrollRestoredRef.current = false;
         setFilters((prevState) => {
             return {
                 ...prevState,
@@ -66,6 +93,11 @@ export const ListOrders = () => {
     }
 
     useEffect(() => {
+        // Skip the initial load debounce effect if we're restoring from saved state
+        if (isInitialLoadRef.current) {
+            return;
+        }
+        
         const getData = setTimeout(() => {
             dispatch(listOrdersAction(filters));
         }, 500);
