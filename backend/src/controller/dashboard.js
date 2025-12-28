@@ -280,5 +280,36 @@ module.exports = {
                 message: error.message
             });
         }
+    },
+
+    // Set opening balance for today
+    setOpeningBalance: async (req, res) => {
+        try {
+            const { amount } = req.body;
+            
+            if (amount === undefined || amount === null) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Amount is required'
+                });
+            }
+
+            const summary = await Services.dailySummary.setOpeningBalance(
+                parseFloat(amount),
+                req.user?.name || req.user?.username
+            );
+            
+            return res.status(200).json({
+                status: 200,
+                message: 'Opening balance set successfully',
+                data: summary
+            });
+        } catch (error) {
+            console.error('Set opening balance error:', error);
+            return res.status(500).json({
+                status: 500,
+                message: error.message
+            });
+        }
     }
 };
