@@ -128,6 +128,26 @@ export const AdminDashboard = () => {
         }
     };
 
+    const handleSetOpeningBalance = async () => {
+        const amount = parseFloat(openingBalanceInput);
+        if (isNaN(amount) || amount < 0) {
+            alert('Please enter a valid amount');
+            return;
+        }
+        
+        setSavingOpeningBalance(true);
+        try {
+            await dashboardService.setOpeningBalance(amount);
+            setOpeningBalanceInput('');
+            fetchData();
+            alert('✅ Opening balance set successfully!');
+        } catch (err) {
+            alert('Failed to set opening balance: ' + err);
+        } finally {
+            setSavingOpeningBalance(false);
+        }
+    };
+
     const getActionColor = (action) => {
         switch (action) {
             case 'CREATE': return 'success';
