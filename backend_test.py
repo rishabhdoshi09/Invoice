@@ -666,6 +666,28 @@ class BackendTester:
         """Test authentication and get JWT token"""
         print("\n=== TESTING AUTHENTICATION ===")
         
+        # First check if setup is required
+        response = self.make_request('GET', '/auth/setup-check')
+        if response and response.status_code == 200:
+            response_json = response.json()
+            setup_required = response_json.get('data', {}).get('setupRequired', False)
+            
+            if setup_required:
+                # Setup admin user
+                setup_data = {
+                    "username": "admin",
+                    "password": "admin123",
+                    "role": "admin"
+                }
+                
+                setup_response = self.make_request('POST', '/auth/setup', setup_data)
+                if setup_response and setup_response.status_code == 200:
+                    self.log_result("System Setup", True, "Admin user setup completed successfully")
+                else:
+                    error_msg = setup_response.text if setup_response else "Connection failed"
+                    self.log_result("System Setup", False, f"Setup failed: {error_msg}")
+                    return False
+        
         # Try to login with admin credentials
         login_data = {
             "username": "admin",
@@ -682,33 +704,8 @@ class BackendTester:
             else:
                 self.log_result("Authentication Login", False, "Login response missing token", response_json)
         else:
-            # Try to create admin user first
-            register_data = {
-                "username": "admin",
-                "password": "admin123",
-                "role": "admin"
-            }
-            
-            register_response = self.make_request('POST', '/auth/register', register_data)
-            if register_response and register_response.status_code == 200:
-                self.log_result("User Registration", True, "Admin user created successfully")
-                
-                # Now try login again
-                response = self.make_request('POST', '/auth/login', login_data)
-                if response and response.status_code == 200:
-                    response_json = response.json()
-                    if response_json.get('status') == 200 and 'token' in response_json:
-                        self.auth_token = response_json['token']
-                        self.log_result("Authentication Login", True, "Successfully logged in after registration")
-                        return True
-                    else:
-                        self.log_result("Authentication Login", False, "Login failed after registration", response_json)
-                else:
-                    error_msg = response.text if response else "Connection failed"
-                    self.log_result("Authentication Login", False, f"Login request failed: {error_msg}")
-            else:
-                error_msg = register_response.text if register_response else "Connection failed"
-                self.log_result("User Registration", False, f"Registration failed: {error_msg}")
+            error_msg = response.text if response else "Connection failed"
+            self.log_result("Authentication Login", False, f"Login request failed: {error_msg}")
         
         return False
 
