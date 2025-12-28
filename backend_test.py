@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 
 # Backend URL from frontend .env
-BASE_URL = "https://daily-payments-1.preview.emergentagent.com/api"
+BASE_URL = "http://localhost:8001/api"
 
 class BackendTester:
     def __init__(self):
