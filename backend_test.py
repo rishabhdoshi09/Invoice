@@ -704,12 +704,16 @@ class BackendTester:
         response = self.make_request('POST', '/auth/login', login_data)
         if response and response.status_code == 200:
             response_json = response.json()
-            if response_json.get('status') == 200 and 'token' in response_json:
-                self.auth_token = response_json['token']
-                self.log_result("Authentication Login", True, "Successfully logged in and obtained JWT token")
-                return True
+            if response_json.get('status') == 200 and 'data' in response_json:
+                token = response_json['data'].get('token')
+                if token:
+                    self.auth_token = token
+                    self.log_result("Authentication Login", True, "Successfully logged in and obtained JWT token")
+                    return True
+                else:
+                    self.log_result("Authentication Login", False, "Login response missing token", response_json)
             else:
-                self.log_result("Authentication Login", False, "Login response missing token", response_json)
+                self.log_result("Authentication Login", False, "Invalid login response structure", response_json)
         else:
             error_msg = response.text if response else "Connection failed"
             self.log_result("Authentication Login", False, f"Login request failed: {error_msg}")
