@@ -22,9 +22,12 @@ module.exports = {
             q: Joi.string().trim().allow("").optional(),
             partyId: Joi.string().trim().allow("").optional(),
             partyType: Joi.string().trim().valid('customer', 'supplier').allow("").optional(),
+            startDate: Joi.string().trim().allow("").optional(),
+            endDate: Joi.string().trim().allow("").optional(),
+            date: Joi.string().trim().allow("").optional(),
             limit: Joi.number().optional(),
             offset: Joi.number().optional()
         });
-        return Joi.validate(paymentObj, schema);
+        return Joi.validate(paymentObj, schema, { convert: true });
     }
 };
