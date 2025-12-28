@@ -143,21 +143,21 @@ export const TallyExport = () => {
 
     return (
         <Box sx={{ p: 3 }}>
-            <Typography variant="h5" sx={{ mb: 3 }}>Tally Export</Typography>
+            <Typography variant="h5" sx={{ mb: 1 }}>Tally Export</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Select specific bills to export for Tally import
+                Export complete bills for Tally import - All records are shown (100%)
             </Typography>
 
             <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)} sx={{ mb: 3 }}>
-                <Tab label="Sales Orders" />
-                <Tab label="Purchases" />
+                <Tab label={`Sales Orders ${totalSalesCount > 0 ? `(${totalSalesCount})` : ''}`} />
+                <Tab label={`Purchases ${totalPurchasesCount > 0 ? `(${totalPurchasesCount})` : ''}`} />
                 <Tab label="Payments & Outstanding" />
             </Tabs>
 
             {activeTab === 0 && (
                 <Card>
                     <CardContent>
-                        <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
+                        <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                             <TextField
                                 label="Start Date"
                                 type="date"
@@ -174,9 +174,17 @@ export const TallyExport = () => {
                                 onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
                                 InputLabelProps={{ shrink: true }}
                             />
-                            <Button startIcon={<Refresh />} onClick={fetchSalesOrders} variant="outlined">
-                                Refresh
+                            <Button startIcon={loading ? <CircularProgress size={16} /> : <Refresh />} onClick={fetchSalesOrders} variant="outlined" disabled={loading}>
+                                {loading ? 'Loading...' : 'Refresh'}
                             </Button>
+                            {salesOrders.length > 0 && (
+                                <Chip 
+                                    icon={<CheckCircle />} 
+                                    label={`Showing all ${salesOrders.length} orders (100%)`} 
+                                    color="success" 
+                                    variant="outlined"
+                                />
+                            )}
                             <Box sx={{ flexGrow: 1 }} />
                             <Button 
                                 variant="contained" 
@@ -188,11 +196,15 @@ export const TallyExport = () => {
                             </Button>
                         </Box>
 
-                        {salesOrders.length === 0 ? (
+                        {loading ? (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                                <CircularProgress />
+                            </Box>
+                        ) : salesOrders.length === 0 ? (
                             <Alert severity="info">No sales orders found</Alert>
                         ) : (
-                            <TableContainer>
-                                <Table size="small">
+                            <TableContainer sx={{ maxHeight: 500 }}>
+                                <Table size="small" stickyHeader>
                                     <TableHead>
                                         <TableRow>
                                             <TableCell padding="checkbox">
@@ -211,7 +223,7 @@ export const TallyExport = () => {
                                     </TableHead>
                                     <TableBody>
                                         {salesOrders.map((order) => (
-                                            <TableRow key={order.id}>
+                                            <TableRow key={order.id} hover>
                                                 <TableCell padding="checkbox">
                                                     <Checkbox
                                                         checked={selectedSales.includes(order.id)}
@@ -236,7 +248,7 @@ export const TallyExport = () => {
             {activeTab === 1 && (
                 <Card>
                     <CardContent>
-                        <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
+                        <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                             <TextField
                                 label="Start Date"
                                 type="date"
@@ -253,9 +265,17 @@ export const TallyExport = () => {
                                 onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
                                 InputLabelProps={{ shrink: true }}
                             />
-                            <Button startIcon={<Refresh />} onClick={fetchPurchases} variant="outlined">
-                                Refresh
+                            <Button startIcon={loading ? <CircularProgress size={16} /> : <Refresh />} onClick={fetchPurchases} variant="outlined" disabled={loading}>
+                                {loading ? 'Loading...' : 'Refresh'}
                             </Button>
+                            {purchases.length > 0 && (
+                                <Chip 
+                                    icon={<CheckCircle />} 
+                                    label={`Showing all ${purchases.length} purchases (100%)`} 
+                                    color="success" 
+                                    variant="outlined"
+                                />
+                            )}
                             <Box sx={{ flexGrow: 1 }} />
                             <Button 
                                 variant="contained" 
@@ -267,11 +287,15 @@ export const TallyExport = () => {
                             </Button>
                         </Box>
 
-                        {purchases.length === 0 ? (
+                        {loading ? (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                                <CircularProgress />
+                            </Box>
+                        ) : purchases.length === 0 ? (
                             <Alert severity="info">No purchase bills found</Alert>
                         ) : (
-                            <TableContainer>
-                                <Table size="small">
+                            <TableContainer sx={{ maxHeight: 500 }}>
+                                <Table size="small" stickyHeader>
                                     <TableHead>
                                         <TableRow>
                                             <TableCell padding="checkbox">
@@ -290,7 +314,7 @@ export const TallyExport = () => {
                                     </TableHead>
                                     <TableBody>
                                         {purchases.map((purchase) => (
-                                            <TableRow key={purchase.id}>
+                                            <TableRow key={purchase.id} hover>
                                                 <TableCell padding="checkbox">
                                                     <Checkbox
                                                         checked={selectedPurchases.includes(purchase.id)}
