@@ -761,6 +761,49 @@ export const DailyPayments = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog
+                open={deleteDialogOpen}
+                onClose={handleDeleteCancel}
+                maxWidth="sm"
+            >
+                <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
+                    <Warning /> Delete Payment
+                </DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Are you sure you want to delete this payment?
+                    </DialogContentText>
+                    {paymentToDelete && (
+                        <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+                            <Typography variant="body2"><strong>Payment No:</strong> {paymentToDelete.paymentNumber}</Typography>
+                            <Typography variant="body2"><strong>Party:</strong> {paymentToDelete.partyName}</Typography>
+                            <Typography variant="body2"><strong>Amount:</strong> ₹{paymentToDelete.amount?.toLocaleString()}</Typography>
+                            <Typography variant="body2"><strong>Type:</strong> {paymentToDelete.partyType}</Typography>
+                            {paymentToDelete.notes && (
+                                <Typography variant="body2"><strong>Notes:</strong> {paymentToDelete.notes}</Typography>
+                            )}
+                        </Box>
+                    )}
+                    <Typography variant="body2" color="error" sx={{ mt: 2 }}>
+                        ⚠️ This action cannot be undone. If this payment was linked to an order or purchase, the payment status will be reversed.
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleDeleteCancel} disabled={deleting}>
+                        Cancel
+                    </Button>
+                    <Button 
+                        onClick={handleDeleteConfirm} 
+                        color="error" 
+                        variant="contained"
+                        disabled={deleting}
+                    >
+                        {deleting ? 'Deleting...' : 'Delete Payment'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 };
