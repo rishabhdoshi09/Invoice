@@ -21,10 +21,15 @@ import {
   Alert,
   IconButton,
   Tooltip,
-  Divider
+  Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions
 } from '@mui/material';
-import { Edit as EditIcon, Save as SaveIcon, Cancel as CancelIcon, NoteAdd, Send } from '@mui/icons-material';
-import { getOrderAction } from '../../../store/orders';
+import { Edit as EditIcon, Save as SaveIcon, Cancel as CancelIcon, NoteAdd, Send, Delete, Warning } from '@mui/icons-material';
+import { getOrderAction, deleteOrderAction } from '../../../store/orders';
 import { setNotification } from '../../../store/application';
 import { useAuth } from '../../../context/AuthContext';
 
