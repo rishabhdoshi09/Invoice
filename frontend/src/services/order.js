@@ -4,9 +4,14 @@ import axios from "axios";
 export const listOrders = async (filters) => {
     try{
         const { data: { data: { count, rows }}} = await axios.get('/api/orders', {
-            params: filters,
+            params: {
+                ...filters,
+                _t: Date.now() // Cache-busting timestamp
+            },
             headers: {
-              'Content-Type': 'application/json'
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
             }
         });
         // Keep rows as array to preserve order from backend (sorted by createdAt DESC)
