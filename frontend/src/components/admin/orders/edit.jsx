@@ -325,13 +325,23 @@ export const EditOrder = () => {
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Edit Order</Typography>
-        <Box>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          {isAdmin && (
+            <Button 
+              variant="outlined" 
+              color="error"
+              onClick={handleDeleteClick}
+              disabled={saving || deleting}
+              startIcon={<Delete />}
+            >
+              Delete Invoice
+            </Button>
+          )}
           <Button 
             variant="contained" 
             color="primary"
             onClick={handleSaveOrder}
             disabled={saving || editingItemId !== null}
-            sx={{ mr: 2 }}
             startIcon={<SaveIcon />}
           >
             Save Order
