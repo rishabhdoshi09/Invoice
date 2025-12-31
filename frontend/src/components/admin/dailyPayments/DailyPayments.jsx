@@ -541,16 +541,17 @@ export const DailyPayments = () => {
                                     <TableCell>Reference Type</TableCell>
                                     <TableCell>Reference</TableCell>
                                     <TableCell>Notes</TableCell>
+                                    <TableCell align="center">Actions</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {loading ? (
                                     <TableRow>
-                                        <TableCell colSpan={8} align="center">Loading...</TableCell>
+                                        <TableCell colSpan={9} align="center">Loading...</TableCell>
                                     </TableRow>
                                 ) : payments.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={8} align="center">
+                                        <TableCell colSpan={9} align="center">
                                             No payments recorded for {moment(selectedDate).format('MMMM D, YYYY')}
                                         </TableCell>
                                     </TableRow>
@@ -584,6 +585,17 @@ export const DailyPayments = () => {
                                             </TableCell>
                                             <TableCell>{payment.referenceNumber || '-'}</TableCell>
                                             <TableCell>{payment.notes || '-'}</TableCell>
+                                            <TableCell align="center">
+                                                <Tooltip title="Delete Payment">
+                                                    <IconButton 
+                                                        color="error" 
+                                                        size="small"
+                                                        onClick={() => handleDeleteClick(payment)}
+                                                    >
+                                                        <Delete />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </TableCell>
                                         </TableRow>
                                     ))
                                 )}
