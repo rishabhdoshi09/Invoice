@@ -360,8 +360,11 @@ export const DailyPayments = () => {
                             <Refresh />
                         </IconButton>
                     </Tooltip>
-                    <Button variant="contained" onClick={handleOpenDialog}>
-                        Record Payment
+                    <Button variant="contained" onClick={() => handleOpenDialog('simple')} startIcon={<Add />}>
+                        Quick Expense
+                    </Button>
+                    <Button variant="outlined" onClick={() => handleOpenDialog('advanced')}>
+                        Supplier/Customer Payment
                     </Button>
                 </Box>
             </Box>
