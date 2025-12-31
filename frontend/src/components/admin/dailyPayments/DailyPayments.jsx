@@ -168,7 +168,13 @@ export const DailyPayments = () => {
         setSelectedDate(moment().format('YYYY-MM-DD'));
     };
 
-    const handleOpenDialog = () => {
+    const handleOpenDialog = (mode = 'simple') => {
+        setDialogMode(mode);
+        setSimpleForm({
+            amount: '',
+            description: '',
+            category: 'misc'
+        });
         setFormData({
             paymentDate: selectedDate,
             partyId: '',
@@ -185,6 +191,14 @@ export const DailyPayments = () => {
 
     const handleCloseDialog = () => {
         setOpenDialog(false);
+    };
+
+    const handleSimpleFormChange = (e) => {
+        const { name, value } = e.target;
+        setSimpleForm(prev => ({
+            ...prev,
+            [name]: value
+        }));
     };
 
     const handleChange = (e) => {
