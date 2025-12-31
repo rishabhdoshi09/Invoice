@@ -142,14 +142,52 @@ export const ListOrders = () => {
         navigate(`edit/${orderId}`);
     };
 
+    const handleDateChange = (e) => {
+        sessionStorage.removeItem(SCROLL_POSITION_KEY);
+        scrollRestoredRef.current = false;
+        setFilters((prevState) => ({
+            ...prevState,
+            date: e.target.value,
+            offset: 0  // Reset to first page when filtering
+        }));
+        shouldFetch(true);
+    };
+
+    const clearDateFilter = () => {
+        setFilters((prevState) => ({
+            ...prevState,
+            date: "",
+            offset: 0
+        }));
+        shouldFetch(true);
+    };
+
     return (
         <>
-            <Typography component={'div'}>
-                <TextField size="small" id="q" label="Search Order" onChange={filterChangeHandler} sx={{margin: "0px 15px 0px 0px"}}></TextField>
-                <Button variant="contained" onClick={() => navigate(`create`)} sx={{margin: "0px 15px"}}>Create Order</Button>
-            </Typography>
-
-            <br></br>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', mb: 2 }}>
+                <TextField size="small" id="q" label="Search Order" onChange={filterChangeHandler} value={filters.q || ''} sx={{minWidth: '200px'}}></TextField>
+                <TextField 
+                    size="small" 
+                    id="date" 
+                    label="Filter by Date" 
+                    type="date"
+                    value={filters.date || ''}
+                    onChange={handleDateChange}
+                    InputLabelProps={{ shrink: true }}
+                    sx={{minWidth: '180px'}}
+                />
+                {filters.date && (
+                    <Button 
+                        variant="outlined" 
+                        size="small" 
+                        onClick={clearDateFilter}
+                        startIcon={<Clear />}
+                    >
+                        Clear Date
+                    </Button>
+                )}
+                <Button variant="contained" onClick={() => navigate(`create`)}>Create Order</Button>
+            </Box>
 
             <TableContainer component={Paper} ref={tableRef}>
                 <Table>
