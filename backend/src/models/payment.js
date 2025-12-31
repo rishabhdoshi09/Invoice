@@ -19,14 +19,14 @@ module.exports = (sequelize, Sequelize) => {
             },
             partyId: {
                 type: Sequelize.UUID,
-                allowNull: false
+                allowNull: true
             },
             partyName: {
                 type: Sequelize.STRING,
                 allowNull: false
             },
             partyType: {
-                type: Sequelize.ENUM('customer', 'supplier'),
+                type: Sequelize.ENUM('customer', 'supplier', 'expense'),
                 allowNull: false
             },
             amount: {
