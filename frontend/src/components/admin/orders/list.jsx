@@ -32,7 +32,7 @@ export const ListOrders = () => {
         } catch (e) {
             console.error('Error parsing saved filters:', e);
         }
-        return { limit: 25, offset: 0, q: "" };
+        return { limit: 25, offset: 0, q: "", date: "" };
     };
 
     const [refetch, shouldFetch] = useState(true);
