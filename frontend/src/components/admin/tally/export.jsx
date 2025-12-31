@@ -232,7 +232,7 @@ export const TallyExport = () => {
                             {salesOrders.length > 0 && (
                                 <Chip 
                                     icon={<CheckCircle />} 
-                                    label={`Showing all ${salesOrders.length} orders (100%)`} 
+                                    label={`Showing all ${salesOrders.length} invoices (100%)`} 
                                     color="success" 
                                     variant="outlined"
                                 />
@@ -245,7 +245,7 @@ export const TallyExport = () => {
                                 onClick={() => handleExportAll('sales')}
                                 disabled={salesOrders.length === 0}
                             >
-                                Export ALL ({salesOrders.length})
+                                Export GSTR-1 ({salesOrders.length})
                             </Button>
                             <Button 
                                 variant="outlined" 
@@ -262,7 +262,7 @@ export const TallyExport = () => {
                                 <CircularProgress />
                             </Box>
                         ) : salesOrders.length === 0 ? (
-                            <Alert severity="info">No sales orders found</Alert>
+                            <Alert severity="info">No sales invoices found</Alert>
                         ) : (
                             <TableContainer sx={{ maxHeight: 500 }}>
                                 <Table size="small" stickyHeader>
@@ -275,11 +275,15 @@ export const TallyExport = () => {
                                                     onChange={() => handleSelectAll('sales')}
                                                 />
                                             </TableCell>
-                                            <TableCell>Order No</TableCell>
+                                            <TableCell>Invoice No</TableCell>
                                             <TableCell>Date</TableCell>
-                                            <TableCell>Customer</TableCell>
+                                            <TableCell>Buyer Name</TableCell>
+                                            <TableCell>GSTIN/URP</TableCell>
+                                            <TableCell>Place of Supply</TableCell>
+                                            <TableCell align="right">Taxable Value</TableCell>
+                                            <TableCell align="right">Tax</TableCell>
                                             <TableCell align="right">Total</TableCell>
-                                            <TableCell>Status</TableCell>
+                                            <TableCell>Type</TableCell>
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
@@ -294,8 +298,18 @@ export const TallyExport = () => {
                                                 <TableCell>{order.orderNumber}</TableCell>
                                                 <TableCell>{order.orderDate}</TableCell>
                                                 <TableCell>{order.customerName || 'N/A'}</TableCell>
+                                                <TableCell>{order.customerGstin || 'URP'}</TableCell>
+                                                <TableCell>{order.placeOfSupply || '27-MH'}</TableCell>
+                                                <TableCell align="right">₹{order.subTotal}</TableCell>
+                                                <TableCell align="right">₹{order.tax} ({order.taxPercent}%)</TableCell>
                                                 <TableCell align="right">₹{order.total}</TableCell>
-                                                <TableCell>{order.paymentStatus || 'paid'}</TableCell>
+                                                <TableCell>
+                                                    <Chip 
+                                                        label={getInvoiceType(order.customerGstin)} 
+                                                        size="small" 
+                                                        color={getInvoiceType(order.customerGstin) === 'B2B' ? 'primary' : 'default'}
+                                                    />
+                                                </TableCell>
                                             </TableRow>
                                         ))}
                                     </TableBody>
