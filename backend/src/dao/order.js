@@ -42,6 +42,26 @@ module.exports = {
                 };
             }
             
+            // Add date filter if provided
+            if (filterObj.date) {
+                whereClause.orderDate = filterObj.date;
+            }
+            
+            // Add date range filter if provided
+            if (filterObj.startDate && filterObj.endDate) {
+                whereClause.orderDate = {
+                    [db.Sequelize.Op.between]: [filterObj.startDate, filterObj.endDate]
+                };
+            } else if (filterObj.startDate) {
+                whereClause.orderDate = {
+                    [db.Sequelize.Op.gte]: filterObj.startDate
+                };
+            } else if (filterObj.endDate) {
+                whereClause.orderDate = {
+                    [db.Sequelize.Op.lte]: filterObj.endDate
+                };
+            }
+            
             const res = await db.order.findAndCountAll({ 
                 where: whereClause,
                 order: [['createdAt', 'DESC']], 
