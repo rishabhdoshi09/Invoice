@@ -254,7 +254,43 @@ export const DailyPayments = () => {
         }
     };
 
+    const handleSimpleSubmit = async () => {
+        if (!simpleForm.amount || parseFloat(simpleForm.amount) <= 0) {
+            alert('Please enter a valid amount');
+            return;
+        }
+        if (!simpleForm.description.trim()) {
+            alert('Please enter a description');
+            return;
+        }
+
+        try {
+            // For simple expenses, we'll create an expense record
+            // Using the existing payment structure with a special "expense" party type
+            const payload = {
+                paymentDate: selectedDate,
+                partyType: 'expense',
+                partyName: `${expenseCategories.find(c => c.value === simpleForm.category)?.label || 'Expense'}: ${simpleForm.description}`,
+                partyId: null,
+                amount: parseFloat(simpleForm.amount),
+                referenceType: 'advance',
+                notes: `[${simpleForm.category.toUpperCase()}] ${simpleForm.description}`
+            };
+            
+            await createPayment(payload);
+            handleCloseDialog();
+            fetchDailySummary();
+        } catch (error) {
+            console.error('Error recording expense:', error);
+            alert('Error recording expense. Please try again.');
+        }
+    };
+
     const handleSubmit = async () => {
+        if (dialogMode === 'simple') {
+            return handleSimpleSubmit();
+        }
+        
         if (!formData.partyId || !formData.amount) {
             alert('Please fill required fields');
             return;
