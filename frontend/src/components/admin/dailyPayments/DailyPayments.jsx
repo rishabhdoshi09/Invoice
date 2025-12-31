@@ -543,106 +543,157 @@ export const DailyPayments = () => {
 
             {/* Create Payment Dialog */}
             <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-                <DialogTitle>Record Payment for {moment(selectedDate).format('MMMM D, YYYY')}</DialogTitle>
+                <DialogTitle>
+                    {dialogMode === 'simple' 
+                        ? `Quick Expense - ${moment(selectedDate).format('MMMM D, YYYY')}`
+                        : `Record Payment - ${moment(selectedDate).format('MMMM D, YYYY')}`
+                    }
+                </DialogTitle>
                 <DialogContent>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-                        <TextField
-                            label="Payment Date"
-                            name="paymentDate"
-                            type="date"
-                            value={formData.paymentDate}
-                            onChange={handleChange}
-                            fullWidth
-                            InputLabelProps={{ shrink: true }}
-                        />
-                        <FormControl fullWidth>
-                            <InputLabel>Party Type</InputLabel>
-                            <Select
-                                name="partyType"
-                                value={formData.partyType}
-                                onChange={handleChange}
-                                label="Party Type"
-                            >
-                                <MenuItem value="supplier">Supplier (Payment Out)</MenuItem>
-                                <MenuItem value="customer">Customer (Receipt In)</MenuItem>
-                            </Select>
-                        </FormControl>
-                        <FormControl fullWidth>
-                            <InputLabel>Select {formData.partyType === 'supplier' ? 'Supplier' : 'Customer'} *</InputLabel>
-                            <Select
-                                name="partyId"
-                                value={formData.partyId}
-                                onChange={handleChange}
-                                label={`Select ${formData.partyType === 'supplier' ? 'Supplier' : 'Customer'} *`}
-                            >
-                                {formData.partyType === 'supplier' 
-                                    ? suppliers.map((supplier) => (
-                                        <MenuItem key={supplier.id} value={supplier.id}>
-                                            {supplier.name}
-                                        </MenuItem>
-                                    ))
-                                    : customers.map((customer) => (
-                                        <MenuItem key={customer.id} value={customer.id}>
-                                            {customer.name}
-                                        </MenuItem>
-                                    ))
-                                }
-                            </Select>
-                        </FormControl>
-                        <TextField
-                            label="Amount *"
-                            name="amount"
-                            type="number"
-                            value={formData.amount}
-                            onChange={handleChange}
-                            fullWidth
-                            InputProps={{ inputProps: { min: 0 } }}
-                        />
-                        <FormControl fullWidth>
-                            <InputLabel>Reference Type</InputLabel>
-                            <Select
-                                name="referenceType"
-                                value={formData.referenceType}
-                                onChange={handleChange}
-                                label="Reference Type"
-                            >
-                                {formData.partyType === 'supplier' && <MenuItem value="purchase">Purchase</MenuItem>}
-                                {formData.partyType === 'customer' && <MenuItem value="order">Order</MenuItem>}
-                                <MenuItem value="advance">Advance</MenuItem>
-                            </Select>
-                        </FormControl>
-                        {formData.referenceType === 'purchase' && formData.partyType === 'supplier' && (
+                    {dialogMode === 'simple' ? (
+                        /* Simple Expense Form */
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 2 }}>
+                            <TextField
+                                label="Amount (₹) *"
+                                name="amount"
+                                type="number"
+                                value={simpleForm.amount}
+                                onChange={handleSimpleFormChange}
+                                fullWidth
+                                autoFocus
+                                InputProps={{ 
+                                    inputProps: { min: 0 },
+                                    sx: { fontSize: '1.5rem' }
+                                }}
+                                placeholder="Enter amount"
+                            />
                             <FormControl fullWidth>
-                                <InputLabel>Purchase Bill</InputLabel>
+                                <InputLabel>Category</InputLabel>
                                 <Select
-                                    name="referenceId"
-                                    value={formData.referenceId}
-                                    onChange={handleChange}
-                                    label="Purchase Bill"
+                                    name="category"
+                                    value={simpleForm.category}
+                                    onChange={handleSimpleFormChange}
+                                    label="Category"
                                 >
-                                    {purchases.filter(p => p.supplierId === formData.partyId).map((purchase) => (
-                                        <MenuItem key={purchase.id} value={purchase.id}>
-                                            {purchase.billNumber} - ₹{purchase.dueAmount} due
+                                    {expenseCategories.map((cat) => (
+                                        <MenuItem key={cat.value} value={cat.value}>
+                                            {cat.label}
                                         </MenuItem>
                                     ))}
                                 </Select>
                             </FormControl>
-                        )}
-                        <TextField
-                            label="Notes"
-                            name="notes"
-                            value={formData.notes}
-                            onChange={handleChange}
-                            fullWidth
-                            multiline
-                            rows={2}
-                        />
-                    </Box>
+                            <TextField
+                                label="Description *"
+                                name="description"
+                                value={simpleForm.description}
+                                onChange={handleSimpleFormChange}
+                                fullWidth
+                                multiline
+                                rows={2}
+                                placeholder="e.g., Paid to Ram for loading, Transport to warehouse, etc."
+                            />
+                        </Box>
+                    ) : (
+                        /* Advanced Payment Form */
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
+                            <TextField
+                                label="Payment Date"
+                                name="paymentDate"
+                                type="date"
+                                value={formData.paymentDate}
+                                onChange={handleChange}
+                                fullWidth
+                                InputLabelProps={{ shrink: true }}
+                            />
+                            <FormControl fullWidth>
+                                <InputLabel>Party Type</InputLabel>
+                                <Select
+                                    name="partyType"
+                                    value={formData.partyType}
+                                    onChange={handleChange}
+                                    label="Party Type"
+                                >
+                                    <MenuItem value="supplier">Supplier (Payment Out)</MenuItem>
+                                    <MenuItem value="customer">Customer (Receipt In)</MenuItem>
+                                </Select>
+                            </FormControl>
+                            <FormControl fullWidth>
+                                <InputLabel>Select {formData.partyType === 'supplier' ? 'Supplier' : 'Customer'} *</InputLabel>
+                                <Select
+                                    name="partyId"
+                                    value={formData.partyId}
+                                    onChange={handleChange}
+                                    label={`Select ${formData.partyType === 'supplier' ? 'Supplier' : 'Customer'} *`}
+                                >
+                                    {formData.partyType === 'supplier' 
+                                        ? suppliers.map((supplier) => (
+                                            <MenuItem key={supplier.id} value={supplier.id}>
+                                                {supplier.name}
+                                            </MenuItem>
+                                        ))
+                                        : customers.map((customer) => (
+                                            <MenuItem key={customer.id} value={customer.id}>
+                                                {customer.name}
+                                            </MenuItem>
+                                        ))
+                                    }
+                                </Select>
+                            </FormControl>
+                            <TextField
+                                label="Amount *"
+                                name="amount"
+                                type="number"
+                                value={formData.amount}
+                                onChange={handleChange}
+                                fullWidth
+                                InputProps={{ inputProps: { min: 0 } }}
+                            />
+                            <FormControl fullWidth>
+                                <InputLabel>Reference Type</InputLabel>
+                                <Select
+                                    name="referenceType"
+                                    value={formData.referenceType}
+                                    onChange={handleChange}
+                                    label="Reference Type"
+                                >
+                                    {formData.partyType === 'supplier' && <MenuItem value="purchase">Purchase</MenuItem>}
+                                    {formData.partyType === 'customer' && <MenuItem value="order">Order</MenuItem>}
+                                    <MenuItem value="advance">Advance</MenuItem>
+                                </Select>
+                            </FormControl>
+                            {formData.referenceType === 'purchase' && formData.partyType === 'supplier' && (
+                                <FormControl fullWidth>
+                                    <InputLabel>Purchase Bill</InputLabel>
+                                    <Select
+                                        name="referenceId"
+                                        value={formData.referenceId}
+                                        onChange={handleChange}
+                                        label="Purchase Bill"
+                                    >
+                                        {purchases.filter(p => p.supplierId === formData.partyId).map((purchase) => (
+                                            <MenuItem key={purchase.id} value={purchase.id}>
+                                                {purchase.billNumber} - ₹{purchase.dueAmount} due
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            )}
+                            <TextField
+                                label="Notes"
+                                name="notes"
+                                value={formData.notes}
+                                onChange={handleChange}
+                                fullWidth
+                                multiline
+                                rows={2}
+                            />
+                        </Box>
+                    )}
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseDialog}>Cancel</Button>
-                    <Button onClick={handleSubmit} variant="contained">
-                        Record Payment
+                    <Button onClick={handleSubmit} variant="contained" color="primary">
+                        {dialogMode === 'simple' ? 'Record Expense' : 'Record Payment'}
                     </Button>
                 </DialogActions>
             </Dialog>
