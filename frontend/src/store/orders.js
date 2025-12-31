@@ -7,7 +7,7 @@ import { createOrder, fetchWeights, listOrders, deleteOrder, getOrder } from '..
 const initialState = {
     orders: {
         count: 0,
-        rows: {}
+        rows: []
     }
 };
 const reducers = {
