@@ -13,6 +13,7 @@ import {
     Dialog, 
     DialogTitle, 
     DialogContent, 
+    DialogContentText,
     DialogActions, 
     Typography, 
     TextField, 
@@ -38,7 +39,9 @@ import {
     People,
     LocalShipping,
     TrendingUp,
-    Add
+    Add,
+    Delete,
+    Warning
 } from '@mui/icons-material';
 import { listPayments, createPayment } from '../../../services/tally';
 import { listSuppliers } from '../../../services/supplier';
