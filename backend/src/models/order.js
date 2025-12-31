@@ -22,6 +22,16 @@ module.exports = (sequelize, Sequelize) => {
             customerMobile: {
                 type: Sequelize.STRING
             },
+            // GST fields for GSTR-1 compliance
+            customerGstin: {
+                type: Sequelize.STRING,
+                allowNull: true
+            },
+            placeOfSupply: {
+                type: Sequelize.STRING,
+                allowNull: true,
+                defaultValue: '27-Maharashtra'
+            },
             subTotal: {
                 type: Sequelize.DOUBLE
             },
