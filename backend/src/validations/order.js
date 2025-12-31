@@ -38,7 +38,8 @@ module.exports = {
             startDate: Joi.string().trim().allow("").optional(),
             endDate: Joi.string().trim().allow("").optional(),
             limit: Joi.number().optional(),
-            offset: Joi.number().optional()
+            offset: Joi.number().optional(),
+            _t: Joi.number().optional() // Cache-busting timestamp
         });
         return Joi.validate(orderObj, schema, { convert: true });
     },
