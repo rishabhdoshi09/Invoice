@@ -5,9 +5,9 @@ module.exports = {
         const schema = Joi.object().keys({
             paymentNumber: Joi.string().trim().required(),
             paymentDate: Joi.string().trim().required(),
-            partyId: Joi.string().trim().required(),
+            partyId: Joi.string().trim().allow("", null).optional(),
             partyName: Joi.string().trim().required(),
-            partyType: Joi.string().trim().valid('customer', 'supplier').required(),
+            partyType: Joi.string().trim().valid('customer', 'supplier', 'expense').required(),
             amount: Joi.number().greater(0).required(),
             referenceType: Joi.string().trim().valid('order', 'purchase', 'advance').required(),
             referenceId: Joi.string().trim().allow("").optional(),
@@ -21,7 +21,7 @@ module.exports = {
         const schema = Joi.object().keys({
             q: Joi.string().trim().allow("").optional(),
             partyId: Joi.string().trim().allow("").optional(),
-            partyType: Joi.string().trim().valid('customer', 'supplier').allow("").optional(),
+            partyType: Joi.string().trim().valid('customer', 'supplier', 'expense').allow("").optional(),
             startDate: Joi.string().trim().allow("").optional(),
             endDate: Joi.string().trim().allow("").optional(),
             date: Joi.string().trim().allow("").optional(),
