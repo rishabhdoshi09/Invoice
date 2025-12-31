@@ -51,7 +51,7 @@ export const ListOrders = () => {
     // Confirm delete
     const handleConfirmDelete = () => {
         if (orderToDelete) {
-            dispatch(deleteOrderAction(orderToDelete.id));
+            dispatch(deleteOrderAction(orderToDelete.id, filters));
         }
         setDeleteDialogOpen(false);
         setOrderToDelete(null);
