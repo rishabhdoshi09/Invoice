@@ -53,9 +53,19 @@ export const DailyPayments = () => {
     const [loading, setLoading] = useState(false);
     const [selectedDate, setSelectedDate] = useState(moment().format('YYYY-MM-DD'));
     const [openDialog, setOpenDialog] = useState(false);
+    const [dialogMode, setDialogMode] = useState('simple'); // 'simple' or 'advanced'
     const [suppliers, setSuppliers] = useState([]);
     const [customers, setCustomers] = useState([]);
     const [purchases, setPurchases] = useState([]);
+    
+    // Simple form for quick expense recording
+    const [simpleForm, setSimpleForm] = useState({
+        amount: '',
+        description: '',
+        category: 'misc'
+    });
+    
+    // Advanced form for supplier/customer payments
     const [formData, setFormData] = useState({
         paymentDate: moment().format('YYYY-MM-DD'),
         partyId: '',
@@ -67,6 +77,16 @@ export const DailyPayments = () => {
         referenceNumber: '',
         notes: ''
     });
+
+    // Expense categories for simple mode
+    const expenseCategories = [
+        { value: 'laborer', label: 'Laborer' },
+        { value: 'transport', label: 'Transport' },
+        { value: 'misc', label: 'Miscellaneous' },
+        { value: 'fuel', label: 'Fuel' },
+        { value: 'maintenance', label: 'Maintenance' },
+        { value: 'other', label: 'Other' }
+    ];
 
     const fetchDailySummary = useCallback(async () => {
         try {
