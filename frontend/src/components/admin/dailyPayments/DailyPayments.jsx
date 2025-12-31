@@ -528,13 +528,13 @@ export const DailyPayments = () => {
                                                 <Chip 
                                                     label={payment.partyType} 
                                                     size="small" 
-                                                    color={payment.partyType === 'customer' ? 'success' : 'warning'}
+                                                    color={payment.partyType === 'customer' ? 'success' : payment.partyType === 'expense' ? 'error' : 'warning'}
                                                 />
                                             </TableCell>
                                             <TableCell align="right">
                                                 <Typography 
                                                     fontWeight="bold"
-                                                    color={payment.partyType === 'customer' ? 'success.main' : 'warning.main'}
+                                                    color={payment.partyType === 'customer' ? 'success.main' : 'error.main'}
                                                 >
                                                     {payment.partyType === 'customer' ? '+' : '-'}₹{payment.amount?.toLocaleString()}
                                                 </Typography>
