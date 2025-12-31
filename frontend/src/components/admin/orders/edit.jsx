@@ -247,6 +247,37 @@ export const EditOrder = () => {
     }
   };
 
+  // Delete order handlers
+  const handleDeleteClick = () => {
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      setDeleting(true);
+      await dispatch(deleteOrderAction(orderId));
+      dispatch(setNotification({
+        open: true,
+        severity: 'success',
+        message: 'Invoice deleted successfully!'
+      }));
+      setDeleteDialogOpen(false);
+      navigate('/orders');
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      dispatch(setNotification({
+        open: true,
+        severity: 'error',
+        message: error.response?.data?.message || 'Failed to delete invoice'
+      }));
+      setDeleting(false);
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
