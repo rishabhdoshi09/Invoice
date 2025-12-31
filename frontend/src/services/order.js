@@ -3,15 +3,15 @@ import axios from "axios";
 
 export const listOrders = async (filters) => {
     try{
+        // Remove empty string values to avoid validation issues
+        const cleanFilters = Object.fromEntries(
+            Object.entries(filters).filter(([key, value]) => value !== "" && value !== undefined && value !== null)
+        );
+        
         const { data: { data: { count, rows }}} = await axios.get('/api/orders', {
-            params: {
-                ...filters,
-                _t: Date.now() // Cache-busting timestamp
-            },
+            params: cleanFilters,
             headers: {
-              'Content-Type': 'application/json',
-              'Cache-Control': 'no-cache',
-              'Pragma': 'no-cache'
+              'Content-Type': 'application/json'
             }
         });
         // Keep rows as array to preserve order from backend (sorted by createdAt DESC)
