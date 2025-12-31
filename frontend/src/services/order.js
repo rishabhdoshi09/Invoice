@@ -9,9 +9,8 @@ export const listOrders = async (filters) => {
               'Content-Type': 'application/json'
             }
         });
-        let transformedRows = {};
-        rows.forEach(orderObj => transformedRows[orderObj.id] = orderObj);
-        return { count: count, rows: transformedRows };
+        // Keep rows as array to preserve order from backend (sorted by createdAt DESC)
+        return { count: count, rows: rows };
     }
     catch(error){
         console.log(error);
