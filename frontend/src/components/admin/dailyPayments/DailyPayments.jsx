@@ -61,6 +61,11 @@ export const DailyPayments = () => {
     const [customers, setCustomers] = useState([]);
     const [purchases, setPurchases] = useState([]);
     
+    // Delete confirmation dialog state
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [paymentToDelete, setPaymentToDelete] = useState(null);
+    const [deleting, setDeleting] = useState(false);
+    
     // Simple form for quick expense recording
     const [simpleForm, setSimpleForm] = useState({
         amount: '',
