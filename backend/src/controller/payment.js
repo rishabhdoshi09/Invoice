@@ -73,6 +73,42 @@ module.exports = {
                             referenceId: response.id
                         });
                     }
+                } else if (value.partyType === 'expense') {
+                    // Simple expense: Cash/Bank (Credit) - money going out
+                    // Try to get or create an Expenses ledger
+                    let expenseLedger = await Services.ledger.getLedgerByName('Expenses');
+                    if (!expenseLedger) {
+                        // If no expense ledger, just record the cash outflow
+                        ledgerEntries.push({
+                            ledgerId: CASH_BANK_LEDGER_ID,
+                            entryDate: value.paymentDate,
+                            debit: 0,
+                            credit: value.amount,
+                            description: `Expense: ${value.partyName} - ${value.notes || ''}`,
+                            referenceType: 'payment',
+                            referenceId: response.id
+                        });
+                    } else {
+                        // Double entry: Expense (Debit) to Cash/Bank (Credit)
+                        ledgerEntries.push({
+                            ledgerId: expenseLedger.id,
+                            entryDate: value.paymentDate,
+                            debit: value.amount,
+                            credit: 0,
+                            description: `Expense: ${value.partyName} - ${value.notes || ''}`,
+                            referenceType: 'payment',
+                            referenceId: response.id
+                        });
+                        ledgerEntries.push({
+                            ledgerId: CASH_BANK_LEDGER_ID,
+                            entryDate: value.paymentDate,
+                            debit: 0,
+                            credit: value.amount,
+                            description: `Expense: ${value.partyName} - ${value.notes || ''}`,
+                            referenceType: 'payment',
+                            referenceId: response.id
+                        });
+                    }
                 }
 
                 if (ledgerEntries.length > 0) {
