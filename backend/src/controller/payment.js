@@ -353,9 +353,11 @@ module.exports = {
             const totalAmount = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
             const customerPayments = payments.filter(p => p.partyType === 'customer');
             const supplierPayments = payments.filter(p => p.partyType === 'supplier');
+            const expensePayments = payments.filter(p => p.partyType === 'expense');
             
             const customerTotal = customerPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
             const supplierTotal = supplierPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+            const expenseTotal = expensePayments.reduce((sum, p) => sum + (p.amount || 0), 0);
 
             // Group by reference type
             const orderPayments = payments.filter(p => p.referenceType === 'order');
@@ -377,6 +379,10 @@ module.exports = {
                         suppliers: {
                             count: supplierPayments.length,
                             amount: supplierTotal
+                        },
+                        expenses: {
+                            count: expensePayments.length,
+                            amount: expenseTotal
                         }
                     },
                     byReferenceType: {
