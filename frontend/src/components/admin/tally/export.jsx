@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Box, Button, Card, CardContent, Typography, Grid, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Checkbox, Tabs, Tab, TextField, Alert, Chip, CircularProgress } from '@mui/material';
-import { Download, Refresh, CheckCircle } from '@mui/icons-material';
+import { Download, Refresh, CheckCircle, Receipt } from '@mui/icons-material';
 import axios from 'axios';
 import { listPurchases } from '../../../services/purchase';
 
@@ -92,7 +92,7 @@ export const TallyExport = () => {
         }
     };
 
-    // Export ALL records without needing to select
+    // Export ALL records without needing to select - GSTR-1 format
     const handleExportAll = async (type) => {
         const items = type === 'sales' ? salesOrders : purchases;
         
@@ -116,7 +116,9 @@ export const TallyExport = () => {
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `tally_${type}_ALL_${new Date().toISOString().split('T')[0]}.csv`;
+            link.download = type === 'sales' 
+                ? `GSTR1_Sales_${new Date().toISOString().split('T')[0]}.csv`
+                : `tally_${type}_ALL_${new Date().toISOString().split('T')[0]}.csv`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -148,7 +150,9 @@ export const TallyExport = () => {
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `tally_${type}_export_${new Date().toISOString().split('T')[0]}.csv`;
+            link.download = type === 'sales'
+                ? `GSTR1_Sales_Selected_${new Date().toISOString().split('T')[0]}.csv`
+                : `tally_${type}_export_${new Date().toISOString().split('T')[0]}.csv`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -176,15 +180,28 @@ export const TallyExport = () => {
         window.open(url, '_blank');
     };
 
+    // Helper to get invoice type
+    const getInvoiceType = (gstin) => {
+        if (gstin && gstin.trim() && gstin.trim().toUpperCase() !== 'URP') {
+            return 'B2B';
+        }
+        return 'B2C';
+    };
+
     return (
         <Box sx={{ p: 3 }}>
-            <Typography variant="h5" sx={{ mb: 1 }}>Tally Export</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Export complete bills for Tally import - All records are shown (100%)
+            <Typography variant="h5" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Receipt /> GST Export (GSTR-1 Compliant)
             </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Export invoices in GSTR-1 format for GST filing
+            </Typography>
+            <Alert severity="info" sx={{ mb: 3 }}>
+                <strong>Export Fields:</strong> Invoice Number, Invoice Date, Buyer GSTIN/URP, Place of Supply, HSN (7323), Taxable Value, CGST/SGST/IGST, Invoice Type (B2B/B2C)
+            </Alert>
 
             <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)} sx={{ mb: 3 }}>
-                <Tab label={`Sales Orders ${totalSalesCount > 0 ? `(${totalSalesCount})` : ''}`} />
+                <Tab label={`Sales Invoices ${totalSalesCount > 0 ? `(${totalSalesCount})` : ''}`} />
                 <Tab label={`Purchases ${totalPurchasesCount > 0 ? `(${totalPurchasesCount})` : ''}`} />
                 <Tab label="Payments & Outstanding" />
             </Tabs>
