@@ -612,6 +612,54 @@ export const EditOrder = () => {
           </Box>
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
+          <Warning /> Delete Invoice
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete this invoice?
+          </DialogContentText>
+          {orderData && (
+            <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+              <Typography variant="body2"><strong>Invoice No:</strong> {orderData.orderNumber}</Typography>
+              <Typography variant="body2"><strong>Date:</strong> {orderData.orderDate}</Typography>
+              <Typography variant="body2"><strong>Customer:</strong> {orderData.customerName || 'N/A'}</Typography>
+              <Typography variant="body2"><strong>Mobile:</strong> {orderData.customerMobile || 'N/A'}</Typography>
+              <Divider sx={{ my: 1 }} />
+              <Typography variant="body2"><strong>Subtotal:</strong> ₹{orderData.subTotal?.toLocaleString()}</Typography>
+              <Typography variant="body2"><strong>Tax ({orderData.taxPercent}%):</strong> ₹{orderData.tax?.toLocaleString()}</Typography>
+              <Typography variant="body1" fontWeight="bold" color="primary.main">
+                <strong>Total:</strong> ₹{orderData.total?.toLocaleString()}
+              </Typography>
+            </Box>
+          )}
+          <Alert severity="error" sx={{ mt: 2 }}>
+            <strong>⚠️ Warning:</strong> This action cannot be undone. The invoice and all its items will be permanently deleted.
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleDeleteConfirm} 
+            color="error" 
+            variant="contained"
+            disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={16} /> : <Delete />}
+          >
+            {deleting ? 'Deleting...' : 'Delete Invoice'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
