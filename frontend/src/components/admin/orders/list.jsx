@@ -75,6 +75,12 @@ export const ListOrders = () => {
         }
     }, [refetch, dispatch, filters]);
 
+    // Always fetch fresh data when component mounts (navigating to the page)
+    useEffect(() => {
+        dispatch(listOrdersAction(filters));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     // Restore scroll position after data is loaded - use useLayoutEffect for sync scroll restoration
     useLayoutEffect(() => {
         if (rows.length > 0 && !scrollRestoredRef.current) {
