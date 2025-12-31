@@ -34,6 +34,9 @@ module.exports = {
     validateListOrdersObj: (orderObj) => {
         const schema = Joi.object().keys({
             q: Joi.string().trim().allow("").optional(),
+            date: Joi.string().trim().allow("").optional(),
+            startDate: Joi.string().trim().allow("").optional(),
+            endDate: Joi.string().trim().allow("").optional(),
             limit: Joi.number().optional(),
             offset: Joi.number().optional()
         });
