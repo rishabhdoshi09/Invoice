@@ -377,7 +377,7 @@ export const DailyPayments = () => {
 
             {/* Summary Cards */}
             <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid item xs={12} sm={6} md={2.4}>
                     <Paper elevation={2} sx={{ p: 2, bgcolor: '#e3f2fd' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <AccountBalance color="primary" />
@@ -393,7 +393,7 @@ export const DailyPayments = () => {
                         </Box>
                     </Paper>
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid item xs={12} sm={6} md={2.4}>
                     <Paper elevation={2} sx={{ p: 2, bgcolor: '#e8f5e9' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <People color="success" />
@@ -409,7 +409,7 @@ export const DailyPayments = () => {
                         </Box>
                     </Paper>
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid item xs={12} sm={6} md={2.4}>
                     <Paper elevation={2} sx={{ p: 2, bgcolor: '#fff3e0' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <LocalShipping color="warning" />
@@ -425,19 +425,35 @@ export const DailyPayments = () => {
                         </Box>
                     </Paper>
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid item xs={12} sm={6} md={2.4}>
+                    <Paper elevation={2} sx={{ p: 2, bgcolor: '#ffebee' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <AccountBalance sx={{ color: '#d32f2f' }} />
+                            <Box>
+                                <Typography variant="body2" color="text.secondary">Expenses</Typography>
+                                <Typography variant="h5" fontWeight="bold" color="error.main">
+                                    ₹{summary?.summary?.expenses?.amount?.toLocaleString() || 0}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    {summary?.summary?.expenses?.count || 0} expenses
+                                </Typography>
+                            </Box>
+                        </Box>
+                    </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={2.4}>
                     <Paper elevation={2} sx={{ p: 2, bgcolor: '#f3e5f5' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <TrendingUp color="secondary" />
                             <Box>
                                 <Typography variant="body2" color="text.secondary">Net Cash Flow</Typography>
                                 <Typography variant="h5" fontWeight="bold" 
-                                    color={(summary?.summary?.customers?.amount || 0) - (summary?.summary?.suppliers?.amount || 0) >= 0 ? 'success.main' : 'error.main'}
+                                    color={(summary?.summary?.customers?.amount || 0) - (summary?.summary?.suppliers?.amount || 0) - (summary?.summary?.expenses?.amount || 0) >= 0 ? 'success.main' : 'error.main'}
                                 >
-                                    ₹{((summary?.summary?.customers?.amount || 0) - (summary?.summary?.suppliers?.amount || 0)).toLocaleString()}
+                                    ₹{((summary?.summary?.customers?.amount || 0) - (summary?.summary?.suppliers?.amount || 0) - (summary?.summary?.expenses?.amount || 0)).toLocaleString()}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
-                                    (Received - Paid)
+                                    (In - Out - Expenses)
                                 </Typography>
                             </Box>
                         </Box>
