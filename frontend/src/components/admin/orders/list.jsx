@@ -190,6 +190,15 @@ export const ListOrders = () => {
                         Clear Date
                     </Button>
                 )}
+                <Tooltip title="Refresh list">
+                    <IconButton 
+                        color="primary" 
+                        onClick={() => dispatch(listOrdersAction(filters))}
+                        sx={{ ml: 1 }}
+                    >
+                        <Refresh />
+                    </IconButton>
+                </Tooltip>
                 <Button variant="contained" onClick={() => navigate(`create`)}>Create Order</Button>
             </Box>
 
