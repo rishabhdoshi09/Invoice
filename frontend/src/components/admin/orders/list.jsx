@@ -76,10 +76,19 @@ export const ListOrders = () => {
     }, [refetch, dispatch, filters]);
 
     // Always fetch fresh data when component mounts or when location changes (navigating to the page)
+    // Also fetch when rows is empty (after order creation clears the cache)
     useEffect(() => {
         dispatch(listOrdersAction(filters));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [location.key]);
+
+    // Fetch when orders are cleared (after creating a new order)
+    useEffect(() => {
+        if (rows.length === 0 && count === 0) {
+            dispatch(listOrdersAction(filters));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [rows.length, count]);
 
     // Restore scroll position after data is loaded - use useLayoutEffect for sync scroll restoration
     useLayoutEffect(() => {
