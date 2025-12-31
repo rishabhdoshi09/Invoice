@@ -1,11 +1,11 @@
-import { Button, Paper, TextField, Typography, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, Chip, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
+import { Button, Paper, TextField, Typography, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, Chip, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Box } from '@mui/material';
 import { useNavigate, useLocation } from 'react-router';
 import { useDispatch, useSelector } from 'react-redux';
 import { useEffect, useState, useRef, useLayoutEffect } from 'react';
 import { listOrdersAction, deleteOrderAction  } from '../../../store/orders';
 import { Pagination } from '../../common/pagination';
 import { useAuth } from '../../../context/AuthContext';
-import { Note, Warning } from '@mui/icons-material';
+import { Note, Warning, Clear } from '@mui/icons-material';
 
 // Key for storing scroll position
 const SCROLL_POSITION_KEY = 'orders_scroll_position';
