@@ -31,14 +31,19 @@ module.exports = {
     },
     listOrders: async (filterObj) => {
         try {
+            const whereClause = {
+                isDeleted: false  // Always filter out deleted orders
+            };
+            
+            // Add search filter if provided
+            if (filterObj.q && filterObj.q !== "") {
+                whereClause.orderNumber = {
+                    [db.Sequelize.Op.iLike]: `%${filterObj.q}%`
+                };
+            }
+            
             const res = await db.order.findAndCountAll({ 
-                ...( filterObj.q && filterObj.q !== "" ? {
-                    where: {
-                        orderNumber: {
-                            [db.Sequelize.Op.iLike]: `%${filterObj.q}%`
-                        }
-                    }}
-                : {}),
+                where: whereClause,
                 order: [['createdAt', 'DESC']], 
                 include: [ { model: db.orderItems }], 
                 distinct: true,
