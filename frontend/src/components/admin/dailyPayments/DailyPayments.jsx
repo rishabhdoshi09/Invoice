@@ -321,6 +321,34 @@ export const DailyPayments = () => {
         }
     };
 
+    // Delete payment handlers
+    const handleDeleteClick = (payment) => {
+        setPaymentToDelete(payment);
+        setDeleteDialogOpen(true);
+    };
+
+    const handleDeleteCancel = () => {
+        setDeleteDialogOpen(false);
+        setPaymentToDelete(null);
+    };
+
+    const handleDeleteConfirm = async () => {
+        if (!paymentToDelete) return;
+        
+        try {
+            setDeleting(true);
+            await axios.delete(`/api/payments/${paymentToDelete.id}`);
+            setDeleteDialogOpen(false);
+            setPaymentToDelete(null);
+            fetchDailySummary(); // Refresh the list
+        } catch (error) {
+            console.error('Error deleting payment:', error);
+            alert('Error deleting payment. Please try again.');
+        } finally {
+            setDeleting(false);
+        }
+    };
+
     const isToday = selectedDate === moment().format('YYYY-MM-DD');
 
     return (
