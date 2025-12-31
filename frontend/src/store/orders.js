@@ -13,6 +13,9 @@ const initialState = {
 const reducers = {
     setOrders(state, action) {
         state.orders = action.payload;
+    },
+    clearOrders(state) {
+        state.orders = { count: 0, rows: [] };
     }
 }
 
@@ -22,7 +25,9 @@ const orderSlice = createSlice({
     reducers: reducers
 });
 
-const { setOrders } = orderSlice.actions;
+const { setOrders, clearOrders } = orderSlice.actions;
+
+export { clearOrders };
 
 export default orderSlice;
 
