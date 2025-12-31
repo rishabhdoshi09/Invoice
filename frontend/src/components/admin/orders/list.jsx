@@ -162,9 +162,9 @@ export const ListOrders = () => {
                     </TableHead>
                     <TableBody>
                         {
-                            Children.toArray(Object.values(rows).map((orderObj) => {
+                            rows.map((orderObj) => {
                                 return (
-                                    <TableRow sx={orderObj.staffNotes ? { bgcolor: '#fff8e1' } : {}} id={`order-row-${orderObj.id}`}>
+                                    <TableRow key={orderObj.id} sx={orderObj.staffNotes ? { bgcolor: '#fff8e1' } : {}} id={`order-row-${orderObj.id}`}>
                                         <TableCell>{orderObj.orderNumber}</TableCell>
                                         <TableCell>{orderObj.orderDate}</TableCell>
                                         <TableCell>{orderObj.customerName}</TableCell>
@@ -203,7 +203,7 @@ export const ListOrders = () => {
                                         </TableCell>
                                     </TableRow>
                                 );
-                            }))
+                            })
                         }
                     </TableBody>
                 </Table>
