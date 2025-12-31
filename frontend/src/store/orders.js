@@ -61,14 +61,15 @@ export const createOrderAction = (payload) => {
     }
 }
 
-export const deleteOrderAction = (orderId) => {
+export const deleteOrderAction = (orderId, filters) => {
     return async(dispatch) => {
         try{
             dispatch(startLoading());
             await deleteOrder(orderId);
             dispatch(setNotification({ open: true, severity: 'success', message: 'Order deleted successfully'}));
             dispatch(stopLoading());
-            dispatch(listOrdersAction());
+            // Refresh with current filters to maintain pagination state
+            dispatch(listOrdersAction(filters || { limit: 25, offset: 0 }));
         }
         catch(error){
             console.log(error);
