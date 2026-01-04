@@ -782,8 +782,8 @@ export const CreateOrder = () => {
     const navKeys = ['ArrowLeft','ArrowRight','Tab','Home','End'];
     if (navKeys.includes(e.key)) return;
 
-    // Tens digit protection: block 1,2,3,4 in tens place unless Command key is held
-    if (tensDigitProtection && /^[1234]$/.test(e.key) && !e.metaKey && !commandKeyHeldRef.current) {
+    // Tens digit protection: block 1,2,3,4 in tens place unless Caps Lock is ON
+    if (tensDigitProtection && /^[1234]$/.test(e.key) && !e.getModifierState('CapsLock')) {
       const target = e.target;
       const currentValue = String(target.value || '');
       const selStart = target.selectionStart ?? currentValue.length;
