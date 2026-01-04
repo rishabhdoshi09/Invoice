@@ -803,6 +803,25 @@ export const CreateOrder = () => {
     const navKeys = ['ArrowLeft','ArrowRight','Tab','Home','End'];
     if (navKeys.includes(e.key)) return;
 
+    // Tens digit protection: block 1,2,3,4 in tens place unless Command key is held
+    if (tensDigitProtection && /^[1234]$/.test(e.key) && !e.metaKey && !commandKeyHeldRef.current) {
+      const target = e.target;
+      const currentValue = String(target.value || '');
+      const selStart = target.selectionStart ?? currentValue.length;
+      const selEnd = target.selectionEnd ?? selStart;
+      
+      // Check if typing in tens place (position 1, i.e., second character)
+      // This happens when: cursor is at position 1, or selecting from position 1
+      // OR when current value has 1 digit and we're adding the second
+      const wouldBeInTensPlace = (currentValue.length === 1 && selStart === 1 && selEnd === 1) ||
+                                  (selStart === 1 && selEnd === 1);
+      
+      if (wouldBeInTensPlace) {
+        e.preventDefault();
+        return;
+      }
+    }
+
     if (bowlPriceLock) {
       const allowed = ['Backspace','Delete'];
       if (!/^\d$/.test(e.key) && !allowed.includes(e.key)) {
