@@ -543,13 +543,9 @@ export const CreateOrder = () => {
       setTimeout(() => {
         const el = priceInputRef && priceInputRef.current;
         if (!el || typeof el.focus !== 'function') return;
-        
-        // Don't interfere if user is already typing in the field
-        if (document.activeElement === el) return;
-        
         el.focus();
         const val = String(el.value || '');
-        const len = val.length;
+               const len = val.length;
         if (typeof el.setSelectionRange === 'function') {
           const num = Number(val);
           if (Number.isFinite(num) && num >= 200 && num <= 299 && len >= 3) {
