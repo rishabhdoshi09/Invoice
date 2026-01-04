@@ -540,12 +540,17 @@ export const CreateOrder = () => {
   // Helper: focus main price input, with 2xx last-two-digit selection
   const focusMainPriceInput = useCallback(() => {
     try {
+      // Use a longer timeout to avoid interfering with fast typing
       setTimeout(() => {
         const el = priceInputRef && priceInputRef.current;
         if (!el || typeof el.focus !== 'function') return;
+        
+        // Don't interfere if user is already typing (document.activeElement check)
+        if (document.activeElement === el) return;
+        
         el.focus();
         const val = String(el.value || '');
-               const len = val.length;
+        const len = val.length;
         if (typeof el.setSelectionRange === 'function') {
           const num = Number(val);
           if (Number.isFinite(num) && num >= 200 && num <= 299 && len >= 3) {
@@ -556,7 +561,7 @@ export const CreateOrder = () => {
         } else if (typeof el.select === 'function') {
           el.select();
         }
-      }, 80);
+      }, 150); // Increased from 80ms to 150ms
     } catch {}
   }, []);
 
