@@ -2,6 +2,7 @@
 import { useDispatch, useSelector } from "react-redux";
 import { useFormik } from "formik";
 import { Box, Button, Grid, Select, MenuItem, TextField, Typography } from "@mui/material";
+import { useState, useEffect } from "react";
 
 import { updateProductAction } from "../../../store/products";
 import { ProductType } from "../../../enums/product";
@@ -10,6 +11,9 @@ export const EditProduct = ({ productId }) => {
 
     const dispatch = useDispatch();
     const { products: { rows} } = useSelector(state => state.productState);
+    
+    // Use local state for price input to avoid conversion issues during typing
+    const [priceInput, setPriceInput] = useState(String(rows[productId].pricePerKg));
     
     const formik = useFormik({
         initialValues: {
@@ -22,7 +26,7 @@ export const EditProduct = ({ productId }) => {
             if (values.name === "") {
                 errors.name = "Product name is required"
             }
-            if (values.pricePerKg === "") {
+            if (values.pricePerKg === "" || values.pricePerKg === null || isNaN(values.pricePerKg)) {
                 errors.pricePerKg = "Product price is required"
             }
             return errors;
@@ -32,6 +36,30 @@ export const EditProduct = ({ productId }) => {
             await dispatch(updateProductAction(productId, values));
         }
     });
+
+    // Sync price input to formik when user stops typing (on blur)
+    const handlePriceBlur = () => {
+        const numValue = parseFloat(priceInput);
+        if (!isNaN(numValue)) {
+            formik.setFieldValue('pricePerKg', numValue);
+        }
+    };
+
+    // Handle price input change - keep as string during typing
+    const handlePriceChange = (e) => {
+        const value = e.target.value;
+        setPriceInput(value);
+        // Also update formik immediately for validation
+        const numValue = parseFloat(value);
+        if (!isNaN(numValue)) {
+            formik.setFieldValue('pricePerKg', numValue);
+        }
+    };
+
+    // Reset local state when product changes
+    useEffect(() => {
+        setPriceInput(String(rows[productId].pricePerKg));
+    }, [productId, rows]);
 
     // Check if product is high-value (≥300)
     const isHighValue = rows[productId].pricePerKg >= 300;
