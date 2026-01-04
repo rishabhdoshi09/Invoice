@@ -167,17 +167,17 @@ export const EditProduct = ({ productId }) => {
                 </Box>
 
                 {/* Price Preview */}
-                {formik.values.pricePerKg && !isNaN(formik.values.pricePerKg) && (
+                {priceInput && !isNaN(parseFloat(priceInput)) && (
                     <Typography 
                         variant="h5" 
                         sx={{ 
                             mb: 4, 
-                            color: parseFloat(formik.values.pricePerKg) !== rows[productId].pricePerKg ? '#1976d2' : '#999',
+                            color: parseFloat(priceInput) !== rows[productId].pricePerKg ? '#1976d2' : '#999',
                             fontWeight: 600,
                             textAlign: 'center'
                         }}
                     >
-                        New Price: ₹{parseFloat(formik.values.pricePerKg).toFixed(2)}
+                        New Price: ₹{parseFloat(priceInput).toFixed(2)}
                     </Typography>
                 )}
 
@@ -186,7 +186,7 @@ export const EditProduct = ({ productId }) => {
                     variant="contained" 
                     size="large"
                     onClick={formik.handleSubmit}
-                    disabled={formik.values.pricePerKg === rows[productId].pricePerKg}
+                    disabled={parseFloat(priceInput) === rows[productId].pricePerKg || isNaN(parseFloat(priceInput))}
                     sx={{ 
                         minWidth: 200,
                         fontSize: '1.1rem',
@@ -195,6 +195,7 @@ export const EditProduct = ({ productId }) => {
                     }}
                 >
                     Update Price
+                </Button>
                 </Button>
             </Box>
         );
