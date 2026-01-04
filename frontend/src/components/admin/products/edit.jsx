@@ -2,7 +2,6 @@
 import { useDispatch, useSelector } from "react-redux";
 import { useFormik } from "formik";
 import { Box, Button, Grid, Select, MenuItem, TextField, Typography } from "@mui/material";
-import { useState, useRef } from "react";
 
 import { updateProductAction } from "../../../store/products";
 import { ProductType } from "../../../enums/product";
@@ -11,54 +10,31 @@ export const EditProduct = ({ productId }) => {
 
     const dispatch = useDispatch();
     const { products: { rows} } = useSelector(state => state.productState);
-    const product = rows[productId];
-    
-    // Use local state for price input to avoid issues during typing
-    const [priceInput, setPriceInput] = useState(String(product.pricePerKg));
-    const lastProductId = useRef(productId);
-    
-    // Reset price input only when productId changes (not on every render)
-    if (lastProductId.current !== productId) {
-        lastProductId.current = productId;
-        setPriceInput(String(product.pricePerKg));
-    }
     
     const formik = useFormik({
         initialValues: {
-            name: product.name,
-            pricePerKg: product.pricePerKg,
-            type: product.type
+            name: rows[productId].name,
+            pricePerKg: rows[productId].pricePerKg,
+            type: rows[productId].type
         },
-        enableReinitialize: false, // Don't reinitialize on prop changes
         validate: (values) => {
             const errors = {};
             if (values.name === "") {
                 errors.name = "Product name is required"
             }
-            if (values.pricePerKg === "" || values.pricePerKg === null || isNaN(values.pricePerKg)) {
+            if (values.pricePerKg === "") {
                 errors.pricePerKg = "Product price is required"
             }
             return errors;
         },
         validateOnBlur: true,
-        validateOnChange: false, // Don't validate on every change
         onSubmit: async (values) => {
-            // Use priceInput value for submission
-            const submitValues = {
-                ...values,
-                pricePerKg: parseFloat(priceInput) || values.pricePerKg
-            };
-            await dispatch(updateProductAction(productId, submitValues));
+            await dispatch(updateProductAction(productId, values));
         }
     });
 
-    // Handle price input change - just update local state, no formik sync during typing
-    const handlePriceChange = (e) => {
-        setPriceInput(e.target.value);
-    };
-
     // Check if product is high-value (≥300)
-    const isHighValue = product.pricePerKg >= 300;
+    const isHighValue = rows[productId].pricePerKg >= 300;
 
     // If high-value product, show clean focused interface
     if (isHighValue) {
@@ -126,16 +102,16 @@ export const EditProduct = ({ productId }) => {
                     <TextField
                         fullWidth
                         id="pricePerKg"
-                        type="text"
-                        inputMode="decimal"
+                        type="number"
                         name="pricePerKg"
-                        value={priceInput}
-                        onChange={handlePriceChange}
-                        onBlur={handlePriceBlur}
+                        value={formik.values.pricePerKg}
+                        onChange={formik.handleChange}
                         required
-                        error={Boolean(formik.errors.pricePerKg)}
+                        error={formik.errors.pricePerKg}
                         helperText={formik.errors.pricePerKg}
                         inputProps={{ 
+                            min: 0,
+                            step: 0.01,
                             style: { 
                                 fontSize: '3rem',
                                 textAlign: 'center',
@@ -148,7 +124,7 @@ export const EditProduct = ({ productId }) => {
                                 bgcolor: 'white',
                                 '& fieldset': {
                                     borderWidth: '3px',
-                                    borderColor: parseFloat(priceInput) !== rows[productId].pricePerKg ? '#1976d2' : '#ccc'
+                                    borderColor: formik.values.pricePerKg !== rows[productId].pricePerKg ? '#1976d2' : '#ccc'
                                 },
                                 '&:hover fieldset': {
                                     borderColor: '#1976d2',
@@ -163,17 +139,17 @@ export const EditProduct = ({ productId }) => {
                 </Box>
 
                 {/* Price Preview */}
-                {priceInput && !isNaN(parseFloat(priceInput)) && (
+                {formik.values.pricePerKg && !isNaN(formik.values.pricePerKg) && (
                     <Typography 
                         variant="h5" 
                         sx={{ 
                             mb: 4, 
-                            color: parseFloat(priceInput) !== rows[productId].pricePerKg ? '#1976d2' : '#999',
+                            color: parseFloat(formik.values.pricePerKg) !== rows[productId].pricePerKg ? '#1976d2' : '#999',
                             fontWeight: 600,
                             textAlign: 'center'
                         }}
                     >
-                        New Price: ₹{parseFloat(priceInput).toFixed(2)}
+                        New Price: ₹{parseFloat(formik.values.pricePerKg).toFixed(2)}
                     </Typography>
                 )}
 
@@ -182,7 +158,7 @@ export const EditProduct = ({ productId }) => {
                     variant="contained" 
                     size="large"
                     onClick={formik.handleSubmit}
-                    disabled={parseFloat(priceInput) === rows[productId].pricePerKg || isNaN(parseFloat(priceInput))}
+                    disabled={formik.values.pricePerKg === rows[productId].pricePerKg}
                     sx={{ 
                         minWidth: 200,
                         fontSize: '1.1rem',
@@ -210,7 +186,7 @@ export const EditProduct = ({ productId }) => {
                         onChange={formik.handleChange}
                         required
                         fullWidth
-                        error={Boolean(formik.errors.name)}
+                        error={formik.errors.name}
                         helperText={formik.errors.name}
                     />
                 </Grid>
@@ -218,16 +194,14 @@ export const EditProduct = ({ productId }) => {
                     <TextField
                         size="small"
                         id="pricePerKg"
-                        type="text"
-                        inputMode="decimal"
+                        type="number"
                         name="pricePerKg"
                         label="Product Price (per Kg)"
-                        value={priceInput}
-                        onChange={handlePriceChange}
-                        onBlur={handlePriceBlur}
+                        value={formik.values.pricePerKg}
+                        onChange={formik.handleChange}
                         required
                         fullWidth
-                        error={Boolean(formik.errors.pricePerKg)}
+                        error={formik.errors.pricePerKg}
                         helperText={formik.errors.pricePerKg}
                     />
                 </Grid>
