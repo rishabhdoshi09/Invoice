@@ -196,7 +196,6 @@ export const EditProduct = ({ productId }) => {
                 >
                     Update Price
                 </Button>
-                </Button>
             </Box>
         );
     }
