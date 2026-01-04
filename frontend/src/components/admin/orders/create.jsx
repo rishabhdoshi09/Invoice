@@ -1774,6 +1774,19 @@ export const CreateOrder = () => {
                 )}
               </CardContent>
             </Card>
+
+            {/* Tens digit protection toggle - discreet placement */}
+            <Box sx={{ mt: 1, display: 'flex', justifyContent: 'flex-end', opacity: 0.5 }}>
+              <Button
+                size="small"
+                variant={tensDigitProtection ? "contained" : "outlined"}
+                color={tensDigitProtection ? "primary" : "inherit"}
+                onClick={() => setTensDigitProtection(!tensDigitProtection)}
+                sx={{ fontSize: '0.65rem', py: 0.25, px: 1, minWidth: 'auto' }}
+              >
+                {tensDigitProtection ? '₹X50+' : '₹X00+'}
+              </Button>
+            </Box>
           </Box>
         </Grid>
       </Grid>
