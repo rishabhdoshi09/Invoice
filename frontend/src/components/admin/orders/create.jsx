@@ -540,12 +540,11 @@ export const CreateOrder = () => {
   // Helper: focus main price input, with 2xx last-two-digit selection
   const focusMainPriceInput = useCallback(() => {
     try {
-      // Use a longer timeout to avoid interfering with fast typing
       setTimeout(() => {
         const el = priceInputRef && priceInputRef.current;
         if (!el || typeof el.focus !== 'function') return;
         
-        // Don't interfere if user is already typing (document.activeElement check)
+        // Don't interfere if user is already typing in the field
         if (document.activeElement === el) return;
         
         el.focus();
@@ -561,7 +560,7 @@ export const CreateOrder = () => {
         } else if (typeof el.select === 'function') {
           el.select();
         }
-      }, 150); // Increased from 80ms to 150ms
+      }, 80);
     } catch {}
   }, []);
 
