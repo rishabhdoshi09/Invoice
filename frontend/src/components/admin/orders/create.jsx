@@ -334,6 +334,30 @@ export const CreateOrder = () => {
     setDailyHistory(computeDailyTotalsFromInvoices(inv));
   }, []);
 
+  // Tens digit protection - blocks 1,2,3,4 in tens place unless Command key is held
+  const [tensDigitProtection, setTensDigitProtection] = useState(true); // Default ON
+  const commandKeyHeldRef = useRef(false);
+
+  // Track Command key state globally
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.metaKey || e.key === 'Meta') {
+        commandKeyHeldRef.current = true;
+      }
+    };
+    const handleKeyUp = (e) => {
+      if (e.key === 'Meta' || !e.metaKey) {
+        commandKeyHeldRef.current = false;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
   const printPdf = useCallback(() => {
     try {
       if (!pdfUrl && !archivedPdfUrl) return;
