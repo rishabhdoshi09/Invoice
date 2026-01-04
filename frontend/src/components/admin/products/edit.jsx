@@ -2,7 +2,7 @@
 import { useDispatch, useSelector } from "react-redux";
 import { useFormik } from "formik";
 import { Box, Button, Grid, Select, MenuItem, TextField, Typography } from "@mui/material";
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
 
 import { updateProductAction } from "../../../store/products";
 import { ProductType } from "../../../enums/product";
@@ -11,16 +11,25 @@ export const EditProduct = ({ productId }) => {
 
     const dispatch = useDispatch();
     const { products: { rows} } = useSelector(state => state.productState);
+    const product = rows[productId];
     
-    // Use local state for price input to avoid conversion issues during typing
-    const [priceInput, setPriceInput] = useState(String(rows[productId].pricePerKg));
+    // Use local state for price input to avoid issues during typing
+    const [priceInput, setPriceInput] = useState(String(product.pricePerKg));
+    const lastProductId = useRef(productId);
+    
+    // Reset price input only when productId changes (not on every render)
+    if (lastProductId.current !== productId) {
+        lastProductId.current = productId;
+        setPriceInput(String(product.pricePerKg));
+    }
     
     const formik = useFormik({
         initialValues: {
-            name: rows[productId].name,
-            pricePerKg: rows[productId].pricePerKg,
-            type: rows[productId].type
+            name: product.name,
+            pricePerKg: product.pricePerKg,
+            type: product.type
         },
+        enableReinitialize: false, // Don't reinitialize on prop changes
         validate: (values) => {
             const errors = {};
             if (values.name === "") {
@@ -32,37 +41,24 @@ export const EditProduct = ({ productId }) => {
             return errors;
         },
         validateOnBlur: true,
+        validateOnChange: false, // Don't validate on every change
         onSubmit: async (values) => {
-            await dispatch(updateProductAction(productId, values));
+            // Use priceInput value for submission
+            const submitValues = {
+                ...values,
+                pricePerKg: parseFloat(priceInput) || values.pricePerKg
+            };
+            await dispatch(updateProductAction(productId, submitValues));
         }
     });
 
-    // Sync price input to formik when user stops typing (on blur)
-    const handlePriceBlur = () => {
-        const numValue = parseFloat(priceInput);
-        if (!isNaN(numValue)) {
-            formik.setFieldValue('pricePerKg', numValue);
-        }
-    };
-
-    // Handle price input change - keep as string during typing
+    // Handle price input change - just update local state, no formik sync during typing
     const handlePriceChange = (e) => {
-        const value = e.target.value;
-        setPriceInput(value);
-        // Also update formik immediately for validation
-        const numValue = parseFloat(value);
-        if (!isNaN(numValue)) {
-            formik.setFieldValue('pricePerKg', numValue);
-        }
+        setPriceInput(e.target.value);
     };
-
-    // Reset local state when product changes
-    useEffect(() => {
-        setPriceInput(String(rows[productId].pricePerKg));
-    }, [productId, rows]);
 
     // Check if product is high-value (≥300)
-    const isHighValue = rows[productId].pricePerKg >= 300;
+    const isHighValue = product.pricePerKg >= 300;
 
     // If high-value product, show clean focused interface
     if (isHighValue) {
