@@ -215,7 +215,7 @@ export const EditProduct = ({ productId }) => {
                         onChange={formik.handleChange}
                         required
                         fullWidth
-                        error={formik.errors.name}
+                        error={Boolean(formik.errors.name)}
                         helperText={formik.errors.name}
                     />
                 </Grid>
@@ -223,14 +223,16 @@ export const EditProduct = ({ productId }) => {
                     <TextField
                         size="small"
                         id="pricePerKg"
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         name="pricePerKg"
                         label="Product Price (per Kg)"
-                        value={formik.values.pricePerKg}
-                        onChange={formik.handleChange}
+                        value={priceInput}
+                        onChange={handlePriceChange}
+                        onBlur={handlePriceBlur}
                         required
                         fullWidth
-                        error={formik.errors.pricePerKg}
+                        error={Boolean(formik.errors.pricePerKg)}
                         helperText={formik.errors.pricePerKg}
                     />
                 </Grid>
