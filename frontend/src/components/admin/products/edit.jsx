@@ -130,16 +130,16 @@ export const EditProduct = ({ productId }) => {
                     <TextField
                         fullWidth
                         id="pricePerKg"
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         name="pricePerKg"
-                        value={formik.values.pricePerKg}
-                        onChange={formik.handleChange}
+                        value={priceInput}
+                        onChange={handlePriceChange}
+                        onBlur={handlePriceBlur}
                         required
-                        error={formik.errors.pricePerKg}
+                        error={Boolean(formik.errors.pricePerKg)}
                         helperText={formik.errors.pricePerKg}
                         inputProps={{ 
-                            min: 0,
-                            step: 0.01,
                             style: { 
                                 fontSize: '3rem',
                                 textAlign: 'center',
@@ -152,7 +152,7 @@ export const EditProduct = ({ productId }) => {
                                 bgcolor: 'white',
                                 '& fieldset': {
                                     borderWidth: '3px',
-                                    borderColor: formik.values.pricePerKg !== rows[productId].pricePerKg ? '#1976d2' : '#ccc'
+                                    borderColor: parseFloat(priceInput) !== rows[productId].pricePerKg ? '#1976d2' : '#ccc'
                                 },
                                 '&:hover fieldset': {
                                     borderColor: '#1976d2',
