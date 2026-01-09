@@ -366,7 +366,7 @@ export const CreateOrder = () => {
     customer: null,
     notes: "",
     orderNumber: "ORD-XXXXXXXX",
-    orderDate: moment().format("DD-MM-YYYY"),
+    orderDate: moment().format("DD-MM-YYYY"), // This is set once on mount
     orderItems: [], 
     subTotal: 0, 
     tax: 0, 
@@ -375,6 +375,35 @@ export const CreateOrder = () => {
   }), []);
   
   const [orderProps, setOrderProps] = useState(initialOrderProps);
+  
+  // Update orderDate to today whenever the component becomes visible/focused
+  useEffect(() => {
+    const updateDateIfNeeded = () => {
+      const today = moment().format("DD-MM-YYYY");
+      setOrderProps(prev => {
+        if (prev.orderDate !== today) {
+          return { ...prev, orderDate: today };
+        }
+        return prev;
+      });
+    };
+    
+    // Update on mount
+    updateDateIfNeeded();
+    
+    // Update when window gains focus (user comes back to tab)
+    window.addEventListener('focus', updateDateIfNeeded);
+    
+    // Update at midnight
+    const msToMidnight = msToNextMidnight();
+    const midnightTimer = setTimeout(updateDateIfNeeded, msToMidnight + 1000);
+    
+    return () => {
+      window.removeEventListener('focus', updateDateIfNeeded);
+      clearTimeout(midnightTimer);
+    };
+  }, []);
+  
   const orderItemsRef = useRef(orderProps.orderItems || []);
   useEffect(() => { orderItemsRef.current = orderProps.orderItems || []; }, [orderProps.orderItems]);
 
