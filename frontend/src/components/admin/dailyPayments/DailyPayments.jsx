@@ -658,7 +658,7 @@ export const DailyPayments = () => {
             )}
 
             {/* Outstanding Payables Section */}
-            {outstandingPayables.length > 0 && (
+            {Array.isArray(outstandingPayables) && outstandingPayables.length > 0 && (
                 <Box sx={{ mb: 3 }}>
                     <Paper elevation={2} sx={{ p: 2, bgcolor: '#ffebee', border: '1px solid #ef5350' }}>
                         <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
