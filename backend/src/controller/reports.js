@@ -1,42 +1,62 @@
 const Services = require('../services');
 const db = require('../models');
+const { Op } = require('sequelize');
 
 module.exports = {
     getOutstandingReceivables: async (req, res) => {
         try {
-            // Get all customers with outstanding balance (currentBalance > 0)
-            const customers = await db.customer.findAll({
+            // Get outstanding receivables from orders (credit sales)
+            const unpaidOrders = await db.order.findAll({
                 where: {
-                    currentBalance: {
-                        [db.Sequelize.Op.gt]: 0
+                    paymentStatus: {
+                        [Op.in]: ['unpaid', 'partial']
+                    },
+                    isDeleted: false,
+                    customerName: {
+                        [Op.ne]: ''
                     }
                 },
-                attributes: ['id', 'name', 'mobile', 'currentBalance'],
-                include: [{
-                    model: db.order,
-                    where: {
-                        paymentStatus: {
-                            [db.Sequelize.Op.in]: ['unpaid', 'partial']
-                        }
-                    },
-                    required: false,
-                    attributes: ['id', 'orderNumber', 'orderDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus']
-                }],
-                order: [['name', 'ASC']]
+                attributes: ['id', 'orderNumber', 'orderDate', 'customerName', 'customerMobile', 'total', 'paidAmount', 'dueAmount', 'paymentStatus'],
+                order: [['customerName', 'ASC'], ['orderDate', 'DESC']]
             });
 
-            let totalReceivable = 0;
-            customers.forEach(customer => {
-                totalReceivable += customer.currentBalance || 0;
+            // Group by customer name
+            const customerMap = {};
+            unpaidOrders.forEach(order => {
+                const name = order.customerName || 'Unknown';
+                if (!customerMap[name]) {
+                    customerMap[name] = {
+                        customerName: name,
+                        customerMobile: order.customerMobile,
+                        totalOutstanding: 0,
+                        orderCount: 0,
+                        orders: []
+                    };
+                }
+                const due = order.dueAmount || (order.total - (order.paidAmount || 0));
+                customerMap[name].totalOutstanding += due;
+                customerMap[name].orderCount += 1;
+                customerMap[name].orders.push({
+                    id: order.id,
+                    orderNumber: order.orderNumber,
+                    orderDate: order.orderDate,
+                    total: order.total,
+                    paidAmount: order.paidAmount || 0,
+                    dueAmount: due,
+                    paymentStatus: order.paymentStatus
+                });
             });
+
+            const receivables = Object.values(customerMap).filter(c => c.totalOutstanding > 0);
+            receivables.sort((a, b) => b.totalOutstanding - a.totalOutstanding); // Sort by highest due first
+
+            const totalReceivable = receivables.reduce((sum, c) => sum + c.totalOutstanding, 0);
 
             return res.status(200).send({
                 status: 200,
                 message: 'outstanding receivables fetched successfully',
-                data: {
-                    totalReceivable,
-                    customers: customers
-                }
+                data: receivables,
+                totalReceivable: totalReceivable
             });
 
         } catch (error) {
@@ -50,39 +70,60 @@ module.exports = {
 
     getOutstandingPayables: async (req, res) => {
         try {
-            // Get all suppliers with outstanding balance
-            const suppliers = await db.supplier.findAll({
+            // Get outstanding payables from purchase bills
+            const unpaidPurchases = await db.purchaseBill.findAll({
                 where: {
-                    currentBalance: {
-                        [db.Sequelize.Op.gt]: 0
+                    paymentStatus: {
+                        [Op.in]: ['unpaid', 'partial']
                     }
                 },
-                attributes: ['id', 'name', 'mobile', 'currentBalance'],
                 include: [{
-                    model: db.purchaseBill,
-                    where: {
-                        paymentStatus: {
-                            [db.Sequelize.Op.in]: ['unpaid', 'partial']
-                        }
-                    },
-                    required: false,
-                    attributes: ['id', 'billNumber', 'billDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus']
+                    model: db.supplier,
+                    attributes: ['id', 'name', 'mobile']
                 }],
-                order: [['name', 'ASC']]
+                attributes: ['id', 'billNumber', 'billDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus', 'supplierId'],
+                order: [['billDate', 'DESC']]
             });
 
-            let totalPayable = 0;
-            suppliers.forEach(supplier => {
-                totalPayable += supplier.currentBalance || 0;
+            // Group by supplier
+            const supplierMap = {};
+            unpaidPurchases.forEach(purchase => {
+                const supplierId = purchase.supplierId;
+                const supplierName = purchase.supplier?.name || 'Unknown';
+                if (!supplierMap[supplierId]) {
+                    supplierMap[supplierId] = {
+                        supplierId: supplierId,
+                        supplierName: supplierName,
+                        supplierMobile: purchase.supplier?.mobile,
+                        totalOutstanding: 0,
+                        billCount: 0,
+                        bills: []
+                    };
+                }
+                const due = purchase.dueAmount || (purchase.total - (purchase.paidAmount || 0));
+                supplierMap[supplierId].totalOutstanding += due;
+                supplierMap[supplierId].billCount += 1;
+                supplierMap[supplierId].bills.push({
+                    id: purchase.id,
+                    billNumber: purchase.billNumber,
+                    billDate: purchase.billDate,
+                    total: purchase.total,
+                    paidAmount: purchase.paidAmount || 0,
+                    dueAmount: due,
+                    paymentStatus: purchase.paymentStatus
+                });
             });
+
+            const payables = Object.values(supplierMap).filter(s => s.totalOutstanding > 0);
+            payables.sort((a, b) => b.totalOutstanding - a.totalOutstanding);
+
+            const totalPayable = payables.reduce((sum, s) => sum + s.totalOutstanding, 0);
 
             return res.status(200).send({
                 status: 200,
                 message: 'outstanding payables fetched successfully',
-                data: {
-                    totalPayable,
-                    suppliers
-                }
+                data: payables,
+                totalPayable: totalPayable
             });
 
         } catch (error) {
