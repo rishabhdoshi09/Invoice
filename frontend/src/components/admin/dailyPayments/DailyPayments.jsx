@@ -681,28 +681,14 @@ export const DailyPayments = () => {
                                     <MenuItem value="customer">Customer (Receipt In)</MenuItem>
                                 </Select>
                             </FormControl>
-                            <FormControl fullWidth>
-                                <InputLabel>Select {formData.partyType === 'supplier' ? 'Supplier' : 'Customer'} *</InputLabel>
-                                <Select
-                                    name="partyId"
-                                    value={formData.partyId}
-                                    onChange={handleChange}
-                                    label={`Select ${formData.partyType === 'supplier' ? 'Supplier' : 'Customer'} *`}
-                                >
-                                    {formData.partyType === 'supplier' 
-                                        ? suppliers.map((supplier) => (
-                                            <MenuItem key={supplier.id} value={supplier.id}>
-                                                {supplier.name}
-                                            </MenuItem>
-                                        ))
-                                        : customers.map((customer) => (
-                                            <MenuItem key={customer.id} value={customer.id}>
-                                                {customer.name}
-                                            </MenuItem>
-                                        ))
-                                    }
-                                </Select>
-                            </FormControl>
+                            <TextField
+                                label={`${formData.partyType === 'supplier' ? 'Supplier' : 'Customer'} Name *`}
+                                name="partyName"
+                                value={formData.partyName}
+                                onChange={handleChange}
+                                fullWidth
+                                placeholder={`Type ${formData.partyType === 'supplier' ? 'supplier' : 'customer'} name`}
+                            />
                             <TextField
                                 label="Amount *"
                                 name="amount"
