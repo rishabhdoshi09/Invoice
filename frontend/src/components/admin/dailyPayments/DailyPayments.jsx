@@ -590,17 +590,17 @@ export const DailyPayments = () => {
             {/* Outstanding Receivables Section */}
             {outstandingReceivables.length > 0 && (
                 <Box sx={{ mt: 3, mb: 3 }}>
-                    <Paper elevation={2} sx={{ p: 2, bgcolor: '#fff8e1', border: '1px solid #ffb300' }}>
+                    <Paper elevation={2} sx={{ p: 2, bgcolor: '#e8f5e9', border: '1px solid #4caf50' }}>
                         <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Warning sx={{ color: '#f57c00' }} />
-                            Outstanding Receivables (Credit Sales)
+                            <People sx={{ color: '#2e7d32' }} />
+                            Outstanding Receivables - Customers Owe You
                         </Typography>
                         <TableContainer>
                             <Table size="small">
                                 <TableHead>
-                                    <TableRow sx={{ bgcolor: '#fff3e0' }}>
+                                    <TableRow sx={{ bgcolor: '#c8e6c9' }}>
                                         <TableCell><strong>Customer Name</strong></TableCell>
-                                        <TableCell align="right"><strong>Total Due</strong></TableCell>
+                                        <TableCell align="right"><strong>Amount Due</strong></TableCell>
                                         <TableCell align="right"><strong>Orders</strong></TableCell>
                                         <TableCell align="center"><strong>Action</strong></TableCell>
                                     </TableRow>
@@ -610,7 +610,7 @@ export const DailyPayments = () => {
                                         <TableRow key={idx} hover>
                                             <TableCell>{item.customerName || item.name}</TableCell>
                                             <TableCell align="right">
-                                                <Typography color="error.main" fontWeight="bold">
+                                                <Typography color="success.main" fontWeight="bold">
                                                     ₹{(item.totalOutstanding || item.outstanding || 0).toLocaleString('en-IN')}
                                                 </Typography>
                                             </TableCell>
@@ -648,7 +648,75 @@ export const DailyPayments = () => {
                         </TableContainer>
                         {outstandingReceivables.length > 10 && (
                             <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                                Showing top 10 of {outstandingReceivables.length} outstanding receivables
+                                Showing top 10 of {outstandingReceivables.length} customers
+                            </Typography>
+                        )}
+                    </Paper>
+                </Box>
+            )}
+
+            {/* Outstanding Payables Section */}
+            {outstandingPayables.length > 0 && (
+                <Box sx={{ mb: 3 }}>
+                    <Paper elevation={2} sx={{ p: 2, bgcolor: '#ffebee', border: '1px solid #ef5350' }}>
+                        <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <LocalShipping sx={{ color: '#c62828' }} />
+                            Outstanding Payables - You Owe Suppliers
+                        </Typography>
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#ffcdd2' }}>
+                                        <TableCell><strong>Supplier Name</strong></TableCell>
+                                        <TableCell align="right"><strong>Amount Due</strong></TableCell>
+                                        <TableCell align="right"><strong>Bills</strong></TableCell>
+                                        <TableCell align="center"><strong>Action</strong></TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {outstandingPayables.slice(0, 10).map((item, idx) => (
+                                        <TableRow key={idx} hover>
+                                            <TableCell>{item.supplierName || item.name}</TableCell>
+                                            <TableCell align="right">
+                                                <Typography color="error.main" fontWeight="bold">
+                                                    ₹{(item.totalOutstanding || item.outstanding || 0).toLocaleString('en-IN')}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell align="right">{item.billCount || item.count || '-'}</TableCell>
+                                            <TableCell align="center">
+                                                <Button
+                                                    size="small"
+                                                    variant="contained"
+                                                    color="error"
+                                                    startIcon={<Add />}
+                                                    onClick={() => {
+                                                        setFormData({
+                                                            paymentDate: selectedDate,
+                                                            partyId: null,
+                                                            partyName: item.supplierName || item.name,
+                                                            partyType: 'supplier',
+                                                            amount: '',
+                                                            referenceType: 'advance',
+                                                            referenceId: '',
+                                                            referenceNumber: '',
+                                                            notes: ''
+                                                        });
+                                                        setSelectedPartyOutstanding(item.totalOutstanding || item.outstanding || 0);
+                                                        setDialogMode('advanced');
+                                                        setOpenDialog(true);
+                                                    }}
+                                                >
+                                                    Pay ₹
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                        {outstandingPayables.length > 10 && (
+                            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                                Showing top 10 of {outstandingPayables.length} suppliers
                             </Typography>
                         )}
                     </Paper>
