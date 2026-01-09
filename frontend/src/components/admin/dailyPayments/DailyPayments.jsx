@@ -241,8 +241,9 @@ export const DailyPayments = () => {
     const getPartySuggestions = () => {
         if (formData.partyType === 'supplier') {
             // Combine suppliers with outstanding payables
-            const supplierNames = suppliers.map(s => ({ name: s.name, outstanding: 0, type: 'supplier' }));
-            const payableNames = outstandingPayables.map(p => ({ 
+            const supplierNames = (suppliers || []).map(s => ({ name: s.name, outstanding: 0, type: 'supplier' }));
+            const payableList = Array.isArray(outstandingPayables) ? outstandingPayables : [];
+            const payableNames = payableList.map(p => ({ 
                 name: p.supplierName || p.name, 
                 outstanding: p.totalOutstanding || p.outstanding || 0,
                 type: 'payable'
@@ -257,8 +258,9 @@ export const DailyPayments = () => {
             return merged.filter(m => m.name);
         } else {
             // Combine customers with outstanding receivables
-            const customerNames = customers.map(c => ({ name: c.customerName || c.name, outstanding: 0, type: 'customer' }));
-            const receivableNames = outstandingReceivables.map(r => ({ 
+            const customerNames = (customers || []).map(c => ({ name: c.customerName || c.name, outstanding: 0, type: 'customer' }));
+            const receivableList = Array.isArray(outstandingReceivables) ? outstandingReceivables : [];
+            const receivableNames = receivableList.map(r => ({ 
                 name: r.customerName || r.name, 
                 outstanding: r.totalOutstanding || r.outstanding || 0,
                 type: 'receivable'
