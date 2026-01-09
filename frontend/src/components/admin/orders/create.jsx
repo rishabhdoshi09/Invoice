@@ -685,6 +685,8 @@ export const CreateOrder = () => {
       if (!allowAddProductName && isAddSpecial) {
         alert("Product 'add' is disabled. Turn ON the switch to use it.");
         formik.resetForm();
+        setLocalPrice('');
+        localPriceRef.current = '';
         setSelectedProduct(null);
         setInputValue('');
         clearQuickHighlight();
@@ -696,6 +698,8 @@ export const CreateOrder = () => {
         formik.setFieldValue('name', value?.value || "");
         formik.setFieldValue('type', "");
         formik.setFieldValue('productPrice', "");
+        setLocalPrice('');
+        localPriceRef.current = '';
         formik.setFieldValue('totalPrice', 0);
         setBowlPriceLock(false);
         setBowlProductIdLocked(null);
