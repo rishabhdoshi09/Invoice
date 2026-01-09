@@ -590,7 +590,7 @@ export const DailyPayments = () => {
             </Grid>
 
             {/* Outstanding Receivables Section */}
-            {outstandingReceivables.length > 0 && (
+            {Array.isArray(outstandingReceivables) && outstandingReceivables.length > 0 && (
                 <Box sx={{ mt: 3, mb: 3 }}>
                     <Paper elevation={2} sx={{ p: 2, bgcolor: '#e8f5e9', border: '1px solid #4caf50' }}>
                         <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
