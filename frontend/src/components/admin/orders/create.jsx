@@ -817,7 +817,9 @@ export const CreateOrder = () => {
     if (navKeys.includes(e.key)) return;
 
     // Tens digit protection: block 1,2,3,4,5 in tens place unless Caps Lock is ON
-    if (tensDigitProtection && /^[12345]$/.test(e.key) && !e.getModifierState('CapsLock')) {
+    // Disabled for billing staff - they can type freely
+    const protectionEnabled = tensDigitProtection && isAdmin && !isBillingStaff;
+    if (protectionEnabled && /^[12345]$/.test(e.key) && !e.getModifierState('CapsLock')) {
       const target = e.target;
       const currentValue = String(target.value || '');
       const selStart = target.selectionStart ?? currentValue.length;
