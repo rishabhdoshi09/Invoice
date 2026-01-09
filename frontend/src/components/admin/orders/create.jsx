@@ -530,6 +530,8 @@ export const CreateOrder = () => {
       } catch {}
 
       formik.resetForm();
+      setLocalPrice('');
+      localPriceRef.current = '';
       setSelectedProduct(null);
       setInputValue('');
       try { setFetchedViaScale(false); } catch {}
