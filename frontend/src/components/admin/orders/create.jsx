@@ -1132,6 +1132,12 @@ export const CreateOrder = () => {
       return;
     }
     
+    // Credit sale validation: customer name is mandatory
+    if (isCreditSale && !orderProps.customerName?.trim()) {
+      alert("Credit Sale requires a Customer Name to track the due amount.");
+      return;
+    }
+    
     setIsSubmitting(true);
     setSuppressAutoSuggest(true);
     try {
@@ -1164,8 +1170,8 @@ export const CreateOrder = () => {
         return;
       }
 
-      // SANITIZE before save
-      const sanitized = sanitizeOrderForServer(orderProps);
+      // SANITIZE before save (pass isCreditSale for payment status)
+      const sanitized = sanitizeOrderForServer(orderProps, isCreditSale);
 
       // ONLINE SAVE (Server)
       const savedOrder = await dispatch(createOrderAction(sanitized));
