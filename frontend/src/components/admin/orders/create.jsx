@@ -1362,6 +1362,25 @@ export const CreateOrder = () => {
 
   return (
     <>
+      {/* Guide for Billing Staff */}
+      {isBillingStaff && (
+        <Alert 
+          severity="info" 
+          icon={<Info />}
+          sx={{ mb: 2 }}
+        >
+          <Typography variant="subtitle2" fontWeight="bold">Quick Guide:</Typography>
+          <Box component="ul" sx={{ m: 0, pl: 2 }}>
+            <li><strong>Step 1:</strong> Select product from dropdown → Price auto-fills</li>
+            <li><strong>Step 2:</strong> Edit price if needed → Press <Chip label="Add" size="small" color="primary" sx={{ mx: 0.5 }} /> or <Chip label="Enter" size="small" sx={{ mx: 0.5 }} /></li>
+            <li><strong>Step 3:</strong> Repeat for all items → Click <Chip label="Create Invoice" size="small" color="success" sx={{ mx: 0.5 }} /></li>
+          </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            💰 For payments: Go to <strong>Daily Payments</strong> page from menu
+          </Typography>
+        </Alert>
+      )}
+
       <Card><CardContent><CreateProduct /></CardContent></Card>
 
       <br />
