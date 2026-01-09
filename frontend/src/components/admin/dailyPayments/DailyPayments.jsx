@@ -387,7 +387,10 @@ export const DailyPayments = () => {
         }
 
         try {
-            const payload = { ...formData };
+            const payload = { 
+                ...formData,
+                paymentDate: selectedDate 
+            };
             // Remove empty referenceId to avoid validation errors
             if (!payload.referenceId || payload.referenceType === 'advance') {
                 delete payload.referenceId;
@@ -401,6 +404,7 @@ export const DailyPayments = () => {
             await createPayment(payload);
             handleCloseDialog();
             fetchDailySummary();
+            fetchOutstandingData(); // Refresh outstanding data
         } catch (error) {
             console.error('Error creating payment:', error);
             alert('Error creating payment');
