@@ -163,6 +163,14 @@ export const ListOrders = () => {
             date: "",
             offset: 0
         }));
+        sessionStorage.removeItem(SCROLL_FILTERS_KEY); // Clear saved filters
+        shouldFetch(true);
+    };
+
+    const clearAllFilters = () => {
+        const defaultFilters = { limit: 25, offset: 0, q: "", date: "" };
+        setFilters(defaultFilters);
+        sessionStorage.removeItem(SCROLL_FILTERS_KEY);
         shouldFetch(true);
     };
 
@@ -188,6 +196,16 @@ export const ListOrders = () => {
                         startIcon={<Clear />}
                     >
                         Clear Date
+                    </Button>
+                )}
+                {(filters.date || filters.q) && (
+                    <Button 
+                        variant="text" 
+                        size="small" 
+                        color="error"
+                        onClick={clearAllFilters}
+                    >
+                        Clear All Filters
                     </Button>
                 )}
                 <Tooltip title="Refresh list">
