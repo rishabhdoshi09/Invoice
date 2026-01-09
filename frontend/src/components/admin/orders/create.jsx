@@ -886,8 +886,18 @@ export const CreateOrder = () => {
         return;
       }
       
-      formik.setFieldValue('productPrice', rawInput);
-      formik.setFieldValue('totalPrice', Number((numeric * (Number(formik.values.quantity)||0)).toFixed(2)));
+      // Update local state immediately for responsive UI
+      setLocalPrice(rawInput);
+      localPriceRef.current = rawInput;
+      
+      // Debounce Formik update to avoid race conditions with rapid typing
+      if (priceUpdateTimeoutRef.current) {
+        clearTimeout(priceUpdateTimeoutRef.current);
+      }
+      priceUpdateTimeoutRef.current = setTimeout(() => {
+        formik.setFieldValue('productPrice', localPriceRef.current);
+        formik.setFieldValue('totalPrice', Number((Number(localPriceRef.current) * (Number(formik.values.quantity)||0)).toFixed(2)));
+      }, 50);
       return;
     }
 
@@ -905,11 +915,38 @@ export const CreateOrder = () => {
       return;
     }
     
-    formik.setFieldValue('productPrice', digitsOnly);
-    formik.setFieldValue('totalPrice', Number((numeric * (Number(formik.values.quantity)||0)).toFixed(2)));
+    // Update local state immediately for responsive UI
+    setLocalPrice(digitsOnly);
+    localPriceRef.current = digitsOnly;
+    
+    // Debounce Formik update
+    if (priceUpdateTimeoutRef.current) {
+      clearTimeout(priceUpdateTimeoutRef.current);
+    }
+    priceUpdateTimeoutRef.current = setTimeout(() => {
+      formik.setFieldValue('productPrice', localPriceRef.current);
+      formik.setFieldValue('totalPrice', Number((Number(localPriceRef.current) * (Number(formik.values.quantity)||0)).toFixed(2)));
+    }, 50);
   };
 
-  const onPriceBlur = () => {};
+  // Sync local price state when Formik value changes externally (e.g., product selection)
+  useEffect(() => {
+    const formikPrice = formik.values.productPrice;
+    // Only sync if different and not during user typing
+    if (formikPrice !== localPrice && formikPrice !== localPriceRef.current) {
+      setLocalPrice(String(formikPrice || ''));
+      localPriceRef.current = String(formikPrice || '');
+    }
+  }, [formik.values.productPrice, localPrice]);
+
+  const onPriceBlur = () => {
+    // Ensure Formik is synced on blur
+    if (localPriceRef.current !== formik.values.productPrice) {
+      formik.setFieldValue('productPrice', localPriceRef.current);
+      const numeric = Number(localPriceRef.current) || 0;
+      formik.setFieldValue('totalPrice', Number((numeric * (Number(formik.values.quantity)||0)).toFixed(2)));
+    }
+  };
   const onPasteHandler = (e) => {
     try {
       const clip = (e.clipboardData || window.clipboardData).getData("text") || '';
