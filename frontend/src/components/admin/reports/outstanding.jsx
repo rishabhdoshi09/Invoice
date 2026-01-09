@@ -4,19 +4,42 @@ import { getOutstandingPayables, getOutstandingReceivables } from '../../../serv
 
 export const OutstandingReports = () => {
     const [tab, setTab] = useState(0);
-    const [payables, setPayables] = useState({ totalPayable: 0, suppliers: [] });
-    const [receivables, setReceivables] = useState({ totalReceivable: 0, customers: [] });
+    const [payables, setPayables] = useState([]);
+    const [receivables, setReceivables] = useState([]);
+    const [totalPayable, setTotalPayable] = useState(0);
+    const [totalReceivable, setTotalReceivable] = useState(0);
     const [loading, setLoading] = useState(false);
 
     const fetchReports = async () => {
         try {
             setLoading(true);
-            const [payablesData, receivablesData] = await Promise.all([
+            const [payablesRes, receivablesRes] = await Promise.all([
                 getOutstandingPayables(),
                 getOutstandingReceivables()
             ]);
-            setPayables(payablesData.data);
-            setReceivables(receivablesData.data);
+            
+            // Handle both old and new API response structures
+            const payablesData = payablesRes.data;
+            const receivablesData = receivablesRes.data;
+            
+            // New structure: data is array, totalPayable/totalReceivable are separate
+            if (Array.isArray(payablesData)) {
+                setPayables(payablesData);
+                setTotalPayable(payablesRes.totalPayable || 0);
+            } else {
+                // Old structure: data.suppliers, data.totalPayable
+                setPayables(payablesData?.suppliers || []);
+                setTotalPayable(payablesData?.totalPayable || 0);
+            }
+            
+            if (Array.isArray(receivablesData)) {
+                setReceivables(receivablesData);
+                setTotalReceivable(receivablesRes.totalReceivable || 0);
+            } else {
+                // Old structure: data.customers, data.totalReceivable
+                setReceivables(receivablesData?.customers || []);
+                setTotalReceivable(receivablesData?.totalReceivable || 0);
+            }
         } catch (error) {
             console.error('Error fetching reports:', error);
         } finally {
@@ -33,8 +56,8 @@ export const OutstandingReports = () => {
             <Typography variant="h5" sx={{ mb: 3 }}>Outstanding Reports</Typography>
 
             <Tabs value={tab} onChange={(e, newValue) => setTab(newValue)} sx={{ mb: 3 }}>
-                <Tab label={`Payables (₹${payables.totalPayable})`} />
-                <Tab label={`Receivables (₹${receivables.totalReceivable})`} />
+                <Tab label={`Payables (₹${totalPayable.toLocaleString('en-IN')})`} />
+                <Tab label={`Receivables (₹${totalReceivable.toLocaleString('en-IN')})`} />
             </Tabs>
 
             {tab === 0 && (
@@ -42,7 +65,7 @@ export const OutstandingReports = () => {
                     <CardContent>
                         <Typography variant="h6" sx={{ mb: 2 }}>Outstanding Payables</Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                            Total Amount Due to Suppliers: ₹{payables.totalPayable}
+                            Total Amount Due to Suppliers: ₹{totalPayable.toLocaleString('en-IN')}
                         </Typography>
                         <TableContainer>
                             <Table>
@@ -59,17 +82,17 @@ export const OutstandingReports = () => {
                                         <TableRow>
                                             <TableCell colSpan={4} align="center">Loading...</TableCell>
                                         </TableRow>
-                                    ) : payables.suppliers.length === 0 ? (
+                                    ) : payables.length === 0 ? (
                                         <TableRow>
                                             <TableCell colSpan={4} align="center">No outstanding payables</TableCell>
                                         </TableRow>
                                     ) : (
-                                        payables.suppliers.map((supplier) => (
-                                            <TableRow key={supplier.id}>
-                                                <TableCell>{supplier.name}</TableCell>
-                                                <TableCell>{supplier.mobile}</TableCell>
-                                                <TableCell align="right">₹{supplier.currentBalance}</TableCell>
-                                                <TableCell align="right">{supplier.purchaseBills?.length || 0}</TableCell>
+                                        payables.map((supplier, index) => (
+                                            <TableRow key={supplier.supplierId || index}>
+                                                <TableCell>{supplier.supplierName || supplier.name}</TableCell>
+                                                <TableCell>{supplier.supplierMobile || supplier.mobile || '-'}</TableCell>
+                                                <TableCell align="right">₹{(supplier.totalOutstanding || supplier.currentBalance || 0).toLocaleString('en-IN')}</TableCell>
+                                                <TableCell align="right">{supplier.billCount || supplier.bills?.length || 0}</TableCell>
                                             </TableRow>
                                         ))
                                     )}
@@ -85,7 +108,7 @@ export const OutstandingReports = () => {
                     <CardContent>
                         <Typography variant="h6" sx={{ mb: 2 }}>Outstanding Receivables</Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                            Total Amount Due from Customers: ₹{receivables.totalReceivable}
+                            Total Amount Due from Customers: ₹{totalReceivable.toLocaleString('en-IN')}
                         </Typography>
                         <TableContainer>
                             <Table>
@@ -102,17 +125,17 @@ export const OutstandingReports = () => {
                                         <TableRow>
                                             <TableCell colSpan={4} align="center">Loading...</TableCell>
                                         </TableRow>
-                                    ) : receivables.customers.length === 0 ? (
+                                    ) : receivables.length === 0 ? (
                                         <TableRow>
                                             <TableCell colSpan={4} align="center">No outstanding receivables</TableCell>
                                         </TableRow>
                                     ) : (
-                                        receivables.customers.map((customer, index) => (
+                                        receivables.map((customer, index) => (
                                             <TableRow key={index}>
-                                                <TableCell>{customer.customerName}</TableCell>
-                                                <TableCell>{customer.customerMobile}</TableCell>
-                                                <TableCell align="right">₹{customer.totalDue}</TableCell>
-                                                <TableCell align="right">{customer.orders?.length || 0}</TableCell>
+                                                <TableCell>{customer.customerName || customer.name}</TableCell>
+                                                <TableCell>{customer.customerMobile || customer.mobile || '-'}</TableCell>
+                                                <TableCell align="right">₹{(customer.totalOutstanding || customer.totalDue || 0).toLocaleString('en-IN')}</TableCell>
+                                                <TableCell align="right">{customer.orderCount || customer.orders?.length || 0}</TableCell>
                                             </TableRow>
                                         ))
                                     )}
