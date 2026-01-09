@@ -940,6 +940,15 @@ export const CreateOrder = () => {
     }
   }, [formik.values.productPrice, localPrice]);
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (priceUpdateTimeoutRef.current) {
+        clearTimeout(priceUpdateTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const onPriceBlur = () => {
     // Ensure Formik is synced on blur
     if (localPriceRef.current !== formik.values.productPrice) {
