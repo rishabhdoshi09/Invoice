@@ -82,17 +82,6 @@ export const ListOrders = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Auto-refetch when orders cache is cleared (e.g., after creating a new order)
-    useEffect(() => {
-        if (count === 0 && rows.length === 0) {
-            // Cache was cleared, trigger a refetch
-            const timeoutId = setTimeout(() => {
-                dispatch(listOrdersAction(filters));
-            }, 100);
-            return () => clearTimeout(timeoutId);
-        }
-    }, [count, rows.length, dispatch, filters]);
-
     // Restore scroll position after data is loaded - use useLayoutEffect for sync scroll restoration
     useLayoutEffect(() => {
         if (rows.length > 0 && !scrollRestoredRef.current) {
