@@ -18,14 +18,17 @@ import {
   DialogContent,
   DialogActions,
   Switch,
-  FormControlLabel
+  FormControlLabel,
+  Alert,
+  Chip
 } from '@mui/material';
 import { CreateProduct } from '../products/create';
 import pdfMake from 'pdfmake/build/pdfmake';
 import { generatePdfDefinition, generatePdfDefinition2 } from './helper';
-import { Delete, Sync } from '@mui/icons-material';
+import { Delete, Sync, Info } from '@mui/icons-material';
 import { fetchWeightsAction, createOrderAction } from '../../../store/orders';
 import { ProductType } from '../../../enums/product';
+import { useAuth } from '../../../context/AuthContext';
 
 /* -------------------------
   Safe font loader for pdfMake
