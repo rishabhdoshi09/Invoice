@@ -950,13 +950,14 @@ export const CreateOrder = () => {
 
   // Sync local price state when Formik value changes externally (e.g., product selection)
   useEffect(() => {
-    const formikPrice = formik.values.productPrice;
-    // Only sync if different and not during user typing
-    if (formikPrice !== localPrice && formikPrice !== localPriceRef.current) {
-      setLocalPrice(String(formikPrice || ''));
-      localPriceRef.current = String(formikPrice || '');
+    const formikPrice = String(formik.values.productPrice || '');
+    // Only sync if Formik changed externally (not from our own updates)
+    if (formikPrice !== localPriceRef.current) {
+      setLocalPrice(formikPrice);
+      localPriceRef.current = formikPrice;
     }
-  }, [formik.values.productPrice, localPrice]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formik.values.productPrice]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
