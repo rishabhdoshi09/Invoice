@@ -1449,7 +1449,7 @@ export const CreateOrder = () => {
                 <li><Chip label="/" size="small" sx={{ mx: 0.5 }} /> Fetch weight from scale</li>
                 <li><Chip label="=" size="small" sx={{ mx: 0.5 }} /> Add product to order</li>
                 <li><Chip label="Shift+D" size="small" sx={{ mx: 0.5 }} /> Delete last item</li>
-                <li><Chip label="Ctrl+P" size="small" sx={{ mx: 0.5 }} /> Print PDF</li>
+                <li><Chip label="Ctrl+P" size="small" sx={{ mx: 0.5 }} /> Print PDF <Typography component="span" variant="caption" color="text.secondary">(after submit)</Typography></li>
               </Box>
             </Box>
             <Box>
