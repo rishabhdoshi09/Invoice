@@ -1860,7 +1860,15 @@ export const CreateOrder = () => {
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                 <Typography variant="subtitle2">Last Invoice: {lastInvoiceTotal != null ? `₹ ${Number(lastInvoiceTotal).toLocaleString('en-IN')}` : '—'}</Typography>
               </Box>
-              <Button size="small" variant="outlined" onClick={printPdf}>Print PDF</Button>
+              <Button 
+                size="small" 
+                variant="outlined" 
+                onClick={printPdf}
+                disabled={!archivedOrderProps}
+                title={!archivedOrderProps ? 'Submit an order first to enable printing' : 'Print PDF'}
+              >
+                Print PDF
+              </Button>
             </Box>
 
             <Box sx={{ flexGrow: 1, '& iframe': { width: '100%', height: '100%', border: 'none' } }}>
