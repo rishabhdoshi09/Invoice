@@ -299,8 +299,8 @@ export const DailyPayments = () => {
             return handleSimpleSubmit();
         }
         
-        if (!formData.partyId || !formData.amount) {
-            alert('Please fill required fields');
+        if (!formData.partyName || !formData.amount) {
+            alert('Please fill required fields (Party Name and Amount)');
             return;
         }
 
@@ -310,6 +310,10 @@ export const DailyPayments = () => {
             if (!payload.referenceId || payload.referenceType === 'advance') {
                 delete payload.referenceId;
                 delete payload.referenceNumber;
+            }
+            // partyId is optional for direct name entry
+            if (!payload.partyId) {
+                payload.partyId = null;
             }
             
             await createPayment(payload);
