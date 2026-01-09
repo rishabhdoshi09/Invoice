@@ -315,6 +315,9 @@ export const CreateOrder = () => {
   // Credit Sale toggle - when ON, customer name is mandatory and order is marked unpaid
   const [isCreditSale, setIsCreditSale] = useState(false);
 
+  // Admin guide visibility - hidden by default
+  const [showAdminGuide, setShowAdminGuide] = useState(false);
+
   // use suppressAutoSuggest in a small effect so eslint doesn't flag it as assigned but unused
   useEffect(() => {
     if (suppressAutoSuggest) {
