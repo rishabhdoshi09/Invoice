@@ -1436,11 +1436,58 @@ export const CreateOrder = () => {
             }}
           >
             <Grid container spacing={2}>
+              {/* Credit Sale Toggle - Prominent Position */}
+              <Grid item xs={12}>
+                <Box 
+                  sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 2,
+                    p: 1.5,
+                    borderRadius: 1,
+                    bgcolor: isCreditSale ? '#fff3e0' : '#e8f5e9',
+                    border: isCreditSale ? '2px solid #ff9800' : '1px solid #4caf50'
+                  }}
+                >
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={isCreditSale}
+                        onChange={(e) => setIsCreditSale(e.target.checked)}
+                        color="warning"
+                      />
+                    }
+                    label={
+                      <Typography variant="subtitle2" fontWeight="bold">
+                        {isCreditSale ? '⚠️ CREDIT SALE (Unpaid)' : '✅ CASH SALE (Paid)'}
+                      </Typography>
+                    }
+                  />
+                  {isCreditSale && (
+                    <Typography variant="caption" color="warning.dark">
+                      Customer name required for credit tracking
+                    </Typography>
+                  )}
+                </Box>
+              </Grid>
+
               <Grid item xs={12} md={4}>
-                <TextField size="small" id="customerName" name="customerName" label="Customer Name" value={orderProps.customerName} onChange={(e)=>{ const { id, value } = e.target; const obj = {}; if (id === 'taxPercent') { const taxPct = Number(value) || 0; obj['taxPercent'] = taxPct; const subTotal = orderProps.subTotal; obj['tax'] = Math.round(subTotal * (taxPct / 100)); obj['total'] = subTotal + obj['tax']; } setOrderProps((prevProps) => ({ ...prevProps, [id]: value, ...obj })); }} required fullWidth />
+                <TextField 
+                  size="small" 
+                  id="customerName" 
+                  name="customerName" 
+                  label={isCreditSale ? "Customer Name *" : "Customer Name"} 
+                  value={orderProps.customerName} 
+                  onChange={(e)=>{ const { id, value } = e.target; setOrderProps((prevProps) => ({ ...prevProps, [id]: value })); }} 
+                  required={isCreditSale}
+                  error={isCreditSale && !orderProps.customerName}
+                  helperText={isCreditSale && !orderProps.customerName ? "Required for credit sale" : ""}
+                  fullWidth 
+                  sx={isCreditSale ? { '& .MuiOutlinedInput-root': { borderColor: 'warning.main' } } : {}}
+                />
               </Grid>
               <Grid item xs={12} md={4}>
-                <TextField size="small" id="customerMobile" name="customerMobile" label="Customer Mobile" value={orderProps.customerMobile} onChange={(e)=>{ const { id, value } = e.target; const obj = {}; if (id === 'taxPercent') { const taxPct = Number(value) || 0; obj['taxPercent'] = taxPct; const subTotal = orderProps.subTotal; obj['tax'] = Math.round(subTotal * (taxPct / 100)); obj['total'] = subTotal + obj['tax']; } setOrderProps((prevProps) => ({ ...prevProps, [id]: value, ...obj })); }} required fullWidth />
+                <TextField size="small" id="customerMobile" name="customerMobile" label="Customer Mobile" value={orderProps.customerMobile} onChange={(e)=>{ const { id, value } = e.target; setOrderProps((prevProps) => ({ ...prevProps, [id]: value })); }} fullWidth />
               </Grid>
               <Grid item xs={12} md={4}>
                 <TextField size="small" type='number' id="taxPercent" name="taxPercent" label="Tax Percentage" value={orderProps.taxPercent} onChange={(e)=>{ const { id, value } = e.target; const obj = {}; if (id === 'taxPercent') { const taxPct = Number(value) || 0; obj['taxPercent'] = taxPct; const subTotal = orderProps.subTotal; obj['tax'] = Math.round(subTotal * (taxPct / 100)); obj['total'] = subTotal + obj['tax']; } setOrderProps((prevProps) => ({ ...prevProps, [id]: value, ...obj })); }} required fullWidth />
