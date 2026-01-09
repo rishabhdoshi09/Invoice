@@ -587,6 +587,74 @@ export const DailyPayments = () => {
                 </Grid>
             </Grid>
 
+            {/* Outstanding Receivables Section */}
+            {outstandingReceivables.length > 0 && (
+                <Box sx={{ mt: 3, mb: 3 }}>
+                    <Paper elevation={2} sx={{ p: 2, bgcolor: '#fff8e1', border: '1px solid #ffb300' }}>
+                        <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Warning sx={{ color: '#f57c00' }} />
+                            Outstanding Receivables (Credit Sales)
+                        </Typography>
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#fff3e0' }}>
+                                        <TableCell><strong>Customer Name</strong></TableCell>
+                                        <TableCell align="right"><strong>Total Due</strong></TableCell>
+                                        <TableCell align="right"><strong>Orders</strong></TableCell>
+                                        <TableCell align="center"><strong>Action</strong></TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {outstandingReceivables.slice(0, 10).map((item, idx) => (
+                                        <TableRow key={idx} hover>
+                                            <TableCell>{item.customerName || item.name}</TableCell>
+                                            <TableCell align="right">
+                                                <Typography color="error.main" fontWeight="bold">
+                                                    ₹{(item.totalOutstanding || item.outstanding || 0).toLocaleString('en-IN')}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell align="right">{item.orderCount || item.count || '-'}</TableCell>
+                                            <TableCell align="center">
+                                                <Button
+                                                    size="small"
+                                                    variant="contained"
+                                                    color="success"
+                                                    startIcon={<Add />}
+                                                    onClick={() => {
+                                                        setFormData({
+                                                            paymentDate: selectedDate,
+                                                            partyId: null,
+                                                            partyName: item.customerName || item.name,
+                                                            partyType: 'customer',
+                                                            amount: '',
+                                                            referenceType: 'advance',
+                                                            referenceId: '',
+                                                            referenceNumber: '',
+                                                            notes: ''
+                                                        });
+                                                        setSelectedPartyOutstanding(item.totalOutstanding || item.outstanding || 0);
+                                                        setDialogMode('advanced');
+                                                        setOpenDialog(true);
+                                                    }}
+                                                >
+                                                    Receive ₹
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                        {outstandingReceivables.length > 10 && (
+                            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                                Showing top 10 of {outstandingReceivables.length} outstanding receivables
+                            </Typography>
+                        )}
+                    </Paper>
+                </Box>
+            )}
+
             {/* Breakdown by Reference Type */}
             {summary?.byReferenceType && (
                 <Box sx={{ mb: 3 }}>
