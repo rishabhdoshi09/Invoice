@@ -6,12 +6,15 @@ module.exports = {
     getOutstandingReceivables: async (req, res) => {
         try {
             // Get outstanding receivables from orders (credit sales)
+            // Include orders where paymentStatus is unpaid/partial OR dueAmount > 0 OR paidAmount < total
             const unpaidOrders = await db.order.findAll({
                 where: {
-                    paymentStatus: {
-                        [Op.in]: ['unpaid', 'partial']
-                    },
-                    isDeleted: false
+                    isDeleted: false,
+                    [Op.or]: [
+                        { paymentStatus: { [Op.in]: ['unpaid', 'partial'] } },
+                        { dueAmount: { [Op.gt]: 0 } },
+                        db.Sequelize.literal('"paidAmount" < "total"')
+                    ]
                 },
                 attributes: ['id', 'orderNumber', 'orderDate', 'customerName', 'customerMobile', 'total', 'paidAmount', 'dueAmount', 'paymentStatus'],
                 order: [['customerName', 'ASC'], ['orderDate', 'DESC']]
@@ -33,20 +36,29 @@ module.exports = {
                         orders: []
                     };
                 }
-                const due = order.dueAmount != null ? order.dueAmount : (order.total - (order.paidAmount || 0));
-                customerMap[name].totalOutstanding += due;
-                customerMap[name].outstanding = customerMap[name].totalOutstanding;
-                customerMap[name].orderCount += 1;
-                customerMap[name].count = customerMap[name].orderCount;
-                customerMap[name].orders.push({
-                    id: order.id,
-                    orderNumber: order.orderNumber,
-                    orderDate: order.orderDate,
-                    total: order.total,
-                    paidAmount: order.paidAmount || 0,
-                    dueAmount: due,
-                    paymentStatus: order.paymentStatus
-                });
+                // Calculate due amount - handle cases where dueAmount might not be set
+                let due = 0;
+                if (order.dueAmount != null && order.dueAmount > 0) {
+                    due = order.dueAmount;
+                } else {
+                    due = (order.total || 0) - (order.paidAmount || 0);
+                }
+                
+                if (due > 0) {
+                    customerMap[name].totalOutstanding += due;
+                    customerMap[name].outstanding = customerMap[name].totalOutstanding;
+                    customerMap[name].orderCount += 1;
+                    customerMap[name].count = customerMap[name].orderCount;
+                    customerMap[name].orders.push({
+                        id: order.id,
+                        orderNumber: order.orderNumber,
+                        orderDate: order.orderDate,
+                        total: order.total,
+                        paidAmount: order.paidAmount || 0,
+                        dueAmount: due,
+                        paymentStatus: order.paymentStatus || 'unpaid'
+                    });
+                }
             });
 
             const receivables = Object.values(customerMap).filter(c => c.totalOutstanding > 0);
