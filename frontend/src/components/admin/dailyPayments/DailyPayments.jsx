@@ -214,17 +214,19 @@ export const DailyPayments = () => {
             partyId: '',
             partyName: '',
             partyType: 'supplier',
-            amount: 0,
-            referenceType: 'purchase',
+            amount: '',
+            referenceType: 'advance',
             referenceId: '',
             referenceNumber: '',
             notes: ''
         });
+        setSelectedPartyOutstanding(null);
         setOpenDialog(true);
     };
 
     const handleCloseDialog = () => {
         setOpenDialog(false);
+        setSelectedPartyOutstanding(null);
     };
 
     const handleSimpleFormChange = (e) => {
@@ -233,6 +235,60 @@ export const DailyPayments = () => {
             ...prev,
             [name]: value
         }));
+    };
+
+    // Get party suggestions based on party type
+    const getPartySuggestions = () => {
+        if (formData.partyType === 'supplier') {
+            // Combine suppliers with outstanding payables
+            const supplierNames = suppliers.map(s => ({ name: s.name, outstanding: 0, type: 'supplier' }));
+            const payableNames = outstandingPayables.map(p => ({ 
+                name: p.supplierName || p.name, 
+                outstanding: p.totalOutstanding || p.outstanding || 0,
+                type: 'payable'
+            }));
+            // Merge and dedupe
+            const merged = [...payableNames];
+            supplierNames.forEach(s => {
+                if (!merged.find(m => m.name?.toLowerCase() === s.name?.toLowerCase())) {
+                    merged.push(s);
+                }
+            });
+            return merged.filter(m => m.name);
+        } else {
+            // Combine customers with outstanding receivables
+            const customerNames = customers.map(c => ({ name: c.customerName || c.name, outstanding: 0, type: 'customer' }));
+            const receivableNames = outstandingReceivables.map(r => ({ 
+                name: r.customerName || r.name, 
+                outstanding: r.totalOutstanding || r.outstanding || 0,
+                type: 'receivable'
+            }));
+            // Merge and dedupe
+            const merged = [...receivableNames];
+            customerNames.forEach(c => {
+                if (!merged.find(m => m.name?.toLowerCase() === c.name?.toLowerCase())) {
+                    merged.push(c);
+                }
+            });
+            return merged.filter(m => m.name);
+        }
+    };
+
+    const handlePartySelect = (event, value) => {
+        if (value) {
+            if (typeof value === 'string') {
+                // User typed a new name
+                setFormData(prev => ({ ...prev, partyName: value, partyId: null }));
+                setSelectedPartyOutstanding(null);
+            } else {
+                // User selected from dropdown
+                setFormData(prev => ({ ...prev, partyName: value.name, partyId: null }));
+                setSelectedPartyOutstanding(value.outstanding > 0 ? value.outstanding : null);
+            }
+        } else {
+            setFormData(prev => ({ ...prev, partyName: '', partyId: null }));
+            setSelectedPartyOutstanding(null);
+        }
     };
 
     const handleChange = (e) => {
