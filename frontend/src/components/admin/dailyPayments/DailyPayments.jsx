@@ -154,6 +154,24 @@ export const DailyPayments = () => {
         }
     };
 
+    const fetchOutstandingData = async () => {
+        try {
+            // Fetch outstanding receivables (customers who owe money)
+            const { data: receivables } = await axios.get('/api/reports/outstanding-receivables');
+            if (receivables.status === 200) {
+                setOutstandingReceivables(receivables.data || []);
+            }
+            
+            // Fetch outstanding payables (money owed to suppliers)
+            const { data: payables } = await axios.get('/api/reports/outstanding-payables');
+            if (payables.status === 200) {
+                setOutstandingPayables(payables.data || []);
+            }
+        } catch (error) {
+            console.error('Error fetching outstanding data:', error);
+        }
+    };
+
     useEffect(() => {
         fetchDailySummary();
     }, [fetchDailySummary]);
@@ -162,6 +180,7 @@ export const DailyPayments = () => {
         fetchSuppliers();
         fetchCustomers();
         fetchPurchases();
+        fetchOutstandingData();
     }, []);
 
     const handleDateChange = (newDate) => {
