@@ -339,7 +339,8 @@ export const CreateOrder = () => {
   }, []);
 
   // Tens digit protection - blocks 1,2,3,4 in tens place unless Caps Lock is ON
-  const [tensDigitProtection, setTensDigitProtection] = useState(true); // Default ON
+  // Only enabled for admin users, billing staff can type freely
+  const [tensDigitProtection, setTensDigitProtection] = useState(true); // Default ON for admin
 
   const printPdf = useCallback(() => {
     try {
