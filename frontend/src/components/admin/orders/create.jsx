@@ -240,6 +240,7 @@ function computeDailyTotalsFromInvoices(invoices) {
 
 export const CreateOrder = () => {
   const dispatch = useDispatch();
+  const { isAdmin, isBillingStaff } = useAuth();
 
   const rows = useSelector(
     state => state?.productState?.products?.rows || {},
