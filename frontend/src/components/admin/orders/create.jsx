@@ -308,6 +308,9 @@ export const CreateOrder = () => {
   // NEW: switch to control whether product named "add" is allowed
   const [allowAddProductName, setAllowAddProductName] = useState(false);
 
+  // Credit Sale toggle - when ON, customer name is mandatory and order is marked unpaid
+  const [isCreditSale, setIsCreditSale] = useState(false);
+
   // use suppressAutoSuggest in a small effect so eslint doesn't flag it as assigned but unused
   useEffect(() => {
     if (suppressAutoSuggest) {
