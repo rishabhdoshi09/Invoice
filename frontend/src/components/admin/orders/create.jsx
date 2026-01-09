@@ -1362,6 +1362,36 @@ export const CreateOrder = () => {
 
   return (
     <>
+      {/* Guide for Admin Users */}
+      {isAdmin && (
+        <Alert 
+          severity="success" 
+          icon={<Info />}
+          sx={{ mb: 2, backgroundColor: '#e8f5e9' }}
+        >
+          <Typography variant="subtitle2" fontWeight="bold">Admin Quick Reference:</Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1 }}>
+            <Box>
+              <Typography variant="caption" color="text.secondary">Shortcuts:</Typography>
+              <Box component="ul" sx={{ m: 0, pl: 2, fontSize: '0.85rem' }}>
+                <li><Chip label="/" size="small" sx={{ mx: 0.5 }} /> Fetch weight from scale</li>
+                <li><Chip label="=" size="small" sx={{ mx: 0.5 }} /> Add product to order</li>
+                <li><Chip label="Shift+D" size="small" sx={{ mx: 0.5 }} /> Delete last item</li>
+                <li><Chip label="Ctrl+P" size="small" sx={{ mx: 0.5 }} /> Print PDF</li>
+              </Box>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">Price Protection:</Typography>
+              <Box component="ul" sx={{ m: 0, pl: 2, fontSize: '0.85rem' }}>
+                <li>Tens digit blocks <strong>1-5</strong> unless <Chip label="Caps Lock" size="small" color="warning" sx={{ mx: 0.5 }} /> is ON</li>
+                <li>Weighted products: 3-digit only (100-399)</li>
+                <li>Restricted ranges: 200-209, 301-309</li>
+              </Box>
+            </Box>
+          </Box>
+        </Alert>
+      )}
+
       {/* Guide for Billing Staff */}
       {isBillingStaff && (
         <Alert 
