@@ -138,6 +138,43 @@ module.exports = {
                             }
                         );
                     }
+                } else if (value.partyType === 'customer' && value.partyName && !value.referenceId) {
+                    // Payment by customer name without specific order reference
+                    // Find unpaid orders for this customer and apply payment
+                    const unpaidOrders = await db.order.findAll({
+                        where: {
+                            customerName: value.partyName,
+                            paymentStatus: ['unpaid', 'partial'],
+                            isDeleted: false
+                        },
+                        order: [['orderDate', 'ASC']] // Pay oldest first
+                    });
+
+                    let remainingAmount = value.amount;
+                    for (const order of unpaidOrders) {
+                        if (remainingAmount <= 0) break;
+                        
+                        const dueAmount = (order.dueAmount || order.total - (order.paidAmount || 0));
+                        const paymentForThisOrder = Math.min(remainingAmount, dueAmount);
+                        
+                        const newPaidAmount = (order.paidAmount || 0) + paymentForThisOrder;
+                        const newDueAmount = order.total - newPaidAmount;
+                        let paymentStatus = 'unpaid';
+                        
+                        if (newPaidAmount >= order.total) {
+                            paymentStatus = 'paid';
+                        } else if (newPaidAmount > 0) {
+                            paymentStatus = 'partial';
+                        }
+
+                        await order.update({ 
+                            paidAmount: newPaidAmount, 
+                            dueAmount: newDueAmount,
+                            paymentStatus: paymentStatus
+                        }, { transaction });
+
+                        remainingAmount -= paymentForThisOrder;
+                    }
                 } else if (value.referenceType === 'purchase' && value.referenceId) {
                     const purchase = await Services.purchaseBill.getPurchaseBill({ id: value.referenceId });
                     if (purchase) {
