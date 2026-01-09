@@ -424,11 +424,6 @@ export const CreateOrder = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [inputValue, setInputValue] = useState('');
   const [recentlyDeleted, setRecentlyDeleted] = useState([]);
-  
-  // Local price state to handle rapid typing without race conditions
-  const [localPrice, setLocalPrice] = useState('');
-  const localPriceRef = useRef('');
-  const priceUpdateTimeoutRef = useRef(null);
 
   function formikSafeGet(field) {
     try { return (formik && formik.values && formik.values[field]) || ""; } catch { return ""; }
