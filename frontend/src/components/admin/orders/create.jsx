@@ -725,7 +725,10 @@ export const CreateOrder = () => {
         try { firstDigitLockRef.current = (String(price || '') || '').charAt(0) || null; } catch {}
       }
       
-      formik.setFieldValue('productPrice', price ? String(price) : "");
+      const priceStr = price ? String(price) : "";
+      formik.setFieldValue('productPrice', priceStr);
+      setLocalPrice(priceStr);
+      localPriceRef.current = priceStr;
       formik.setFieldValue('totalPrice', Number((((price||0) * (Number(formik.values.quantity)||0))).toFixed(2)));
 
       const selectedType = rows[productId]?.type;
