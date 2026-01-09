@@ -5,7 +5,11 @@ export const Loader = (props) => {
         <>
         {props.isLoading && 
             <Backdrop
-                sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}
+                sx={{ 
+                    color: '#fff', 
+                    zIndex: (theme) => theme.zIndex.drawer + 1,
+                    pointerEvents: 'none'  // Allow clicks through the backdrop
+                }}
                 open={props.isLoading}
             >
                 <CircularProgress color="secondary" size={50}/>
