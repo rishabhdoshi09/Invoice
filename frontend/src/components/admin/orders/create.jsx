@@ -1195,13 +1195,17 @@ export const CreateOrder = () => {
       // refresh history panel
       refreshHistory();
 
-      alert(`✅ Order created successfully!\nOrder #: ${savedOrder.orderNumber}\nTotal: ₹${savedOrder.total}`);
+      const paymentMsg = isCreditSale 
+        ? `\n⚠️ CREDIT SALE - Due: ₹${savedOrder.total}` 
+        : '';
+      alert(`✅ Order created successfully!\nOrder #: ${savedOrder.orderNumber}\nTotal: ₹${savedOrder.total}${paymentMsg}`);
 
       setOrderProps(initialOrderProps);
       formik.resetForm();
       setFetchedViaScale(false);
       setRecentlyDeleted([]);
       setSelectedHistoryDate('');
+      setIsCreditSale(false); // Reset credit sale toggle
     } catch (err) {
       console.error("createOrder unexpected error:", err);
       setLastSubmitError({ type: "unexpected", message: String(err?.message || err), raw: err });
