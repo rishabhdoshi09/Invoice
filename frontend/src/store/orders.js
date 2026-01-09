@@ -54,10 +54,6 @@ export const createOrderAction = (payload) => {
             dispatch(startLoading());
             const { data: { data }} = await createOrder(payload);
             dispatch(setNotification({ open: true, severity: 'success', message: 'Order created successfully'}));
-            // Clear orders cache and trigger a refetch for fresh data
-            dispatch(clearOrders());
-            // Automatically fetch fresh orders list after creating
-            dispatch(listOrdersAction({ limit: 25, offset: 0 }));
             dispatch(stopLoading());
             return data;
         }
