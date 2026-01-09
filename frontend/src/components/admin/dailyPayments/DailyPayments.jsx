@@ -63,6 +63,11 @@ export const DailyPayments = () => {
     const [customers, setCustomers] = useState([]);
     const [purchases, setPurchases] = useState([]);
     
+    // Outstanding parties for autocomplete
+    const [outstandingReceivables, setOutstandingReceivables] = useState([]);
+    const [outstandingPayables, setOutstandingPayables] = useState([]);
+    const [selectedPartyOutstanding, setSelectedPartyOutstanding] = useState(null);
+    
     // Delete confirmation dialog state
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [paymentToDelete, setPaymentToDelete] = useState(null);
@@ -81,8 +86,8 @@ export const DailyPayments = () => {
         partyId: '',
         partyName: '',
         partyType: 'supplier',
-        amount: 0,
-        referenceType: 'purchase',
+        amount: '',
+        referenceType: 'advance',
         referenceId: '',
         referenceNumber: '',
         notes: ''
