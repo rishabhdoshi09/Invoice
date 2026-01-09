@@ -129,7 +129,7 @@ const toNum = (v) => {
  * orderDate, customerName, customerMobile, subTotal, tax, taxPercent, total, orderItems[]
  * So we must strip extra UI-only properties like `customer`, `notes`, `orderNumber`, etc.
  */
-const sanitizeOrderForServer = (props = {}) => {
+const sanitizeOrderForServer = (props = {}, isCreditSale = false) => {
   const { orderItems = [] } = props;
 
   const clean = orderItems.map((it) => {
@@ -144,6 +144,8 @@ const sanitizeOrderForServer = (props = {}) => {
     return cpy;
   });
 
+  const total = toNum(props.total);
+  
   return {
     orderDate: props.orderDate || getTodayStr(),
     customerName: props.customerName || '',
@@ -151,7 +153,9 @@ const sanitizeOrderForServer = (props = {}) => {
     subTotal: toNum(props.subTotal),
     tax: toNum(props.tax),
     taxPercent: toNum(props.taxPercent),
-    total: toNum(props.total),
+    total: total,
+    // Credit sale: paidAmount = 0, otherwise fully paid
+    paidAmount: isCreditSale ? 0 : total,
     orderItems: clean,
   };
 };
