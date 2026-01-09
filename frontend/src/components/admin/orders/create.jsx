@@ -344,13 +344,18 @@ export const CreateOrder = () => {
 
   const printPdf = useCallback(() => {
     try {
+      // Only allow printing if an order has been submitted (archivedOrderProps exists)
+      if (!archivedOrderProps) {
+        alert('Please create (submit) an order first before printing.');
+        return;
+      }
       if (!pdfUrl && !archivedPdfUrl) return;
       const frame = pdfRef.current;
       if (frame && frame.contentWindow) { frame.contentWindow.focus(); frame.contentWindow.print(); return; }
       const w = window.open(archivedPdfUrl || pdfUrl);
       if (w) { const onLoad = () => { try { w.print(); } catch {} }; w.addEventListener('load', onLoad, { once: true }); }
     } catch {}
-  }, [pdfUrl, archivedPdfUrl]);
+  }, [pdfUrl, archivedPdfUrl, archivedOrderProps]);
 
   const generatePdf = useCallback((pdfProps) => {
     const updatedProps = JSON.parse(JSON.stringify(pdfProps));
