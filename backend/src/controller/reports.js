@@ -11,10 +11,7 @@ module.exports = {
                     paymentStatus: {
                         [Op.in]: ['unpaid', 'partial']
                     },
-                    isDeleted: false,
-                    customerName: {
-                        [Op.ne]: ''
-                    }
+                    isDeleted: false
                 },
                 attributes: ['id', 'orderNumber', 'orderDate', 'customerName', 'customerMobile', 'total', 'paidAmount', 'dueAmount', 'paymentStatus'],
                 order: [['customerName', 'ASC'], ['orderDate', 'DESC']]
@@ -23,19 +20,24 @@ module.exports = {
             // Group by customer name
             const customerMap = {};
             unpaidOrders.forEach(order => {
-                const name = order.customerName || 'Unknown';
+                const name = (order.customerName || '').trim() || 'Walk-in Customer';
                 if (!customerMap[name]) {
                     customerMap[name] = {
                         customerName: name,
-                        customerMobile: order.customerMobile,
+                        name: name, // alias for compatibility
+                        customerMobile: order.customerMobile || '',
                         totalOutstanding: 0,
+                        outstanding: 0, // alias for compatibility
                         orderCount: 0,
+                        count: 0, // alias for compatibility
                         orders: []
                     };
                 }
-                const due = order.dueAmount || (order.total - (order.paidAmount || 0));
+                const due = order.dueAmount != null ? order.dueAmount : (order.total - (order.paidAmount || 0));
                 customerMap[name].totalOutstanding += due;
+                customerMap[name].outstanding = customerMap[name].totalOutstanding;
                 customerMap[name].orderCount += 1;
+                customerMap[name].count = customerMap[name].orderCount;
                 customerMap[name].orders.push({
                     id: order.id,
                     orderNumber: order.orderNumber,
