@@ -75,15 +75,12 @@ export const ListOrders = () => {
         }
     }, [refetch, dispatch, filters]);
 
-    // Always fetch fresh data when component mounts or when location changes (navigating to the page)
+    // Always fetch fresh data when component mounts
     useEffect(() => {
-        // Force fresh fetch every time the component mounts or user navigates to this page
-        const fetchData = async () => {
-            await dispatch(listOrdersAction(filters));
-        };
-        fetchData();
+        // Force fresh fetch on every mount
+        dispatch(listOrdersAction(filters));
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [location.pathname]);
+    }, []);
 
     // Restore scroll position after data is loaded - use useLayoutEffect for sync scroll restoration
     useLayoutEffect(() => {
