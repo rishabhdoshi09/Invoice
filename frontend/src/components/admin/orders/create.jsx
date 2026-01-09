@@ -547,12 +547,11 @@ export const CreateOrder = () => {
     String(formik.values.type||'').toLowerCase()==='weighted'
   );
   
-  // For weighted products: validate 3-digit price using localPrice for real-time feedback
-  const priceValue = Number(localPrice) || 0;
-  const priceStr = String(localPrice || '');
+  // For weighted products: validate 3-digit price
+  const priceValue = Number(formikSafeGet('productPrice')) || 0;
+  const priceStr = String(priceValue);
   const isWeightedPriceInvalid = Boolean(
     isWeighted && 
-    priceStr.length > 0 &&
     (priceStr.length !== 3 || priceValue < 100 || priceValue > 399)
   );
   
