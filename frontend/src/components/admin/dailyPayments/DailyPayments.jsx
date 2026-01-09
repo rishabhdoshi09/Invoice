@@ -746,15 +746,6 @@ export const DailyPayments = () => {
                     ) : (
                         /* Advanced Payment Form */
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-                            <TextField
-                                label="Payment Date"
-                                name="paymentDate"
-                                type="date"
-                                value={formData.paymentDate}
-                                onChange={handleChange}
-                                fullWidth
-                                InputLabelProps={{ shrink: true }}
-                            />
                             <FormControl fullWidth>
                                 <InputLabel>Party Type</InputLabel>
                                 <Select
@@ -767,14 +758,54 @@ export const DailyPayments = () => {
                                     <MenuItem value="customer">Customer (Receipt In)</MenuItem>
                                 </Select>
                             </FormControl>
-                            <TextField
-                                label={`${formData.partyType === 'supplier' ? 'Supplier' : 'Customer'} Name *`}
-                                name="partyName"
+                            
+                            <Autocomplete
+                                freeSolo
+                                options={getPartySuggestions()}
+                                getOptionLabel={(option) => {
+                                    if (typeof option === 'string') return option;
+                                    return option.name || '';
+                                }}
+                                renderOption={(props, option) => (
+                                    <li {...props}>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                                            <span>{option.name}</span>
+                                            {option.outstanding > 0 && (
+                                                <Chip 
+                                                    size="small" 
+                                                    color={formData.partyType === 'supplier' ? 'error' : 'success'}
+                                                    label={`Due: ₹${option.outstanding.toLocaleString('en-IN')}`}
+                                                />
+                                            )}
+                                        </Box>
+                                    </li>
+                                )}
                                 value={formData.partyName}
-                                onChange={handleChange}
-                                fullWidth
-                                placeholder={`Type ${formData.partyType === 'supplier' ? 'supplier' : 'customer'} name`}
+                                onChange={handlePartySelect}
+                                onInputChange={(event, newValue) => {
+                                    if (event?.type === 'change') {
+                                        setFormData(prev => ({ ...prev, partyName: newValue }));
+                                    }
+                                }}
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        label={`${formData.partyType === 'supplier' ? 'Supplier' : 'Customer'} Name *`}
+                                        placeholder="Type or select name"
+                                        helperText={selectedPartyOutstanding ? `Outstanding: ₹${selectedPartyOutstanding.toLocaleString('en-IN')}` : ''}
+                                    />
+                                )}
                             />
+                            
+                            {selectedPartyOutstanding && (
+                                <Alert severity="info" icon={<Warning />}>
+                                    {formData.partyType === 'supplier' 
+                                        ? `You owe ₹${selectedPartyOutstanding.toLocaleString('en-IN')} to this supplier`
+                                        : `This customer owes ₹${selectedPartyOutstanding.toLocaleString('en-IN')}`
+                                    }
+                                </Alert>
+                            )}
+                            
                             <TextField
                                 label="Amount *"
                                 name="amount"
