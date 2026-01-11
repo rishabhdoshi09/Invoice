@@ -113,6 +113,12 @@ export const Layout = () =>  {
 
     const pages = [
         {
+            key: 'day-start',
+            label: 'Day Start', 
+            icon: <AccountBalance />,
+            path: 'day-start'
+        },
+        {
             key: 'orders',
             label: 'Orders', 
             icon: <Shop />,
