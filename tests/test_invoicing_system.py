@@ -63,9 +63,9 @@ class TestProductSetup:
     def test_01_create_test_products(self):
         """Create test products for order testing"""
         products = [
-            {"name": "TEST_Product_A", "pricePerKg": 100, "isWeighted": False},
-            {"name": "TEST_Product_B", "pricePerKg": 250, "isWeighted": True},
-            {"name": "TEST_Product_C", "pricePerKg": 500, "isWeighted": False}
+            {"name": "TEST_Product_A", "pricePerKg": 100, "type": "non-weighted"},
+            {"name": "TEST_Product_B", "pricePerKg": 250, "type": "weighted"},
+            {"name": "TEST_Product_C", "pricePerKg": 500, "type": "non-weighted"}
         ]
         
         for product in products:
