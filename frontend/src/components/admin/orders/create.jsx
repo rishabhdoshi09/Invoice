@@ -1323,8 +1323,7 @@ export const CreateOrder = () => {
     return () => { H.pushState=originalPush; H.replaceState=originalReplace };
   }, []);
 
-  // Only show PDF after order is submitted (archivedPdfUrl exists)
-  const visiblePdfUrl = archivedPdfUrl || '';
+  const visiblePdfUrl = archivedPdfUrl || pdfUrl;
   const visibleOrderDisplay = archivedOrderProps || orderProps;
 
   // When price enters 300–399 (and name is set) and user hasn't suppressed, open the modal.
