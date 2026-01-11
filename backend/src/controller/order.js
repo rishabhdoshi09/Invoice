@@ -30,7 +30,10 @@ module.exports = {
             let { orderItems, ...orderObj } = value;
 
             // Calculate payment status (most sales are cash, default to paid)
-            if (!orderObj.paidAmount) orderObj.paidAmount = orderObj.total; // Default: fully paid
+            // Use explicit check for undefined/null, not falsy (0 is valid for credit sales)
+            if (orderObj.paidAmount === undefined || orderObj.paidAmount === null) {
+                orderObj.paidAmount = orderObj.total; // Default: fully paid
+            }
             orderObj.dueAmount = orderObj.total - orderObj.paidAmount;
             
             if (orderObj.paidAmount === 0) {
