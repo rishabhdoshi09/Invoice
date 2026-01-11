@@ -84,6 +84,7 @@ const AppContent = () => {
           <Route path="outstanding" element={<OutstandingReports />} />
         </Route>
         <Route path="tally-export" element={<TallyExport />} />
+        <Route path="day-start" element={<DayStart />} />
         <Route 
           path="admin-dashboard" 
           element={
