@@ -586,7 +586,8 @@ class TestPaymentRecording:
                 "name": product["name"],
                 "quantity": 1,
                 "productPrice": total,
-                "totalPrice": total
+                "totalPrice": total,
+                "type": product.get("type", "non-weighted")
             }]
         }
         
