@@ -86,10 +86,10 @@ module.exports = {
                 const ledgerEntries = [];
                 
                 // 1. Debit Customer/Receivable (if not fully paid)
-                if (orderObj.dueAmount > 0) {
+                if (orderObj.dueAmount > 0 && orderObj.customerId) {
                     // Assuming customer has a ledgerId
                     const customer = await Services.customer.getCustomer({ id: orderObj.customerId });
-                    if (customer) {
+                    if (customer && customer.ledgerId) {
                         ledgerEntries.push({
                             ledgerId: customer.ledgerId, 
                             entryDate: orderObj.orderDate,
