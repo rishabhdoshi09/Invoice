@@ -266,7 +266,8 @@ class TestOrderCreation:
                 "name": product["name"],
                 "quantity": quantity,
                 "productPrice": price,
-                "totalPrice": item_total
+                "totalPrice": item_total,
+                "type": product.get("type", "non-weighted")
             })
         
         tax_percent = 18
