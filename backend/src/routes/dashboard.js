@@ -23,7 +23,9 @@ module.exports = (router) => {
     router.post('/dashboard/summary/close/:date', authenticate, authorize('admin'), Controller.closeDay);
     router.post('/dashboard/summary/reopen/:date', authenticate, authorize('admin'), Controller.reopenDay);
     router.post('/dashboard/summary/recalculate/:date', authenticate, authorize('admin'), Controller.recalculateSummary);
-    router.post('/dashboard/summary/opening-balance', authenticate, authorize('admin'), Controller.setOpeningBalance);
+    
+    // Opening balance - accessible by both admin and billing_staff
+    router.post('/dashboard/summary/opening-balance', authenticate, authorize('admin', 'billing_staff'), Controller.setOpeningBalance);
     
     // Invoice sequence info
     router.get('/dashboard/invoice-sequence', authenticate, Controller.getInvoiceSequence);
