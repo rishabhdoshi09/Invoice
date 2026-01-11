@@ -431,7 +431,8 @@ class TestOrderOperations:
                 "name": product["name"],
                 "quantity": 1,
                 "productPrice": 50,
-                "totalPrice": 50
+                "totalPrice": 50,
+                "type": product.get("type", "non-weighted")
             }]
         }
         
