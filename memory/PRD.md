@@ -1,111 +1,143 @@
-# Customer Invoicing System - Product Requirements Document
+# BizLedger - Invoice & Billing System
 
 ## Original Problem Statement
-Build a customer invoicing/billing application for managing orders, products, payments, and generating invoices. The system should support:
-- Order creation with weighted and non-weighted products
-- Invoice generation with PDF export
-- Daily payment tracking
-- GST/Tally export for accounting compliance
-- Role-based access (Admin, Billing Staff)
+A billing/invoicing system with React frontend + Node.js backend + PostgreSQL database for managing customer invoices, orders, payments, and financial tracking.
 
-## Current Architecture
+## User Personas
+- **Admin:** Full access to all features, dashboard, audit logs, user management
+- **Billing Staff:** Limited access for creating orders, recording payments
 
-### Tech Stack
-- **Frontend:** React (Create React App), Redux Toolkit, Material-UI (MUI), Formik
-- **Backend:** Node.js, Express.js, Sequelize ORM
-- **Database:** PostgreSQL
-- **Process Manager:** Supervisor
+## Core Requirements
+1. Order/Invoice Management (CRUD)
+2. Customer Management
+3. Product Management
+4. Payment Tracking (Credit Sales, Receivables, Payables)
+5. Daily Sales Summary & Dashboard
+6. Audit Logging
+7. Invoice Number Sequencing
 
-### Code Structure
-```
-/app/
-├── backend/         # Node.js/Express backend
-│   ├── src/
-│   │   ├── controller/   # API controllers
-│   │   ├── dao/          # Data access layer
-│   │   ├── middleware/   # Auth, audit logging
-│   │   ├── models/       # Sequelize models
-│   │   ├── routes/       # Express routes
-│   │   ├── services/     # Business logic
-│   │   └── validations/  # Input validation
-│   └── index.js
-├── frontend/        # React frontend
-│   ├── src/
-│   │   ├── components/   # UI components
-│   │   ├── context/      # React context (Auth)
-│   │   ├── services/     # API service layer
-│   │   └── store/        # Redux store
-└── memory/          # Documentation
-```
+---
 
 ## What's Been Implemented
 
-### Session: January 9, 2026
+### Authentication & Users
+- JWT-based authentication
+- Role-based access (admin, billing_staff)
+- User management
 
-#### Features Completed:
-1. **Admin Quick Reference Guide** - Added helpful guide on order creation page showing:
-   - Keyboard shortcuts (/, =, Shift+D, Ctrl+P)
-   - Price protection rules
-   - Visible only to admin users
+### Orders & Invoicing
+- Order creation with auto-generated invoice numbers (INV-YYYYMMDD-XXXXXX)
+- Credit Sale toggle (unpaid orders tracking)
+- Order editing (admin only)
+- Order deletion with audit logging
+- Order list with date filtering
 
-2. **Price Input Race Condition Fix** - Resolved issue where rapid typing caused digits to be missed:
-   - Implemented local state (`localPrice`) for immediate UI updates
-   - Debounced Formik updates (50ms) to prevent race conditions
-   - Added proper sync between local state and Formik on blur/product selection
+### Dashboard (Admin)
+- Today's Sales total
+- Opening Balance tracking
+- Expected Cash in Drawer calculation
+- Activity Log
+- Deletions Log
+- Daily Summaries with date range
 
-3. **Orders Auto-Refetch** - Fixed issue where new orders didn't appear instantly:
-   - Modified `createOrderAction` to trigger automatic list refresh after order creation
-   - Added cleanup logic in list component when cache is cleared
+### Payments
+- Daily Payments page with Outstanding Receivables/Payables
+- Smart autocomplete for parties with outstanding balances
+- Payment recording
 
-4. **Database Schema Sync** - Added missing columns to PostgreSQL tables:
-   - orders: `isDeleted`, `deletedAt`, `deletedBy`, `deletedByName`, `customerGstin`, `placeOfSupply`, `staffNotes`, `staffNotesUpdatedAt`, `staffNotesUpdatedBy`, `createdBy`, `createdByName`, `modifiedBy`, `modifiedByName`, `paidAmount`, `dueAmount`, `customerId`, `paymentStatus`
-   - orderItems: `altName`
-   - Created ledger accounts: Sales Account, Cash Account
+### Financial Tracking
+- Ledger entries for sales
+- Daily summary auto-calculation
 
-## Key API Endpoints
-- `GET /api/orders` - List orders with filtering/pagination
-- `POST /api/orders` - Create new order
-- `DELETE /api/orders/:id` - Soft delete order
-- `GET /api/products` - List products
-- `POST /api/products` - Create product
-- `POST /api/auth/login` - User authentication
-- `GET /api/auth/me` - Current user info
+---
 
-## Key Files Reference
-- `/app/frontend/src/components/admin/orders/create.jsx` - Order creation page (1900+ lines)
-- `/app/frontend/src/components/admin/orders/list.jsx` - Orders list page
-- `/app/frontend/src/store/orders.js` - Redux order state management
-- `/app/frontend/src/context/AuthContext.jsx` - Authentication context
-- `/app/backend/src/controller/order.js` - Order controller
-- `/app/backend/src/models/order.js` - Order Sequelize model
+## Known Issues (Priority Order)
 
-## User Roles
-- **Admin:** Full access, price protection enabled (bypass with Caps Lock)
-- **Billing Staff:** Simplified workflow, no price protection
+### 🔴 P0 - Critical
+1. **SequelizeUniqueConstraintError on order creation**
+   - Root cause: `invoice_sequences` table counter de-syncs
+   - Status: Needs permanent fix in backend logic
+
+### 🟠 P1 - High Priority
+2. **Price input race condition**
+   - Fast typing in price field drops digits
+   - Previous fix caused UI freeze, was reverted
+
+3. **New orders not appearing instantly**
+   - Redux caching issue
+   - Fix implemented but unverified
+
+### 🟡 P2 - Medium Priority
+4. **Refactor orders/create.jsx** (1900+ lines)
+5. **Migrate Redux to RTK Query**
+
+---
+
+## Upcoming Tasks
+- Purchase Bill Paid/Not Paid toggle
+
+---
+
+## API Endpoints
+
+### Auth
+- POST /api/auth/login
+
+### Orders
+- GET /api/orders
+- POST /api/orders
+- GET /api/orders/:id
+- PUT /api/orders/:id
+- DELETE /api/orders/:id
+
+### Dashboard
+- GET /api/dashboard/summary/today
+- GET /api/dashboard/summary/date/:date
+- GET /api/dashboard/summary/range
+- POST /api/dashboard/summary/recalculate/:date
+- POST /api/dashboard/summary/opening-balance
+- GET /api/dashboard/stats
+- GET /api/dashboard/audit-logs
+
+---
+
+## Database Schema (Key Tables)
+
+### orders
+- id (UUID, PK)
+- orderNumber (UNIQUE)
+- orderDate
+- customerName
+- total, paidAmount, dueAmount
+- paymentStatus (ENUM: paid, partial, unpaid)
+- createdBy, modifiedBy
+
+### invoice_sequences
+- id, prefix, currentNumber, dailyNumber, lastDate
+
+### daily_summaries
+- date, totalSales, totalOrders, openingBalance, isClosed
+
+---
 
 ## Test Credentials
-- Username: `admin`
-- Password: `admin123`
+- Admin: admin / admin123
+- Staff: staff / staff123
 
-## Prioritized Backlog
+---
 
-### P0 (Critical)
-- None currently
+## Verified Tests (Jan 11, 2026)
 
-### P1 (High Priority)
-- Create guided flow for payment entries (dashboard with clear action buttons)
-- Refactor `orders/create.jsx` (1900+ lines) into smaller components
+### Totals Verification Test ✅
+- Created 40 random bills via API
+- Sum: ₹36,895.57
+- Dashboard total: ₹36,895.57
+- DB query total: ₹36,895.57
+- **All match correctly**
 
-### P2 (Medium Priority)
-- Add more keyboard shortcuts for billing staff
-- Improve error handling and validation messages
-- Add unit tests for critical flows
+---
 
-## Known Issues
-- Invoice sequence doesn't auto-update (manual DB fix needed if sequence gets out of sync)
-- Some lint warnings in create.jsx (empty catch blocks)
-
-## Notes for Future Development
-- Consider using RTK Query for automatic cache management
-- The `create.jsx` component is a major source of technical debt
-- Role-based features should be tested with actual billing_staff user
+## Tech Stack
+- Frontend: React, Redux, Formik, MUI
+- Backend: Node.js, Express, Sequelize
+- Database: PostgreSQL
