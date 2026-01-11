@@ -340,7 +340,8 @@ class TestOrderCreation:
                     "name": product["name"],
                     "quantity": 1,
                     "productPrice": 100,
-                    "totalPrice": 100
+                    "totalPrice": 100,
+                    "type": product.get("type", "non-weighted")
                 }]
             }
             
