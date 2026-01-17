@@ -256,6 +256,7 @@ export const ListOrders = () => {
                                 <TableRow sx={{ bgcolor: '#f5f5f5' }}>
                                     <TableCell><strong>Order #</strong></TableCell>
                                     <TableCell><strong>Date</strong></TableCell>
+                                    <TableCell><strong>Time</strong></TableCell>
                                     <TableCell><strong>Customer</strong></TableCell>
                                     <TableCell><strong>Mobile</strong></TableCell>
                                     <TableCell align="right"><strong>Total</strong></TableCell>
