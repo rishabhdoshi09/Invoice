@@ -615,6 +615,7 @@ export const DailyPayments = () => {
                             <Table size="small">
                                 <TableHead>
                                     <TableRow sx={{ bgcolor: '#c8e6c9' }}>
+                                        <TableCell width={40}></TableCell>
                                         <TableCell><strong>Customer Name</strong></TableCell>
                                         <TableCell align="right"><strong>Amount Due</strong></TableCell>
                                         <TableCell align="right"><strong>Orders</strong></TableCell>
@@ -623,41 +624,147 @@ export const DailyPayments = () => {
                                 </TableHead>
                                 <TableBody>
                                     {outstandingReceivables.slice(0, 10).map((item, idx) => (
-                                        <TableRow key={idx} hover>
-                                            <TableCell>{item.customerName || item.name}</TableCell>
-                                            <TableCell align="right">
-                                                <Typography color="success.main" fontWeight="bold">
-                                                    ₹{(item.totalOutstanding || item.outstanding || 0).toLocaleString('en-IN')}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell align="right">{item.orderCount || item.count || '-'}</TableCell>
-                                            <TableCell align="center">
-                                                <Button
-                                                    size="small"
-                                                    variant="contained"
-                                                    color="success"
-                                                    startIcon={<Add />}
-                                                    onClick={() => {
-                                                        setFormData({
-                                                            paymentDate: selectedDate,
-                                                            partyId: null,
-                                                            partyName: item.customerName || item.name,
-                                                            partyType: 'customer',
-                                                            amount: '',
-                                                            referenceType: 'advance',
-                                                            referenceId: '',
-                                                            referenceNumber: '',
-                                                            notes: ''
-                                                        });
-                                                        setSelectedPartyOutstanding(item.totalOutstanding || item.outstanding || 0);
-                                                        setDialogMode('advanced');
-                                                        setOpenDialog(true);
-                                                    }}
-                                                >
-                                                    Receive ₹
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
+                                        <React.Fragment key={idx}>
+                                            <TableRow hover>
+                                                <TableCell>
+                                                    {item.orders && item.orders.length > 0 && (
+                                                        <IconButton
+                                                            size="small"
+                                                            onClick={() => setExpandedCustomers(prev => ({
+                                                                ...prev,
+                                                                [idx]: !prev[idx]
+                                                            }))}
+                                                        >
+                                                            {expandedCustomers[idx] ? <ExpandLess /> : <ExpandMore />}
+                                                        </IconButton>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>{item.customerName || item.name}</TableCell>
+                                                <TableCell align="right">
+                                                    <Typography color="success.main" fontWeight="bold">
+                                                        ₹{(item.totalOutstanding || item.outstanding || 0).toLocaleString('en-IN')}
+                                                    </Typography>
+                                                </TableCell>
+                                                <TableCell align="right">
+                                                    <Chip 
+                                                        label={`${item.orderCount || item.count || 0} bills`}
+                                                        size="small"
+                                                        color="primary"
+                                                        variant="outlined"
+                                                        onClick={() => setExpandedCustomers(prev => ({
+                                                            ...prev,
+                                                            [idx]: !prev[idx]
+                                                        }))}
+                                                        sx={{ cursor: 'pointer' }}
+                                                    />
+                                                </TableCell>
+                                                <TableCell align="center">
+                                                    <Button
+                                                        size="small"
+                                                        variant="contained"
+                                                        color="success"
+                                                        startIcon={<Add />}
+                                                        onClick={() => {
+                                                            setFormData({
+                                                                paymentDate: selectedDate,
+                                                                partyId: null,
+                                                                partyName: item.customerName || item.name,
+                                                                partyType: 'customer',
+                                                                amount: '',
+                                                                referenceType: 'advance',
+                                                                referenceId: '',
+                                                                referenceNumber: '',
+                                                                notes: ''
+                                                            });
+                                                            setSelectedPartyOutstanding(item.totalOutstanding || item.outstanding || 0);
+                                                            setDialogMode('advanced');
+                                                            setOpenDialog(true);
+                                                        }}
+                                                    >
+                                                        Receive ₹
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                            {/* Expanded Bills Row */}
+                                            {expandedCustomers[idx] && item.orders && item.orders.length > 0 && (
+                                                <TableRow>
+                                                    <TableCell colSpan={5} sx={{ py: 0, bgcolor: '#f1f8e9' }}>
+                                                        <Box sx={{ p: 2 }}>
+                                                            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                                                                📋 Unpaid Bills for {item.customerName || item.name}
+                                                            </Typography>
+                                                            <Table size="small">
+                                                                <TableHead>
+                                                                    <TableRow sx={{ bgcolor: '#dcedc8' }}>
+                                                                        <TableCell><strong>Bill No</strong></TableCell>
+                                                                        <TableCell><strong>Date</strong></TableCell>
+                                                                        <TableCell align="right"><strong>Total</strong></TableCell>
+                                                                        <TableCell align="right"><strong>Paid</strong></TableCell>
+                                                                        <TableCell align="right"><strong>Due</strong></TableCell>
+                                                                        <TableCell align="center"><strong>Status</strong></TableCell>
+                                                                        <TableCell align="center"><strong>View</strong></TableCell>
+                                                                    </TableRow>
+                                                                </TableHead>
+                                                                <TableBody>
+                                                                    {item.orders.map((order, orderIdx) => (
+                                                                        <TableRow key={orderIdx} hover>
+                                                                            <TableCell>
+                                                                                <Typography variant="body2" fontWeight="bold" color="primary">
+                                                                                    {order.orderNumber}
+                                                                                </Typography>
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                {moment(order.orderDate).format('DD/MM/YYYY')}
+                                                                            </TableCell>
+                                                                            <TableCell align="right">
+                                                                                ₹{(order.total || 0).toLocaleString('en-IN')}
+                                                                            </TableCell>
+                                                                            <TableCell align="right">
+                                                                                ₹{(order.paidAmount || 0).toLocaleString('en-IN')}
+                                                                            </TableCell>
+                                                                            <TableCell align="right">
+                                                                                <Typography color="error.main" fontWeight="bold">
+                                                                                    ₹{(order.dueAmount || 0).toLocaleString('en-IN')}
+                                                                                </Typography>
+                                                                            </TableCell>
+                                                                            <TableCell align="center">
+                                                                                <Chip 
+                                                                                    label={order.paymentStatus}
+                                                                                    size="small"
+                                                                                    color={order.paymentStatus === 'partial' ? 'warning' : 'error'}
+                                                                                />
+                                                                            </TableCell>
+                                                                            <TableCell align="center">
+                                                                                <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+                                                                                    <Tooltip title="View Bill">
+                                                                                        <IconButton 
+                                                                                            size="small" 
+                                                                                            color="primary"
+                                                                                            onClick={() => navigate(`/orders/edit/${order.id}`)}
+                                                                                        >
+                                                                                            <Visibility fontSize="small" />
+                                                                                        </IconButton>
+                                                                                    </Tooltip>
+                                                                                    <Tooltip title="Quick Preview">
+                                                                                        <IconButton 
+                                                                                            size="small" 
+                                                                                            color="secondary"
+                                                                                            onClick={() => setBillPreviewDialog({ open: true, order: order })}
+                                                                                        >
+                                                                                            <Receipt fontSize="small" />
+                                                                                        </IconButton>
+                                                                                    </Tooltip>
+                                                                                </Box>
+                                                                            </TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                </TableBody>
+                                                            </Table>
+                                                        </Box>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </React.Fragment>
                                     ))}
                                 </TableBody>
                             </Table>
