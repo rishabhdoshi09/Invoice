@@ -30,7 +30,8 @@ import {
     ToggleButton,
     ToggleButtonGroup,
     Autocomplete,
-    Alert
+    Alert,
+    CircularProgress
 } from '@mui/material';
 import { 
     CalendarToday, 
@@ -55,16 +56,56 @@ import { listPayments, createPayment } from '../../../services/tally';
 import { listSuppliers } from '../../../services/supplier';
 import { listCustomers } from '../../../services/customer';
 import { listPurchases } from '../../../services/tally';
-import axios from 'axios';
+import { 
+    useGetDailySummaryQuery, 
+    useGetOutstandingReceivablesQuery, 
+    useGetOutstandingPayablesQuery,
+    useCreatePaymentMutation,
+    useDeletePaymentMutation
+} from '../../../store/api';
 import moment from 'moment';
 
 export const DailyPayments = () => {
     const navigate = useNavigate();
-    const [payments, setPayments] = useState([]);
-    const [summary, setSummary] = useState(null);
-    const [loading, setLoading] = useState(false);
     const [selectedDate, setSelectedDate] = useState(moment().format('YYYY-MM-DD'));
     const [openDialog, setOpenDialog] = useState(false);
+    
+    // RTK Query hooks - automatic cache invalidation!
+    const { 
+        data: summaryData, 
+        isLoading: loadingSummary,
+        isFetching: fetchingSummary,
+        refetch: refetchSummary 
+    } = useGetDailySummaryQuery(selectedDate, {
+        refetchOnFocus: true,
+        refetchOnReconnect: true,
+    });
+    
+    const { 
+        data: outstandingReceivables = [], 
+        isLoading: loadingReceivables,
+        refetch: refetchReceivables 
+    } = useGetOutstandingReceivablesQuery(undefined, {
+        refetchOnFocus: true,
+        refetchOnReconnect: true,
+    });
+    
+    const { 
+        data: outstandingPayables = [], 
+        isLoading: loadingPayables,
+        refetch: refetchPayables 
+    } = useGetOutstandingPayablesQuery(undefined, {
+        refetchOnFocus: true,
+        refetchOnReconnect: true,
+    });
+    
+    const [createPaymentMutation] = useCreatePaymentMutation();
+    const [deletePaymentMutation, { isLoading: deletingPayment }] = useDeletePaymentMutation();
+    
+    // Extract data from RTK Query
+    const summary = summaryData || null;
+    const payments = summaryData?.payments || [];
+    const loading = loadingSummary || loadingReceivables || loadingPayables;
     
     // Expanded rows for viewing bills
     const [expandedCustomers, setExpandedCustomers] = useState({});
