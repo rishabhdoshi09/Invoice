@@ -213,6 +213,14 @@ export const DailyPayments = () => {
         return () => window.removeEventListener('focus', handleFocus);
     }, [fetchOutstandingData]);
 
+    // Auto-refresh outstanding data every 30 seconds
+    useEffect(() => {
+        const interval = setInterval(() => {
+            fetchOutstandingData();
+        }, 30000);
+        return () => clearInterval(interval);
+    }, [fetchOutstandingData]);
+
     useEffect(() => {
         fetchSuppliers();
         fetchCustomers();
