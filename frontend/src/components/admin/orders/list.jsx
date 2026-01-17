@@ -179,10 +179,15 @@ export const ListOrders = () => {
     };
 
     // Format time for display
-    const formatTime = (dateString) => {
+    const formatTime = (row) => {
+        // Try createdAt first, then updatedAt, then use orderDate
+        const dateString = row.createdAt || row.updatedAt || row.orderDate;
         if (!dateString) return '-';
         try {
-            return new Date(dateString).toLocaleTimeString('en-IN', {
+            const date = new Date(dateString);
+            // Check if date is valid
+            if (isNaN(date.getTime())) return '-';
+            return date.toLocaleTimeString('en-IN', {
                 hour: '2-digit',
                 minute: '2-digit',
                 hour12: true
