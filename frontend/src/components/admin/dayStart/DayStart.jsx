@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
     Box,
     Card,
@@ -23,8 +23,11 @@ import {
     Receipt
 } from '@mui/icons-material';
 import { useAuth } from '../../../context/AuthContext';
-import * as dashboardService from '../../../services/dashboard';
-import axios from 'axios';
+import { 
+    useGetTodaySummaryQuery, 
+    useGetDailySummaryQuery,
+    useSetOpeningBalanceMutation 
+} from '../../../store/api';
 import moment from 'moment';
 import {
     PieChart,
@@ -36,52 +39,46 @@ import {
     YAxis,
     CartesianGrid,
     Tooltip,
-    Legend,
     ResponsiveContainer
 } from 'recharts';
 
-const COLORS = ['#4caf50', '#2196f3', '#ff9800', '#f44336', '#9c27b0'];
-
 export const DayStart = () => {
     const { user } = useAuth();
-    const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
-    const [todaySummary, setTodaySummary] = useState(null);
-    const [paymentSummary, setPaymentSummary] = useState(null);
     
     // Opening balance state
     const [openingBalanceInput, setOpeningBalanceInput] = useState('');
-    const [savingOpeningBalance, setSavingOpeningBalance] = useState(false);
 
-    const fetchData = async () => {
-        setLoading(true);
-        setError('');
-        
-        try {
-            // Fetch dashboard summary and payment summary in parallel
-            const [summary, paymentRes] = await Promise.all([
-                dashboardService.getTodaySummary(),
-                axios.get('/api/payments/daily-summary', {
-                    params: { date: moment().format('YYYY-MM-DD') }
-                })
-            ]);
-            
-            setTodaySummary(summary);
-            
-            if (paymentRes.data.status === 200) {
-                setPaymentSummary(paymentRes.data.data);
-            }
-        } catch (err) {
-            setError(err.toString());
-        } finally {
-            setLoading(false);
-        }
+    // RTK Query hooks - automatic caching and refetch!
+    const { 
+        data: todaySummary, 
+        isLoading: loadingSummary,
+        isFetching: fetchingSummary,
+        refetch: refetchSummary 
+    } = useGetTodaySummaryQuery(undefined, {
+        refetchOnFocus: true,
+        refetchOnReconnect: true,
+    });
+    
+    const todayDate = moment().format('YYYY-MM-DD');
+    const { 
+        data: paymentSummary,
+        isLoading: loadingPayments,
+        refetch: refetchPayments
+    } = useGetDailySummaryQuery(todayDate, {
+        refetchOnFocus: true,
+        refetchOnReconnect: true,
+    });
+    
+    const [setOpeningBalance, { isLoading: savingOpeningBalance }] = useSetOpeningBalanceMutation();
+
+    const loading = loadingSummary || loadingPayments;
+
+    const handleRefreshAll = () => {
+        refetchSummary();
+        refetchPayments();
     };
-
-    useEffect(() => {
-        fetchData();
-    }, []);
 
     const handleSetOpeningBalance = async () => {
         const amount = parseFloat(openingBalanceInput);
@@ -90,19 +87,16 @@ export const DayStart = () => {
             return;
         }
         
-        setSavingOpeningBalance(true);
         setError('');
         setSuccess('');
         
         try {
-            await dashboardService.setOpeningBalance(amount);
+            await setOpeningBalance(amount).unwrap();
             setOpeningBalanceInput('');
             setSuccess('Opening balance set successfully!');
-            fetchData();
+            // No manual refetch needed - RTK Query handles it!
         } catch (err) {
-            setError('Failed to set opening balance: ' + err);
-        } finally {
-            setSavingOpeningBalance(false);
+            setError('Failed to set opening balance: ' + (err.data?.message || err.message || err));
         }
     };
 
@@ -122,11 +116,6 @@ export const DayStart = () => {
         { name: 'Opening Balance', value: openingBalance, color: '#9c27b0' },
         { name: 'Today\'s Sales', value: totalSales, color: '#2196f3' },
         { name: 'Customer Receipts', value: customerPayments, color: '#4caf50' },
-    ].filter(item => item.value > 0);
-
-    const cashOutflowData = [
-        { name: 'Supplier Payments', value: supplierPayments, color: '#ff9800' },
-        { name: 'Expenses', value: expenses, color: '#f44336' },
     ].filter(item => item.value > 0);
 
     const barChartData = [
@@ -153,13 +142,17 @@ export const DayStart = () => {
                     <AccountBalance color="primary" />
                     Day Start - Cash Management
                 </Typography>
-                <Button
-                    startIcon={<Refresh />}
-                    onClick={fetchData}
-                    variant="outlined"
-                >
-                    Refresh
-                </Button>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {fetchingSummary && <CircularProgress size={20} />}
+                    <Button
+                        startIcon={<Refresh />}
+                        onClick={handleRefreshAll}
+                        variant="outlined"
+                        disabled={fetchingSummary}
+                    >
+                        Refresh
+                    </Button>
+                </Box>
             </Box>
 
             {error && (
