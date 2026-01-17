@@ -1,8 +1,7 @@
-import { Button, Paper, TextField, Typography, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, Chip, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Box, IconButton } from '@mui/material';
-import { useNavigate, useLocation } from 'react-router';
-import { useDispatch, useSelector } from 'react-redux';
-import { useEffect, useState, useRef, useLayoutEffect } from 'react';
-import { listOrdersAction, deleteOrderAction  } from '../../../store/orders';
+import { Button, Paper, TextField, Typography, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, Chip, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Box, IconButton, CircularProgress } from '@mui/material';
+import { useNavigate } from 'react-router';
+import { useState, useRef, useLayoutEffect, useEffect } from 'react';
+import { useGetOrdersQuery, useDeleteOrderMutation } from '../../../store/api';
 import { Pagination } from '../../common/pagination';
 import { useAuth } from '../../../context/AuthContext';
 import { Note, Warning, Clear, Refresh } from '@mui/icons-material';
@@ -12,15 +11,9 @@ const SCROLL_POSITION_KEY = 'orders_scroll_position';
 const SCROLL_FILTERS_KEY = 'orders_filters';
 
 export const ListOrders = () => {
-
-    const dispatch = useDispatch();
     const navigate = useNavigate();
-    const location = useLocation();
     const { isAdmin } = useAuth();
-    const { orders: { count, rows } } = useSelector(state => state.orderState);
-    const tableRef = useRef(null);
     const scrollRestoredRef = useRef(false);
-    const isInitialLoadRef = useRef(true);
 
     // Try to restore filters from sessionStorage on initial load
     const getSavedFilters = () => {
@@ -35,8 +28,28 @@ export const ListOrders = () => {
         return { limit: 25, offset: 0, q: "", date: "" };
     };
 
-    const [refetch, shouldFetch] = useState(true);
     const [filters, setFilters] = useState(getSavedFilters);
+    
+    // RTK Query hooks - automatic caching and refetch on focus!
+    const { 
+        data: ordersData, 
+        isLoading, 
+        isFetching,
+        refetch 
+    } = useGetOrdersQuery(filters, {
+        // Refetch when window regains focus
+        refetchOnFocus: true,
+        // Refetch on reconnect
+        refetchOnReconnect: true,
+        // Poll every 30 seconds for real-time updates (optional)
+        // pollingInterval: 30000,
+    });
+    
+    const [deleteOrder, { isLoading: isDeleting }] = useDeleteOrderMutation();
+    
+    // Extract data with defaults
+    const count = ordersData?.count || 0;
+    const rows = ordersData?.rows || [];
     
     // Delete confirmation dialog state
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -49,9 +62,14 @@ export const ListOrders = () => {
     };
 
     // Confirm delete
-    const handleConfirmDelete = () => {
+    const handleConfirmDelete = async () => {
         if (orderToDelete) {
-            dispatch(deleteOrderAction(orderToDelete.id, filters));
+            try {
+                await deleteOrder(orderToDelete.id).unwrap();
+                // No need to manually refetch - RTK Query handles cache invalidation!
+            } catch (error) {
+                console.error('Failed to delete order:', error);
+            }
         }
         setDeleteDialogOpen(false);
         setOrderToDelete(null);
@@ -68,265 +86,259 @@ export const ListOrders = () => {
         sessionStorage.setItem(SCROLL_FILTERS_KEY, JSON.stringify(filters));
     }, [filters]);
 
-    useEffect(() => {
-        if (refetch) {
-            shouldFetch(false);
-            dispatch(listOrdersAction(filters));
-        }
-    }, [refetch, dispatch, filters]);
-
-    // Always fetch fresh data when component mounts
-    useEffect(() => {
-        // Force fresh fetch on every mount
-        dispatch(listOrdersAction(filters));
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    // Refresh data when window gains focus (user switches back to this tab/page)
-    useEffect(() => {
-        const handleFocus = () => {
-            dispatch(listOrdersAction(filters));
-        };
-        window.addEventListener('focus', handleFocus);
-        return () => window.removeEventListener('focus', handleFocus);
-    }, [dispatch, filters]);
-
-    // Restore scroll position after data is loaded - use useLayoutEffect for sync scroll restoration
+    // Restore scroll position after data is loaded
     useLayoutEffect(() => {
         if (rows.length > 0 && !scrollRestoredRef.current) {
             const savedPosition = sessionStorage.getItem(SCROLL_POSITION_KEY);
             if (savedPosition) {
-                // Use requestAnimationFrame to ensure DOM is fully rendered
                 requestAnimationFrame(() => {
                     window.scrollTo(0, parseInt(savedPosition, 10));
                     sessionStorage.removeItem(SCROLL_POSITION_KEY);
                     scrollRestoredRef.current = true;
                 });
             }
-            isInitialLoadRef.current = false;
         }
     }, [rows]);
 
     const paginate = (limit, offset) => {
-        shouldFetch(true);
-        // Clear scroll position when changing pages
         sessionStorage.removeItem(SCROLL_POSITION_KEY);
         scrollRestoredRef.current = false;
-        setFilters((prevState) => {
-            return {
-                ...prevState,
-                limit: limit,
-                offset: offset,
-            };
-        });
+        setFilters((prevState) => ({
+            ...prevState,
+            limit: limit,
+            offset: offset,
+        }));
     };
 
     const filterChangeHandler = (e) => {
-        // Clear scroll position when filtering
         sessionStorage.removeItem(SCROLL_POSITION_KEY);
         scrollRestoredRef.current = false;
-        setFilters((prevState) => {
-            return {
-                ...prevState,
-                [e.target.id]: e.target.value
-            };
-        });
-    }
+        setFilters((prevState) => ({
+            ...prevState,
+            [e.target.id]: e.target.value
+        }));
+    };
 
+    // Debounced filter effect
     useEffect(() => {
-        // Skip the initial load debounce effect if we're restoring from saved state
-        if (isInitialLoadRef.current) {
-            return;
-        }
-        
         const getData = setTimeout(() => {
-            dispatch(listOrdersAction(filters));
+            // RTK Query automatically handles this via the filters dependency
         }, 500);
-    
         return () => clearTimeout(getData);
-    }, [filters.q, dispatch, filters]);
+    }, [filters.q, filters.date]);
 
-    // Save scroll position and navigate to edit
-    const handleEditClick = (orderId) => {
+    const viewOrder = (row) => {
         sessionStorage.setItem(SCROLL_POSITION_KEY, window.scrollY.toString());
-        navigate(`edit/${orderId}`);
+        navigate(`/orders/edit/${row.id}`);
     };
 
-    const handleDateChange = (e) => {
+    const clearFilters = () => {
         sessionStorage.removeItem(SCROLL_POSITION_KEY);
-        scrollRestoredRef.current = false;
-        setFilters((prevState) => ({
-            ...prevState,
-            date: e.target.value,
-            offset: 0  // Reset to first page when filtering
-        }));
-        shouldFetch(true);
-    };
-
-    const clearDateFilter = () => {
-        setFilters((prevState) => ({
-            ...prevState,
-            date: "",
-            offset: 0
-        }));
-        sessionStorage.removeItem(SCROLL_FILTERS_KEY); // Clear saved filters
-        shouldFetch(true);
-    };
-
-    const clearAllFilters = () => {
-        const defaultFilters = { limit: 25, offset: 0, q: "", date: "" };
-        setFilters(defaultFilters);
         sessionStorage.removeItem(SCROLL_FILTERS_KEY);
-        shouldFetch(true);
+        scrollRestoredRef.current = false;
+        setFilters({ limit: 25, offset: 0, q: "", date: "" });
+    };
+
+    const hasFilters = filters.q || filters.date;
+
+    // Format date for display
+    const formatDate = (dateString) => {
+        if (!dateString) return '-';
+        try {
+            return new Date(dateString).toLocaleDateString('en-IN', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+        } catch {
+            return dateString;
+        }
+    };
+
+    // Format currency
+    const formatCurrency = (amount) => {
+        return `₹${(amount || 0).toLocaleString('en-IN')}`;
     };
 
     return (
-        <>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', mb: 2 }}>
-                <TextField size="small" id="q" label="Search Order" onChange={filterChangeHandler} value={filters.q || ''} sx={{minWidth: '200px'}}></TextField>
-                <TextField 
-                    size="small" 
-                    id="date" 
-                    label="Filter by Date" 
-                    type="date"
-                    value={filters.date || ''}
-                    onChange={handleDateChange}
-                    InputLabelProps={{ shrink: true }}
-                    sx={{minWidth: '180px'}}
-                />
-                {filters.date && (
-                    <Button 
-                        variant="outlined" 
-                        size="small" 
-                        onClick={clearDateFilter}
-                        startIcon={<Clear />}
-                    >
-                        Clear Date
+        <Paper sx={{ width: '100%', overflow: 'hidden', padding: '10px' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h5">Orders</Typography>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    {isFetching && <CircularProgress size={20} />}
+                    <Tooltip title="Refresh list">
+                        <IconButton onClick={() => refetch()} disabled={isFetching}>
+                            <Refresh />
+                        </IconButton>
+                    </Tooltip>
+                    <Button variant="contained" onClick={() => navigate('/orders/create')}>
+                        Create Order
                     </Button>
-                )}
-                {(filters.date || filters.q) && (
-                    <Button 
-                        variant="text" 
-                        size="small" 
-                        color="error"
-                        onClick={clearAllFilters}
-                    >
-                        Clear All Filters
-                    </Button>
-                )}
-                <Tooltip title="Refresh list">
-                    <IconButton 
-                        color="primary" 
-                        onClick={() => dispatch(listOrdersAction(filters))}
-                        sx={{ ml: 1 }}
-                    >
-                        <Refresh />
-                    </IconButton>
-                </Tooltip>
-                <Button variant="contained" onClick={() => navigate(`create`)}>Create Order</Button>
+                </Box>
             </Box>
 
-            <TableContainer component={Paper} ref={tableRef}>
-                <Table>
-                    <TableHead>
-                        <TableRow>
-                            <TableCell><b>Order Number</b></TableCell>
-                            <TableCell><b>Order Date</b></TableCell>
-                            <TableCell><b>Name</b></TableCell>
-                            <TableCell><b>Mobile</b></TableCell>
-                            <TableCell><b>Subtotal</b></TableCell>
-                            <TableCell><b>Tax</b></TableCell>
-                            <TableCell><b>Total</b></TableCell>
-                            <TableCell><b>Notes</b></TableCell>
-                            <TableCell><b>Action</b></TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {
-                            rows.map((orderObj) => {
-                                return (
-                                    <TableRow key={orderObj.id} sx={orderObj.staffNotes ? { bgcolor: '#fff8e1' } : {}} id={`order-row-${orderObj.id}`}>
-                                        <TableCell>{orderObj.orderNumber}</TableCell>
-                                        <TableCell>{orderObj.orderDate}</TableCell>
-                                        <TableCell>{orderObj.customerName}</TableCell>
-                                        <TableCell>{orderObj.customerMobile}</TableCell>
-                                        <TableCell>{orderObj.subTotal}</TableCell>
-                                        <TableCell>{orderObj.tax} ({orderObj.taxPercent}%)</TableCell>
-                                        <TableCell>{orderObj.total}</TableCell>
-                                        <TableCell>
-                                            {orderObj.staffNotes ? (
-                                                <Tooltip title={orderObj.staffNotes.split('\n').slice(-1)[0]}>
-                                                    <Chip 
-                                                        icon={<Note />} 
-                                                        label="Has Notes" 
-                                                        size="small" 
-                                                        color="warning"
-                                                    />
-                                                </Tooltip>
-                                            ) : (
-                                                <Typography variant="caption" color="text.secondary">-</Typography>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Button variant='outlined' sx={{margin: '5px'}} onClick={() => handleEditClick(orderObj.id)}>
-                                                {isAdmin ? 'Edit' : 'View/Note'}
-                                            </Button>
-                                            {isAdmin && (
-                                                <Button 
-                                                    variant='outlined' 
-                                                    color="error"
-                                                    sx={{margin: '5px'}} 
-                                                    onClick={() => handleDeleteClick(orderObj)}
-                                                >
-                                                    Delete
-                                                </Button>
-                                            )}
+            {/* Filters */}
+            <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
+                <TextField
+                    id="q"
+                    label="Search (Order #, Customer, Mobile)"
+                    variant="outlined"
+                    size="small"
+                    value={filters.q}
+                    onChange={filterChangeHandler}
+                    sx={{ minWidth: 250 }}
+                />
+                <TextField
+                    id="date"
+                    label="Filter by Date"
+                    type="date"
+                    variant="outlined"
+                    size="small"
+                    value={filters.date}
+                    onChange={filterChangeHandler}
+                    InputLabelProps={{ shrink: true }}
+                />
+                {hasFilters && (
+                    <Tooltip title="Clear all filters">
+                        <IconButton onClick={clearFilters} size="small">
+                            <Clear />
+                        </IconButton>
+                    </Tooltip>
+                )}
+            </Box>
+
+            {isLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                    <CircularProgress />
+                </Box>
+            ) : (
+                <>
+                    <TableContainer>
+                        <Table size="small">
+                            <TableHead>
+                                <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                    <TableCell><strong>Order #</strong></TableCell>
+                                    <TableCell><strong>Date</strong></TableCell>
+                                    <TableCell><strong>Customer</strong></TableCell>
+                                    <TableCell><strong>Mobile</strong></TableCell>
+                                    <TableCell align="right"><strong>Total</strong></TableCell>
+                                    <TableCell align="center"><strong>Status</strong></TableCell>
+                                    <TableCell align="center"><strong>Actions</strong></TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {rows.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={7} align="center">
+                                            <Typography color="text.secondary" sx={{ py: 4 }}>
+                                                No orders found
+                                            </Typography>
                                         </TableCell>
                                     </TableRow>
-                                );
-                            })
-                        }
-                    </TableBody>
-                </Table>
-            </TableContainer>
-            <Pagination
-                limit={filters.limit}
-                offset={filters.offset}
-                count={count}
-                updateFilters={paginate}
-            />
+                                ) : (
+                                    rows.map((row) => (
+                                        <TableRow 
+                                            key={row.id} 
+                                            hover 
+                                            sx={{ cursor: 'pointer' }}
+                                            onClick={() => viewOrder(row)}
+                                        >
+                                            <TableCell>
+                                                <Typography variant="body2" fontWeight="bold" color="primary">
+                                                    {row.orderNumber}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>{formatDate(row.orderDate)}</TableCell>
+                                            <TableCell>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                    {row.customerName || 'Walk-in'}
+                                                    {row.notes && (
+                                                        <Tooltip title={row.notes}>
+                                                            <Note fontSize="small" color="action" />
+                                                        </Tooltip>
+                                                    )}
+                                                </Box>
+                                            </TableCell>
+                                            <TableCell>{row.customerMobile || '-'}</TableCell>
+                                            <TableCell align="right">
+                                                <Typography fontWeight="bold">
+                                                    {formatCurrency(row.total)}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell align="center">
+                                                {row.paymentStatus === 'paid' ? (
+                                                    <Chip label="Paid" size="small" color="success" />
+                                                ) : row.paymentStatus === 'partial' ? (
+                                                    <Chip label="Partial" size="small" color="warning" />
+                                                ) : (
+                                                    <Chip label="Unpaid" size="small" color="error" />
+                                                )}
+                                            </TableCell>
+                                            <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                                                <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+                                                    <Button 
+                                                        size="small" 
+                                                        variant="outlined"
+                                                        onClick={() => viewOrder(row)}
+                                                    >
+                                                        View
+                                                    </Button>
+                                                    {isAdmin && (
+                                                        <Button 
+                                                            size="small" 
+                                                            variant="outlined" 
+                                                            color="error"
+                                                            onClick={() => handleDeleteClick(row)}
+                                                            disabled={isDeleting}
+                                                        >
+                                                            Delete
+                                                        </Button>
+                                                    )}
+                                                </Box>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+
+                    {/* Pagination */}
+                    <Box sx={{ mt: 2 }}>
+                        <Pagination
+                            count={count}
+                            limit={filters.limit}
+                            offset={filters.offset}
+                            paginate={paginate}
+                        />
+                    </Box>
+                </>
+            )}
 
             {/* Delete Confirmation Dialog */}
-            <Dialog
-                open={deleteDialogOpen}
-                onClose={handleCancelDelete}
-                aria-labelledby="delete-dialog-title"
-                aria-describedby="delete-dialog-description"
-            >
-                <DialogTitle id="delete-dialog-title" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Warning color="error" />
-                    Confirm Delete
+            <Dialog open={deleteDialogOpen} onClose={handleCancelDelete}>
+                <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
+                    <Warning /> Delete Order
                 </DialogTitle>
                 <DialogContent>
-                    <DialogContentText id="delete-dialog-description">
+                    <DialogContentText>
                         Are you sure you want to delete order <strong>{orderToDelete?.orderNumber}</strong>?
-                        <br /><br />
-                        <strong>Customer:</strong> {orderToDelete?.customerName}
-                        <br />
-                        <strong>Total:</strong> ₹{orderToDelete?.total}
-                        <br /><br />
-                        This action cannot be undone.
                     </DialogContentText>
+                    <DialogContentText sx={{ mt: 1 }}>
+                        Customer: {orderToDelete?.customerName || 'Walk-in'}<br />
+                        Total: {formatCurrency(orderToDelete?.total)}
+                    </DialogContentText>
+                    <Typography variant="body2" color="error" sx={{ mt: 2 }}>
+                        ⚠️ This action cannot be undone.
+                    </Typography>
                 </DialogContent>
-                <DialogActions sx={{ px: 3, pb: 2 }}>
-                    <Button onClick={handleCancelDelete} variant="outlined">
-                        Cancel
-                    </Button>
-                    <Button onClick={handleConfirmDelete} variant="contained" color="error" autoFocus>
-                        Delete Order
+                <DialogActions>
+                    <Button onClick={handleCancelDelete} disabled={isDeleting}>Cancel</Button>
+                    <Button onClick={handleConfirmDelete} color="error" variant="contained" disabled={isDeleting}>
+                        {isDeleting ? 'Deleting...' : 'Delete'}
                     </Button>
                 </DialogActions>
             </Dialog>
-        </>
+        </Paper>
     );
-}
+};
