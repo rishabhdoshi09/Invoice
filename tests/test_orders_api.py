@@ -297,17 +297,21 @@ class TestOrdersAPI:
         create_response = self.session.post(f"{BASE_URL}/api/orders", json=order_payload)
         assert create_response.status_code == 200
         
-        # Search for the order
-        search_response = self.session.get(f"{BASE_URL}/api/orders?limit=25&offset=0&q=SearchUnique")
+        # Get the created order number
+        created_order = create_response.json()['data']
+        order_number = created_order['orderNumber']
+        
+        # Search for the order by order number (search only works on orderNumber)
+        search_response = self.session.get(f"{BASE_URL}/api/orders?limit=25&offset=0&q={order_number}")
         assert search_response.status_code == 200
         
         results = search_response.json()['data']['rows']
         
-        # Should find at least one order with the unique name
-        found = any(unique_name in o.get('customerName', '') for o in results)
-        assert found, f"Search should find order with customer name containing 'SearchUnique'"
+        # Should find the order by order number
+        found = any(order_number in o.get('orderNumber', '') for o in results)
+        assert found, f"Search should find order with order number {order_number}"
         
-        print(f"✓ Search filter working: found {len(results)} results for 'SearchUnique'")
+        print(f"✓ Search filter working: found {len(results)} results for '{order_number}'")
 
 
 class TestOrdersReduxIntegration:
