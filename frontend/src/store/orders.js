@@ -2,6 +2,7 @@
 import { createSlice } from '@reduxjs/toolkit';
 import { setNotification, startLoading, stopLoading } from "./application"
 import { createOrder, fetchWeights, listOrders, deleteOrder, getOrder } from '../services/order';
+import { api } from './api'; // RTK Query API for cache invalidation
 
 
 const initialState = {
