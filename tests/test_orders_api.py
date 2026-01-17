@@ -124,6 +124,21 @@ class TestOrdersAPI:
     
     def test_created_order_appears_in_list(self):
         """Test that newly created order appears in the orders list"""
+        # First get a product ID
+        products_response = self.session.get(f"{BASE_URL}/api/products")
+        assert products_response.status_code == 200
+        products = products_response.json()['data']['rows']
+        
+        if len(products) == 0:
+            pytest.skip("No products available to create order")
+        
+        if isinstance(products, dict):
+            product_id = list(products.keys())[0]
+            product = products[product_id]
+        else:
+            product = products[0]
+            product_id = product['id']
+        
         # Create order
         order_payload = {
             "customerName": "TEST_List_Verify_Customer",
@@ -137,11 +152,12 @@ class TestOrdersAPI:
             "paidAmount": 500,
             "orderItems": [
                 {
-                    "name": "TEST_List_Product",
+                    "productId": product_id,
+                    "name": product.get('name', 'TEST_List_Product'),
                     "quantity": 1,
                     "productPrice": 500,
                     "totalPrice": 500,
-                    "type": "non-weighted"
+                    "type": product.get('type', 'non-weighted')
                 }
             ]
         }
