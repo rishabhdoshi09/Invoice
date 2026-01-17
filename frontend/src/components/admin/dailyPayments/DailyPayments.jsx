@@ -168,7 +168,7 @@ export const DailyPayments = () => {
         }
     };
 
-    const fetchOutstandingData = async () => {
+    const fetchOutstandingData = useCallback(async () => {
         try {
             // Fetch outstanding receivables (customers who owe money)
             const { data: receivables } = await axios.get('/api/reports/outstanding-receivables');
