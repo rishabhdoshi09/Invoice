@@ -32,6 +32,7 @@ import { Edit as EditIcon, Save as SaveIcon, Cancel as CancelIcon, NoteAdd, Send
 import { getOrderAction, deleteOrderAction } from '../../../store/orders';
 import { setNotification } from '../../../store/application';
 import { useAuth } from '../../../context/AuthContext';
+import { api } from '../../../store/api'; // RTK Query API for cache invalidation
 
 export const EditOrder = () => {
   const { orderId } = useParams();
