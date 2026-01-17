@@ -59,11 +59,19 @@ import axios from 'axios';
 import moment from 'moment';
 
 export const DailyPayments = () => {
+    const navigate = useNavigate();
     const [payments, setPayments] = useState([]);
     const [summary, setSummary] = useState(null);
     const [loading, setLoading] = useState(false);
     const [selectedDate, setSelectedDate] = useState(moment().format('YYYY-MM-DD'));
     const [openDialog, setOpenDialog] = useState(false);
+    
+    // Expanded rows for viewing bills
+    const [expandedCustomers, setExpandedCustomers] = useState({});
+    const [expandedSuppliers, setExpandedSuppliers] = useState({});
+    
+    // Bill preview dialog
+    const [billPreviewDialog, setBillPreviewDialog] = useState({ open: false, order: null });
     const [dialogMode, setDialogMode] = useState('simple'); // 'simple' or 'advanced'
     const [suppliers, setSuppliers] = useState([]);
     const [customers, setCustomers] = useState([]);
