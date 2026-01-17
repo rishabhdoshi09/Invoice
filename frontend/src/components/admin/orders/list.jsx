@@ -1,7 +1,8 @@
 import { Button, Paper, TextField, Typography, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, Chip, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Box, IconButton, CircularProgress } from '@mui/material';
 import { useNavigate } from 'react-router';
-import { useState, useRef, useLayoutEffect, useEffect } from 'react';
-import { useGetOrdersQuery, useDeleteOrderMutation } from '../../../store/api';
+import { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { listOrdersAction, deleteOrderAction } from '../../../store/orders';
 import { Pagination } from '../../common/pagination';
 import { useAuth } from '../../../context/AuthContext';
 import { Note, Warning, Clear, Refresh } from '@mui/icons-material';
@@ -12,8 +13,15 @@ const SCROLL_FILTERS_KEY = 'orders_filters';
 
 export const ListOrders = () => {
     const navigate = useNavigate();
+    const dispatch = useDispatch();
     const { isAdmin } = useAuth();
     const scrollRestoredRef = useRef(false);
+    const isInitialLoadRef = useRef(true);
+
+    // Get orders from Redux store
+    const { orders } = useSelector((state) => state.orderState);
+    const { count = 0, rows = [] } = orders || {};
+    const { loading } = useSelector((state) => state.applicationState);
 
     // Try to restore filters from sessionStorage on initial load
     const getSavedFilters = () => {
@@ -29,31 +37,12 @@ export const ListOrders = () => {
     };
 
     const [filters, setFilters] = useState(getSavedFilters);
-    
-    // RTK Query hooks - automatic caching and refetch on focus!
-    const { 
-        data: ordersData, 
-        isLoading, 
-        isFetching,
-        refetch 
-    } = useGetOrdersQuery(filters, {
-        // Refetch when window regains focus
-        refetchOnFocus: true,
-        // Refetch on reconnect
-        refetchOnReconnect: true,
-        // Poll every 30 seconds for real-time updates (optional)
-        // pollingInterval: 30000,
-    });
-    
-    const [deleteOrder, { isLoading: isDeleting }] = useDeleteOrderMutation();
-    
-    // Extract data with defaults
-    const count = ordersData?.count || 0;
-    const rows = ordersData?.rows || [];
+    const [refetch, shouldFetch] = useState(false);
     
     // Delete confirmation dialog state
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [orderToDelete, setOrderToDelete] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Handle delete button click - open confirmation dialog
     const handleDeleteClick = (order) => {
@@ -65,10 +54,12 @@ export const ListOrders = () => {
     const handleConfirmDelete = async () => {
         if (orderToDelete) {
             try {
-                await deleteOrder(orderToDelete.id).unwrap();
-                // No need to manually refetch - RTK Query handles cache invalidation!
+                setIsDeleting(true);
+                await dispatch(deleteOrderAction(orderToDelete.id, filters));
             } catch (error) {
                 console.error('Failed to delete order:', error);
+            } finally {
+                setIsDeleting(false);
             }
         }
         setDeleteDialogOpen(false);
@@ -81,6 +72,33 @@ export const ListOrders = () => {
         setOrderToDelete(null);
     };
 
+    // Fetch orders function
+    const fetchOrders = useCallback(() => {
+        dispatch(listOrdersAction(filters));
+    }, [dispatch, filters]);
+
+    // Fetch on filter change
+    useEffect(() => {
+        if (refetch) {
+            shouldFetch(false);
+            fetchOrders();
+        }
+    }, [refetch, fetchOrders]);
+
+    // Always fetch fresh data when component mounts
+    useEffect(() => {
+        fetchOrders();
+    }, [fetchOrders]);
+
+    // Refresh data when window gains focus
+    useEffect(() => {
+        const handleFocus = () => {
+            fetchOrders();
+        };
+        window.addEventListener('focus', handleFocus);
+        return () => window.removeEventListener('focus', handleFocus);
+    }, [fetchOrders]);
+
     // Save filters whenever they change
     useEffect(() => {
         sessionStorage.setItem(SCROLL_FILTERS_KEY, JSON.stringify(filters));
@@ -88,7 +106,7 @@ export const ListOrders = () => {
 
     // Restore scroll position after data is loaded
     useLayoutEffect(() => {
-        if (rows.length > 0 && !scrollRestoredRef.current) {
+        if (rows.length > 0 && !scrollRestoredRef.current && !isInitialLoadRef.current) {
             const savedPosition = sessionStorage.getItem(SCROLL_POSITION_KEY);
             if (savedPosition) {
                 requestAnimationFrame(() => {
@@ -97,6 +115,9 @@ export const ListOrders = () => {
                     scrollRestoredRef.current = true;
                 });
             }
+        }
+        if (rows.length > 0) {
+            isInitialLoadRef.current = false;
         }
     }, [rows]);
 
@@ -108,6 +129,7 @@ export const ListOrders = () => {
             limit: limit,
             offset: offset,
         }));
+        shouldFetch(true);
     };
 
     const filterChangeHandler = (e) => {
@@ -122,7 +144,7 @@ export const ListOrders = () => {
     // Debounced filter effect
     useEffect(() => {
         const getData = setTimeout(() => {
-            // RTK Query automatically handles this via the filters dependency
+            shouldFetch(true);
         }, 500);
         return () => clearTimeout(getData);
     }, [filters.q, filters.date]);
@@ -137,6 +159,7 @@ export const ListOrders = () => {
         sessionStorage.removeItem(SCROLL_FILTERS_KEY);
         scrollRestoredRef.current = false;
         setFilters({ limit: 25, offset: 0, q: "", date: "" });
+        shouldFetch(true);
     };
 
     const hasFilters = filters.q || filters.date;
@@ -165,9 +188,9 @@ export const ListOrders = () => {
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h5">Orders</Typography>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                    {isFetching && <CircularProgress size={20} />}
+                    {loading && <CircularProgress size={20} />}
                     <Tooltip title="Refresh list">
-                        <IconButton onClick={() => refetch()} disabled={isFetching}>
+                        <IconButton onClick={fetchOrders} disabled={loading}>
                             <Refresh />
                         </IconButton>
                     </Tooltip>
@@ -207,7 +230,7 @@ export const ListOrders = () => {
                 )}
             </Box>
 
-            {isLoading ? (
+            {loading && rows.length === 0 ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
                     <CircularProgress />
                 </Box>
