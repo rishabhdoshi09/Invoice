@@ -357,7 +357,7 @@ export const ListOrders = () => {
                             count={count}
                             limit={filters.limit}
                             offset={filters.offset}
-                            paginate={paginate}
+                            updateFilters={paginate}
                         />
                     </Box>
                 </>
