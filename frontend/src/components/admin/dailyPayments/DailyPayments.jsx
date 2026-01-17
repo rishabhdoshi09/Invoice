@@ -204,6 +204,12 @@ export const DailyPayments = () => {
         fetchOutstandingData();
     }, [fetchDailySummary, fetchOutstandingData]);
 
+    useEffect(() => {
+        fetchSuppliers();
+        fetchCustomers();
+        fetchPurchases();
+    }, []);
+
     const handleDateChange = (newDate) => {
         setSelectedDate(newDate);
     };
