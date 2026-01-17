@@ -204,6 +204,15 @@ export const DailyPayments = () => {
         fetchOutstandingData();
     }, [fetchDailySummary, fetchOutstandingData]);
 
+    // Refresh data when window gains focus (user switches back to this tab)
+    useEffect(() => {
+        const handleFocus = () => {
+            fetchOutstandingData();
+        };
+        window.addEventListener('focus', handleFocus);
+        return () => window.removeEventListener('focus', handleFocus);
+    }, [fetchOutstandingData]);
+
     useEffect(() => {
         fetchSuppliers();
         fetchCustomers();
