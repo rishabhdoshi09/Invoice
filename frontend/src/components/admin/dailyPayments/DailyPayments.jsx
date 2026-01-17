@@ -1155,16 +1155,16 @@ export const DailyPayments = () => {
                     </Typography>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={handleDeleteCancel} disabled={deleting}>
+                    <Button onClick={handleDeleteCancel} disabled={deletingPayment}>
                         Cancel
                     </Button>
                     <Button 
                         onClick={handleDeleteConfirm} 
                         color="error" 
                         variant="contained"
-                        disabled={deleting}
+                        disabled={deletingPayment}
                     >
-                        {deleting ? 'Deleting...' : 'Delete Payment'}
+                        {deletingPayment ? 'Deleting...' : 'Delete Payment'}
                     </Button>
                 </DialogActions>
             </Dialog>
