@@ -55,6 +55,8 @@ export const createOrderAction = (payload) => {
             const { data: { data }} = await createOrder(payload);
             dispatch(setNotification({ open: true, severity: 'success', message: 'Order created successfully'}));
             dispatch(stopLoading());
+            // Refresh orders list to show new order immediately
+            dispatch(listOrdersAction({ limit: 25, offset: 0 }));
             return data;
         }
         catch(error){
