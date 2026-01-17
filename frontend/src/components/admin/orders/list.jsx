@@ -294,7 +294,7 @@ export const ListOrders = () => {
                                             <TableCell>{formatDate(row.orderDate)}</TableCell>
                                             <TableCell>
                                                 <Typography variant="body2" color="text.secondary">
-                                                    {formatTime(row.createdAt)}
+                                                    {formatTime(row)}
                                                 </Typography>
                                             </TableCell>
                                             <TableCell>
