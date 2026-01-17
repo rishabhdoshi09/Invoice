@@ -189,40 +189,8 @@ export const DailyPayments = () => {
         refetchReceivables();
         refetchPayables();
     }, [refetchSummary, refetchReceivables, refetchPayables]);
-    const handleRefreshAll = useCallback(async () => {
-        setLoading(true);
-        try {
-            await Promise.all([
-                fetchDailySummary(),
-                fetchOutstandingData()
-            ]);
-        } finally {
-            setLoading(false);
-        }
-    }, [fetchDailySummary, fetchOutstandingData]);
 
-    useEffect(() => {
-        fetchDailySummary();
-        fetchOutstandingData();
-    }, [fetchDailySummary, fetchOutstandingData]);
-
-    // Refresh data when window gains focus (user switches back to this tab)
-    useEffect(() => {
-        const handleFocus = () => {
-            fetchOutstandingData();
-        };
-        window.addEventListener('focus', handleFocus);
-        return () => window.removeEventListener('focus', handleFocus);
-    }, [fetchOutstandingData]);
-
-    // Auto-refresh outstanding data every 30 seconds
-    useEffect(() => {
-        const interval = setInterval(() => {
-            fetchOutstandingData();
-        }, 30000);
-        return () => clearInterval(interval);
-    }, [fetchOutstandingData]);
-
+    // Fetch non-RTK Query data on mount
     useEffect(() => {
         fetchSuppliers();
         fetchCustomers();
