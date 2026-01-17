@@ -333,6 +333,21 @@ class TestOrdersReduxIntegration:
         Test the flow: Create order -> List orders -> Verify new order appears
         This simulates what the Redux store should do after createOrderAction
         """
+        # First get a product ID
+        products_response = self.session.get(f"{BASE_URL}/api/products")
+        assert products_response.status_code == 200
+        products = products_response.json()['data']['rows']
+        
+        if len(products) == 0:
+            pytest.skip("No products available to create order")
+        
+        if isinstance(products, dict):
+            product_id = list(products.keys())[0]
+            product = products[product_id]
+        else:
+            product = products[0]
+            product_id = product['id']
+        
         # Get initial count
         initial_response = self.session.get(f"{BASE_URL}/api/orders?limit=25&offset=0")
         initial_count = initial_response.json()['data']['count']
@@ -351,11 +366,12 @@ class TestOrdersReduxIntegration:
             "paidAmount": 750,
             "orderItems": [
                 {
-                    "name": "TEST_Redux_Product",
+                    "productId": product_id,
+                    "name": product.get('name', 'TEST_Redux_Product'),
                     "quantity": 3,
                     "productPrice": 250,
                     "totalPrice": 750,
-                    "type": "non-weighted"
+                    "type": product.get('type', 'non-weighted')
                 }
             ]
         }
