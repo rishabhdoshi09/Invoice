@@ -85,7 +85,7 @@ class TestOrdersAPI:
             "customerName": "TEST_API_Customer",
             "customerMobile": "9999999999",
             "orderDate": "2026-01-17",
-            "placeOfSupply": "27-Maharashtra",
+            
             "subTotal": 1000,
             "total": 1000,
             "tax": 0,
@@ -144,7 +144,7 @@ class TestOrdersAPI:
             "customerName": "TEST_List_Verify_Customer",
             "customerMobile": "8888888888",
             "orderDate": "2026-01-17",
-            "placeOfSupply": "27-Maharashtra",
+            
             "subTotal": 500,
             "total": 500,
             "tax": 0,
@@ -276,7 +276,7 @@ class TestOrdersAPI:
             "customerName": unique_name,
             "customerMobile": "7777777777",
             "orderDate": "2026-01-17",
-            "placeOfSupply": "27-Maharashtra",
+            
             "subTotal": 100,
             "total": 100,
             "tax": 0,
@@ -358,7 +358,7 @@ class TestOrdersReduxIntegration:
             "customerName": "TEST_Redux_Integration",
             "customerMobile": "6666666666",
             "orderDate": "2026-01-17",
-            "placeOfSupply": "27-Maharashtra",
+            
             "subTotal": 750,
             "total": 750,
             "tax": 0,
