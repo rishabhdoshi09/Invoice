@@ -9,12 +9,38 @@ import {
     Button,
     Alert,
     CircularProgress,
-    Paper
+    Paper,
+    Divider
 } from '@mui/material';
-import { AccountBalance, Refresh } from '@mui/icons-material';
+import { 
+    AccountBalance, 
+    Refresh, 
+    TrendingUp, 
+    TrendingDown,
+    People,
+    LocalShipping,
+    ShoppingCart,
+    Receipt
+} from '@mui/icons-material';
 import { useAuth } from '../../../context/AuthContext';
 import * as dashboardService from '../../../services/dashboard';
+import axios from 'axios';
 import moment from 'moment';
+import {
+    PieChart,
+    Pie,
+    Cell,
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend,
+    ResponsiveContainer
+} from 'recharts';
+
+const COLORS = ['#4caf50', '#2196f3', '#ff9800', '#f44336', '#9c27b0'];
 
 export const DayStart = () => {
     const { user } = useAuth();
@@ -22,6 +48,7 @@ export const DayStart = () => {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [todaySummary, setTodaySummary] = useState(null);
+    const [paymentSummary, setPaymentSummary] = useState(null);
     
     // Opening balance state
     const [openingBalanceInput, setOpeningBalanceInput] = useState('');
@@ -32,8 +59,19 @@ export const DayStart = () => {
         setError('');
         
         try {
-            const summary = await dashboardService.getTodaySummary();
+            // Fetch dashboard summary and payment summary in parallel
+            const [summary, paymentRes] = await Promise.all([
+                dashboardService.getTodaySummary(),
+                axios.get('/api/payments/daily-summary', {
+                    params: { date: moment().format('YYYY-MM-DD') }
+                })
+            ]);
+            
             setTodaySummary(summary);
+            
+            if (paymentRes.data.status === 200) {
+                setPaymentSummary(paymentRes.data.data);
+            }
         } catch (err) {
             setError(err.toString());
         } finally {
@@ -68,6 +106,38 @@ export const DayStart = () => {
         }
     };
 
+    // Calculate cash flow values
+    const openingBalance = todaySummary?.openingBalance || 0;
+    const totalSales = todaySummary?.totalSales || 0;
+    const customerPayments = paymentSummary?.summary?.customers?.amount || 0;
+    const supplierPayments = paymentSummary?.summary?.suppliers?.amount || 0;
+    const expenses = paymentSummary?.summary?.expenses?.amount || 0;
+    
+    // Expected cash = Opening + Sales + Customer Receipts - Supplier Payments - Expenses
+    const expectedCash = openingBalance + totalSales + customerPayments - supplierPayments - expenses;
+    const netCashFlow = customerPayments - supplierPayments - expenses;
+
+    // Prepare chart data
+    const cashInflowData = [
+        { name: 'Opening Balance', value: openingBalance, color: '#9c27b0' },
+        { name: 'Today\'s Sales', value: totalSales, color: '#2196f3' },
+        { name: 'Customer Receipts', value: customerPayments, color: '#4caf50' },
+    ].filter(item => item.value > 0);
+
+    const cashOutflowData = [
+        { name: 'Supplier Payments', value: supplierPayments, color: '#ff9800' },
+        { name: 'Expenses', value: expenses, color: '#f44336' },
+    ].filter(item => item.value > 0);
+
+    const barChartData = [
+        { name: 'Opening', amount: openingBalance, fill: '#9c27b0' },
+        { name: 'Sales', amount: totalSales, fill: '#2196f3' },
+        { name: 'Received', amount: customerPayments, fill: '#4caf50' },
+        { name: 'Paid Out', amount: -supplierPayments, fill: '#ff9800' },
+        { name: 'Expenses', amount: -expenses, fill: '#f44336' },
+        { name: 'Expected', amount: expectedCash, fill: '#00bcd4' },
+    ];
+
     if (loading) {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
@@ -81,7 +151,7 @@ export const DayStart = () => {
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h4" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <AccountBalance color="primary" />
-                    Day Start - Opening Balance
+                    Day Start - Cash Management
                 </Typography>
                 <Button
                     startIcon={<Refresh />}
@@ -109,107 +179,284 @@ export const DayStart = () => {
                 {moment().format('dddd, MMMM D, YYYY')}
             </Typography>
 
-            {/* Opening Balance Section */}
-            <Paper sx={{ p: 3, mb: 3, bgcolor: '#fff3e0' }}>
-                <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#e65100' }}>
-                    💵 Opening Balance Entry
+            {/* Main Cash Summary Section */}
+            <Paper sx={{ p: 3, mb: 3, bgcolor: '#e3f2fd', border: '2px solid #1565c0' }}>
+                <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', color: '#1565c0', mb: 3 }}>
+                    💰 Expected Cash in Drawer
                 </Typography>
                 
-                <Grid container spacing={3} alignItems="center">
-                    <Grid item xs={12} md={4}>
-                        <Box>
-                            <Typography variant="body2" color="text.secondary">
-                                Current Opening Balance:
+                <Grid container spacing={3}>
+                    {/* Opening Balance */}
+                    <Grid item xs={12} md={2}>
+                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: '#f3e5f5', borderRadius: 2 }}>
+                            <AccountBalance sx={{ fontSize: 40, color: '#9c27b0' }} />
+                            <Typography variant="body2" color="text.secondary">Opening Balance</Typography>
+                            <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#9c27b0' }}>
+                                ₹{openingBalance.toLocaleString('en-IN')}
                             </Typography>
-                            <Typography variant="h3" sx={{ fontWeight: 'bold', color: '#e65100' }}>
-                                ₹{todaySummary?.openingBalance?.toLocaleString('en-IN') || 0}
-                            </Typography>
-                            {todaySummary?.openingBalanceSetAt && (
-                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                                    Set by <strong>{todaySummary?.openingBalanceSetBy}</strong> at {moment(todaySummary?.openingBalanceSetAt).format('hh:mm A')}
-                                </Typography>
-                            )}
                         </Box>
                     </Grid>
                     
-                    <Grid item xs={12} md={4}>
-                        <Box>
-                            <Typography variant="body2" color="text.secondary">
-                                Today's Sales So Far:
+                    {/* Plus Sign */}
+                    <Grid item xs={12} md={0.5} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Typography variant="h4" color="text.secondary">+</Typography>
+                    </Grid>
+                    
+                    {/* Sales */}
+                    <Grid item xs={12} md={2}>
+                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: '#e3f2fd', borderRadius: 2 }}>
+                            <ShoppingCart sx={{ fontSize: 40, color: '#1976d2' }} />
+                            <Typography variant="body2" color="text.secondary">Today's Sales</Typography>
+                            <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+                                ₹{totalSales.toLocaleString('en-IN')}
                             </Typography>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#1565c0' }}>
-                                ₹{todaySummary?.totalSales?.toLocaleString('en-IN') || 0}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
+                            <Typography variant="caption" color="text.secondary">
                                 {todaySummary?.totalOrders || 0} orders
                             </Typography>
                         </Box>
                     </Grid>
                     
-                    <Grid item xs={12} md={4}>
-                        <Box>
+                    {/* Plus Sign */}
+                    <Grid item xs={12} md={0.5} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Typography variant="h4" color="text.secondary">+</Typography>
+                    </Grid>
+                    
+                    {/* Customer Receipts */}
+                    <Grid item xs={12} md={2}>
+                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: '#e8f5e9', borderRadius: 2 }}>
+                            <People sx={{ fontSize: 40, color: '#2e7d32' }} />
+                            <Typography variant="body2" color="text.secondary">Customer Receipts</Typography>
+                            <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
+                                +₹{customerPayments.toLocaleString('en-IN')}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                                {paymentSummary?.summary?.customers?.count || 0} receipts
+                            </Typography>
+                        </Box>
+                    </Grid>
+                    
+                    {/* Minus Sign */}
+                    <Grid item xs={12} md={0.5} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Typography variant="h4" color="text.secondary">−</Typography>
+                    </Grid>
+                    
+                    {/* Supplier Payments */}
+                    <Grid item xs={12} md={2}>
+                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: '#fff3e0', borderRadius: 2 }}>
+                            <LocalShipping sx={{ fontSize: 40, color: '#e65100' }} />
+                            <Typography variant="body2" color="text.secondary">Supplier Payments</Typography>
+                            <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#e65100' }}>
+                                −₹{supplierPayments.toLocaleString('en-IN')}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                                {paymentSummary?.summary?.suppliers?.count || 0} payments
+                            </Typography>
+                        </Box>
+                    </Grid>
+                    
+                    {/* Minus Sign */}
+                    <Grid item xs={12} md={0.5} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Typography variant="h4" color="text.secondary">−</Typography>
+                    </Grid>
+                    
+                    {/* Expenses */}
+                    <Grid item xs={12} md={2}>
+                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: '#ffebee', borderRadius: 2 }}>
+                            <Receipt sx={{ fontSize: 40, color: '#c62828' }} />
+                            <Typography variant="body2" color="text.secondary">Expenses</Typography>
+                            <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#c62828' }}>
+                                −₹{expenses.toLocaleString('en-IN')}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                                {paymentSummary?.summary?.expenses?.count || 0} expenses
+                            </Typography>
+                        </Box>
+                    </Grid>
+                </Grid>
+                
+                {/* Result Line */}
+                <Divider sx={{ my: 3 }} />
+                
+                <Grid container spacing={2} alignItems="center">
+                    <Grid item xs={12} md={6}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Typography variant="h6">=</Typography>
+                            <Box sx={{ bgcolor: '#fff', p: 2, borderRadius: 2, border: '3px solid #1565c0', flexGrow: 1 }}>
+                                <Typography variant="body2" color="text.secondary">Expected Cash in Drawer</Typography>
+                                <Typography variant="h3" sx={{ fontWeight: 'bold', color: expectedCash >= 0 ? '#1565c0' : '#c62828' }}>
+                                    ₹{expectedCash.toLocaleString('en-IN')}
+                                </Typography>
+                            </Box>
+                        </Box>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                        <Box sx={{ 
+                            bgcolor: netCashFlow >= 0 ? '#e8f5e9' : '#ffebee', 
+                            p: 2, 
+                            borderRadius: 2,
+                            border: `2px solid ${netCashFlow >= 0 ? '#4caf50' : '#f44336'}`
+                        }}>
                             <Typography variant="body2" color="text.secondary">
-                                Expected Cash in Drawer:
+                                Net Cash Flow Today (Receipts - Payments - Expenses)
                             </Typography>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
-                                ₹{((todaySummary?.openingBalance || 0) + (todaySummary?.totalSales || 0)).toLocaleString('en-IN')}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                                Opening + Sales
-                            </Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                {netCashFlow >= 0 ? (
+                                    <TrendingUp sx={{ color: '#4caf50', fontSize: 30 }} />
+                                ) : (
+                                    <TrendingDown sx={{ color: '#f44336', fontSize: 30 }} />
+                                )}
+                                <Typography variant="h4" sx={{ fontWeight: 'bold', color: netCashFlow >= 0 ? '#2e7d32' : '#c62828' }}>
+                                    {netCashFlow >= 0 ? '+' : ''}₹{netCashFlow.toLocaleString('en-IN')}
+                                </Typography>
+                            </Box>
                         </Box>
                     </Grid>
                 </Grid>
             </Paper>
 
+            {/* Charts Section */}
+            <Grid container spacing={3} sx={{ mb: 3 }}>
+                {/* Cash Flow Bar Chart */}
+                <Grid item xs={12} md={8}>
+                    <Paper sx={{ p: 2 }}>
+                        <Typography variant="h6" gutterBottom>Cash Flow Breakdown</Typography>
+                        <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={barChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="name" />
+                                <YAxis tickFormatter={(value) => `₹${Math.abs(value).toLocaleString()}`} />
+                                <Tooltip 
+                                    formatter={(value) => [`₹${Math.abs(value).toLocaleString('en-IN')}`, value < 0 ? 'Outflow' : 'Inflow']}
+                                />
+                                <Bar dataKey="amount" fill="#8884d8">
+                                    {barChartData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </Paper>
+                </Grid>
+
+                {/* Pie Charts */}
+                <Grid item xs={12} md={4}>
+                    <Paper sx={{ p: 2, height: '100%' }}>
+                        <Typography variant="h6" gutterBottom>Cash Sources</Typography>
+                        {cashInflowData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={250}>
+                                <PieChart>
+                                    <Pie
+                                        data={cashInflowData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={40}
+                                        outerRadius={80}
+                                        paddingAngle={5}
+                                        dataKey="value"
+                                        label={({ name, value }) => `${name}: ₹${value.toLocaleString()}`}
+                                        labelLine={false}
+                                    >
+                                        {cashInflowData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.color} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip formatter={(value) => `₹${value.toLocaleString('en-IN')}`} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 250 }}>
+                                <Typography color="text.secondary">No cash inflows yet</Typography>
+                            </Box>
+                        )}
+                    </Paper>
+                </Grid>
+            </Grid>
+
             {/* Set Opening Balance Card */}
-            <Card sx={{ maxWidth: 500 }}>
-                <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                        Set Today's Opening Balance
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        Enter the cash amount in the drawer at the start of the day.
-                    </Typography>
-                    
-                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
-                        <TextField
-                            label="Opening Balance Amount"
-                            type="number"
-                            value={openingBalanceInput}
-                            onChange={(e) => setOpeningBalanceInput(e.target.value)}
-                            placeholder="Enter amount"
-                            InputProps={{ 
-                                startAdornment: <Typography sx={{ mr: 1 }}>₹</Typography> 
-                            }}
-                            disabled={savingOpeningBalance}
-                            fullWidth
-                            inputProps={{ min: 0, step: 0.01 }}
-                            data-testid="opening-balance-input"
-                        />
-                        <Button
-                            variant="contained"
-                            onClick={handleSetOpeningBalance}
-                            disabled={savingOpeningBalance || !openingBalanceInput}
-                            sx={{ minWidth: 100, height: 56 }}
-                            data-testid="set-opening-balance-btn"
-                        >
-                            {savingOpeningBalance ? <CircularProgress size={24} /> : 'SET'}
-                        </Button>
-                    </Box>
-                    
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-                        This will be recorded with your username ({user?.username}) and timestamp.
-                    </Typography>
-                </CardContent>
-            </Card>
+            <Grid container spacing={3}>
+                <Grid item xs={12} md={6}>
+                    <Card>
+                        <CardContent>
+                            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <AccountBalance color="primary" />
+                                Set Today's Opening Balance
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                Enter the cash amount in the drawer at the start of the day.
+                            </Typography>
+                            
+                            {todaySummary?.openingBalanceSetAt && (
+                                <Alert severity="info" sx={{ mb: 2 }}>
+                                    Current: ₹{openingBalance.toLocaleString('en-IN')} - Set by <strong>{todaySummary?.openingBalanceSetBy}</strong> at {moment(todaySummary?.openingBalanceSetAt).format('hh:mm A')}
+                                </Alert>
+                            )}
+                            
+                            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+                                <TextField
+                                    label="Opening Balance Amount"
+                                    type="number"
+                                    value={openingBalanceInput}
+                                    onChange={(e) => setOpeningBalanceInput(e.target.value)}
+                                    placeholder="Enter amount"
+                                    InputProps={{ 
+                                        startAdornment: <Typography sx={{ mr: 1 }}>₹</Typography> 
+                                    }}
+                                    disabled={savingOpeningBalance}
+                                    fullWidth
+                                    inputProps={{ min: 0, step: 0.01 }}
+                                    data-testid="opening-balance-input"
+                                />
+                                <Button
+                                    variant="contained"
+                                    onClick={handleSetOpeningBalance}
+                                    disabled={savingOpeningBalance || !openingBalanceInput}
+                                    sx={{ minWidth: 100, height: 56 }}
+                                    data-testid="set-opening-balance-btn"
+                                >
+                                    {savingOpeningBalance ? <CircularProgress size={24} /> : 'SET'}
+                                </Button>
+                            </Box>
+                            
+                            <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
+                                This will be recorded with your username ({user?.username}) and timestamp.
+                            </Typography>
+                        </CardContent>
+                    </Card>
+                </Grid>
+
+                {/* Quick Summary */}
+                <Grid item xs={12} md={6}>
+                    <Card sx={{ height: '100%' }}>
+                        <CardContent>
+                            <Typography variant="h6" gutterBottom>Today's Summary</Typography>
+                            <Grid container spacing={2}>
+                                <Grid item xs={6}>
+                                    <Typography variant="body2" color="text.secondary">Orders Created</Typography>
+                                    <Typography variant="h5">{todaySummary?.totalOrders || 0}</Typography>
+                                </Grid>
+                                <Grid item xs={6}>
+                                    <Typography variant="body2" color="text.secondary">Total Sales</Typography>
+                                    <Typography variant="h5" color="primary">₹{totalSales.toLocaleString('en-IN')}</Typography>
+                                </Grid>
+                                <Grid item xs={6}>
+                                    <Typography variant="body2" color="text.secondary">Payments Received</Typography>
+                                    <Typography variant="h5" color="success.main">₹{customerPayments.toLocaleString('en-IN')}</Typography>
+                                </Grid>
+                                <Grid item xs={6}>
+                                    <Typography variant="body2" color="text.secondary">Payments Made</Typography>
+                                    <Typography variant="h5" color="error.main">₹{(supplierPayments + expenses).toLocaleString('en-IN')}</Typography>
+                                </Grid>
+                            </Grid>
+                        </CardContent>
+                    </Card>
+                </Grid>
+            </Grid>
 
             {/* Info Section */}
             <Box sx={{ mt: 3 }}>
                 <Alert severity="info">
                     <Typography variant="body2">
-                        <strong>Tip:</strong> Set the opening balance at the start of each day before creating any orders. 
-                        This helps track expected cash in the drawer throughout the day.
+                        <strong>Formula:</strong> Expected Cash = Opening Balance + Sales + Customer Receipts − Supplier Payments − Expenses
                     </Typography>
                 </Alert>
             </Box>
