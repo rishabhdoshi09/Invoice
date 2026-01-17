@@ -184,7 +184,20 @@ export const DailyPayments = () => {
         } catch (error) {
             console.error('Error fetching outstanding data:', error);
         }
-    };
+    }, []);
+
+    // Combined refresh function to refresh all data
+    const handleRefreshAll = useCallback(async () => {
+        setLoading(true);
+        try {
+            await Promise.all([
+                fetchDailySummary(),
+                fetchOutstandingData()
+            ]);
+        } finally {
+            setLoading(false);
+        }
+    }, [fetchDailySummary, fetchOutstandingData]);
 
     useEffect(() => {
         fetchDailySummary();
