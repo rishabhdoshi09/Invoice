@@ -255,6 +255,21 @@ class TestOrdersAPI:
     
     def test_orders_search_filter(self):
         """Test orders search/filter by customer name"""
+        # First get a product ID
+        products_response = self.session.get(f"{BASE_URL}/api/products")
+        assert products_response.status_code == 200
+        products = products_response.json()['data']['rows']
+        
+        if len(products) == 0:
+            pytest.skip("No products available to create order")
+        
+        if isinstance(products, dict):
+            product_id = list(products.keys())[0]
+            product = products[product_id]
+        else:
+            product = products[0]
+            product_id = product['id']
+        
         # Create a unique order for search test
         unique_name = "TEST_SearchUnique_Customer"
         order_payload = {
@@ -269,11 +284,12 @@ class TestOrdersAPI:
             "paidAmount": 100,
             "orderItems": [
                 {
-                    "name": "TEST_Search_Product",
+                    "productId": product_id,
+                    "name": product.get('name', 'TEST_Search_Product'),
                     "quantity": 1,
                     "productPrice": 100,
                     "totalPrice": 100,
-                    "type": "non-weighted"
+                    "type": product.get('type', 'non-weighted')
                 }
             ]
         }
