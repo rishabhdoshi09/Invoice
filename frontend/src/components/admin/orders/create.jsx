@@ -29,6 +29,7 @@ import { Delete, Sync, Info } from '@mui/icons-material';
 import { fetchWeightsAction, createOrderAction } from '../../../store/orders';
 import { ProductType } from '../../../enums/product';
 import { useAuth } from '../../../context/AuthContext';
+import { api } from '../../../store/api'; // RTK Query API for cache invalidation
 
 /* -------------------------
   Safe font loader for pdfMake
