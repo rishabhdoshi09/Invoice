@@ -261,6 +261,14 @@ export const EditOrder = () => {
     try {
       setDeleting(true);
       await dispatch(deleteOrderAction(orderId));
+      
+      // Invalidate RTK Query cache to refresh orders list
+      dispatch(api.util.invalidateTags([
+        { type: 'Orders', id: 'LIST' },
+        { type: 'Receivables', id: 'LIST' },
+        { type: 'Dashboard', id: 'TODAY' }
+      ]));
+      
       dispatch(setNotification({
         open: true,
         severity: 'success',
