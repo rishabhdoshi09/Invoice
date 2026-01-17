@@ -1170,6 +1170,97 @@ export const DailyPayments = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {/* Bill Preview Dialog */}
+            <Dialog
+                open={billPreviewDialog.open}
+                onClose={() => setBillPreviewDialog({ open: false, order: null })}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Receipt color="primary" />
+                        Bill Preview
+                    </Box>
+                    <Chip 
+                        label={billPreviewDialog.order?.paymentStatus || 'unpaid'}
+                        color={billPreviewDialog.order?.paymentStatus === 'partial' ? 'warning' : 'error'}
+                        size="small"
+                    />
+                </DialogTitle>
+                <DialogContent>
+                    {billPreviewDialog.order && (
+                        <Box>
+                            <Paper sx={{ p: 2, bgcolor: '#f5f5f5', mb: 2 }}>
+                                <Grid container spacing={2}>
+                                    <Grid item xs={6}>
+                                        <Typography variant="caption" color="text.secondary">Bill Number</Typography>
+                                        <Typography variant="h6" color="primary" fontWeight="bold">
+                                            {billPreviewDialog.order.orderNumber}
+                                        </Typography>
+                                    </Grid>
+                                    <Grid item xs={6}>
+                                        <Typography variant="caption" color="text.secondary">Date</Typography>
+                                        <Typography variant="h6">
+                                            {moment(billPreviewDialog.order.orderDate).format('DD/MM/YYYY')}
+                                        </Typography>
+                                    </Grid>
+                                </Grid>
+                            </Paper>
+                            
+                            <Divider sx={{ my: 2 }} />
+                            
+                            <Grid container spacing={2}>
+                                <Grid item xs={4}>
+                                    <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#e3f2fd' }}>
+                                        <Typography variant="caption" color="text.secondary">Total Amount</Typography>
+                                        <Typography variant="h5" color="primary" fontWeight="bold">
+                                            ₹{(billPreviewDialog.order.total || 0).toLocaleString('en-IN')}
+                                        </Typography>
+                                    </Paper>
+                                </Grid>
+                                <Grid item xs={4}>
+                                    <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#e8f5e9' }}>
+                                        <Typography variant="caption" color="text.secondary">Paid</Typography>
+                                        <Typography variant="h5" color="success.main" fontWeight="bold">
+                                            ₹{(billPreviewDialog.order.paidAmount || 0).toLocaleString('en-IN')}
+                                        </Typography>
+                                    </Paper>
+                                </Grid>
+                                <Grid item xs={4}>
+                                    <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#ffebee' }}>
+                                        <Typography variant="caption" color="text.secondary">Due</Typography>
+                                        <Typography variant="h5" color="error.main" fontWeight="bold">
+                                            ₹{(billPreviewDialog.order.dueAmount || 0).toLocaleString('en-IN')}
+                                        </Typography>
+                                    </Paper>
+                                </Grid>
+                            </Grid>
+                            
+                            <Alert severity="info" sx={{ mt: 2 }}>
+                                Click "View Full Bill" to see complete bill details including items, customer info, and print option.
+                            </Alert>
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setBillPreviewDialog({ open: false, order: null })}>
+                        Close
+                    </Button>
+                    <Button 
+                        variant="contained" 
+                        color="primary"
+                        startIcon={<Visibility />}
+                        onClick={() => {
+                            navigate(`/orders/edit/${billPreviewDialog.order?.id}`);
+                            setBillPreviewDialog({ open: false, order: null });
+                        }}
+                    >
+                        View Full Bill
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 };
