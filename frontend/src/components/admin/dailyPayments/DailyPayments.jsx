@@ -118,15 +118,12 @@ export const DailyPayments = () => {
     const [customers, setCustomers] = useState([]);
     const [purchases, setPurchases] = useState([]);
     
-    // Outstanding parties for autocomplete
-    const [outstandingReceivables, setOutstandingReceivables] = useState([]);
-    const [outstandingPayables, setOutstandingPayables] = useState([]);
+    // Outstanding parties for autocomplete - now from RTK Query
     const [selectedPartyOutstanding, setSelectedPartyOutstanding] = useState(null);
     
     // Delete confirmation dialog state
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [paymentToDelete, setPaymentToDelete] = useState(null);
-    const [deleting, setDeleting] = useState(false);
     
     // Simple form for quick expense recording
     const [simpleForm, setSimpleForm] = useState({
@@ -158,30 +155,7 @@ export const DailyPayments = () => {
         { value: 'other', label: 'Other' }
     ];
 
-    const fetchDailySummary = useCallback(async () => {
-        try {
-            setLoading(true);
-            const { data } = await axios.get('/api/payments/daily-summary', {
-                params: { date: selectedDate }
-            });
-            if (data.status === 200) {
-                setSummary(data.data);
-                setPayments(data.data.payments || []);
-            }
-        } catch (error) {
-            console.error('Error fetching daily summary:', error);
-            // Fallback to regular list if summary endpoint fails
-            try {
-                const { rows } = await listPayments({ date: selectedDate });
-                setPayments(rows);
-            } catch (err) {
-                console.error('Error in fallback:', err);
-            }
-        } finally {
-            setLoading(false);
-        }
-    }, [selectedDate]);
-
+    // Fetch suppliers, customers, purchases (non-RTK Query data)
     const fetchSuppliers = async () => {
         try {
             const { rows } = await listSuppliers({});
@@ -209,25 +183,12 @@ export const DailyPayments = () => {
         }
     };
 
-    const fetchOutstandingData = useCallback(async () => {
-        try {
-            // Fetch outstanding receivables (customers who owe money)
-            const { data: receivables } = await axios.get('/api/reports/outstanding-receivables');
-            if (receivables.status === 200) {
-                setOutstandingReceivables(receivables.data || []);
-            }
-            
-            // Fetch outstanding payables (money owed to suppliers)
-            const { data: payables } = await axios.get('/api/reports/outstanding-payables');
-            if (payables.status === 200) {
-                setOutstandingPayables(payables.data || []);
-            }
-        } catch (error) {
-            console.error('Error fetching outstanding data:', error);
-        }
-    }, []);
-
-    // Combined refresh function to refresh all data
+    // Combined refresh function using RTK Query refetch
+    const handleRefreshAll = useCallback(() => {
+        refetchSummary();
+        refetchReceivables();
+        refetchPayables();
+    }, [refetchSummary, refetchReceivables, refetchPayables]);
     const handleRefreshAll = useCallback(async () => {
         setLoading(true);
         try {
