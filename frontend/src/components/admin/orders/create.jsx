@@ -1180,6 +1180,13 @@ export const CreateOrder = () => {
       // ONLINE SAVE (Server)
       const savedOrder = await dispatch(createOrderAction(sanitized));
 
+      // Invalidate RTK Query cache to refresh orders list
+      dispatch(api.util.invalidateTags([
+        { type: 'Orders', id: 'LIST' },
+        { type: 'Receivables', id: 'LIST' },
+        { type: 'Dashboard', id: 'TODAY' }
+      ]));
+
       setLastSubmitResponse({
         stage: "online_success",
         note: "Order saved to server",
