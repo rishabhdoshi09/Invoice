@@ -496,7 +496,7 @@ export const DailyPayments = () => {
                         </Button>
                     )}
                     <Tooltip title="Refresh All Data">
-                        <IconButton onClick={handleRefreshAll} disabled={loading}>
+                        <IconButton onClick={handleRefreshAll} disabled={fetchingSummary}>
                             <Refresh />
                         </IconButton>
                     </Tooltip>
