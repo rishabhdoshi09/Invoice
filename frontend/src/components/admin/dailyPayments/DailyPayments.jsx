@@ -201,14 +201,8 @@ export const DailyPayments = () => {
 
     useEffect(() => {
         fetchDailySummary();
-    }, [fetchDailySummary]);
-
-    useEffect(() => {
-        fetchSuppliers();
-        fetchCustomers();
-        fetchPurchases();
         fetchOutstandingData();
-    }, []);
+    }, [fetchDailySummary, fetchOutstandingData]);
 
     const handleDateChange = (newDate) => {
         setSelectedDate(newDate);
