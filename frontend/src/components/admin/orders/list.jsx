@@ -178,6 +178,20 @@ export const ListOrders = () => {
         }
     };
 
+    // Format time for display
+    const formatTime = (dateString) => {
+        if (!dateString) return '-';
+        try {
+            return new Date(dateString).toLocaleTimeString('en-IN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        } catch {
+            return '-';
+        }
+    };
+
     // Format currency
     const formatCurrency = (amount) => {
         return `₹${(amount || 0).toLocaleString('en-IN')}`;
