@@ -65,6 +65,22 @@ class TestOrdersAPI:
     
     def test_create_order_returns_200(self):
         """Test POST /api/orders creates order successfully"""
+        # First get a product ID
+        products_response = self.session.get(f"{BASE_URL}/api/products")
+        assert products_response.status_code == 200
+        products = products_response.json()['data']['rows']
+        
+        if len(products) == 0:
+            pytest.skip("No products available to create order")
+        
+        # Get first product (it's an object keyed by ID)
+        if isinstance(products, dict):
+            product_id = list(products.keys())[0]
+            product = products[product_id]
+        else:
+            product = products[0]
+            product_id = product['id']
+        
         order_payload = {
             "customerName": "TEST_API_Customer",
             "customerMobile": "9999999999",
@@ -77,11 +93,12 @@ class TestOrdersAPI:
             "paidAmount": 1000,
             "orderItems": [
                 {
-                    "name": "TEST_API_Product",
+                    "productId": product_id,
+                    "name": product.get('name', 'TEST_API_Product'),
                     "quantity": 2,
                     "productPrice": 500,
                     "totalPrice": 1000,
-                    "type": "non-weighted"
+                    "type": product.get('type', 'non-weighted')
                 }
             ]
         }
