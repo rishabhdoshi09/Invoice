@@ -56,8 +56,17 @@ export const createOrderAction = (payload) => {
             const { data: { data }} = await createOrder(payload);
             dispatch(setNotification({ open: true, severity: 'success', message: 'Order created successfully'}));
             dispatch(stopLoading());
-            // Refresh orders list to show new order immediately
+            
+            // Invalidate RTK Query cache to refresh orders list (NEW WAY)
+            dispatch(api.util.invalidateTags([
+                { type: 'Orders', id: 'LIST' },
+                { type: 'Receivables', id: 'LIST' },
+                { type: 'Dashboard', id: 'TODAY' }
+            ]));
+            
+            // Also refresh old Redux store (LEGACY - for any components still using it)
             dispatch(listOrdersAction({ limit: 25, offset: 0 }));
+            
             return data;
         }
         catch(error){
