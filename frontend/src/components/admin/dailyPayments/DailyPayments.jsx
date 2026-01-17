@@ -372,7 +372,6 @@ export const DailyPayments = () => {
 
         try {
             // For simple expenses, we'll create an expense record
-            // Using the existing payment structure with a special "expense" party type
             const payload = {
                 paymentDate: selectedDate,
                 partyType: 'expense',
@@ -383,9 +382,10 @@ export const DailyPayments = () => {
                 notes: `[${simpleForm.category.toUpperCase()}] ${simpleForm.description}`
             };
             
-            await createPayment(payload);
+            // Use RTK Query mutation - cache invalidation is automatic!
+            await createPaymentMutation(payload).unwrap();
             handleCloseDialog();
-            fetchDailySummary();
+            // No manual refetch needed - RTK Query handles it!
         } catch (error) {
             console.error('Error recording expense:', error);
             alert('Error recording expense. Please try again.');
@@ -417,10 +417,10 @@ export const DailyPayments = () => {
                 payload.partyId = null;
             }
             
-            await createPayment(payload);
+            // Use RTK Query mutation - cache invalidation is automatic!
+            await createPaymentMutation(payload).unwrap();
             handleCloseDialog();
-            fetchDailySummary();
-            fetchOutstandingData(); // Refresh outstanding data
+            // No manual refetch needed - RTK Query handles it!
         } catch (error) {
             console.error('Error creating payment:', error);
             alert('Error creating payment');
@@ -442,16 +442,14 @@ export const DailyPayments = () => {
         if (!paymentToDelete) return;
         
         try {
-            setDeleting(true);
-            await axios.delete(`/api/payments/${paymentToDelete.id}`);
+            // Use RTK Query mutation - cache invalidation is automatic!
+            await deletePaymentMutation(paymentToDelete.id).unwrap();
             setDeleteDialogOpen(false);
             setPaymentToDelete(null);
-            fetchDailySummary(); // Refresh the list
+            // No manual refetch needed - RTK Query handles it!
         } catch (error) {
             console.error('Error deleting payment:', error);
             alert('Error deleting payment. Please try again.');
-        } finally {
-            setDeleting(false);
         }
     };
 
