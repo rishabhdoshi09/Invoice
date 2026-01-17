@@ -82,6 +82,15 @@ export const ListOrders = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Refresh data when window gains focus (user switches back to this tab/page)
+    useEffect(() => {
+        const handleFocus = () => {
+            dispatch(listOrdersAction(filters));
+        };
+        window.addEventListener('focus', handleFocus);
+        return () => window.removeEventListener('focus', handleFocus);
+    }, [dispatch, filters]);
+
     // Restore scroll position after data is loaded - use useLayoutEffect for sync scroll restoration
     useLayoutEffect(() => {
         if (rows.length > 0 && !scrollRestoredRef.current) {
