@@ -267,7 +267,7 @@ export const ListOrders = () => {
                             <TableBody>
                                 {rows.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={7} align="center">
+                                        <TableCell colSpan={8} align="center">
                                             <Typography color="text.secondary" sx={{ py: 4 }}>
                                                 No orders found
                                             </Typography>
@@ -287,6 +287,11 @@ export const ListOrders = () => {
                                                 </Typography>
                                             </TableCell>
                                             <TableCell>{formatDate(row.orderDate)}</TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" color="text.secondary">
+                                                    {formatTime(row.createdAt)}
+                                                </Typography>
+                                            </TableCell>
                                             <TableCell>
                                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                     {row.customerName || 'Walk-in'}
