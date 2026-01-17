@@ -85,7 +85,15 @@ export const deleteOrderAction = (orderId, filters) => {
             await deleteOrder(orderId);
             dispatch(setNotification({ open: true, severity: 'success', message: 'Order deleted successfully'}));
             dispatch(stopLoading());
-            // Refresh with current filters to maintain pagination state
+            
+            // Invalidate RTK Query cache (NEW WAY)
+            dispatch(api.util.invalidateTags([
+                { type: 'Orders', id: 'LIST' },
+                { type: 'Receivables', id: 'LIST' },
+                { type: 'Dashboard', id: 'TODAY' }
+            ]));
+            
+            // Also refresh old Redux store (LEGACY)
             dispatch(listOrdersAction(filters || { limit: 25, offset: 0 }));
         }
         catch(error){
