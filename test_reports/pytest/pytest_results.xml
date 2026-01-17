@@ -1,32 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="9" tests="19" time="623.814" timestamp="2026-01-11T10:29:39.910614+00:00" hostname="agent-env-9ba276d5-ff6d-49e8-8abf-c95e08b47378"><testcase classname="tests.test_invoicing_system.TestAuth" name="test_01_login_success" time="0.155" /><testcase classname="tests.test_invoicing_system.TestAuth" name="test_02_login_invalid_credentials" time="0.119" /><testcase classname="tests.test_invoicing_system.TestProductSetup" name="test_01_create_test_products" time="0.129"><failure message="AssertionError: At least one product should be created&#10;assert 0 &gt;= 1&#10; +  where 0 = len([])">tests/test_invoicing_system.py:83: in test_01_create_test_products
-    assert len(created_products) &gt;= 1, "At least one product should be created"
-E   AssertionError: At least one product should be created
-E   assert 0 &gt;= 1
-E    +  where 0 = len([])</failure></testcase><testcase classname="tests.test_invoicing_system.TestProductSetup" name="test_02_list_products" time="0.046" /><testcase classname="tests.test_invoicing_system.TestCustomerSetup" name="test_01_create_test_customer" time="0.049" /><testcase classname="tests.test_invoicing_system.TestOrderCreation" name="test_01_create_cash_sale_order" time="0.037"><skipped type="pytest.skip" message="No products available for testing">/app/tests/test_invoicing_system.py:150: No products available for testing</skipped></testcase><testcase classname="tests.test_invoicing_system.TestOrderCreation" name="test_02_create_credit_sale_order" time="0.045"><skipped type="pytest.skip" message="No products available for testing">/app/tests/test_invoicing_system.py:202: No products available for testing</skipped></testcase><testcase classname="tests.test_invoicing_system.TestOrderCreation" name="test_03_verify_calculation_accuracy" time="0.040"><skipped type="pytest.skip" message="Need at least 2 products for multi-item test">/app/tests/test_invoicing_system.py:251: Need at least 2 products for multi-item test</skipped></testcase><testcase classname="tests.test_invoicing_system.TestOrderCreation" name="test_04_verify_order_persistence" time="0.003"><skipped type="pytest.skip" message="No orders created to verify">/app/tests/test_invoicing_system.py:301: No orders created to verify</skipped></testcase><testcase classname="tests.test_invoicing_system.TestOrderCreation" name="test_05_invoice_number_uniqueness" time="0.039"><skipped type="pytest.skip" message="No products available">/app/tests/test_invoicing_system.py:320: No products available</skipped></testcase><testcase classname="tests.test_invoicing_system.TestOrderOperations" name="test_01_edit_order" time="0.000"><skipped type="pytest.skip" message="No orders to edit">/app/tests/test_invoicing_system.py:373: No orders to edit</skipped></testcase><testcase classname="tests.test_invoicing_system.TestOrderOperations" name="test_02_delete_order_soft_delete" time="0.039"><skipped type="pytest.skip" message="No products available">/app/tests/test_invoicing_system.py:414: No products available</skipped></testcase><testcase classname="tests.test_invoicing_system.TestOutstandingReceivables" name="test_01_outstanding_receivables_structure" time="0.045" /><testcase classname="tests.test_invoicing_system.TestOutstandingReceivables" name="test_02_credit_sale_appears_in_receivables" time="0.038"><skipped type="pytest.skip" message="No products available">/app/tests/test_invoicing_system.py:493: No products available</skipped></testcase><testcase classname="tests.test_invoicing_system.TestPaymentRecording" name="test_01_record_payment_updates_order" time="0.040"><skipped type="pytest.skip" message="No products available">/app/tests/test_invoicing_system.py:564: No products available</skipped></testcase><testcase classname="tests.test_invoicing_system.TestAdminDashboard" name="test_01_dashboard_data" time="622.653" /><testcase classname="tests.test_invoicing_system.TestAdminDashboard" name="test_02_orders_list_accuracy" time="0.055"><failure message="assert 520 == 200&#10; +  where 520 = &lt;Response [520]&gt;.status_code">tests/test_invoicing_system.py:651: in test_02_orders_list_accuracy
-    print(f"✓ Dashboard data retrieved: {data}")
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E   assert 520 == 200
-E    +  where 520 = &lt;Response [520]&gt;.status_code</failure></testcase><testcase classname="tests.test_invoicing_system.TestSystemResilience" name="test_01_invalid_order_data" time="0.034"><failure message="AssertionError: Should reject invalid order&#10;assert 520 in [400, 500]&#10; +  where 520 = &lt;Response [520]&gt;.status_code">tests/test_invoicing_system.py:691: in test_01_invalid_order_data
-    ???
-E   AssertionError: Should reject invalid order
-E   assert 520 in [400, 500]
-E    +  where 520 = &lt;Response [520]&gt;.status_code</failure></testcase><testcase classname="tests.test_invoicing_system.TestSystemResilience" name="test_02_duplicate_submission_prevention" time="0.036"><failure message="requests.exceptions.JSONDecodeError: Expecting value: line 1 column 1 (char 0)">/root/.venv/lib/python3.11/site-packages/requests/models.py:976: in json
-    return complexjson.loads(self.text, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/json/__init__.py:346: in loads
-    return _default_decoder.decode(s)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/json/decoder.py:337: in decode
-    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-/usr/local/lib/python3.11/json/decoder.py:355: in raw_decode
-    raise JSONDecodeError("Expecting value", s, err.value) from None
-E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
-
-During handling of the above exception, another exception occurred:
-tests/test_invoicing_system.py:697: in test_02_duplicate_submission_prevention
-    response = requests.post(f"{BASE_URL}/orders", json=invalid_order, headers=self.get_headers())
-               ^^^^^^^^^^^^^^^^^^^^
-/root/.venv/lib/python3.11/site-packages/requests/models.py:980: in json
-    raise RequestsJSONDecodeError(e.msg, e.doc, e.pos)
-E   requests.exceptions.JSONDecodeError: Expecting value: line 1 column 1 (char 0)</failure></testcase></testsuite></testsuites>
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="9" time="1.455" timestamp="2026-01-17T17:55:18.660463+00:00" hostname="agent-env-60f659d3-0a4e-4fe5-a7e5-2d3e9da80fa9"><testcase classname="tests.test_orders_api.TestOrdersAPI" name="test_list_orders_returns_200" time="0.206" /><testcase classname="tests.test_orders_api.TestOrdersAPI" name="test_list_orders_returns_array_of_orders" time="0.138" /><testcase classname="tests.test_orders_api.TestOrdersAPI" name="test_create_order_returns_200" time="0.133"><failure message="AssertionError: Expected 200, got 400: {&quot;status&quot;:400,&quot;message&quot;:&quot;\&quot;productId\&quot; is required&quot;}&#10;assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">tests/test_orders_api.py:91: in test_create_order_returns_200
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+E   AssertionError: Expected 200, got 400: {"status":400,"message":"\"productId\" is required"}
+E   assert 400 == 200
+E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="tests.test_orders_api.TestOrdersAPI" name="test_created_order_appears_in_list" time="0.133"><failure message="AssertionError: Create failed: {&quot;status&quot;:400,&quot;message&quot;:&quot;\&quot;productId\&quot; is required&quot;}&#10;assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">tests/test_orders_api.py:133: in test_created_order_appears_in_list
+    assert create_response.status_code == 200, f"Create failed: {create_response.text}"
+E   AssertionError: Create failed: {"status":400,"message":"\"productId\" is required"}
+E   assert 400 == 200
+E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="tests.test_orders_api.TestOrdersAPI" name="test_get_single_order" time="0.141" /><testcase classname="tests.test_orders_api.TestOrdersAPI" name="test_orders_sorted_by_created_date_desc" time="0.134" /><testcase classname="tests.test_orders_api.TestOrdersAPI" name="test_orders_pagination" time="0.147" /><testcase classname="tests.test_orders_api.TestOrdersAPI" name="test_orders_search_filter" time="0.128"><failure message="assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">tests/test_orders_api.py:249: in test_orders_search_filter
+    assert create_response.status_code == 200
+E   assert 400 == 200
+E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="tests.test_orders_api.TestOrdersReduxIntegration" name="test_create_order_and_immediate_list_refresh" time="0.140"><failure message="assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">tests/test_orders_api.py:315: in test_create_order_and_immediate_list_refresh
+    assert create_response.status_code == 200
+E   assert 400 == 200
+E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase></testsuite></testsuites>
