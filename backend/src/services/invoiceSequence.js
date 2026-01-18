@@ -2,6 +2,24 @@ const db = require('../models');
 const uuidv4 = require('uuid/v4');
 const moment = require('moment-timezone');
 
+// Helper to get financial year string (e.g., "2025-26")
+const getFinancialYear = (date = new Date()) => {
+    const d = moment(date);
+    const month = d.month(); // 0-indexed (0 = January)
+    const year = d.year();
+    
+    // Financial year in India runs from April 1 to March 31
+    // If month is Jan-Mar (0-2), we're in previous year's FY
+    // If month is Apr-Dec (3-11), we're in current year's FY
+    if (month < 3) {
+        // January to March - FY started last year
+        return `${year - 1}-${String(year).slice(-2)}`;
+    } else {
+        // April to December - FY starts this year
+        return `${year}-${String(year + 1).slice(-2)}`;
+    }
+};
+
 module.exports = {
     // Get or create the invoice sequence record
     getSequence: async () => {
@@ -21,8 +39,10 @@ module.exports = {
     },
 
     // Generate the next invoice number (server-side, tamper-proof)
+    // Format: INV/2025-26/0001 (GST Compatible - Financial Year based)
     generateInvoiceNumber: async (transaction = null) => {
         const today = moment().format('YYYY-MM-DD');
+        const currentFY = getFinancialYear();
         
         // Use transaction lock to prevent race conditions
         const options = transaction ? { transaction, lock: true } : {};
@@ -35,12 +55,22 @@ module.exports = {
                 prefix: 'INV',
                 currentNumber: 0,
                 dailyNumber: 0,
-                lastDate: today
+                lastDate: today,
+                lastFinancialYear: currentFY
             }, transaction ? { transaction } : {});
         }
 
-        // Increment global number (never resets)
-        const newGlobalNumber = sequence.currentNumber + 1;
+        // Check if we need to reset for new financial year
+        const lastFY = sequence.lastFinancialYear || getFinancialYear(sequence.lastDate || today);
+        let newGlobalNumber;
+        
+        if (lastFY !== currentFY) {
+            // New financial year - reset counter
+            newGlobalNumber = 1;
+        } else {
+            // Same financial year - increment
+            newGlobalNumber = sequence.currentNumber + 1;
+        }
         
         // Check if we need to reset daily number
         let newDailyNumber;
@@ -56,31 +86,34 @@ module.exports = {
         await sequence.update({
             currentNumber: newGlobalNumber,
             dailyNumber: newDailyNumber,
-            lastDate: today
+            lastDate: today,
+            lastFinancialYear: currentFY
         }, transaction ? { transaction } : {});
 
-        // Generate invoice number format: INV-YYYYMMDD-XXXX (global sequence)
-        const dateStr = moment().format('YYYYMMDD');
-        const paddedNumber = String(newGlobalNumber).padStart(6, '0');
+        // Generate invoice number format: INV/2025-26/0001 (GST Compatible)
+        const paddedNumber = String(newGlobalNumber).padStart(4, '0');
         
         return {
-            invoiceNumber: `${sequence.prefix}-${dateStr}-${paddedNumber}`,
+            invoiceNumber: `${sequence.prefix}/${currentFY}/${paddedNumber}`,
             globalSequence: newGlobalNumber,
             dailySequence: newDailyNumber,
-            date: today
+            date: today,
+            financialYear: currentFY
         };
     },
 
     // Get current sequence info
     getSequenceInfo: async () => {
         const sequence = await db.invoiceSequence.findOne();
+        const currentFY = getFinancialYear();
         
         if (!sequence) {
             return {
                 currentNumber: 0,
                 dailyNumber: 0,
                 lastDate: null,
-                prefix: 'INV'
+                prefix: 'INV',
+                financialYear: currentFY
             };
         }
 
@@ -88,7 +121,12 @@ module.exports = {
             currentNumber: sequence.currentNumber,
             dailyNumber: sequence.dailyNumber,
             lastDate: sequence.lastDate,
-            prefix: sequence.prefix
+            prefix: sequence.prefix,
+            financialYear: currentFY,
+            lastFinancialYear: sequence.lastFinancialYear
         };
-    }
+    },
+    
+    // Helper function exported for use elsewhere
+    getFinancialYear
 };
