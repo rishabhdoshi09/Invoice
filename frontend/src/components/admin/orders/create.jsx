@@ -369,16 +369,22 @@ export const CreateOrder = () => {
   }, [pdfUrl, archivedPdfUrl, archivedOrderProps]);
 
   const generatePdf = useCallback((pdfProps) => {
-    const updatedProps = JSON.parse(JSON.stringify(pdfProps));
-    updatedProps.orderItems = updatedProps.orderItems?.map(item => ({
-      name: (item.altName && item.altName.trim()) ? item.altName.trim() : safeGetProductName(rows, item),
-      productPrice: item.productPrice,
-      quantity: item.quantity,
-      totalPrice: item.totalPrice
-    })) ?? [];
-    const chosen = TEMPLATE_MAP[template] ?? template;
-    const pdfObject = chosen === 1 ? generatePdfDefinition(updatedProps) : generatePdfDefinition2(updatedProps);
-    pdfMake.createPdf(pdfObject).getBlob((blob) => { const url = URL.createObjectURL(blob); setPdfUrl(url); });
+    return new Promise((resolve) => {
+      const updatedProps = JSON.parse(JSON.stringify(pdfProps));
+      updatedProps.orderItems = updatedProps.orderItems?.map(item => ({
+        name: (item.altName && item.altName.trim()) ? item.altName.trim() : safeGetProductName(rows, item),
+        productPrice: item.productPrice,
+        quantity: item.quantity,
+        totalPrice: item.totalPrice
+      })) ?? [];
+      const chosen = TEMPLATE_MAP[template] ?? template;
+      const pdfObject = chosen === 1 ? generatePdfDefinition(updatedProps) : generatePdfDefinition2(updatedProps);
+      pdfMake.createPdf(pdfObject).getBlob((blob) => { 
+        const url = URL.createObjectURL(blob); 
+        setPdfUrl(url);
+        resolve(url);
+      });
+    });
   }, [rows, template, TEMPLATE_MAP]);
 
   const initialOrderProps = useMemo(() => ({
