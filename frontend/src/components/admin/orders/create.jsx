@@ -957,9 +957,7 @@ export const CreateOrder = () => {
       return;
     }
 
-    // Get the input element directly from the event
-    const inputElement = e.target;
-    
+    // Bowl path - get input element reference (already have inputElement from above)
     const digitsOnly = rawInput.replace(/\D/g, '');
     if (digitsOnly.length > 3) { 
       e.preventDefault && e.preventDefault(); 
@@ -973,10 +971,10 @@ export const CreateOrder = () => {
       return; 
     }
     
-    const numeric = Number(digitsOnly) || 0;
+    const numericBowl = Number(digitsOnly) || 0;
     
     // Block restricted ranges (200-209, 301-309) for weighted products
-    if (isWeighted && digitsOnly.length >= 3 && isRestrictedPrice(numeric)) {
+    if (isWeighted && digitsOnly.length >= 3 && isRestrictedPrice(numericBowl)) {
       e.preventDefault && e.preventDefault();
       inputElement.value = formik.values.productPrice || '';
       return;
@@ -987,12 +985,12 @@ export const CreateOrder = () => {
     inputElement.value = digitsOnly;
     
     // Capture current quantity for the debounced callback
-    const currentQuantity = Number(formik.values.quantity) || 0;
+    const currentQuantityBowl = Number(formik.values.quantity) || 0;
     
     // Debounce formik update
     priceUpdateTimeoutRef.current = setTimeout(() => {
       formik.setFieldValue('productPrice', digitsOnly);
-      formik.setFieldValue('totalPrice', Number((numeric * currentQuantity).toFixed(2)));
+      formik.setFieldValue('totalPrice', Number((numericBowl * currentQuantityBowl).toFixed(2)));
     }, 150); // 150ms debounce
   };
 
