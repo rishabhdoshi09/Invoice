@@ -373,7 +373,7 @@ export const GstExportTool = () => {
             />
           ))}
           {priceRules.filter(r => r.enabled).length === 0 && (
-            <Typography variant="body2" color="text.secondary">No active rules. Click "Price Rules" to configure.</Typography>
+            <Typography variant="body2" color="text.secondary">No active rules. Click &quot;Price Rules&quot; to configure.</Typography>
           )}
         </Box>
       </Paper>
