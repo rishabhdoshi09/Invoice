@@ -35,15 +35,33 @@ module.exports = (router) => {
 
             const rows = [];
 
+            // GST Rate constants (5% total = 2.5% CGST + 2.5% SGST)
+            const GST_RATE = 0.05;
+            const CGST_RATE = 2.5;
+            const SGST_RATE = 2.5;
+
             for (const order of orders) {
                 const items = useAdjusted && order.adjustedItems 
                     ? order.adjustedItems 
                     : order.orderItems || [];
 
                 for (const item of items) {
-                    const taxRate = Number(order.taxPercent || 0) / 2; // Split between CGST and SGST
                     const lineTotal = Number(item.totalPrice || 0);
-                    const taxAmount = lineTotal * (Number(order.taxPercent || 0) / 100);
+                    
+                    // Use pre-calculated GST values from frontend if available, otherwise calculate
+                    let baseAmount, cgstAmount, sgstAmount;
+                    if (item.baseAmount && item.cgstAmount && item.sgstAmount) {
+                        baseAmount = Number(item.baseAmount);
+                        cgstAmount = Number(item.cgstAmount);
+                        sgstAmount = Number(item.sgstAmount);
+                    } else {
+                        // Calculate GST (price is inclusive, so extract base)
+                        baseAmount = lineTotal / (1 + GST_RATE);
+                        cgstAmount = baseAmount * (CGST_RATE / 100);
+                        sgstAmount = baseAmount * (SGST_RATE / 100);
+                    }
+                    
+                    const totalTax = cgstAmount + sgstAmount;
 
                     rows.push([
                         order.orderNumber || '',
@@ -56,12 +74,12 @@ module.exports = (router) => {
                         item.productPrice,
                         Number(item.quantity).toFixed(3),
                         item.type === 'weighted' ? 'KG' : 'PCS',
-                        lineTotal.toFixed(2),
-                        taxRate.toFixed(2),
-                        (taxAmount / 2).toFixed(2),
-                        taxRate.toFixed(2),
-                        (taxAmount / 2).toFixed(2),
-                        taxAmount.toFixed(2),
+                        baseAmount.toFixed(2),
+                        CGST_RATE.toFixed(2),
+                        cgstAmount.toFixed(2),
+                        SGST_RATE.toFixed(2),
+                        sgstAmount.toFixed(2),
+                        totalTax.toFixed(2),
                         lineTotal.toFixed(2),
                         Number(order.total || 0).toFixed(2)
                     ]);
