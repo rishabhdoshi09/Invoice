@@ -168,13 +168,29 @@ export const ListOrders = () => {
     const formatDate = (dateString) => {
         if (!dateString) return '-';
         try {
-            return new Date(dateString).toLocaleDateString('en-IN', {
+            // Handle different date formats
+            let date;
+            if (typeof dateString === 'string') {
+                // If it's a date-only string like "2026-01-18", add time to avoid timezone issues
+                if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    date = new Date(dateString + 'T00:00:00');
+                } else {
+                    date = new Date(dateString);
+                }
+            } else {
+                date = new Date(dateString);
+            }
+            
+            // Check if date is valid
+            if (isNaN(date.getTime())) return '-';
+            
+            return date.toLocaleDateString('en-IN', {
                 day: '2-digit',
                 month: '2-digit',
                 year: 'numeric'
             });
         } catch {
-            return dateString;
+            return '-';
         }
     };
 
