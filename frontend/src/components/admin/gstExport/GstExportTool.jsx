@@ -33,6 +33,7 @@ export const GstExportTool = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [previewOrder, setPreviewOrder] = useState(null);
   const [expandedRows, setExpandedRows] = useState({});
+  const [showAdjusted, setShowAdjusted] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
   
   // Pagination state
