@@ -543,6 +543,9 @@ export const GstExportTool = () => {
                                       <TableCell>Product Name</TableCell>
                                       <TableCell align="right">Product Price</TableCell>
                                       <TableCell align="right">Quantity</TableCell>
+                                      <TableCell align="right">Taxable Value</TableCell>
+                                      <TableCell align="right">SGST 2.5%</TableCell>
+                                      <TableCell align="right">CGST 2.5%</TableCell>
                                       <TableCell align="right">Amount</TableCell>
                                     </TableRow>
                                   </TableHead>
@@ -552,6 +555,9 @@ export const GstExportTool = () => {
                                         <TableCell>{item.name}</TableCell>
                                         <TableCell align="right">₹{item.productPrice}</TableCell>
                                         <TableCell align="right">{Number(item.quantity).toFixed(3)}</TableCell>
+                                        <TableCell align="right">₹{item.baseAmount || (Number(item.totalPrice) / 1.05).toFixed(2)}</TableCell>
+                                        <TableCell align="right">₹{item.sgstAmount || (Number(item.totalPrice) / 1.05 * 0.025).toFixed(2)}</TableCell>
+                                        <TableCell align="right">₹{item.cgstAmount || (Number(item.totalPrice) / 1.05 * 0.025).toFixed(2)}</TableCell>
                                         <TableCell align="right">₹{Number(item.totalPrice || 0).toFixed(2)}</TableCell>
                                       </TableRow>
                                     ))}
