@@ -714,98 +714,58 @@ export const GstExportTool = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Preview Dialog */}
-      <Dialog open={!!previewOrder} onClose={() => setPreviewOrder(null)} maxWidth="lg" fullWidth>
+      {/* Invoice Preview Dialog - Clean view without comparison */}
+      <Dialog open={!!previewOrder} onClose={() => setPreviewOrder(null)} maxWidth="md" fullWidth>
         <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <CompareArrows /> Invoice Comparison: {previewOrder?.orderNumber}
-          </Box>
+          Invoice: {previewOrder?.orderNumber}
         </DialogTitle>
         <DialogContent>
           {previewOrder && (
-            <Grid container spacing={3}>
-              {/* Original */}
-              <Grid item xs={12} md={6}>
-                <Paper sx={{ p: 2, border: '2px solid', borderColor: 'grey.300' }}>
-                  <Typography variant="h6" sx={{ mb: 2, color: 'grey.700' }}>
-                    📄 Original Invoice
-                  </Typography>
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="body2"><strong>Invoice:</strong> {previewOrder.orderNumber}</Typography>
-                    <Typography variant="body2"><strong>Date:</strong> {formatDate(previewOrder.orderDate)}</Typography>
-                    <Typography variant="body2"><strong>Customer:</strong> {previewOrder.customerName || 'Walk-in'}</Typography>
-                  </Box>
-                  <Divider sx={{ my: 1 }} />
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Item</TableCell>
-                        <TableCell align="right">Price</TableCell>
-                        <TableCell align="right">Qty</TableCell>
-                        <TableCell align="right">Total</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {(previewOrder.orderItems || []).map((item, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell>{item.name}</TableCell>
-                          <TableCell align="right">₹{item.productPrice}</TableCell>
-                          <TableCell align="right">{Number(item.quantity).toFixed(3)}</TableCell>
-                          <TableCell align="right">₹{Number(item.totalPrice).toFixed(2)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <Divider sx={{ my: 1 }} />
-                  <Box sx={{ textAlign: 'right' }}>
-                    <Typography variant="body2">Subtotal: ₹{previewOrder.subTotal}</Typography>
-                    <Typography variant="body2">Tax: ₹{previewOrder.tax}</Typography>
-                    <Typography variant="h6">Total: ₹{previewOrder.total}</Typography>
-                  </Box>
-                </Paper>
+            <Box>
+              <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid item xs={6}>
+                  <Typography variant="body2"><strong>Invoice:</strong> {previewOrder.orderNumber}</Typography>
+                  <Typography variant="body2"><strong>Date:</strong> {formatDate(previewOrder.orderDate)}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="body2"><strong>Customer:</strong> {previewOrder.customerName || 'Walk-in'}</Typography>
+                  <Typography variant="body2"><strong>GSTIN:</strong> {previewOrder.customerGstin || 'URP'}</Typography>
+                </Grid>
               </Grid>
-
-              {/* Adjusted */}
-              <Grid item xs={12} md={6}>
-                <Paper sx={{ p: 2, border: '2px solid', borderColor: 'primary.main' }}>
-                  <Typography variant="h6" sx={{ mb: 2, color: 'primary.dark' }}>
-                    Adjusted Invoice (For GST Filing)
-                  </Typography>
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="body2"><strong>Invoice:</strong> {previewOrder.orderNumber}</Typography>
-                    <Typography variant="body2"><strong>Date:</strong> {formatDate(previewOrder.orderDate)}</Typography>
-                    <Typography variant="body2"><strong>Customer:</strong> {previewOrder.customerName || 'Walk-in'}</Typography>
-                  </Box>
-                  <Divider sx={{ my: 1 }} />
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Product Name</TableCell>
-                        <TableCell align="right">Product Price</TableCell>
-                        <TableCell align="right">Quantity</TableCell>
-                        <TableCell align="right">Amount</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {(previewOrder.adjustedItems || []).map((item, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell>{item.name}</TableCell>
-                          <TableCell align="right">₹{item.productPrice}</TableCell>
-                          <TableCell align="right">{Number(item.quantity).toFixed(3)}</TableCell>
-                          <TableCell align="right">₹{Number(item.totalPrice).toFixed(2)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <Divider sx={{ my: 1 }} />
-                  <Box sx={{ textAlign: 'right' }}>
-                    <Typography variant="body2">Subtotal: ₹{previewOrder.subTotal}</Typography>
-                    <Typography variant="body2">Tax: ₹{previewOrder.tax}</Typography>
-                    <Typography variant="h6">Total: ₹{previewOrder.total}</Typography>
-                  </Box>
-                </Paper>
-              </Grid>
-            </Grid>
+              <Divider sx={{ my: 2 }} />
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Product Name</TableCell>
+                    <TableCell align="right">Rate (₹/kg)</TableCell>
+                    <TableCell align="right">Weight (kg)</TableCell>
+                    <TableCell align="right">Taxable Value</TableCell>
+                    <TableCell align="right">SGST 2.5%</TableCell>
+                    <TableCell align="right">CGST 2.5%</TableCell>
+                    <TableCell align="right">Amount</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(showAdjusted ? (previewOrder.adjustedItems || previewOrder.orderItems || []) : (previewOrder.orderItems || [])).map((item, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell>{item.name}</TableCell>
+                      <TableCell align="right">₹{item.productPrice}</TableCell>
+                      <TableCell align="right">{Number(item.quantity).toFixed(3)}</TableCell>
+                      <TableCell align="right">₹{item.baseAmount || (Number(item.totalPrice) / 1.05).toFixed(2)}</TableCell>
+                      <TableCell align="right">₹{item.sgstAmount || (Number(item.totalPrice) / 1.05 * 0.025).toFixed(2)}</TableCell>
+                      <TableCell align="right">₹{item.cgstAmount || (Number(item.totalPrice) / 1.05 * 0.025).toFixed(2)}</TableCell>
+                      <TableCell align="right">₹{Number(item.totalPrice || 0).toFixed(2)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <Divider sx={{ my: 2 }} />
+              <Box sx={{ textAlign: 'right' }}>
+                <Typography variant="body2">Subtotal: ₹{previewOrder.subTotal}</Typography>
+                <Typography variant="body2">Tax (5%): ₹{previewOrder.tax}</Typography>
+                <Typography variant="h6">Total: ₹{previewOrder.total}</Typography>
+              </Box>
+            </Box>
           )}
         </DialogContent>
         <DialogActions>
