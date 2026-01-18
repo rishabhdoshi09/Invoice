@@ -736,7 +736,7 @@ export const GstExportTool = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {(previewOrder.adjustedItems || previewOrder.orderItems || []).map((item, idx) => (
+                  {(showAdjusted ? (previewOrder.adjustedItems || previewOrder.orderItems || []) : (previewOrder.orderItems || [])).map((item, idx) => (
                     <TableRow key={idx}>
                       <TableCell>{item.name}</TableCell>
                       <TableCell align="right">₹{item.productPrice}</TableCell>
