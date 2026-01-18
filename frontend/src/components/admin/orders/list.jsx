@@ -171,10 +171,17 @@ export const ListOrders = () => {
             // Handle different date formats
             let date;
             if (typeof dateString === 'string') {
-                // If it's a date-only string like "2026-01-18", add time to avoid timezone issues
-                if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                // Handle DD-MM-YYYY format (Indian date format from backend)
+                if (dateString.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                    const [day, month, year] = dateString.split('-');
+                    date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                }
+                // Handle YYYY-MM-DD format
+                else if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
                     date = new Date(dateString + 'T00:00:00');
-                } else {
+                }
+                // Handle ISO string or other formats
+                else {
                     date = new Date(dateString);
                 }
             } else {
