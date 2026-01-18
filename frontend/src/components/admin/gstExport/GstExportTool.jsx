@@ -1,0 +1,777 @@
+import { useState, useEffect, useMemo } from 'react';
+import {
+  Box, Button, Card, CardContent, Typography, Grid, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, Checkbox, TextField, Alert, Chip,
+  CircularProgress, Paper, Divider, Dialog, DialogTitle, DialogContent,
+  DialogActions, IconButton, Tooltip, Collapse, Switch, FormControlLabel,
+  Tabs, Tab
+} from '@mui/material';
+import {
+  Download, Refresh, Settings, Preview, ExpandMore, ExpandLess,
+  CompareArrows, Calculate, Receipt, PictureAsPdf, TableChart
+} from '@mui/icons-material';
+import axios from 'axios';
+
+// Default price rules
+const DEFAULT_PRICE_RULES = [
+  { id: 1, minPrice: 100, maxPrice: 199, targetPrice: 120, enabled: true },
+  { id: 2, minPrice: 200, maxPrice: 299, targetPrice: 220, enabled: true },
+  { id: 3, minPrice: 300, maxPrice: 399, targetPrice: 330, enabled: true },
+];
+
+export const GstExportTool = () => {
+  // State
+  const [orders, setOrders] = useState([]);
+  const [selectedOrders, setSelectedOrders] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
+  const [priceRules, setPriceRules] = useState(DEFAULT_PRICE_RULES);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [previewOrder, setPreviewOrder] = useState(null);
+  const [expandedRows, setExpandedRows] = useState({});
+  const [showAdjusted, setShowAdjusted] = useState(true);
+  const [activeTab, setActiveTab] = useState(0);
+
+  // Load saved rules from localStorage
+  useEffect(() => {
+    const savedRules = localStorage.getItem('gstPriceRules');
+    if (savedRules) {
+      try {
+        setPriceRules(JSON.parse(savedRules));
+      } catch (e) {
+        console.error('Error loading saved rules:', e);
+      }
+    }
+    fetchOrders();
+  }, []);
+
+  // Save rules to localStorage when changed
+  const saveRules = (rules) => {
+    setPriceRules(rules);
+    localStorage.setItem('gstPriceRules', JSON.stringify(rules));
+  };
+
+  const fetchOrders = async () => {
+    try {
+      setLoading(true);
+      const params = {
+        limit: 10000,
+        offset: 0,
+        ...(dateRange.startDate && dateRange.endDate ? dateRange : {})
+      };
+      const { data } = await axios.get('/api/orders', { params });
+      setOrders(data.data?.rows || []);
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Apply price rules to an order item
+  const adjustOrderItem = (item) => {
+    const price = Number(item.productPrice) || 0;
+    const quantity = Number(item.quantity) || 0;
+    const totalPrice = Number(item.totalPrice) || 0;
+
+    // Find applicable rule
+    const rule = priceRules.find(r => 
+      r.enabled && price >= r.minPrice && price <= r.maxPrice
+    );
+
+    if (!rule) {
+      return { ...item, adjusted: false };
+    }
+
+    // Calculate new quantity to maintain same total
+    // Original: price * quantity = totalPrice
+    // Adjusted: targetPrice * newQuantity = totalPrice
+    const newQuantity = totalPrice / rule.targetPrice;
+
+    return {
+      ...item,
+      adjusted: true,
+      originalPrice: price,
+      originalQuantity: quantity,
+      productPrice: rule.targetPrice,
+      quantity: Number(newQuantity.toFixed(3)),
+      // totalPrice remains the same
+    };
+  };
+
+  // Apply adjustments to entire order
+  const adjustOrder = (order) => {
+    if (!order.orderItems || order.orderItems.length === 0) {
+      return { ...order, adjusted: false, adjustedItems: [] };
+    }
+
+    const adjustedItems = order.orderItems.map(adjustOrderItem);
+    const hasAdjustments = adjustedItems.some(item => item.adjusted);
+
+    return {
+      ...order,
+      adjusted: hasAdjustments,
+      adjustedItems,
+      // Totals remain unchanged
+    };
+  };
+
+  // Memoized adjusted orders
+  const adjustedOrders = useMemo(() => {
+    return orders.map(adjustOrder);
+  }, [orders, priceRules]);
+
+  // Toggle row expansion
+  const toggleRow = (orderId) => {
+    setExpandedRows(prev => ({
+      ...prev,
+      [orderId]: !prev[orderId]
+    }));
+  };
+
+  // Selection handlers
+  const handleSelectAll = () => {
+    if (selectedOrders.length === orders.length) {
+      setSelectedOrders([]);
+    } else {
+      setSelectedOrders(orders.map(o => o.id));
+    }
+  };
+
+  const handleToggleOrder = (orderId) => {
+    setSelectedOrders(prev =>
+      prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]
+    );
+  };
+
+  // Add new price rule
+  const addPriceRule = () => {
+    const newId = Math.max(...priceRules.map(r => r.id), 0) + 1;
+    saveRules([...priceRules, { id: newId, minPrice: 0, maxPrice: 99, targetPrice: 50, enabled: true }]);
+  };
+
+  // Update price rule
+  const updateRule = (id, field, value) => {
+    const updated = priceRules.map(rule =>
+      rule.id === id ? { ...rule, [field]: field === 'enabled' ? value : Number(value) } : rule
+    );
+    saveRules(updated);
+  };
+
+  // Delete price rule
+  const deleteRule = (id) => {
+    saveRules(priceRules.filter(rule => rule.id !== id));
+  };
+
+  // Export functions
+  const handleExportExcel = async (useAdjusted = true) => {
+    const ordersToExport = selectedOrders.length > 0 
+      ? adjustedOrders.filter(o => selectedOrders.includes(o.id))
+      : adjustedOrders;
+
+    if (ordersToExport.length === 0) {
+      alert('No orders to export');
+      return;
+    }
+
+    try {
+      const response = await axios.post('/api/gst-export/excel', {
+        orders: ordersToExport,
+        useAdjusted,
+        priceRules: useAdjusted ? priceRules.filter(r => r.enabled) : []
+      }, {
+        responseType: 'blob'
+      });
+
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `GST_Export_${useAdjusted ? 'Adjusted' : 'Original'}_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Export failed. Please try again.');
+    }
+  };
+
+  // Format date for display
+  const formatDate = (dateString) => {
+    if (!dateString) return '-';
+    // Handle DD-MM-YYYY format
+    if (dateString.match(/^\d{2}-\d{2}-\d{4}$/)) {
+      return dateString;
+    }
+    try {
+      return new Date(dateString).toLocaleDateString('en-IN');
+    } catch {
+      return dateString;
+    }
+  };
+
+  // Calculate stats
+  const stats = useMemo(() => {
+    const totalOrders = adjustedOrders.length;
+    const adjustedCount = adjustedOrders.filter(o => o.adjusted).length;
+    const totalValue = adjustedOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+    const itemsAdjusted = adjustedOrders.reduce((sum, o) => 
+      sum + (o.adjustedItems?.filter(i => i.adjusted).length || 0), 0
+    );
+
+    return { totalOrders, adjustedCount, totalValue, itemsAdjusted };
+  }, [adjustedOrders]);
+
+  return (
+    <Box sx={{ p: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Box>
+          <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Calculate /> GST Invoice Export Tool
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Adjust product prices for GST compliance while preserving invoice totals
+          </Typography>
+        </Box>
+        <Button
+          variant="outlined"
+          startIcon={<Settings />}
+          onClick={() => setSettingsOpen(true)}
+          data-testid="price-rules-settings-btn"
+        >
+          Price Rules
+        </Button>
+      </Box>
+
+      {/* Info Alert */}
+      <Alert severity="info" sx={{ mb: 3 }}>
+        <strong>How it works:</strong> Set price ranges and target prices. Items in those ranges will be adjusted 
+        to the target price, with quantity recalculated to maintain the same line total. 
+        Original totals are never changed.
+      </Alert>
+
+      {/* Stats Cards */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={6} md={3}>
+          <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'primary.light', color: 'white' }}>
+            <Typography variant="h4">{stats.totalOrders}</Typography>
+            <Typography variant="body2">Total Invoices</Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'warning.light' }}>
+            <Typography variant="h4">{stats.adjustedCount}</Typography>
+            <Typography variant="body2">Invoices with Adjustments</Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'success.light', color: 'white' }}>
+            <Typography variant="h4">{stats.itemsAdjusted}</Typography>
+            <Typography variant="body2">Items Adjusted</Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={6} md={3}>
+          <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'info.light', color: 'white' }}>
+            <Typography variant="h4">₹{stats.totalValue.toLocaleString()}</Typography>
+            <Typography variant="body2">Total Value (Unchanged)</Typography>
+          </Paper>
+        </Grid>
+      </Grid>
+
+      {/* Active Price Rules Display */}
+      <Paper sx={{ p: 2, mb: 3, bgcolor: 'grey.50' }}>
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>Active Price Rules:</Typography>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          {priceRules.filter(r => r.enabled).map(rule => (
+            <Chip
+              key={rule.id}
+              label={`₹${rule.minPrice}-${rule.maxPrice} → ₹${rule.targetPrice}`}
+              color="primary"
+              variant="outlined"
+              size="small"
+            />
+          ))}
+          {priceRules.filter(r => r.enabled).length === 0 && (
+            <Typography variant="body2" color="text.secondary">No active rules. Click "Price Rules" to configure.</Typography>
+          )}
+        </Box>
+      </Paper>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} sx={{ mb: 2 }}>
+        <Tab label="All Invoices" data-testid="all-invoices-tab" />
+        <Tab label="Adjusted Only" data-testid="adjusted-only-tab" />
+      </Tabs>
+
+      {/* Controls */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+            <TextField
+              label="Start Date"
+              type="date"
+              size="small"
+              value={dateRange.startDate}
+              onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+              InputLabelProps={{ shrink: true }}
+              data-testid="start-date-input"
+            />
+            <TextField
+              label="End Date"
+              type="date"
+              size="small"
+              value={dateRange.endDate}
+              onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+              InputLabelProps={{ shrink: true }}
+              data-testid="end-date-input"
+            />
+            <Button
+              variant="outlined"
+              startIcon={loading ? <CircularProgress size={16} /> : <Refresh />}
+              onClick={fetchOrders}
+              disabled={loading}
+              data-testid="refresh-btn"
+            >
+              {loading ? 'Loading...' : 'Refresh'}
+            </Button>
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={showAdjusted}
+                  onChange={(e) => setShowAdjusted(e.target.checked)}
+                />
+              }
+              label="Show Adjusted Values"
+            />
+
+            <Box sx={{ flexGrow: 1 }} />
+
+            <Button
+              variant="outlined"
+              startIcon={<TableChart />}
+              onClick={() => handleExportExcel(false)}
+              disabled={orders.length === 0}
+              data-testid="export-original-btn"
+            >
+              Export Original
+            </Button>
+            <Button
+              variant="contained"
+              color="success"
+              startIcon={<Download />}
+              onClick={() => handleExportExcel(true)}
+              disabled={orders.length === 0}
+              data-testid="export-adjusted-btn"
+            >
+              Export Adjusted ({selectedOrders.length > 0 ? selectedOrders.length : adjustedOrders.length})
+            </Button>
+          </Box>
+        </CardContent>
+      </Card>
+
+      {/* Orders Table */}
+      <Card>
+        <CardContent>
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : adjustedOrders.length === 0 ? (
+            <Alert severity="info">No invoices found. Try adjusting the date range.</Alert>
+          ) : (
+            <TableContainer sx={{ maxHeight: 600 }}>
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell padding="checkbox">
+                      <Checkbox
+                        checked={selectedOrders.length === orders.length && orders.length > 0}
+                        indeterminate={selectedOrders.length > 0 && selectedOrders.length < orders.length}
+                        onChange={handleSelectAll}
+                        data-testid="select-all-checkbox"
+                      />
+                    </TableCell>
+                    <TableCell width={40}></TableCell>
+                    <TableCell>Invoice No</TableCell>
+                    <TableCell>Date</TableCell>
+                    <TableCell>Customer</TableCell>
+                    <TableCell align="right">Items</TableCell>
+                    <TableCell align="right">Subtotal</TableCell>
+                    <TableCell align="right">Tax</TableCell>
+                    <TableCell align="right">Total</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(activeTab === 1 ? adjustedOrders.filter(o => o.adjusted) : adjustedOrders).map((order) => (
+                    <>
+                      <TableRow
+                        key={order.id}
+                        hover
+                        sx={{
+                          bgcolor: order.adjusted ? 'warning.50' : 'inherit',
+                          '&:hover': { bgcolor: order.adjusted ? 'warning.100' : 'action.hover' }
+                        }}
+                      >
+                        <TableCell padding="checkbox">
+                          <Checkbox
+                            checked={selectedOrders.includes(order.id)}
+                            onChange={() => handleToggleOrder(order.id)}
+                            data-testid={`order-checkbox-${order.id}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <IconButton
+                            size="small"
+                            onClick={() => toggleRow(order.id)}
+                            data-testid={`expand-row-${order.id}`}
+                          >
+                            {expandedRows[order.id] ? <ExpandLess /> : <ExpandMore />}
+                          </IconButton>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight="medium">
+                            {order.orderNumber}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>{formatDate(order.orderDate)}</TableCell>
+                        <TableCell>{order.customerName || 'Walk-in'}</TableCell>
+                        <TableCell align="right">
+                          {order.orderItems?.length || 0}
+                          {order.adjusted && (
+                            <Chip
+                              label="ADJ"
+                              size="small"
+                              color="warning"
+                              sx={{ ml: 1, fontSize: '0.65rem', height: 18 }}
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell align="right">₹{Number(order.subTotal || 0).toLocaleString()}</TableCell>
+                        <TableCell align="right">₹{Number(order.tax || 0).toLocaleString()}</TableCell>
+                        <TableCell align="right">
+                          <Typography fontWeight="bold">
+                            ₹{Number(order.total || 0).toLocaleString()}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={order.paymentStatus || 'paid'}
+                            size="small"
+                            color={order.paymentStatus === 'paid' ? 'success' : order.paymentStatus === 'partial' ? 'warning' : 'error'}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Tooltip title="Preview Original vs Adjusted">
+                            <IconButton
+                              size="small"
+                              onClick={() => setPreviewOrder(order)}
+                              data-testid={`preview-btn-${order.id}`}
+                            >
+                              <CompareArrows />
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
+                      </TableRow>
+
+                      {/* Expanded Row - Order Items */}
+                      <TableRow>
+                        <TableCell colSpan={11} sx={{ py: 0, border: 0 }}>
+                          <Collapse in={expandedRows[order.id]} timeout="auto" unmountOnExit>
+                            <Box sx={{ py: 2, px: 4, bgcolor: 'grey.50' }}>
+                              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                                Order Items {showAdjusted ? '(Adjusted)' : '(Original)'}:
+                              </Typography>
+                              <Table size="small">
+                                <TableHead>
+                                  <TableRow>
+                                    <TableCell>Product</TableCell>
+                                    <TableCell align="right">
+                                      {showAdjusted ? 'Adj. Price' : 'Original Price'}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {showAdjusted ? 'Adj. Qty' : 'Original Qty'}
+                                    </TableCell>
+                                    <TableCell align="right">Total</TableCell>
+                                    <TableCell>Change</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {(order.adjustedItems || order.orderItems || []).map((item, idx) => (
+                                    <TableRow key={idx}>
+                                      <TableCell>{item.name}</TableCell>
+                                      <TableCell align="right">
+                                        {showAdjusted && item.adjusted ? (
+                                          <Box>
+                                            <Typography
+                                              component="span"
+                                              sx={{ textDecoration: 'line-through', color: 'text.secondary', mr: 1 }}
+                                            >
+                                              ₹{item.originalPrice}
+                                            </Typography>
+                                            <Typography component="span" color="success.main" fontWeight="bold">
+                                              ₹{item.productPrice}
+                                            </Typography>
+                                          </Box>
+                                        ) : (
+                                          `₹${item.productPrice}`
+                                        )}
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        {showAdjusted && item.adjusted ? (
+                                          <Box>
+                                            <Typography
+                                              component="span"
+                                              sx={{ textDecoration: 'line-through', color: 'text.secondary', mr: 1 }}
+                                            >
+                                              {item.originalQuantity?.toFixed(3)}
+                                            </Typography>
+                                            <Typography component="span" color="success.main" fontWeight="bold">
+                                              {item.quantity?.toFixed(3)}
+                                            </Typography>
+                                          </Box>
+                                        ) : (
+                                          item.quantity?.toFixed(3)
+                                        )}
+                                      </TableCell>
+                                      <TableCell align="right">₹{Number(item.totalPrice || 0).toFixed(2)}</TableCell>
+                                      <TableCell>
+                                        {item.adjusted ? (
+                                          <Chip label="Adjusted" size="small" color="warning" />
+                                        ) : (
+                                          <Chip label="No Change" size="small" variant="outlined" />
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </Box>
+                          </Collapse>
+                        </TableCell>
+                      </TableRow>
+                    </>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Price Rules Settings Dialog */}
+      <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Settings /> Price Adjustment Rules
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Define price ranges and their target prices. Items falling within a range will be adjusted 
+            to the target price, with quantity recalculated to maintain the same total.
+          </Alert>
+
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Enabled</TableCell>
+                <TableCell>Min Price (₹)</TableCell>
+                <TableCell>Max Price (₹)</TableCell>
+                <TableCell>Target Price (₹)</TableCell>
+                <TableCell>Example</TableCell>
+                <TableCell>Action</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {priceRules.map((rule) => {
+                // Example calculation
+                const exampleOrigPrice = Math.floor((rule.minPrice + rule.maxPrice) / 2);
+                const exampleQty = 0.5;
+                const exampleTotal = exampleOrigPrice * exampleQty;
+                const exampleNewQty = (exampleTotal / rule.targetPrice).toFixed(3);
+
+                return (
+                  <TableRow key={rule.id}>
+                    <TableCell>
+                      <Switch
+                        checked={rule.enabled}
+                        onChange={(e) => updateRule(rule.id, 'enabled', e.target.checked)}
+                        data-testid={`rule-enabled-${rule.id}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        type="number"
+                        size="small"
+                        value={rule.minPrice}
+                        onChange={(e) => updateRule(rule.id, 'minPrice', e.target.value)}
+                        sx={{ width: 100 }}
+                        data-testid={`rule-min-${rule.id}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        type="number"
+                        size="small"
+                        value={rule.maxPrice}
+                        onChange={(e) => updateRule(rule.id, 'maxPrice', e.target.value)}
+                        sx={{ width: 100 }}
+                        data-testid={`rule-max-${rule.id}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        type="number"
+                        size="small"
+                        value={rule.targetPrice}
+                        onChange={(e) => updateRule(rule.id, 'targetPrice', e.target.value)}
+                        sx={{ width: 100 }}
+                        data-testid={`rule-target-${rule.id}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="caption" color="text.secondary">
+                        ₹{exampleOrigPrice} × {exampleQty}kg = ₹{exampleTotal}
+                        <br />
+                        → ₹{rule.targetPrice} × {exampleNewQty}kg = ₹{exampleTotal}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="small"
+                        color="error"
+                        onClick={() => deleteRule(rule.id)}
+                        data-testid={`rule-delete-${rule.id}`}
+                      >
+                        Delete
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+
+          <Button
+            variant="outlined"
+            onClick={addPriceRule}
+            sx={{ mt: 2 }}
+            data-testid="add-rule-btn"
+          >
+            + Add New Rule
+          </Button>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSettingsOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Preview Dialog */}
+      <Dialog open={!!previewOrder} onClose={() => setPreviewOrder(null)} maxWidth="lg" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CompareArrows /> Invoice Comparison: {previewOrder?.orderNumber}
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {previewOrder && (
+            <Grid container spacing={3}>
+              {/* Original */}
+              <Grid item xs={12} md={6}>
+                <Paper sx={{ p: 2, border: '2px solid', borderColor: 'grey.300' }}>
+                  <Typography variant="h6" sx={{ mb: 2, color: 'grey.700' }}>
+                    📄 Original Invoice
+                  </Typography>
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="body2"><strong>Invoice:</strong> {previewOrder.orderNumber}</Typography>
+                    <Typography variant="body2"><strong>Date:</strong> {formatDate(previewOrder.orderDate)}</Typography>
+                    <Typography variant="body2"><strong>Customer:</strong> {previewOrder.customerName || 'Walk-in'}</Typography>
+                  </Box>
+                  <Divider sx={{ my: 1 }} />
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Item</TableCell>
+                        <TableCell align="right">Price</TableCell>
+                        <TableCell align="right">Qty</TableCell>
+                        <TableCell align="right">Total</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {(previewOrder.orderItems || []).map((item, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell>{item.name}</TableCell>
+                          <TableCell align="right">₹{item.productPrice}</TableCell>
+                          <TableCell align="right">{Number(item.quantity).toFixed(3)}</TableCell>
+                          <TableCell align="right">₹{Number(item.totalPrice).toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <Divider sx={{ my: 1 }} />
+                  <Box sx={{ textAlign: 'right' }}>
+                    <Typography variant="body2">Subtotal: ₹{previewOrder.subTotal}</Typography>
+                    <Typography variant="body2">Tax: ₹{previewOrder.tax}</Typography>
+                    <Typography variant="h6">Total: ₹{previewOrder.total}</Typography>
+                  </Box>
+                </Paper>
+              </Grid>
+
+              {/* Adjusted */}
+              <Grid item xs={12} md={6}>
+                <Paper sx={{ p: 2, border: '2px solid', borderColor: 'success.main', bgcolor: 'success.50' }}>
+                  <Typography variant="h6" sx={{ mb: 2, color: 'success.dark' }}>
+                    ✅ GST Adjusted Invoice
+                  </Typography>
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="body2"><strong>Invoice:</strong> {previewOrder.orderNumber}</Typography>
+                    <Typography variant="body2"><strong>Date:</strong> {formatDate(previewOrder.orderDate)}</Typography>
+                    <Typography variant="body2"><strong>Customer:</strong> {previewOrder.customerName || 'Walk-in'}</Typography>
+                  </Box>
+                  <Divider sx={{ my: 1 }} />
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Item</TableCell>
+                        <TableCell align="right">Price</TableCell>
+                        <TableCell align="right">Qty</TableCell>
+                        <TableCell align="right">Total</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {(previewOrder.adjustedItems || []).map((item, idx) => (
+                        <TableRow key={idx} sx={{ bgcolor: item.adjusted ? 'warning.100' : 'inherit' }}>
+                          <TableCell>
+                            {item.name}
+                            {item.adjusted && <Chip label="ADJ" size="small" color="warning" sx={{ ml: 1, fontSize: '0.6rem', height: 16 }} />}
+                          </TableCell>
+                          <TableCell align="right">₹{item.productPrice}</TableCell>
+                          <TableCell align="right">{Number(item.quantity).toFixed(3)}</TableCell>
+                          <TableCell align="right">₹{Number(item.totalPrice).toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <Divider sx={{ my: 1 }} />
+                  <Box sx={{ textAlign: 'right' }}>
+                    <Typography variant="body2">Subtotal: ₹{previewOrder.subTotal}</Typography>
+                    <Typography variant="body2">Tax: ₹{previewOrder.tax}</Typography>
+                    <Typography variant="h6" color="success.dark">Total: ₹{previewOrder.total} (Unchanged)</Typography>
+                  </Box>
+                </Paper>
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPreviewOrder(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
