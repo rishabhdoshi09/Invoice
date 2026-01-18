@@ -2,7 +2,7 @@ const { authenticate, canModify } = require('../middleware/auth');
 const db = require('../models');
 
 module.exports = (router) => {
-    // GST Export - Excel/CSV with adjusted prices
+    // GST Export - Clean CSV format for CA (no comparison columns)
     router.post('/gst-export/excel', authenticate, async (req, res) => {
         try {
             const { orders, useAdjusted, priceRules } = req.body;
@@ -11,7 +11,8 @@ module.exports = (router) => {
                 return res.status(400).json({ status: 400, message: 'No orders provided' });
             }
 
-            // Build CSV content - Professional format without comparison columns
+            // Clean professional format - NO comparison columns
+            // Just the final values as they should appear for CA
             const headers = [
                 'Invoice Number',
                 'Invoice Date',
@@ -20,8 +21,8 @@ module.exports = (router) => {
                 'Place of Supply',
                 'HSN Code',
                 'Product Name',
-                'Product Price',
-                'Quantity',
+                'Rate',          // Product Price (adjusted if applicable)
+                'Weight',        // Quantity (adjusted if applicable)
                 'Unit',
                 'Taxable Value',
                 'CGST Rate',
@@ -29,7 +30,7 @@ module.exports = (router) => {
                 'SGST Rate', 
                 'SGST Amount',
                 'Total Tax',
-                'Line Total',
+                'Amount',
                 'Invoice Total'
             ];
 
@@ -41,6 +42,7 @@ module.exports = (router) => {
             const SGST_RATE = 2.5;
 
             for (const order of orders) {
+                // Use adjusted items if available, otherwise original
                 const items = useAdjusted && order.adjustedItems 
                     ? order.adjustedItems 
                     : order.orderItems || [];
@@ -48,7 +50,7 @@ module.exports = (router) => {
                 for (const item of items) {
                     const lineTotal = Number(item.totalPrice || 0);
                     
-                    // Use pre-calculated GST values from frontend if available, otherwise calculate
+                    // Use pre-calculated GST values from frontend if available
                     let baseAmount, cgstAmount, sgstAmount;
                     if (item.baseAmount && item.cgstAmount && item.sgstAmount) {
                         baseAmount = Number(item.baseAmount);
@@ -63,16 +65,17 @@ module.exports = (router) => {
                     
                     const totalTax = cgstAmount + sgstAmount;
 
+                    // Clean row - just the final values
                     rows.push([
                         order.orderNumber || '',
                         order.orderDate || '',
                         order.customerName || 'Walk-in Customer',
                         order.customerGstin || 'URP',
                         order.placeOfSupply || '27-Maharashtra',
-                        '7323', // HSN code for stainless steel articles
+                        '7323',
                         item.name || '',
-                        item.productPrice,
-                        Number(item.quantity).toFixed(3),
+                        item.productPrice,                    // Rate (final price)
+                        Number(item.quantity).toFixed(3),     // Weight (final quantity)
                         item.type === 'weighted' ? 'KG' : 'PCS',
                         baseAmount.toFixed(2),
                         CGST_RATE.toFixed(2),
