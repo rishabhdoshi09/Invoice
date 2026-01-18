@@ -11,7 +11,7 @@ module.exports = (router) => {
                 return res.status(400).json({ status: 400, message: 'No orders provided' });
             }
 
-            // Build CSV content
+            // Build CSV content - Professional format without comparison columns
             const headers = [
                 'Invoice Number',
                 'Invoice Date',
@@ -20,20 +20,17 @@ module.exports = (router) => {
                 'Place of Supply',
                 'HSN Code',
                 'Product Name',
-                'Original Price',
-                'Adjusted Price',
-                'Original Quantity',
-                'Adjusted Quantity',
+                'Product Price',
+                'Quantity',
                 'Unit',
-                'Line Total',
                 'Taxable Value',
                 'CGST Rate',
                 'CGST Amount',
                 'SGST Rate', 
                 'SGST Amount',
                 'Total Tax',
-                'Invoice Total',
-                'Adjustment Applied'
+                'Line Total',
+                'Invoice Total'
             ];
 
             const rows = [];
@@ -44,8 +41,6 @@ module.exports = (router) => {
                     : order.orderItems || [];
 
                 for (const item of items) {
-                    const originalPrice = item.originalPrice || item.productPrice;
-                    const originalQty = item.originalQuantity || item.quantity;
                     const taxRate = Number(order.taxPercent || 0) / 2; // Split between CGST and SGST
                     const lineTotal = Number(item.totalPrice || 0);
                     const taxAmount = lineTotal * (Number(order.taxPercent || 0) / 100);
@@ -58,20 +53,17 @@ module.exports = (router) => {
                         order.placeOfSupply || '27-Maharashtra',
                         '7323', // HSN code for stainless steel articles
                         item.name || '',
-                        originalPrice,
                         item.productPrice,
-                        Number(originalQty).toFixed(3),
                         Number(item.quantity).toFixed(3),
                         item.type === 'weighted' ? 'KG' : 'PCS',
-                        lineTotal.toFixed(2),
                         lineTotal.toFixed(2),
                         taxRate.toFixed(2),
                         (taxAmount / 2).toFixed(2),
                         taxRate.toFixed(2),
                         (taxAmount / 2).toFixed(2),
                         taxAmount.toFixed(2),
-                        Number(order.total || 0).toFixed(2),
-                        item.adjusted ? 'Yes' : 'No'
+                        lineTotal.toFixed(2),
+                        Number(order.total || 0).toFixed(2)
                     ]);
                 }
             }
