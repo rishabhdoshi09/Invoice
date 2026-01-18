@@ -66,14 +66,27 @@ export const GstExportTool = () => {
     localStorage.setItem('gstPriceRules', JSON.stringify(rules));
   };
 
+  // Convert YYYY-MM-DD to DD-MM-YYYY for backend
+  const formatDateForApi = (dateStr) => {
+    if (!dateStr) return '';
+    const [year, month, day] = dateStr.split('-');
+    return `${day}-${month}-${year}`;
+  };
+
   const fetchOrders = async () => {
     try {
       setLoading(true);
       const params = {
         limit: rowsPerPage,
         offset: page * rowsPerPage,
-        ...(dateRange.startDate && dateRange.endDate ? dateRange : {})
       };
+      
+      // Add date range if both dates are provided
+      if (dateRange.startDate && dateRange.endDate) {
+        params.startDate = formatDateForApi(dateRange.startDate);
+        params.endDate = formatDateForApi(dateRange.endDate);
+      }
+      
       const { data } = await axios.get('/api/orders', { params });
       setOrders(data.data?.rows || []);
       setTotalCount(data.data?.count || 0);
