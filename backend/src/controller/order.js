@@ -130,7 +130,7 @@ module.exports = {
                     await db.ledgerEntry.bulkCreate(ledgerEntries, { transaction });
                 }
 
-                return await Services.order.getOrder({id: orderId });
+                return await Services.order.getOrder({id: orderId }, transaction);
             });
 
             // Audit log for order creation
