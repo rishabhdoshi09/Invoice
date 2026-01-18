@@ -100,7 +100,12 @@ export const GstExportTool = () => {
     fetchOrders();
   };
 
-  // Apply price rules to an order item
+  // GST Rate constants
+  const GST_RATE = 0.05; // 5% total
+  const SGST_RATE = 0.025; // 2.5%
+  const CGST_RATE = 0.025; // 2.5%
+
+  // Apply price rules to an order item and calculate GST
   const adjustOrderItem = (item) => {
     const price = Number(item.productPrice) || 0;
     const quantity = Number(item.quantity) || 0;
@@ -111,20 +116,31 @@ export const GstExportTool = () => {
       r.enabled && price >= r.minPrice && price <= r.maxPrice
     );
 
-    if (!rule) {
-      return { ...item, adjusted: false };
+    let finalPrice = price;
+    let finalQuantity = quantity;
+    let adjusted = false;
+
+    if (rule) {
+      finalPrice = rule.targetPrice;
+      finalQuantity = Number((totalPrice / rule.targetPrice).toFixed(3));
+      adjusted = true;
     }
 
-    // Calculate new quantity to maintain same total
-    const newQuantity = totalPrice / rule.targetPrice;
+    // Calculate GST (price is inclusive, so extract base)
+    const baseAmount = totalPrice / (1 + GST_RATE);
+    const sgstAmount = baseAmount * SGST_RATE;
+    const cgstAmount = baseAmount * CGST_RATE;
 
     return {
       ...item,
-      adjusted: true,
+      adjusted,
       originalPrice: price,
       originalQuantity: quantity,
-      productPrice: rule.targetPrice,
-      quantity: Number(newQuantity.toFixed(3)),
+      productPrice: finalPrice,
+      quantity: finalQuantity,
+      baseAmount: baseAmount.toFixed(2),
+      sgstAmount: sgstAmount.toFixed(2),
+      cgstAmount: cgstAmount.toFixed(2),
     };
   };
 
