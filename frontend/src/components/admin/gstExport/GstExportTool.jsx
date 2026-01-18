@@ -418,16 +418,6 @@ export const GstExportTool = () => {
               {loading ? 'Loading...' : 'Refresh'}
             </Button>
 
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={showAdjusted}
-                  onChange={(e) => setShowAdjusted(e.target.checked)}
-                />
-              }
-              label="Show Adjusted Values"
-            />
-
             <Box sx={{ flexGrow: 1 }} />
 
             <Button
