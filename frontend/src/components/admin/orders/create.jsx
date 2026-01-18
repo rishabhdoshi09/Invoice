@@ -558,17 +558,23 @@ export const CreateOrder = () => {
     }
   });
 
-  // Track if change is from local input to avoid infinite sync loop
-  const isLocalChangeRef = useRef(false);
+  // Track the expected formik value to avoid sync overwrites during typing
+  const expectedFormikValueRef = useRef(null);
 
   // Sync local price state with formik when formik value changes externally (e.g., product selection)
   useEffect(() => {
     const formikPrice = formik.values.productPrice;
-    // Only sync if the change didn't come from local input
-    if (!isLocalChangeRef.current && formikPrice !== localPriceValue) {
+    // Only sync if the change wasn't caused by our own debounced update
+    // (i.e., formik value matches what we expected from our update)
+    if (expectedFormikValueRef.current === formikPrice) {
+      // This was our own update, clear the expected value and don't sync back
+      expectedFormikValueRef.current = null;
+      return;
+    }
+    // External change (product selection, etc.) - sync to local state
+    if (formikPrice !== localPriceValue) {
       setLocalPriceValue(formikPrice || '');
     }
-    isLocalChangeRef.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formik.values.productPrice]);
 
