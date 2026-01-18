@@ -224,6 +224,18 @@ export const ListPurchases = () => {
         }
     };
 
+    // Format date for export - handles both DD-MM-YYYY string and ISO date formats
+    const formatDateForExport = (dateStr) => {
+        if (!dateStr) return '-';
+        // If already in DD-MM-YYYY format, return as-is
+        if (dateStr.match && dateStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+            return dateStr;
+        }
+        // Otherwise try to parse and format
+        const parsed = moment(dateStr);
+        return parsed.isValid() ? parsed.format('DD-MM-YYYY') : dateStr;
+    };
+
     // Export purchases for CA
     const handleExportForCA = async () => {
         try {
@@ -244,7 +256,7 @@ export const ListPurchases = () => {
                     // No items, just add summary row
                     rows.push([
                         purchase.billNumber,
-                        moment(purchase.billDate).format('DD-MM-YYYY'),
+                        formatDateForExport(purchase.billDate),
                         purchase.supplier?.name || '',
                         purchase.supplier?.gstin || 'N/A',
                         'N/A', 0, 0, purchase.subTotal,
@@ -257,7 +269,7 @@ export const ListPurchases = () => {
                         const itemTax = (item.totalPrice * (purchase.taxPercent || 18)) / 100;
                         rows.push([
                             purchase.billNumber,
-                            moment(purchase.billDate).format('DD-MM-YYYY'),
+                            formatDateForExport(purchase.billDate),
                             purchase.supplier?.name || '',
                             purchase.supplier?.gstin || 'N/A',
                             item.name,
