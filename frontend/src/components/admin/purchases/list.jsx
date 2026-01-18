@@ -395,7 +395,7 @@ export const ListPurchases = () => {
                                                             </IconButton>
                                                         </TableCell>
                                                         <TableCell><strong>{purchase.billNumber}</strong></TableCell>
-                                                        <TableCell>{moment(purchase.billDate).format('DD-MM-YYYY')}</TableCell>
+                                                        <TableCell>{purchase.billDate ? (purchase.billDate.includes('-') && purchase.billDate.split('-')[0].length === 2 ? purchase.billDate : moment(purchase.billDate).format('DD-MM-YYYY')) : '-'}</TableCell>
                                                         <TableCell>{purchase.supplier?.name}</TableCell>
                                                         <TableCell align="right">₹{Number(purchase.subTotal).toLocaleString()}</TableCell>
                                                         <TableCell align="right">₹{Number(purchase.tax).toLocaleString()}</TableCell>
