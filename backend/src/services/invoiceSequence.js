@@ -44,8 +44,11 @@ module.exports = {
         const today = moment().format('YYYY-MM-DD');
         const currentFY = getFinancialYear();
         
-        // Use transaction lock to prevent race conditions
-        const options = transaction ? { transaction, lock: true } : {};
+        // Use FOR UPDATE lock to prevent race conditions
+        const options = transaction ? { 
+            transaction, 
+            lock: transaction.LOCK.UPDATE  // Strong lock for concurrent access
+        } : {};
         
         let sequence = await db.invoiceSequence.findOne(options);
         
