@@ -431,23 +431,14 @@ export const GstExportTool = () => {
             <Box sx={{ flexGrow: 1 }} />
 
             <Button
-              variant="outlined"
-              startIcon={exporting ? <CircularProgress size={16} /> : <Download />}
-              onClick={() => handleExportExcel(false)}
-              disabled={totalCount === 0 || exporting}
-              data-testid="export-original-btn"
-            >
-              Export Original
-            </Button>
-            <Button
               variant="contained"
               color="success"
               startIcon={exporting ? <CircularProgress size={16} color="inherit" /> : <Download />}
               onClick={() => handleExportExcel(true)}
               disabled={totalCount === 0 || exporting}
-              data-testid="export-adjusted-btn"
+              data-testid="export-btn"
             >
-              {exporting ? 'Exporting...' : `Export Adjusted (${selectedOrders.length > 0 ? selectedOrders.length : totalCount})`}
+              {exporting ? 'Exporting...' : `Export for GST Filing (${selectedOrders.length > 0 ? selectedOrders.length : totalCount})`}
             </Button>
           </Box>
         </CardContent>
