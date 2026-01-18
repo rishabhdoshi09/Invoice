@@ -33,7 +33,6 @@ async function seed() {
             defaults: {
                 name: 'Test Supplier',
                 address: '123 Main St',
-                phone: '9876543210',
                 gstin: '27ABCDE1234F1ZK'
             }
         });
@@ -41,10 +40,10 @@ async function seed() {
 
         // Create some products
         const products = [
-            { name: 'Steel Utensil A', price: 150, type: 'weighted' },
-            { name: 'Steel Utensil B', price: 220, type: 'weighted' },
-            { name: 'Steel Utensil C', price: 310, type: 'weighted' },
-            { name: 'Steel Box', price: 180, type: 'piece' }
+            { name: 'Steel Utensil A', pricePerKg: 150, type: 'weighted' },
+            { name: 'Steel Utensil B', pricePerKg: 220, type: 'weighted' },
+            { name: 'Steel Utensil C', pricePerKg: 310, type: 'weighted' },
+            { name: 'Steel Box', pricePerKg: 180, type: 'non-weighted' }
         ];
 
         for (const p of products) {
@@ -102,7 +101,7 @@ async function seed() {
                 await db.orderItems.create({
                     orderId: order.id,
                     name: products[i % products.length].name,
-                    productPrice: products[i % products.length].price,
+                    productPrice: products[i % products.length].pricePerKg,
                     quantity: 1.5,
                     totalPrice: 200,
                     type: 'weighted'
