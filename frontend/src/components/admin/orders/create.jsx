@@ -1203,10 +1203,15 @@ export const CreateOrder = () => {
 
       // Note: Daily totals are now tracked server-side only to prevent duplicates
 
-      // Generate and archive PDF
-      try { generatePdf(savedOrder); } catch {}
+      // Generate and archive PDF with the SAVED order (which has the real invoice number)
+      let newPdfUrl = '';
+      try { 
+        newPdfUrl = await generatePdf(savedOrder); 
+      } catch (e) {
+        console.error('PDF generation error:', e);
+      }
       setArchivedOrderProps(savedOrder);
-      setArchivedPdfUrl(pdfUrl || "");
+      setArchivedPdfUrl(newPdfUrl || pdfUrl || "");
       setLastInvoiceTotal(savedOrder.total);
 
       // refresh history panel
