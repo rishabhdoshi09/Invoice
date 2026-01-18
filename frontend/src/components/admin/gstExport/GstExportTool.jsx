@@ -3,12 +3,11 @@ import {
   Box, Button, Card, CardContent, Typography, Grid, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Checkbox, TextField, Alert, Chip,
   CircularProgress, Paper, Divider, Dialog, DialogTitle, DialogContent,
-  DialogActions, IconButton, Tooltip, Collapse, Switch, FormControlLabel,
+  DialogActions, IconButton, Tooltip, Collapse,
   Tabs, Tab, TablePagination
 } from '@mui/material';
 import {
-  Download, Refresh, Settings, ExpandMore, ExpandLess,
-  CompareArrows, Calculate
+  Download, Refresh, Settings, ExpandMore, ExpandLess, Visibility, Calculate
 } from '@mui/icons-material';
 import axios from 'axios';
 
@@ -34,7 +33,6 @@ export const GstExportTool = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [previewOrder, setPreviewOrder] = useState(null);
   const [expandedRows, setExpandedRows] = useState({});
-  const [showAdjusted, setShowAdjusted] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
   
   // Pagination state
