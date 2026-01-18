@@ -1729,7 +1729,7 @@ export const CreateOrder = () => {
                   id="productPrice"
                   name="productPrice" 
                   label={isWeighted ? "Product Price (3-digit: 100-399)" : "Product Price"}
-                  value={formik.values.productPrice}
+                  value={localPriceValue}
                   onChange={onPriceChange}
                   onFocus={onPriceFocus}
                   onBlur={onPriceBlur}
@@ -1737,13 +1737,13 @@ export const CreateOrder = () => {
                   required
                   fullWidth
                   error={
-                    (Boolean(isWeightedPriceInvalid) && formik.values.productPrice !== "") ||
-                    (isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && !allowOriginalPrice && Number(formik.values.productPrice) === originalPriceForSpecial)
+                    (Boolean(isWeightedPriceInvalid) && localPriceValue !== "") ||
+                    (isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && !allowOriginalPrice && Number(localPriceValue) === originalPriceForSpecial)
                   }
                   helperText={
-                    isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && !allowOriginalPrice && Number(formik.values.productPrice) === originalPriceForSpecial
+                    isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && !allowOriginalPrice && Number(localPriceValue) === originalPriceForSpecial
                       ? `⚠️ Cannot use original price (₹${originalPriceForSpecial}) - please edit`
-                      : isWeighted && formik.values.productPrice !== "" 
+                      : isWeighted && localPriceValue !== "" 
                         ? (isWeightedPriceInvalid 
                             ? 'Must be 3 digits (100-399)' 
                             : computedPriceRange 
