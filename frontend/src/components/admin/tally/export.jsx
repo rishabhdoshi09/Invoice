@@ -1,22 +1,33 @@
 import { useState, useEffect } from 'react';
-import { Box, Button, Card, CardContent, Typography, Grid, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Checkbox, Tabs, Tab, TextField, Alert, Chip, CircularProgress } from '@mui/material';
+import { 
+    Box, Button, Card, CardContent, Typography, Grid, Table, TableBody, 
+    TableCell, TableContainer, TableHead, TableRow, Checkbox, Tabs, Tab, 
+    TextField, Alert, Chip, CircularProgress, TablePagination, Paper
+} from '@mui/material';
 import { Download, Refresh, CheckCircle, Receipt } from '@mui/icons-material';
 import axios from 'axios';
 import { listPurchases } from '../../../services/purchase';
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
+const DEFAULT_PAGE_SIZE = 50;
 
 export const TallyExport = () => {
     const [activeTab, setActiveTab] = useState(0);
     const [salesOrders, setSalesOrders] = useState([]);
     const [purchases, setPurchases] = useState([]);
     const [selectedSales, setSelectedSales] = useState([]);
-    // eslint-disable-next-line no-unused-vars
-    // eslint-disable-next-line no-unused-vars
     const [selectedPurchases, setSelectedPurchases] = useState([]);
-    // eslint-disable-next-line no-unused-vars
     const [loading, setLoading] = useState(false);
+    const [exporting, setExporting] = useState(false);
     const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
     const [totalSalesCount, setTotalSalesCount] = useState(0);
     const [totalPurchasesCount, setTotalPurchasesCount] = useState(0);
+    
+    // Pagination state
+    const [salesPage, setSalesPage] = useState(0);
+    const [salesRowsPerPage, setSalesRowsPerPage] = useState(DEFAULT_PAGE_SIZE);
+    const [purchasesPage, setPurchasesPage] = useState(0);
+    const [purchasesRowsPerPage, setPurchasesRowsPerPage] = useState(DEFAULT_PAGE_SIZE);
 
     useEffect(() => {
         if (activeTab === 0) {
@@ -24,20 +35,20 @@ export const TallyExport = () => {
         } else if (activeTab === 1) {
             fetchPurchases();
         }
-    }, [activeTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab, salesPage, salesRowsPerPage, purchasesPage, purchasesRowsPerPage]);
 
     const fetchSalesOrders = async () => {
         try {
             setLoading(true);
-            // Fetch ALL orders by setting a very high limit
             const params = {
-                limit: 10000, // High limit to get all records
-                offset: 0,
+                limit: salesRowsPerPage,
+                offset: salesPage * salesRowsPerPage,
                 ...(dateRange.startDate && dateRange.endDate ? dateRange : {})
             };
             const { data } = await axios.get('/api/orders', { params });
-            setSalesOrders(data.data.rows || []);
-            setTotalSalesCount(data.data.count || 0);
+            setSalesOrders(data.data?.rows || []);
+            setTotalSalesCount(data.data?.count || 0);
         } catch (error) {
             console.error('Error fetching sales orders:', error);
         } finally {
@@ -48,10 +59,9 @@ export const TallyExport = () => {
     const fetchPurchases = async () => {
         try {
             setLoading(true);
-            // Fetch ALL purchases by setting a very high limit
             const params = {
-                limit: 10000, // High limit to get all records
-                offset: 0,
+                limit: purchasesRowsPerPage,
+                offset: purchasesPage * purchasesRowsPerPage,
                 ...(dateRange.startDate && dateRange.endDate ? dateRange : {})
             };
             const { rows, count } = await listPurchases(params);
@@ -62,6 +72,28 @@ export const TallyExport = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleSalesPageChange = (event, newPage) => {
+        setSalesPage(newPage);
+        setSelectedSales([]); // Clear selection on page change
+    };
+
+    const handleSalesRowsPerPageChange = (event) => {
+        setSalesRowsPerPage(parseInt(event.target.value, 10));
+        setSalesPage(0);
+        setSelectedSales([]);
+    };
+
+    const handlePurchasesPageChange = (event, newPage) => {
+        setPurchasesPage(newPage);
+        setSelectedPurchases([]);
+    };
+
+    const handlePurchasesRowsPerPageChange = (event) => {
+        setPurchasesRowsPerPage(parseInt(event.target.value, 10));
+        setPurchasesPage(0);
+        setSelectedPurchases([]);
     };
 
     const handleSelectAll = (type) => {
@@ -92,20 +124,43 @@ export const TallyExport = () => {
         }
     };
 
-    // Export ALL records without needing to select - GSTR-1 format
+    // Export ALL records by fetching in batches (for full export)
     const handleExportAll = async (type) => {
-        const items = type === 'sales' ? salesOrders : purchases;
-        
-        if (items.length === 0) {
+        if (type === 'sales' && totalSalesCount === 0) {
+            alert('No items to export');
+            return;
+        }
+        if (type === 'purchases' && totalPurchasesCount === 0) {
             alert('No items to export');
             return;
         }
 
-        const ids = items.map(item => item.id);
-
         try {
+            setExporting(true);
+            
+            // Fetch all IDs in batches for export
+            const totalCount = type === 'sales' ? totalSalesCount : totalPurchasesCount;
+            const batchSize = 500;
+            let allIds = [];
+            
+            for (let offset = 0; offset < totalCount; offset += batchSize) {
+                const params = {
+                    limit: batchSize,
+                    offset,
+                    ...(dateRange.startDate && dateRange.endDate ? dateRange : {})
+                };
+                
+                if (type === 'sales') {
+                    const { data } = await axios.get('/api/orders', { params });
+                    allIds = [...allIds, ...(data.data?.rows || []).map(o => o.id)];
+                } else {
+                    const { rows } = await listPurchases(params);
+                    allIds = [...allIds, ...(rows || []).map(p => p.id)];
+                }
+            }
+
             const response = await axios.post(`/api/export/tally/${type}`, 
-                { ids },
+                { ids: allIds },
                 { 
                     responseType: 'blob',
                     headers: { 'Content-Type': 'application/json' }
@@ -126,6 +181,8 @@ export const TallyExport = () => {
         } catch (error) {
             console.error('Error exporting:', error);
             alert('Error exporting data. Please try again.');
+        } finally {
+            setExporting(false);
         }
     };
 
@@ -138,6 +195,7 @@ export const TallyExport = () => {
         }
 
         try {
+            setExporting(true);
             const response = await axios.post(`/api/export/tally/${type}`, 
                 { ids },
                 { 
@@ -167,6 +225,8 @@ export const TallyExport = () => {
         } catch (error) {
             console.error('Error exporting:', error);
             alert('Error exporting data. Please try again.');
+        } finally {
+            setExporting(false);
         }
     };
 
@@ -178,6 +238,16 @@ export const TallyExport = () => {
     const handleExportOutstanding = () => {
         const url = `/api/export/tally/outstanding`;
         window.open(url, '_blank');
+    };
+
+    const handleRefresh = () => {
+        if (activeTab === 0) {
+            setSalesPage(0);
+            fetchSalesOrders();
+        } else if (activeTab === 1) {
+            setPurchasesPage(0);
+            fetchPurchases();
+        }
     };
 
     // Helper to get invoice type
@@ -226,32 +296,29 @@ export const TallyExport = () => {
                                 onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
                                 InputLabelProps={{ shrink: true }}
                             />
-                            <Button startIcon={loading ? <CircularProgress size={16} /> : <Refresh />} onClick={fetchSalesOrders} variant="outlined" disabled={loading}>
+                            <Button 
+                                startIcon={loading ? <CircularProgress size={16} /> : <Refresh />} 
+                                onClick={handleRefresh} 
+                                variant="outlined" 
+                                disabled={loading}
+                            >
                                 {loading ? 'Loading...' : 'Refresh'}
                             </Button>
-                            {salesOrders.length > 0 && (
-                                <Chip 
-                                    icon={<CheckCircle />} 
-                                    label={`Showing all ${salesOrders.length} invoices (100%)`} 
-                                    color="success" 
-                                    variant="outlined"
-                                />
-                            )}
                             <Box sx={{ flexGrow: 1 }} />
                             <Button 
                                 variant="contained" 
                                 color="success"
-                                startIcon={<Download />}
+                                startIcon={exporting ? <CircularProgress size={16} color="inherit" /> : <Download />}
                                 onClick={() => handleExportAll('sales')}
-                                disabled={salesOrders.length === 0}
+                                disabled={totalSalesCount === 0 || exporting}
                             >
-                                Export GSTR-1 ({salesOrders.length})
+                                {exporting ? 'Exporting...' : `Export ALL (${totalSalesCount})`}
                             </Button>
                             <Button 
                                 variant="outlined" 
                                 startIcon={<Download />}
                                 onClick={() => handleExportSelected('sales')}
-                                disabled={selectedSales.length === 0}
+                                disabled={selectedSales.length === 0 || exporting}
                             >
                                 Export Selected ({selectedSales.length})
                             </Button>
@@ -264,57 +331,70 @@ export const TallyExport = () => {
                         ) : salesOrders.length === 0 ? (
                             <Alert severity="info">No sales invoices found</Alert>
                         ) : (
-                            <TableContainer sx={{ maxHeight: 500 }}>
-                                <Table size="small" stickyHeader>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell padding="checkbox">
-                                                <Checkbox
-                                                    checked={selectedSales.length === salesOrders.length && salesOrders.length > 0}
-                                                    indeterminate={selectedSales.length > 0 && selectedSales.length < salesOrders.length}
-                                                    onChange={() => handleSelectAll('sales')}
-                                                />
-                                            </TableCell>
-                                            <TableCell>Invoice No</TableCell>
-                                            <TableCell>Date</TableCell>
-                                            <TableCell>Buyer Name</TableCell>
-                                            <TableCell>GSTIN/URP</TableCell>
-                                            <TableCell>Place of Supply</TableCell>
-                                            <TableCell align="right">Taxable Value</TableCell>
-                                            <TableCell align="right">Tax</TableCell>
-                                            <TableCell align="right">Total</TableCell>
-                                            <TableCell>Type</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {salesOrders.map((order) => (
-                                            <TableRow key={order.id} hover>
+                            <Paper variant="outlined">
+                                <TableContainer sx={{ maxHeight: 500 }}>
+                                    <Table size="small" stickyHeader>
+                                        <TableHead>
+                                            <TableRow>
                                                 <TableCell padding="checkbox">
                                                     <Checkbox
-                                                        checked={selectedSales.includes(order.id)}
-                                                        onChange={() => handleToggleItem(order.id, 'sales')}
+                                                        checked={selectedSales.length === salesOrders.length && salesOrders.length > 0}
+                                                        indeterminate={selectedSales.length > 0 && selectedSales.length < salesOrders.length}
+                                                        onChange={() => handleSelectAll('sales')}
                                                     />
                                                 </TableCell>
-                                                <TableCell>{order.orderNumber}</TableCell>
-                                                <TableCell>{order.orderDate}</TableCell>
-                                                <TableCell>{order.customerName || 'N/A'}</TableCell>
-                                                <TableCell>{order.customerGstin || 'URP'}</TableCell>
-                                                <TableCell>{order.placeOfSupply || '27-MH'}</TableCell>
-                                                <TableCell align="right">₹{order.subTotal}</TableCell>
-                                                <TableCell align="right">₹{order.tax} ({order.taxPercent}%)</TableCell>
-                                                <TableCell align="right">₹{order.total}</TableCell>
-                                                <TableCell>
-                                                    <Chip 
-                                                        label={getInvoiceType(order.customerGstin)} 
-                                                        size="small" 
-                                                        color={getInvoiceType(order.customerGstin) === 'B2B' ? 'primary' : 'default'}
-                                                    />
-                                                </TableCell>
+                                                <TableCell>Invoice No</TableCell>
+                                                <TableCell>Date</TableCell>
+                                                <TableCell>Buyer Name</TableCell>
+                                                <TableCell>GSTIN/URP</TableCell>
+                                                <TableCell>Place of Supply</TableCell>
+                                                <TableCell align="right">Taxable Value</TableCell>
+                                                <TableCell align="right">Tax</TableCell>
+                                                <TableCell align="right">Total</TableCell>
+                                                <TableCell>Type</TableCell>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
+                                        </TableHead>
+                                        <TableBody>
+                                            {salesOrders.map((order) => (
+                                                <TableRow key={order.id} hover>
+                                                    <TableCell padding="checkbox">
+                                                        <Checkbox
+                                                            checked={selectedSales.includes(order.id)}
+                                                            onChange={() => handleToggleItem(order.id, 'sales')}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell>{order.orderNumber}</TableCell>
+                                                    <TableCell>{order.orderDate}</TableCell>
+                                                    <TableCell>{order.customerName || 'N/A'}</TableCell>
+                                                    <TableCell>{order.customerGstin || 'URP'}</TableCell>
+                                                    <TableCell>{order.placeOfSupply || '27-MH'}</TableCell>
+                                                    <TableCell align="right">₹{order.subTotal}</TableCell>
+                                                    <TableCell align="right">₹{order.tax} ({order.taxPercent}%)</TableCell>
+                                                    <TableCell align="right">₹{order.total}</TableCell>
+                                                    <TableCell>
+                                                        <Chip 
+                                                            label={getInvoiceType(order.customerGstin)} 
+                                                            size="small" 
+                                                            color={getInvoiceType(order.customerGstin) === 'B2B' ? 'primary' : 'default'}
+                                                        />
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
+                                <TablePagination
+                                    component="div"
+                                    count={totalSalesCount}
+                                    page={salesPage}
+                                    onPageChange={handleSalesPageChange}
+                                    rowsPerPage={salesRowsPerPage}
+                                    onRowsPerPageChange={handleSalesRowsPerPageChange}
+                                    rowsPerPageOptions={PAGE_SIZE_OPTIONS}
+                                    showFirstButton
+                                    showLastButton
+                                />
+                            </Paper>
                         )}
                     </CardContent>
                 </Card>
@@ -340,32 +420,29 @@ export const TallyExport = () => {
                                 onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
                                 InputLabelProps={{ shrink: true }}
                             />
-                            <Button startIcon={loading ? <CircularProgress size={16} /> : <Refresh />} onClick={fetchPurchases} variant="outlined" disabled={loading}>
+                            <Button 
+                                startIcon={loading ? <CircularProgress size={16} /> : <Refresh />} 
+                                onClick={handleRefresh} 
+                                variant="outlined" 
+                                disabled={loading}
+                            >
                                 {loading ? 'Loading...' : 'Refresh'}
                             </Button>
-                            {purchases.length > 0 && (
-                                <Chip 
-                                    icon={<CheckCircle />} 
-                                    label={`Showing all ${purchases.length} purchases (100%)`} 
-                                    color="success" 
-                                    variant="outlined"
-                                />
-                            )}
                             <Box sx={{ flexGrow: 1 }} />
                             <Button 
                                 variant="contained" 
                                 color="success"
-                                startIcon={<Download />}
+                                startIcon={exporting ? <CircularProgress size={16} color="inherit" /> : <Download />}
                                 onClick={() => handleExportAll('purchases')}
-                                disabled={purchases.length === 0}
+                                disabled={totalPurchasesCount === 0 || exporting}
                             >
-                                Export ALL ({purchases.length})
+                                {exporting ? 'Exporting...' : `Export ALL (${totalPurchasesCount})`}
                             </Button>
                             <Button 
                                 variant="outlined" 
                                 startIcon={<Download />}
                                 onClick={() => handleExportSelected('purchases')}
-                                disabled={selectedPurchases.length === 0}
+                                disabled={selectedPurchases.length === 0 || exporting}
                             >
                                 Export Selected ({selectedPurchases.length})
                             </Button>
@@ -378,43 +455,56 @@ export const TallyExport = () => {
                         ) : purchases.length === 0 ? (
                             <Alert severity="info">No purchase bills found</Alert>
                         ) : (
-                            <TableContainer sx={{ maxHeight: 500 }}>
-                                <Table size="small" stickyHeader>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell padding="checkbox">
-                                                <Checkbox
-                                                    checked={selectedPurchases.length === purchases.length && purchases.length > 0}
-                                                    indeterminate={selectedPurchases.length > 0 && selectedPurchases.length < purchases.length}
-                                                    onChange={() => handleSelectAll('purchases')}
-                                                />
-                                            </TableCell>
-                                            <TableCell>Bill No</TableCell>
-                                            <TableCell>Date</TableCell>
-                                            <TableCell>Supplier</TableCell>
-                                            <TableCell align="right">Total</TableCell>
-                                            <TableCell>Status</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {purchases.map((purchase) => (
-                                            <TableRow key={purchase.id} hover>
+                            <Paper variant="outlined">
+                                <TableContainer sx={{ maxHeight: 500 }}>
+                                    <Table size="small" stickyHeader>
+                                        <TableHead>
+                                            <TableRow>
                                                 <TableCell padding="checkbox">
                                                     <Checkbox
-                                                        checked={selectedPurchases.includes(purchase.id)}
-                                                        onChange={() => handleToggleItem(purchase.id, 'purchases')}
+                                                        checked={selectedPurchases.length === purchases.length && purchases.length > 0}
+                                                        indeterminate={selectedPurchases.length > 0 && selectedPurchases.length < purchases.length}
+                                                        onChange={() => handleSelectAll('purchases')}
                                                     />
                                                 </TableCell>
-                                                <TableCell>{purchase.billNumber}</TableCell>
-                                                <TableCell>{purchase.billDate}</TableCell>
-                                                <TableCell>{purchase.supplier?.name || 'N/A'}</TableCell>
-                                                <TableCell align="right">₹{purchase.total}</TableCell>
-                                                <TableCell>{purchase.paymentStatus || 'unpaid'}</TableCell>
+                                                <TableCell>Bill No</TableCell>
+                                                <TableCell>Date</TableCell>
+                                                <TableCell>Supplier</TableCell>
+                                                <TableCell align="right">Total</TableCell>
+                                                <TableCell>Status</TableCell>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
+                                        </TableHead>
+                                        <TableBody>
+                                            {purchases.map((purchase) => (
+                                                <TableRow key={purchase.id} hover>
+                                                    <TableCell padding="checkbox">
+                                                        <Checkbox
+                                                            checked={selectedPurchases.includes(purchase.id)}
+                                                            onChange={() => handleToggleItem(purchase.id, 'purchases')}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell>{purchase.billNumber}</TableCell>
+                                                    <TableCell>{purchase.billDate}</TableCell>
+                                                    <TableCell>{purchase.supplier?.name || 'N/A'}</TableCell>
+                                                    <TableCell align="right">₹{purchase.total}</TableCell>
+                                                    <TableCell>{purchase.paymentStatus || 'unpaid'}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
+                                <TablePagination
+                                    component="div"
+                                    count={totalPurchasesCount}
+                                    page={purchasesPage}
+                                    onPageChange={handlePurchasesPageChange}
+                                    rowsPerPage={purchasesRowsPerPage}
+                                    onRowsPerPageChange={handlePurchasesRowsPerPageChange}
+                                    rowsPerPageOptions={PAGE_SIZE_OPTIONS}
+                                    showFirstButton
+                                    showLastButton
+                                />
+                            </Paper>
                         )}
                     </CardContent>
                 </Card>
