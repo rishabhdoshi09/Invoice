@@ -45,6 +45,11 @@ module.exports = (router) => {
                     ? order.adjustedItems 
                     : order.orderItems || [];
 
+                // Debug: log first item to see what we're receiving
+                if (items.length > 0) {
+                    console.log('First item received:', JSON.stringify(items[0], null, 2));
+                }
+
                 for (const item of items) {
                     const lineTotal = Number(item.totalPrice || 0);
                     
@@ -58,6 +63,8 @@ module.exports = (router) => {
                         // Calculate GST (price is inclusive, so extract base)
                         baseAmount = lineTotal / (1 + GST_RATE);
                         cgstAmount = baseAmount * (CGST_RATE / 100);
+                        sgstAmount = baseAmount * (SGST_RATE / 100);
+                    }
                         sgstAmount = baseAmount * (SGST_RATE / 100);
                     }
                     
