@@ -288,6 +288,10 @@ export const CreateOrder = () => {
   const firstDigitLockRef = useRef(null);
   const lastAddSucceededRef = useRef(false);
 
+  // Local state for price input - prevents race condition when typing quickly
+  const [localPriceValue, setLocalPriceValue] = useState('');
+  const priceUpdateTimeoutRef = useRef(null);
+
   // ref for modal price input to ensure focus works reliably
   const modalPriceRef = useRef(null);
   // ref for main productPrice input to focus after adding / selecting product
