@@ -21,6 +21,7 @@ import { TallyExport } from "./components/admin/tally/export";
 import { AdminDashboard } from "./components/admin/dashboard/AdminDashboard";
 import { UserManagement } from "./components/admin/users/UserManagement";
 import { DayStart } from "./components/admin/dayStart/DayStart";
+import { GstExportTool } from "./components/admin/gstExport/GstExportTool";
 import { CircularProgress, Box } from "@mui/material";
 
 const theme = createTheme();
