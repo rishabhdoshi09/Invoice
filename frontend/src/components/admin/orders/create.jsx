@@ -944,14 +944,11 @@ export const CreateOrder = () => {
       // Capture current quantity for the debounced callback
       const currentQuantity = Number(formik.values.quantity) || 0;
       
-      // Set expected value BEFORE debounced update to prevent sync overwrite
-      expectedFormikValueRef.current = rawInput;
-      
       // Debounce formik update - use captured values to avoid stale closures
       priceUpdateTimeoutRef.current = setTimeout(() => {
         formik.setFieldValue('productPrice', rawInput);
         formik.setFieldValue('totalPrice', Number((numeric * currentQuantity).toFixed(2)));
-      }, 50); // 50ms debounce for better batching
+      }, 100); // 100ms debounce for better batching during fast typing
       return;
     }
 
