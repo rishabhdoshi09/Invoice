@@ -1744,12 +1744,13 @@ export const CreateOrder = () => {
 
               <Grid item xs={12} md={6}>
                 <TextField
+                  key={`price-input-${formik.values.id || 'empty'}`}
                   type="text"
                   size="small"
                   id="productPrice"
                   name="productPrice" 
                   label={isWeighted ? "Product Price (3-digit: 100-399)" : "Product Price"}
-                  value={localPriceValue}
+                  defaultValue={localPriceValue}
                   onChange={onPriceChange}
                   onFocus={onPriceFocus}
                   onBlur={onPriceBlur}
