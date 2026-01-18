@@ -916,9 +916,6 @@ export const CreateOrder = () => {
 
   const onPriceChange = (e) => {
     const rawInput = String(e.target.value || '');
-
-    // Mark this as a local change to prevent sync loop
-    isLocalChangeRef.current = true;
     
     // Update local state immediately for responsive typing
     setLocalPriceValue(rawInput);
@@ -952,11 +949,14 @@ export const CreateOrder = () => {
       // Capture current quantity for the debounced callback
       const currentQuantity = Number(formik.values.quantity) || 0;
       
+      // Set expected value BEFORE debounced update to prevent sync overwrite
+      expectedFormikValueRef.current = rawInput;
+      
       // Debounce formik update - use captured values to avoid stale closures
       priceUpdateTimeoutRef.current = setTimeout(() => {
         formik.setFieldValue('productPrice', rawInput);
         formik.setFieldValue('totalPrice', Number((numeric * currentQuantity).toFixed(2)));
-      }, 50); // Increased debounce to 50ms for better batching
+      }, 50); // 50ms debounce for better batching
       return;
     }
 
