@@ -957,40 +957,43 @@ export const CreateOrder = () => {
       return;
     }
 
+    // Get the input element directly from the event
+    const inputElement = e.target;
+    
     const digitsOnly = rawInput.replace(/\D/g, '');
     if (digitsOnly.length > 3) { 
       e.preventDefault && e.preventDefault(); 
-      setLocalPriceValue(formik.values.productPrice || ''); // Revert local state
+      inputElement.value = formik.values.productPrice || '';
       return; 
     }
     const locked = String(firstDigitLockRef.current || '');
     if (!isNameAdd && locked && digitsOnly.length > 0 && String(digitsOnly).charAt(0) !== locked) { 
       e.preventDefault && e.preventDefault(); 
-      setLocalPriceValue(formik.values.productPrice || ''); // Revert local state
+      inputElement.value = formik.values.productPrice || '';
       return; 
     }
     
     const numeric = Number(digitsOnly) || 0;
     
-    // Block restricted ranges (200-209, 301-309) for weighted products (including bowl path)
-    // Only block when it's a complete 3-digit value in restricted range
+    // Block restricted ranges (200-209, 301-309) for weighted products
     if (isWeighted && digitsOnly.length >= 3 && isRestrictedPrice(numeric)) {
       e.preventDefault && e.preventDefault();
-      setLocalPriceValue(formik.values.productPrice || ''); // Revert local state
+      inputElement.value = formik.values.productPrice || '';
       return;
     }
     
-    // Update local state with digits only for bowl path
+    // Update local state and DOM
     setLocalPriceValue(digitsOnly);
+    inputElement.value = digitsOnly;
     
     // Capture current quantity for the debounced callback
     const currentQuantity = Number(formik.values.quantity) || 0;
     
-    // Debounce formik update - use captured values to avoid stale closures
+    // Debounce formik update
     priceUpdateTimeoutRef.current = setTimeout(() => {
       formik.setFieldValue('productPrice', digitsOnly);
       formik.setFieldValue('totalPrice', Number((numeric * currentQuantity).toFixed(2)));
-    }, 100); // 100ms debounce for better batching during fast typing
+    }, 150); // 150ms debounce
   };
 
   const onPriceBlur = () => {};
