@@ -386,7 +386,7 @@ export const CreateOrder = () => {
     customerMobile: "",
     customer: null,
     notes: "",
-    orderNumber: "ORD-XXXXXXXX",
+    orderNumber: "(Will be generated on save)",
     orderDate: moment().format("DD-MM-YYYY"), // This is set once on mount
     orderItems: [], 
     subTotal: 0, 
