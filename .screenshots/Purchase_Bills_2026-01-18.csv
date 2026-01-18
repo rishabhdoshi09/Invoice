@@ -1,0 +1,2 @@
+Bill Number,Bill Date,Supplier Name,Supplier GSTIN,Item Name,Quantity,Unit Price,Taxable Value,CGST Rate,CGST Amount,SGST Rate,SGST Amount,Total Tax,Line Total,Bill Total,Payment Status
+"PB/2025-26/0001","Invalid date","Test Supplier","27ABCDE1234F1ZK","Steel Raw Material","10","500","5000","9","450","9","450","900","5900","5900","paid"
