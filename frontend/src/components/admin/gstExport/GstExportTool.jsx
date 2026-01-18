@@ -234,8 +234,14 @@ export const GstExportTool = () => {
         const params = {
           limit: batchSize,
           offset,
-          ...(dateRange.startDate && dateRange.endDate ? dateRange : {})
         };
+        
+        // Add date range if both dates are provided
+        if (dateRange.startDate && dateRange.endDate) {
+          params.startDate = formatDateForApi(dateRange.startDate);
+          params.endDate = formatDateForApi(dateRange.endDate);
+        }
+        
         const { data } = await axios.get('/api/orders', { params });
         allOrders = [...allOrders, ...(data.data?.rows || [])];
       }
