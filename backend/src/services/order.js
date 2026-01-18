@@ -18,9 +18,9 @@ module.exports= {
             throw error;
         }
     },
-    getOrder: async (payload) => {
+    getOrder: async (payload, transaction = null) => {
         try {
-            const res = await Dao.order.getOrder(payload);
+            const res = await Dao.order.getOrder(payload, transaction);
             return res;
         } catch (error) {
             throw error;
