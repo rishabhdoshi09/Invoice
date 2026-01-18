@@ -12,9 +12,16 @@ module.exports = {
             throw new Error(error);
         }
     },
-    getOrder: async (filterObj) => {
+    getOrder: async (filterObj, transaction = null) => {
         try {
-            const res = await db.order.findOne({ where: { id: filterObj.id }, include: [ { model: db.orderItems }]});
+            const options = {
+                where: { id: filterObj.id },
+                include: [ { model: db.orderItems }]
+            };
+            if (transaction) {
+                options.transaction = transaction;
+            }
+            const res = await db.order.findOne(options);
             return res;
         } catch (error) {
             console.log(error);
