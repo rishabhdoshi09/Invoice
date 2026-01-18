@@ -2086,16 +2086,16 @@ export const CreateOrder = () => {
               size="small"
               label="Product Price"
               type="text"
-              value={formik.values.productPrice}
+              value={localPriceValue}
               onChange={onPriceChange}
               onKeyDown={onPriceKeyDown}
               onPaste={onPasteHandler}
               helperText={
-                isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && !allowOriginalPrice && Number(formik.values.productPrice) === originalPriceForSpecial
+                isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && !allowOriginalPrice && Number(localPriceValue) === originalPriceForSpecial
                   ? `⚠️ Cannot use original price (₹${originalPriceForSpecial}) - please edit`
                   : isWeighted ? (isWeightedPriceInvalid ? 'Must be 3 digits (100-399)' : (computedPriceRange ? `Range: ₹${computedPriceRange}` : '')) : ''
               }
-              error={isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && !allowOriginalPrice && Number(formik.values.productPrice) === originalPriceForSpecial}
+              error={isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && !allowOriginalPrice && Number(localPriceValue) === originalPriceForSpecial}
               fullWidth
               inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', step: 1 }}
               InputProps={{
