@@ -2,9 +2,10 @@ const uuidv4 = require('uuid/v4');
 const db = require('../models');
 
 module.exports = {
-    createOrder: async (payload) => {
+    createOrder: async (payload, transaction = null) => {
         try {
-            const res = await db.order.create({ id: uuidv4(), ...payload });
+            const options = transaction ? { transaction } : {};
+            const res = await db.order.create({ id: uuidv4(), ...payload }, options);
             return res;
         } catch (error) {
             console.log(error);
