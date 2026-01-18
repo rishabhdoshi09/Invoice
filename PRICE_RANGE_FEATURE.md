@@ -210,7 +210,7 @@ Test different weighted product prices:
 ## Screenshots Location
 
 - Screenshot showing price range display: Available in automation output
-- Feature can be tested at: https://bizledger-38.preview.emergentagent.com/orders/create
+- Feature can be tested at: https://retail-dashboard-55.preview.emergentagent.com/orders/create
 
 ---
 

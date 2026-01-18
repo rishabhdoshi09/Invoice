@@ -4,7 +4,7 @@
 
 const axios = require('axios');
 
-const API_URL = process.env.API_URL || 'https://bizledger-38.preview.emergentagent.com/api';
+const API_URL = process.env.API_URL || 'https://retail-dashboard-55.preview.emergentagent.com/api';
 const USERNAME = 'admin';
 const PASSWORD = 'admin123';
 
