@@ -2,9 +2,9 @@
 const Dao = require("../dao");
 
 module.exports= {
-    createOrder: async (payload) => {
+    createOrder: async (payload, transaction = null) => {
         try {
-            const res = await Dao.order.createOrder(payload);
+            const res = await Dao.order.createOrder(payload, transaction);
             return res;
         } catch (error) {
             throw error;
