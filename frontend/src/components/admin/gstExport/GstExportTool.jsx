@@ -459,10 +459,6 @@ export const GstExportTool = () => {
                         <TableRow
                           key={order.id}
                           hover
-                          sx={{
-                            bgcolor: order.adjusted ? 'warning.50' : 'inherit',
-                            '&:hover': { bgcolor: order.adjusted ? 'warning.100' : 'action.hover' }
-                          }}
                         >
                           <TableCell padding="checkbox">
                             <Checkbox
@@ -489,14 +485,6 @@ export const GstExportTool = () => {
                           <TableCell>{order.customerName || 'Walk-in'}</TableCell>
                           <TableCell align="right">
                             {order.orderItems?.length || 0}
-                            {order.adjusted && (
-                              <Chip
-                                label="ADJ"
-                                size="small"
-                                color="warning"
-                                sx={{ ml: 1, fontSize: '0.65rem', height: 18 }}
-                              />
-                            )}
                           </TableCell>
                           <TableCell align="right">₹{Number(order.subTotal || 0).toLocaleString()}</TableCell>
                           <TableCell align="right">₹{Number(order.tax || 0).toLocaleString()}</TableCell>
@@ -513,7 +501,7 @@ export const GstExportTool = () => {
                             />
                           </TableCell>
                           <TableCell>
-                            <Tooltip title="Preview Original vs Adjusted">
+                            <Tooltip title="Compare Original vs Adjusted">
                               <IconButton
                                 size="small"
                                 onClick={() => setPreviewOrder(order)}
