@@ -935,11 +935,14 @@ export const CreateOrder = () => {
         return;
       }
       
-      // Debounce formik update to prevent race conditions
+      // Capture current quantity for the debounced callback
+      const currentQuantity = Number(formik.values.quantity) || 0;
+      
+      // Debounce formik update - use captured values to avoid stale closures
       priceUpdateTimeoutRef.current = setTimeout(() => {
         formik.setFieldValue('productPrice', rawInput);
-        formik.setFieldValue('totalPrice', Number((numeric * (Number(formik.values.quantity)||0)).toFixed(2)));
-      }, 10);
+        formik.setFieldValue('totalPrice', Number((numeric * currentQuantity).toFixed(2)));
+      }, 50); // Increased debounce to 50ms for better batching
       return;
     }
 
