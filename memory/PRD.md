@@ -14,7 +14,7 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 4. Payment Tracking (Credit Sales, Receivables, Payables)
 5. Daily Sales Summary & Dashboard
 6. Audit Logging
-7. Invoice Number Sequencing
+7. Invoice Number Sequencing (GST-compliant)
 
 ---
 
@@ -26,11 +26,12 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 - User management
 
 ### Orders & Invoicing
-- Order creation with auto-generated invoice numbers (INV-YYYYMMDD-XXXXXX)
+- Order creation with GST-compliant invoice numbers (INV/YYYY-YY/XXXX format)
 - Credit Sale toggle (unpaid orders tracking)
 - Order editing (admin only)
 - Order deletion with audit logging
-- Order list with date filtering
+- Order list with date/time display and filtering
+- Transaction-based order creation (atomic operations)
 
 ### Dashboard (Admin)
 - Today's Sales total
@@ -39,11 +40,13 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 - Activity Log
 - Deletions Log
 - Daily Summaries with date range
+- Day Start page with charts
 
 ### Payments
 - Daily Payments page with Outstanding Receivables/Payables
 - Smart autocomplete for parties with outstanding balances
 - Payment recording
+- View Bill feature for credit sales
 
 ### Financial Tracking
 - Ledger entries for sales
@@ -51,30 +54,48 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 
 ---
 
-## Known Issues (Priority Order)
+## Fixed Issues (Jan 18, 2026)
 
-### 🔴 P0 - Critical
-1. **SequelizeUniqueConstraintError on order creation**
-   - Root cause: `invoice_sequences` table counter de-syncs
-   - Status: Needs permanent fix in backend logic
+### ✅ P0 - SequelizeUniqueConstraintError (FIXED)
+- **Root Cause:** Transaction not passed through DAO/Service layers
+- **Fix:** Added transaction support to:
+  - `/app/backend/src/dao/order.js` - createOrder(), getOrder()
+  - `/app/backend/src/dao/orderItems.js` - addOrderItems()
+  - `/app/backend/src/services/order.js` - createOrder(), getOrder()
+  - `/app/backend/src/services/orderItems.js` - addOrderItems()
+- **Status:** Verified working - concurrent order creation produces unique invoice numbers
 
-### 🟠 P1 - High Priority
-2. **Price input race condition**
-   - Fast typing in price field drops digits
-   - Previous fix caused UI freeze, was reverted
+### ✅ P0 - Invalid Date Display (FIXED)
+- **Root Cause:** Frontend formatDate() didn't handle DD-MM-YYYY format
+- **Fix:** Updated `/app/frontend/src/components/admin/orders/list.jsx` formatDate() to parse DD-MM-YYYY format
+- **Status:** Verified working - dates display correctly as DD/MM/YYYY
 
-3. **New orders not appearing instantly**
-   - Redux caching issue
-   - Fix implemented but unverified
+---
 
-### 🟡 P2 - Medium Priority
-4. **Refactor orders/create.jsx** (1900+ lines)
-5. **Migrate Redux to RTK Query**
+## Known Issues
+
+### 🟠 P1 - Price Input Race Condition (PARTIAL FIX)
+- **Description:** Fast typing in price field may drop digits in automated tests
+- **Attempted fixes:** 
+  - Local state with debounced formik sync
+  - Product-ID based key for uncontrolled input
+  - DOM direct manipulation
+- **Current Status:** Works correctly with manual typing and programmatic `fill()`. Issue only appears with Playwright's `type()` method during automated testing (30ms delay between keystrokes)
+- **User Impact:** Low - real users type slower than automated tests
+- **File:** `/app/frontend/src/components/admin/orders/create.jsx`
+
+### 🟡 P2 - Refactor orders/create.jsx
+- File has 2000+ lines, needs breaking into smaller components
+- Technical debt but not blocking functionality
+
+### 🟡 P2 - Complete RTK Query Migration
+- App is in hybrid state (RTK Query + old Redux thunks)
+- Should be completed for consistency
 
 ---
 
 ## Upcoming Tasks
-- Purchase Bill Paid/Not Paid toggle
+- Purchase Bill Paid/Not Paid toggle for accounts payable tracking
 
 ---
 
@@ -105,15 +126,15 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 
 ### orders
 - id (UUID, PK)
-- orderNumber (UNIQUE)
-- orderDate
-- customerName
+- orderNumber (UNIQUE) - Format: INV/YYYY-YY/XXXX
+- orderDate (STRING) - Format: DD-MM-YYYY
+- customerName, customerMobile
 - total, paidAmount, dueAmount
 - paymentStatus (ENUM: paid, partial, unpaid)
-- createdBy, modifiedBy
+- createdBy, modifiedBy, createdAt, updatedAt
 
 ### invoice_sequences
-- id, prefix, currentNumber, dailyNumber, lastDate
+- id, prefix, currentNumber, dailyNumber, lastDate, lastFinancialYear
 
 ### daily_summaries
 - date, totalSales, totalOrders, openingBalance, isClosed
@@ -126,18 +147,12 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 
 ---
 
-## Verified Tests (Jan 11, 2026)
-
-### Totals Verification Test ✅
-- Created 40 random bills via API
-- Sum: ₹36,895.57
-- Dashboard total: ₹36,895.57
-- DB query total: ₹36,895.57
-- **All match correctly**
+## Tech Stack
+- Frontend: React, Redux, RTK Query, Formik, MUI, Recharts
+- Backend: Node.js, Express, Sequelize
+- Database: PostgreSQL
 
 ---
 
-## Tech Stack
-- Frontend: React, Redux, Formik, MUI
-- Backend: Node.js, Express, Sequelize
-- Database: PostgreSQL
+## Last Updated
+January 18, 2026
