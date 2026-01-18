@@ -536,13 +536,13 @@ export const GstExportTool = () => {
                             />
                           </TableCell>
                           <TableCell>
-                            <Tooltip title="Compare Original vs Adjusted">
+                            <Tooltip title="View Invoice">
                               <IconButton
                                 size="small"
                                 onClick={() => setPreviewOrder(order)}
                                 data-testid={`preview-btn-${order.id}`}
                               >
-                                <CompareArrows />
+                                <Visibility />
                               </IconButton>
                             </Tooltip>
                           </TableCell>
