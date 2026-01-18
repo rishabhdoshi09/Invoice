@@ -558,6 +558,24 @@ export const CreateOrder = () => {
     }
   });
 
+  // Sync local price state with formik when formik value changes externally (e.g., product selection)
+  useEffect(() => {
+    const formikPrice = formik.values.productPrice;
+    if (formikPrice !== localPriceValue) {
+      setLocalPriceValue(formikPrice || '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formik.values.productPrice]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (priceUpdateTimeoutRef.current) {
+        clearTimeout(priceUpdateTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // SPECIAL: correctly detect name "add" instead of using "!id"
   const isNameAdd = isAddName(formik.values.name);
 
