@@ -2,9 +2,10 @@
 const db = require('../models');
 
 module.exports = {
-    addOrderItems: async (payload) => {
+    addOrderItems: async (payload, transaction = null) => {
         try {
-            const res = await db.orderItems.bulkCreate(payload);
+            const options = transaction ? { transaction } : {};
+            const res = await db.orderItems.bulkCreate(payload, options);
             return res;
         } catch (error) {
             console.log(error);
