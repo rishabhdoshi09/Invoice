@@ -4,7 +4,7 @@
 A billing/invoicing system with React frontend + Node.js backend + PostgreSQL database for managing customer invoices, orders, payments, and financial tracking.
 
 ## User Personas
-- **Admin:** Full access to all features, dashboard, audit logs, user management
+- **Admin:** Full access to all features, dashboard, audit logs, user management, GST Export Tool
 - **Billing Staff:** Limited access for creating orders, recording payments
 
 ## Core Requirements
@@ -15,6 +15,7 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 5. Daily Sales Summary & Dashboard
 6. Audit Logging
 7. Invoice Number Sequencing (GST-compliant)
+8. GST Export Tool for CA/Portal submission
 
 ---
 
@@ -52,50 +53,50 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 - Ledger entries for sales
 - Daily summary auto-calculation
 
+### GST Export Tool (NEW - Jan 18, 2026)
+- **Admin-only** page at `/gst-export`
+- Configure price adjustment rules (e.g., ₹200-299 → ₹220)
+- Automatically recalculates quantity to preserve line totals
+- Side-by-side comparison: Original vs GST Adjusted Invoice
+- Export Original CSV (for internal records)
+- Export Adjusted CSV (for CA/GST portal)
+- Price rules saved in localStorage for persistence
+- All GST-required fields: Invoice Number, Date, Customer, GSTIN, HSN Code, CGST/SGST
+
 ---
 
 ## Fixed Issues (Jan 18, 2026)
 
 ### ✅ P0 - SequelizeUniqueConstraintError (FIXED)
 - **Root Cause:** Transaction not passed through DAO/Service layers
-- **Fix:** Added transaction support to:
-  - `/app/backend/src/dao/order.js` - createOrder(), getOrder()
-  - `/app/backend/src/dao/orderItems.js` - addOrderItems()
-  - `/app/backend/src/services/order.js` - createOrder(), getOrder()
-  - `/app/backend/src/services/orderItems.js` - addOrderItems()
-- **Status:** Verified working - concurrent order creation produces unique invoice numbers
+- **Fix:** Added transaction support to order/orderItems DAO/Service
+- **Status:** Verified working
 
 ### ✅ P0 - Invalid Date Display (FIXED)
 - **Root Cause:** Frontend formatDate() didn't handle DD-MM-YYYY format
-- **Fix:** Updated `/app/frontend/src/components/admin/orders/list.jsx` formatDate() to parse DD-MM-YYYY format
-- **Status:** Verified working - dates display correctly as DD/MM/YYYY
+- **Fix:** Updated formatDate() to parse DD-MM-YYYY format
+- **Status:** Verified working
 
 ---
 
-## Known Issues
+## New Feature: GST Export Tool
 
-### 🟠 P1 - Price Input Race Condition (PARTIAL FIX)
-- **Description:** Fast typing in price field may drop digits in automated tests
-- **Attempted fixes:** 
-  - Local state with debounced formik sync
-  - Product-ID based key for uncontrolled input
-  - DOM direct manipulation
-- **Current Status:** Works correctly with manual typing and programmatic `fill()`. Issue only appears with Playwright's `type()` method during automated testing (30ms delay between keystrokes)
-- **User Impact:** Low - real users type slower than automated tests
-- **File:** `/app/frontend/src/components/admin/orders/create.jsx`
+### Purpose
+Automate invoice adjustments for GST compliance when submitting to CA or GST portal.
 
-### 🟡 P2 - Refactor orders/create.jsx
-- File has 2000+ lines, needs breaking into smaller components
-- Technical debt but not blocking functionality
+### How It Works
+1. **Configure Price Rules:** Set price ranges and target prices
+   - Example: ₹200-299 → ₹220, ₹300-399 → ₹330
+2. **Automatic Adjustment:** Quantity recalculated to preserve line total
+   - Original: ₹250 × 0.5kg = ₹125
+   - Adjusted: ₹220 × 0.568kg = ₹125 (same total)
+3. **View Comparison:** Side-by-side Original vs Adjusted preview
+4. **Export:** Download CSV with both original and adjusted values
 
-### 🟡 P2 - Complete RTK Query Migration
-- App is in hybrid state (RTK Query + old Redux thunks)
-- Should be completed for consistency
-
----
-
-## Upcoming Tasks
-- Purchase Bill Paid/Not Paid toggle for accounts payable tracking
+### Files
+- Frontend: `/app/frontend/src/components/admin/gstExport/GstExportTool.jsx`
+- Backend: `/app/backend/src/routes/gstExport.js`
+- Route: `/gst-export` (Admin only)
 
 ---
 
@@ -111,14 +112,14 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 - PUT /api/orders/:id
 - DELETE /api/orders/:id
 
+### GST Export (NEW)
+- POST /api/gst-export/excel - Generate CSV export
+- GET /api/gst-export/summary - Get export summary stats
+- POST /api/gst-export/log - Log export action for audit
+
 ### Dashboard
 - GET /api/dashboard/summary/today
-- GET /api/dashboard/summary/date/:date
-- GET /api/dashboard/summary/range
-- POST /api/dashboard/summary/recalculate/:date
 - POST /api/dashboard/summary/opening-balance
-- GET /api/dashboard/stats
-- GET /api/dashboard/audit-logs
 
 ---
 
@@ -131,13 +132,9 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 - customerName, customerMobile
 - total, paidAmount, dueAmount
 - paymentStatus (ENUM: paid, partial, unpaid)
-- createdBy, modifiedBy, createdAt, updatedAt
 
 ### invoice_sequences
 - id, prefix, currentNumber, dailyNumber, lastDate, lastFinancialYear
-
-### daily_summaries
-- date, totalSales, totalOrders, openingBalance, isClosed
 
 ---
 
@@ -151,6 +148,16 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 - Frontend: React, Redux, RTK Query, Formik, MUI, Recharts
 - Backend: Node.js, Express, Sequelize
 - Database: PostgreSQL
+
+---
+
+## Upcoming Tasks
+- Purchase Bill Paid/Not Paid toggle for accounts payable tracking
+
+## Future/Backlog
+- Complete RTK Query migration
+- Refactor orders/create.jsx (2000+ lines)
+- PDF export for adjusted invoices
 
 ---
 
