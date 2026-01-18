@@ -1,0 +1,76 @@
+{
+  "summary": "Tested GST Export Tool and Purchase Bills CA features. All features working correctly. Fixed 2 bugs: 1) Purchase Bills Export for CA date format showing 'Invalid date', 2) GST Export CSV showing 0.00 for CGST/SGST amounts.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/test_gst_export.py",
+    "/app/test_reports/pytest/gst_export_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GST Export Tool correctly shows CGST 2.5% and SGST 2.5% columns in expanded rows",
+    "Purchase Bills correctly shows CGST 9% and SGST 9% columns in expanded rows (18% GST split)",
+    "View Details dialog shows GSTIN, CGST, SGST breakdown correctly",
+    "Export for CA CSV includes all required Indian tax format columns",
+    "Date format DD-MM-YYYY is correctly displayed in tables and exports"
+  ],
+  "updated_files": [
+    "/app/frontend/src/components/admin/purchases/list.jsx",
+    "/app/backend/src/routes/gstExport.js"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "username": "admin",
+    "password": "admin123"
+  },
+  "seed_data_creation": "Used existing 5 orders and 1 purchase bill from previous iterations",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "GST Export Tool and Purchase Bills CA features are fully functional. All exports include correct CGST/SGST breakdown. Date format is DD-MM-YYYY throughout.",
+  "test_results": {
+    "gst_export_tool": {
+      "page_loads": "PASS - GST Invoice Export Tool page loads at /gst-export",
+      "stats_cards": "PASS - Shows Total Invoices (5), On This Page Adjusted (5), Items on Page Adjusted (5), Page Value (₹1,050)",
+      "date_filter": "PASS - Date filter controls visible and working",
+      "export_buttons": "PASS - Export Original and Export Adjusted buttons visible and working",
+      "expanded_row_gst_columns": "PASS - Shows SGST 2.5% and CGST 2.5% columns with correct values",
+      "export_csv_gst_values": "PASS - CSV includes Taxable Value, CGST Rate, CGST Amount, SGST Rate, SGST Amount, Total Tax"
+    },
+    "purchase_bills": {
+      "page_loads": "PASS - Purchase Bills page loads at /purchases",
+      "date_format": "PASS - Date column shows DD-MM-YYYY format (18-01-2026)",
+      "export_for_ca_button": "PASS - Export for CA button visible and downloads CSV",
+      "expanded_row_gst_columns": "PASS - Shows CGST 9% and SGST 9% columns with correct values",
+      "view_details_dialog": "PASS - Shows GSTIN, CGST, SGST breakdown correctly",
+      "export_csv_date_format": "PASS - CSV shows correct DD-MM-YYYY date format (was 'Invalid date' before fix)"
+    },
+    "csv_export_verification": {
+      "gst_export_headers": "PASS - Invoice Number, Invoice Date, Customer Name, Customer GSTIN, Place of Supply, HSN Code, Product Name, Product Price, Quantity, Unit, Taxable Value, CGST Rate, CGST Amount, SGST Rate, SGST Amount, Total Tax, Line Total, Invoice Total",
+      "gst_export_values": "PASS - Taxable Value: ₹190.48, CGST 2.5%: ₹4.76, SGST 2.5%: ₹4.76, Total Tax: ₹9.52",
+      "purchase_export_headers": "PASS - Bill Number, Bill Date, Supplier Name, Supplier GSTIN, Item Name, Quantity, Unit Price, Taxable Value, CGST Rate, CGST Amount, SGST Rate, SGST Amount, Total Tax, Line Total, Bill Total, Payment Status",
+      "purchase_export_values": "PASS - Date: 18-01-2026, GSTIN: 27ABCDE1234F1ZK, CGST 9%: ₹450, SGST 9%: ₹450"
+    }
+  },
+  "bugs_fixed": [
+    {
+      "file": "/app/frontend/src/components/admin/purchases/list.jsx",
+      "issue": "Export for CA CSV showed 'Invalid date' for Bill Date",
+      "fix": "Added formatDateForExport function to handle DD-MM-YYYY string format dates"
+    },
+    {
+      "file": "/app/backend/src/routes/gstExport.js",
+      "issue": "GST Export CSV showed 0.00 for CGST/SGST amounts",
+      "fix": "Updated to use pre-calculated GST values from frontend (baseAmount, cgstAmount, sgstAmount)"
+    }
+  ]
+}
