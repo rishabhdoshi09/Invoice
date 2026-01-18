@@ -417,6 +417,16 @@ export const GstExportTool = () => {
               {loading ? 'Loading...' : 'Refresh'}
             </Button>
 
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 2 }}>
+              <Typography variant="body2" color="text.secondary">Original</Typography>
+              <Switch
+                checked={showAdjusted}
+                onChange={(e) => setShowAdjusted(e.target.checked)}
+                data-testid="show-adjusted-toggle"
+              />
+              <Typography variant="body2" color="text.secondary">Adjusted</Typography>
+            </Box>
+
             <Box sx={{ flexGrow: 1 }} />
 
             <Button
