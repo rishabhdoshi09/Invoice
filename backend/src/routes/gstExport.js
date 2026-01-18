@@ -65,8 +65,6 @@ module.exports = (router) => {
                         cgstAmount = baseAmount * (CGST_RATE / 100);
                         sgstAmount = baseAmount * (SGST_RATE / 100);
                     }
-                        sgstAmount = baseAmount * (SGST_RATE / 100);
-                    }
                     
                     const totalTax = cgstAmount + sgstAmount;
 
