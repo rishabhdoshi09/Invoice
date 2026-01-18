@@ -911,6 +911,9 @@ export const CreateOrder = () => {
   const onPriceChange = (e) => {
     const rawInput = String(e.target.value || '');
 
+    // Mark this as a local change to prevent sync loop
+    isLocalChangeRef.current = true;
+    
     // Update local state immediately for responsive typing
     setLocalPriceValue(rawInput);
 
