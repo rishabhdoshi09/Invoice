@@ -550,7 +550,7 @@ export const GstExportTool = () => {
                                     </TableRow>
                                   </TableHead>
                                   <TableBody>
-                                    {(showAdjusted ? (order.adjustedItems || order.orderItems || []) : (order.orderItems || [])).map((item, idx) => (
+                                    {(order.adjustedItems || order.orderItems || []).map((item, idx) => (
                                       <TableRow key={idx}>
                                         <TableCell>{item.name}</TableCell>
                                         <TableCell align="right">₹{item.productPrice}</TableCell>
