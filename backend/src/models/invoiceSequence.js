@@ -12,7 +12,7 @@ module.exports = (sequelize, Sequelize) => {
                 type: Sequelize.STRING,
                 defaultValue: 'INV'
             },
-            // Current sequence number (global, never resets)
+            // Current sequence number (resets each financial year)
             currentNumber: {
                 type: Sequelize.INTEGER,
                 defaultValue: 0
@@ -26,6 +26,11 @@ module.exports = (sequelize, Sequelize) => {
             dailyNumber: {
                 type: Sequelize.INTEGER,
                 defaultValue: 0
+            },
+            // Last financial year (e.g., "2025-26") - for resetting sequence
+            lastFinancialYear: {
+                type: Sequelize.STRING,
+                allowNull: true
             }
         }
     );
