@@ -16,6 +16,7 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 6. Audit Logging
 7. Invoice Number Sequencing (GST-compliant)
 8. GST Export Tool for CA/Portal submission
+9. Purchase Bills Management with CA Export
 
 ---
 
@@ -53,7 +54,7 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 - Ledger entries for sales
 - Daily summary auto-calculation
 
-### GST Export Tool (NEW - Jan 18, 2026)
+### GST Export Tool (Jan 18, 2026)
 - **Admin-only** page at `/gst-export`
 - Configure price adjustment rules (e.g., ₹200-299 → ₹220)
 - Automatically recalculates quantity to preserve line totals
@@ -61,7 +62,19 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 - Export Original CSV (for internal records)
 - Export Adjusted CSV (for CA/GST portal)
 - Price rules saved in localStorage for persistence
-- All GST-required fields: Invoice Number, Date, Customer, GSTIN, HSN Code, CGST/SGST
+- **Indian Tax Format Compliance:**
+  - CGST 2.5% and SGST 2.5% columns in expanded rows
+  - Taxable Value calculation (price / 1.05)
+  - All GST-required fields: Invoice Number, Date, Customer, GSTIN, HSN Code, CGST/SGST
+
+### Purchase Bills CA Features (Jan 18, 2026)
+- Purchase Bills page at `/purchases`
+- "Export for CA" button with Indian tax format CSV
+- Expandable rows showing line items with CGST/SGST breakdown
+- View Details dialog with:
+  - Bill Number, Date, Supplier, GSTIN
+  - Items table: Item, Qty, Price, Taxable, CGST, SGST, Total
+- Date format: DD-MM-YYYY throughout
 
 ---
 
@@ -77,26 +90,15 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 - **Fix:** Updated formatDate() to parse DD-MM-YYYY format
 - **Status:** Verified working
 
----
+### ✅ P0 - Purchase Bills Export Date (FIXED)
+- **Root Cause:** moment() couldn't parse DD-MM-YYYY string
+- **Fix:** Added formatDateForExport() function
+- **Status:** Verified working
 
-## New Feature: GST Export Tool
-
-### Purpose
-Automate invoice adjustments for GST compliance when submitting to CA or GST portal.
-
-### How It Works
-1. **Configure Price Rules:** Set price ranges and target prices
-   - Example: ₹200-299 → ₹220, ₹300-399 → ₹330
-2. **Automatic Adjustment:** Quantity recalculated to preserve line total
-   - Original: ₹250 × 0.5kg = ₹125
-   - Adjusted: ₹220 × 0.568kg = ₹125 (same total)
-3. **View Comparison:** Side-by-side Original vs Adjusted preview
-4. **Export:** Download CSV with both original and adjusted values
-
-### Files
-- Frontend: `/app/frontend/src/components/admin/gstExport/GstExportTool.jsx`
-- Backend: `/app/backend/src/routes/gstExport.js`
-- Route: `/gst-export` (Admin only)
+### ✅ P0 - GST Export CSV Values (FIXED)
+- **Root Cause:** Backend not using pre-calculated GST values
+- **Fix:** Updated to use baseAmount, cgstAmount, sgstAmount from frontend
+- **Status:** Verified working
 
 ---
 
@@ -104,6 +106,8 @@ Automate invoice adjustments for GST compliance when submitting to CA or GST por
 
 ### Auth
 - POST /api/auth/login
+- GET /api/auth/setup-check
+- GET /api/auth/me
 
 ### Orders
 - GET /api/orders
@@ -112,10 +116,15 @@ Automate invoice adjustments for GST compliance when submitting to CA or GST por
 - PUT /api/orders/:id
 - DELETE /api/orders/:id
 
-### GST Export (NEW)
-- POST /api/gst-export/excel - Generate CSV export
+### GST Export
+- POST /api/gst-export/excel - Generate CSV export with CGST/SGST
 - GET /api/gst-export/summary - Get export summary stats
 - POST /api/gst-export/log - Log export action for audit
+
+### Purchases
+- GET /api/purchases
+- POST /api/purchases
+- DELETE /api/purchases/:id
 
 ### Dashboard
 - GET /api/dashboard/summary/today
@@ -133,8 +142,18 @@ Automate invoice adjustments for GST compliance when submitting to CA or GST por
 - total, paidAmount, dueAmount
 - paymentStatus (ENUM: paid, partial, unpaid)
 
-### invoice_sequences
-- id, prefix, currentNumber, dailyNumber, lastDate, lastFinancialYear
+### purchaseBills
+- id (UUID, PK)
+- billNumber (UNIQUE)
+- billDate (STRING) - Format: DD-MM-YYYY
+- supplierId (FK)
+- subTotal, tax, taxPercent, total
+- paidAmount, paymentStatus
+
+### purchaseItems
+- id (UUID, PK)
+- purchaseBillId (FK)
+- name, quantity, price, totalPrice
 
 ---
 
@@ -145,19 +164,27 @@ Automate invoice adjustments for GST compliance when submitting to CA or GST por
 ---
 
 ## Tech Stack
-- Frontend: React, Redux, RTK Query, Formik, MUI, Recharts
+- Frontend: React, Redux, RTK Query, Formik, MUI, Recharts, moment.js
 - Backend: Node.js, Express, Sequelize
 - Database: PostgreSQL
 
 ---
 
 ## Upcoming Tasks
-- Purchase Bill Paid/Not Paid toggle for accounts payable tracking
+- **P1:** Add "Paid/Not Paid" toggle when creating purchase bills
 
 ## Future/Backlog
-- Complete RTK Query migration
-- Refactor orders/create.jsx (2000+ lines)
-- PDF export for adjusted invoices
+- **P2:** Complete RTK Query migration
+- **P2:** Refactor orders/create.jsx (1900+ lines)
+- **P2:** PDF export for adjusted invoices (GST Export Tool)
+- **P2:** Fix price input race condition on /orders/create
+
+---
+
+## Key Files
+- GST Export Tool: `/app/frontend/src/components/admin/gstExport/GstExportTool.jsx`
+- GST Export Backend: `/app/backend/src/routes/gstExport.js`
+- Purchase Bills: `/app/frontend/src/components/admin/purchases/list.jsx`
 
 ---
 
