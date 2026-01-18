@@ -266,7 +266,7 @@ export const GstExportTool = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `GST_Export_${useAdjusted ? 'Adjusted' : 'Original'}_${new Date().toISOString().split('T')[0]}.csv`;
+      link.download = `GST_Sales_${new Date().toISOString().split('T')[0]}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
