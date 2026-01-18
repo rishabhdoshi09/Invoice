@@ -726,9 +726,9 @@ export const GstExportTool = () => {
 
               {/* Adjusted */}
               <Grid item xs={12} md={6}>
-                <Paper sx={{ p: 2, border: '2px solid', borderColor: 'success.main', bgcolor: 'success.50' }}>
-                  <Typography variant="h6" sx={{ mb: 2, color: 'success.dark' }}>
-                    ✅ GST Adjusted Invoice
+                <Paper sx={{ p: 2, border: '2px solid', borderColor: 'primary.main' }}>
+                  <Typography variant="h6" sx={{ mb: 2, color: 'primary.dark' }}>
+                    Adjusted Invoice (For GST Filing)
                   </Typography>
                   <Box sx={{ mb: 2 }}>
                     <Typography variant="body2"><strong>Invoice:</strong> {previewOrder.orderNumber}</Typography>
@@ -739,19 +739,16 @@ export const GstExportTool = () => {
                   <Table size="small">
                     <TableHead>
                       <TableRow>
-                        <TableCell>Item</TableCell>
-                        <TableCell align="right">Price</TableCell>
-                        <TableCell align="right">Qty</TableCell>
-                        <TableCell align="right">Total</TableCell>
+                        <TableCell>Product Name</TableCell>
+                        <TableCell align="right">Product Price</TableCell>
+                        <TableCell align="right">Quantity</TableCell>
+                        <TableCell align="right">Amount</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {(previewOrder.adjustedItems || []).map((item, idx) => (
-                        <TableRow key={idx} sx={{ bgcolor: item.adjusted ? 'warning.100' : 'inherit' }}>
-                          <TableCell>
-                            {item.name}
-                            {item.adjusted && <Chip label="ADJ" size="small" color="warning" sx={{ ml: 1, fontSize: '0.6rem', height: 16 }} />}
-                          </TableCell>
+                        <TableRow key={idx}>
+                          <TableCell>{item.name}</TableCell>
                           <TableCell align="right">₹{item.productPrice}</TableCell>
                           <TableCell align="right">{Number(item.quantity).toFixed(3)}</TableCell>
                           <TableCell align="right">₹{Number(item.totalPrice).toFixed(2)}</TableCell>
@@ -763,7 +760,7 @@ export const GstExportTool = () => {
                   <Box sx={{ textAlign: 'right' }}>
                     <Typography variant="body2">Subtotal: ₹{previewOrder.subTotal}</Typography>
                     <Typography variant="body2">Tax: ₹{previewOrder.tax}</Typography>
-                    <Typography variant="h6" color="success.dark">Total: ₹{previewOrder.total} (Unchanged)</Typography>
+                    <Typography variant="h6">Total: ₹{previewOrder.total}</Typography>
                   </Box>
                 </Paper>
               </Grid>
