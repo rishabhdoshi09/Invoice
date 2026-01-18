@@ -7,7 +7,7 @@ import requests
 import os
 import json
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://retail-dashboard-55.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://invoice-adjuster-2.preview.emergentagent.com')
 if BASE_URL.endswith('/api'):
     BASE_URL = BASE_URL[:-4]  # Remove /api suffix if present
 
