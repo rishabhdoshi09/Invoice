@@ -531,68 +531,24 @@ export const GstExportTool = () => {
                             <Collapse in={expandedRows[order.id]} timeout="auto" unmountOnExit>
                               <Box sx={{ py: 2, px: 4, bgcolor: 'grey.50' }}>
                                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                                  Order Items {showAdjusted ? '(Adjusted)' : '(Original)'}:
+                                  Line Items:
                                 </Typography>
                                 <Table size="small">
                                   <TableHead>
                                     <TableRow>
-                                      <TableCell>Product</TableCell>
-                                      <TableCell align="right">
-                                        {showAdjusted ? 'Adj. Price' : 'Original Price'}
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {showAdjusted ? 'Adj. Qty' : 'Original Qty'}
-                                      </TableCell>
-                                      <TableCell align="right">Total</TableCell>
-                                      <TableCell>Change</TableCell>
+                                      <TableCell>Product Name</TableCell>
+                                      <TableCell align="right">Product Price</TableCell>
+                                      <TableCell align="right">Quantity</TableCell>
+                                      <TableCell align="right">Amount</TableCell>
                                     </TableRow>
                                   </TableHead>
                                   <TableBody>
-                                    {(order.adjustedItems || order.orderItems || []).map((item, idx) => (
+                                    {(showAdjusted ? (order.adjustedItems || order.orderItems || []) : (order.orderItems || [])).map((item, idx) => (
                                       <TableRow key={idx}>
                                         <TableCell>{item.name}</TableCell>
-                                        <TableCell align="right">
-                                          {showAdjusted && item.adjusted ? (
-                                            <Box>
-                                              <Typography
-                                                component="span"
-                                                sx={{ textDecoration: 'line-through', color: 'text.secondary', mr: 1 }}
-                                              >
-                                                ₹{item.originalPrice}
-                                              </Typography>
-                                              <Typography component="span" color="success.main" fontWeight="bold">
-                                                ₹{item.productPrice}
-                                              </Typography>
-                                            </Box>
-                                          ) : (
-                                            `₹${item.productPrice}`
-                                          )}
-                                        </TableCell>
-                                        <TableCell align="right">
-                                          {showAdjusted && item.adjusted ? (
-                                            <Box>
-                                              <Typography
-                                                component="span"
-                                                sx={{ textDecoration: 'line-through', color: 'text.secondary', mr: 1 }}
-                                              >
-                                                {item.originalQuantity?.toFixed(3)}
-                                              </Typography>
-                                              <Typography component="span" color="success.main" fontWeight="bold">
-                                                {item.quantity?.toFixed(3)}
-                                              </Typography>
-                                            </Box>
-                                          ) : (
-                                            item.quantity?.toFixed(3)
-                                          )}
-                                        </TableCell>
+                                        <TableCell align="right">₹{item.productPrice}</TableCell>
+                                        <TableCell align="right">{Number(item.quantity).toFixed(3)}</TableCell>
                                         <TableCell align="right">₹{Number(item.totalPrice || 0).toFixed(2)}</TableCell>
-                                        <TableCell>
-                                          {item.adjusted ? (
-                                            <Chip label="Adjusted" size="small" color="warning" />
-                                          ) : (
-                                            <Chip label="No Change" size="small" variant="outlined" />
-                                          )}
-                                        </TableCell>
                                       </TableRow>
                                     ))}
                                   </TableBody>
