@@ -4,11 +4,11 @@ import {
   TableContainer, TableHead, TableRow, Checkbox, TextField, Alert, Chip,
   CircularProgress, Paper, Divider, Dialog, DialogTitle, DialogContent,
   DialogActions, IconButton, Tooltip, Collapse, Switch, FormControlLabel,
-  Tabs, Tab
+  Tabs, Tab, TablePagination
 } from '@mui/material';
 import {
-  Download, Refresh, Settings, Preview, ExpandMore, ExpandLess,
-  CompareArrows, Calculate, Receipt, PictureAsPdf, TableChart
+  Download, Refresh, Settings, ExpandMore, ExpandLess,
+  CompareArrows, Calculate
 } from '@mui/icons-material';
 import axios from 'axios';
 
@@ -19,11 +19,16 @@ const DEFAULT_PRICE_RULES = [
   { id: 3, minPrice: 300, maxPrice: 399, targetPrice: 330, enabled: true },
 ];
 
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
+const DEFAULT_PAGE_SIZE = 50;
+
 export const GstExportTool = () => {
   // State
   const [orders, setOrders] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [selectedOrders, setSelectedOrders] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
   const [priceRules, setPriceRules] = useState(DEFAULT_PRICE_RULES);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -31,6 +36,10 @@ export const GstExportTool = () => {
   const [expandedRows, setExpandedRows] = useState({});
   const [showAdjusted, setShowAdjusted] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
+  
+  // Pagination state
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE);
 
   // Load saved rules from localStorage
   useEffect(() => {
@@ -45,6 +54,12 @@ export const GstExportTool = () => {
     fetchOrders();
   }, []);
 
+  // Fetch orders when pagination changes
+  useEffect(() => {
+    fetchOrders();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, rowsPerPage]);
+
   // Save rules to localStorage when changed
   const saveRules = (rules) => {
     setPriceRules(rules);
@@ -55,17 +70,34 @@ export const GstExportTool = () => {
     try {
       setLoading(true);
       const params = {
-        limit: 10000,
-        offset: 0,
+        limit: rowsPerPage,
+        offset: page * rowsPerPage,
         ...(dateRange.startDate && dateRange.endDate ? dateRange : {})
       };
       const { data } = await axios.get('/api/orders', { params });
       setOrders(data.data?.rows || []);
+      setTotalCount(data.data?.count || 0);
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (event, newPage) => {
+    setPage(newPage);
+    setSelectedOrders([]);
+  };
+
+  const handleRowsPerPageChange = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+    setSelectedOrders([]);
+  };
+
+  const handleRefresh = () => {
+    setPage(0);
+    fetchOrders();
   };
 
   // Apply price rules to an order item
@@ -84,8 +116,6 @@ export const GstExportTool = () => {
     }
 
     // Calculate new quantity to maintain same total
-    // Original: price * quantity = totalPrice
-    // Adjusted: targetPrice * newQuantity = totalPrice
     const newQuantity = totalPrice / rule.targetPrice;
 
     return {
@@ -95,7 +125,6 @@ export const GstExportTool = () => {
       originalQuantity: quantity,
       productPrice: rule.targetPrice,
       quantity: Number(newQuantity.toFixed(3)),
-      // totalPrice remains the same
     };
   };
 
@@ -112,13 +141,13 @@ export const GstExportTool = () => {
       ...order,
       adjusted: hasAdjustments,
       adjustedItems,
-      // Totals remain unchanged
     };
   };
 
   // Memoized adjusted orders
   const adjustedOrders = useMemo(() => {
     return orders.map(adjustOrder);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders, priceRules]);
 
   // Toggle row expansion
@@ -163,18 +192,35 @@ export const GstExportTool = () => {
     saveRules(priceRules.filter(rule => rule.id !== id));
   };
 
-  // Export functions
+  // Export functions - fetch all in batches for full export
   const handleExportExcel = async (useAdjusted = true) => {
-    const ordersToExport = selectedOrders.length > 0 
-      ? adjustedOrders.filter(o => selectedOrders.includes(o.id))
-      : adjustedOrders;
-
-    if (ordersToExport.length === 0) {
-      alert('No orders to export');
-      return;
-    }
-
     try {
+      setExporting(true);
+      
+      // Fetch all orders in batches
+      const batchSize = 500;
+      let allOrders = [];
+      
+      for (let offset = 0; offset < totalCount; offset += batchSize) {
+        const params = {
+          limit: batchSize,
+          offset,
+          ...(dateRange.startDate && dateRange.endDate ? dateRange : {})
+        };
+        const { data } = await axios.get('/api/orders', { params });
+        allOrders = [...allOrders, ...(data.data?.rows || [])];
+      }
+
+      // Apply adjustments if needed
+      const ordersToExport = selectedOrders.length > 0 
+        ? allOrders.filter(o => selectedOrders.includes(o.id)).map(adjustOrder)
+        : allOrders.map(adjustOrder);
+
+      if (ordersToExport.length === 0) {
+        alert('No orders to export');
+        return;
+      }
+
       const response = await axios.post('/api/gst-export/excel', {
         orders: ordersToExport,
         useAdjusted,
@@ -183,7 +229,7 @@ export const GstExportTool = () => {
         responseType: 'blob'
       });
 
-      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const blob = new Blob([response.data], { type: 'text/csv' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -194,13 +240,14 @@ export const GstExportTool = () => {
     } catch (error) {
       console.error('Export error:', error);
       alert('Export failed. Please try again.');
+    } finally {
+      setExporting(false);
     }
   };
 
   // Format date for display
   const formatDate = (dateString) => {
     if (!dateString) return '-';
-    // Handle DD-MM-YYYY format
     if (dateString.match(/^\d{2}-\d{2}-\d{4}$/)) {
       return dateString;
     }
@@ -211,17 +258,16 @@ export const GstExportTool = () => {
     }
   };
 
-  // Calculate stats
+  // Calculate stats from current page data
   const stats = useMemo(() => {
-    const totalOrders = adjustedOrders.length;
     const adjustedCount = adjustedOrders.filter(o => o.adjusted).length;
     const totalValue = adjustedOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
     const itemsAdjusted = adjustedOrders.reduce((sum, o) => 
       sum + (o.adjustedItems?.filter(i => i.adjusted).length || 0), 0
     );
 
-    return { totalOrders, adjustedCount, totalValue, itemsAdjusted };
-  }, [adjustedOrders]);
+    return { totalOrders: totalCount, adjustedCount, totalValue, itemsAdjusted };
+  }, [adjustedOrders, totalCount]);
 
   return (
     <Box sx={{ p: 3 }}>
@@ -263,19 +309,19 @@ export const GstExportTool = () => {
         <Grid item xs={6} md={3}>
           <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'warning.light' }}>
             <Typography variant="h4">{stats.adjustedCount}</Typography>
-            <Typography variant="body2">Invoices with Adjustments</Typography>
+            <Typography variant="body2">On This Page (Adjusted)</Typography>
           </Paper>
         </Grid>
         <Grid item xs={6} md={3}>
           <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'success.light', color: 'white' }}>
             <Typography variant="h4">{stats.itemsAdjusted}</Typography>
-            <Typography variant="body2">Items Adjusted</Typography>
+            <Typography variant="body2">Items on Page (Adjusted)</Typography>
           </Paper>
         </Grid>
         <Grid item xs={6} md={3}>
           <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'info.light', color: 'white' }}>
             <Typography variant="h4">₹{stats.totalValue.toLocaleString()}</Typography>
-            <Typography variant="body2">Total Value (Unchanged)</Typography>
+            <Typography variant="body2">Page Value (Unchanged)</Typography>
           </Paper>
         </Grid>
       </Grid>
@@ -330,7 +376,7 @@ export const GstExportTool = () => {
             <Button
               variant="outlined"
               startIcon={loading ? <CircularProgress size={16} /> : <Refresh />}
-              onClick={fetchOrders}
+              onClick={handleRefresh}
               disabled={loading}
               data-testid="refresh-btn"
             >
@@ -351,9 +397,9 @@ export const GstExportTool = () => {
 
             <Button
               variant="outlined"
-              startIcon={<TableChart />}
+              startIcon={exporting ? <CircularProgress size={16} /> : <Download />}
               onClick={() => handleExportExcel(false)}
-              disabled={orders.length === 0}
+              disabled={totalCount === 0 || exporting}
               data-testid="export-original-btn"
             >
               Export Original
@@ -361,12 +407,12 @@ export const GstExportTool = () => {
             <Button
               variant="contained"
               color="success"
-              startIcon={<Download />}
+              startIcon={exporting ? <CircularProgress size={16} color="inherit" /> : <Download />}
               onClick={() => handleExportExcel(true)}
-              disabled={orders.length === 0}
+              disabled={totalCount === 0 || exporting}
               data-testid="export-adjusted-btn"
             >
-              Export Adjusted ({selectedOrders.length > 0 ? selectedOrders.length : adjustedOrders.length})
+              {exporting ? 'Exporting...' : `Export Adjusted (${selectedOrders.length > 0 ? selectedOrders.length : totalCount})`}
             </Button>
           </Box>
         </CardContent>
@@ -382,183 +428,196 @@ export const GstExportTool = () => {
           ) : adjustedOrders.length === 0 ? (
             <Alert severity="info">No invoices found. Try adjusting the date range.</Alert>
           ) : (
-            <TableContainer sx={{ maxHeight: 600 }}>
-              <Table size="small" stickyHeader>
-                <TableHead>
-                  <TableRow>
-                    <TableCell padding="checkbox">
-                      <Checkbox
-                        checked={selectedOrders.length === orders.length && orders.length > 0}
-                        indeterminate={selectedOrders.length > 0 && selectedOrders.length < orders.length}
-                        onChange={handleSelectAll}
-                        data-testid="select-all-checkbox"
-                      />
-                    </TableCell>
-                    <TableCell width={40}></TableCell>
-                    <TableCell>Invoice No</TableCell>
-                    <TableCell>Date</TableCell>
-                    <TableCell>Customer</TableCell>
-                    <TableCell align="right">Items</TableCell>
-                    <TableCell align="right">Subtotal</TableCell>
-                    <TableCell align="right">Tax</TableCell>
-                    <TableCell align="right">Total</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {(activeTab === 1 ? adjustedOrders.filter(o => o.adjusted) : adjustedOrders).map((order) => (
-                    <>
-                      <TableRow
-                        key={order.id}
-                        hover
-                        sx={{
-                          bgcolor: order.adjusted ? 'warning.50' : 'inherit',
-                          '&:hover': { bgcolor: order.adjusted ? 'warning.100' : 'action.hover' }
-                        }}
-                      >
-                        <TableCell padding="checkbox">
-                          <Checkbox
-                            checked={selectedOrders.includes(order.id)}
-                            onChange={() => handleToggleOrder(order.id)}
-                            data-testid={`order-checkbox-${order.id}`}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <IconButton
-                            size="small"
-                            onClick={() => toggleRow(order.id)}
-                            data-testid={`expand-row-${order.id}`}
-                          >
-                            {expandedRows[order.id] ? <ExpandLess /> : <ExpandMore />}
-                          </IconButton>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight="medium">
-                            {order.orderNumber}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>{formatDate(order.orderDate)}</TableCell>
-                        <TableCell>{order.customerName || 'Walk-in'}</TableCell>
-                        <TableCell align="right">
-                          {order.orderItems?.length || 0}
-                          {order.adjusted && (
-                            <Chip
-                              label="ADJ"
-                              size="small"
-                              color="warning"
-                              sx={{ ml: 1, fontSize: '0.65rem', height: 18 }}
+            <Paper variant="outlined">
+              <TableContainer sx={{ maxHeight: 500 }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell padding="checkbox">
+                        <Checkbox
+                          checked={selectedOrders.length === orders.length && orders.length > 0}
+                          indeterminate={selectedOrders.length > 0 && selectedOrders.length < orders.length}
+                          onChange={handleSelectAll}
+                          data-testid="select-all-checkbox"
+                        />
+                      </TableCell>
+                      <TableCell width={40}></TableCell>
+                      <TableCell>Invoice No</TableCell>
+                      <TableCell>Date</TableCell>
+                      <TableCell>Customer</TableCell>
+                      <TableCell align="right">Items</TableCell>
+                      <TableCell align="right">Subtotal</TableCell>
+                      <TableCell align="right">Tax</TableCell>
+                      <TableCell align="right">Total</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {(activeTab === 1 ? adjustedOrders.filter(o => o.adjusted) : adjustedOrders).map((order) => (
+                      <>
+                        <TableRow
+                          key={order.id}
+                          hover
+                          sx={{
+                            bgcolor: order.adjusted ? 'warning.50' : 'inherit',
+                            '&:hover': { bgcolor: order.adjusted ? 'warning.100' : 'action.hover' }
+                          }}
+                        >
+                          <TableCell padding="checkbox">
+                            <Checkbox
+                              checked={selectedOrders.includes(order.id)}
+                              onChange={() => handleToggleOrder(order.id)}
+                              data-testid={`order-checkbox-${order.id}`}
                             />
-                          )}
-                        </TableCell>
-                        <TableCell align="right">₹{Number(order.subTotal || 0).toLocaleString()}</TableCell>
-                        <TableCell align="right">₹{Number(order.tax || 0).toLocaleString()}</TableCell>
-                        <TableCell align="right">
-                          <Typography fontWeight="bold">
-                            ₹{Number(order.total || 0).toLocaleString()}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={order.paymentStatus || 'paid'}
-                            size="small"
-                            color={order.paymentStatus === 'paid' ? 'success' : order.paymentStatus === 'partial' ? 'warning' : 'error'}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Tooltip title="Preview Original vs Adjusted">
+                          </TableCell>
+                          <TableCell>
                             <IconButton
                               size="small"
-                              onClick={() => setPreviewOrder(order)}
-                              data-testid={`preview-btn-${order.id}`}
+                              onClick={() => toggleRow(order.id)}
+                              data-testid={`expand-row-${order.id}`}
                             >
-                              <CompareArrows />
+                              {expandedRows[order.id] ? <ExpandLess /> : <ExpandMore />}
                             </IconButton>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight="medium">
+                              {order.orderNumber}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{formatDate(order.orderDate)}</TableCell>
+                          <TableCell>{order.customerName || 'Walk-in'}</TableCell>
+                          <TableCell align="right">
+                            {order.orderItems?.length || 0}
+                            {order.adjusted && (
+                              <Chip
+                                label="ADJ"
+                                size="small"
+                                color="warning"
+                                sx={{ ml: 1, fontSize: '0.65rem', height: 18 }}
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell align="right">₹{Number(order.subTotal || 0).toLocaleString()}</TableCell>
+                          <TableCell align="right">₹{Number(order.tax || 0).toLocaleString()}</TableCell>
+                          <TableCell align="right">
+                            <Typography fontWeight="bold">
+                              ₹{Number(order.total || 0).toLocaleString()}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={order.paymentStatus || 'paid'}
+                              size="small"
+                              color={order.paymentStatus === 'paid' ? 'success' : order.paymentStatus === 'partial' ? 'warning' : 'error'}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Tooltip title="Preview Original vs Adjusted">
+                              <IconButton
+                                size="small"
+                                onClick={() => setPreviewOrder(order)}
+                                data-testid={`preview-btn-${order.id}`}
+                              >
+                                <CompareArrows />
+                              </IconButton>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>
 
-                      {/* Expanded Row - Order Items */}
-                      <TableRow>
-                        <TableCell colSpan={11} sx={{ py: 0, border: 0 }}>
-                          <Collapse in={expandedRows[order.id]} timeout="auto" unmountOnExit>
-                            <Box sx={{ py: 2, px: 4, bgcolor: 'grey.50' }}>
-                              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                                Order Items {showAdjusted ? '(Adjusted)' : '(Original)'}:
-                              </Typography>
-                              <Table size="small">
-                                <TableHead>
-                                  <TableRow>
-                                    <TableCell>Product</TableCell>
-                                    <TableCell align="right">
-                                      {showAdjusted ? 'Adj. Price' : 'Original Price'}
-                                    </TableCell>
-                                    <TableCell align="right">
-                                      {showAdjusted ? 'Adj. Qty' : 'Original Qty'}
-                                    </TableCell>
-                                    <TableCell align="right">Total</TableCell>
-                                    <TableCell>Change</TableCell>
-                                  </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                  {(order.adjustedItems || order.orderItems || []).map((item, idx) => (
-                                    <TableRow key={idx}>
-                                      <TableCell>{item.name}</TableCell>
+                        {/* Expanded Row - Order Items */}
+                        <TableRow>
+                          <TableCell colSpan={11} sx={{ py: 0, border: 0 }}>
+                            <Collapse in={expandedRows[order.id]} timeout="auto" unmountOnExit>
+                              <Box sx={{ py: 2, px: 4, bgcolor: 'grey.50' }}>
+                                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                                  Order Items {showAdjusted ? '(Adjusted)' : '(Original)'}:
+                                </Typography>
+                                <Table size="small">
+                                  <TableHead>
+                                    <TableRow>
+                                      <TableCell>Product</TableCell>
                                       <TableCell align="right">
-                                        {showAdjusted && item.adjusted ? (
-                                          <Box>
-                                            <Typography
-                                              component="span"
-                                              sx={{ textDecoration: 'line-through', color: 'text.secondary', mr: 1 }}
-                                            >
-                                              ₹{item.originalPrice}
-                                            </Typography>
-                                            <Typography component="span" color="success.main" fontWeight="bold">
-                                              ₹{item.productPrice}
-                                            </Typography>
-                                          </Box>
-                                        ) : (
-                                          `₹${item.productPrice}`
-                                        )}
+                                        {showAdjusted ? 'Adj. Price' : 'Original Price'}
                                       </TableCell>
                                       <TableCell align="right">
-                                        {showAdjusted && item.adjusted ? (
-                                          <Box>
-                                            <Typography
-                                              component="span"
-                                              sx={{ textDecoration: 'line-through', color: 'text.secondary', mr: 1 }}
-                                            >
-                                              {item.originalQuantity?.toFixed(3)}
-                                            </Typography>
-                                            <Typography component="span" color="success.main" fontWeight="bold">
-                                              {item.quantity?.toFixed(3)}
-                                            </Typography>
-                                          </Box>
-                                        ) : (
-                                          item.quantity?.toFixed(3)
-                                        )}
+                                        {showAdjusted ? 'Adj. Qty' : 'Original Qty'}
                                       </TableCell>
-                                      <TableCell align="right">₹{Number(item.totalPrice || 0).toFixed(2)}</TableCell>
-                                      <TableCell>
-                                        {item.adjusted ? (
-                                          <Chip label="Adjusted" size="small" color="warning" />
-                                        ) : (
-                                          <Chip label="No Change" size="small" variant="outlined" />
-                                        )}
-                                      </TableCell>
+                                      <TableCell align="right">Total</TableCell>
+                                      <TableCell>Change</TableCell>
                                     </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </Box>
-                          </Collapse>
-                        </TableCell>
-                      </TableRow>
-                    </>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                                  </TableHead>
+                                  <TableBody>
+                                    {(order.adjustedItems || order.orderItems || []).map((item, idx) => (
+                                      <TableRow key={idx}>
+                                        <TableCell>{item.name}</TableCell>
+                                        <TableCell align="right">
+                                          {showAdjusted && item.adjusted ? (
+                                            <Box>
+                                              <Typography
+                                                component="span"
+                                                sx={{ textDecoration: 'line-through', color: 'text.secondary', mr: 1 }}
+                                              >
+                                                ₹{item.originalPrice}
+                                              </Typography>
+                                              <Typography component="span" color="success.main" fontWeight="bold">
+                                                ₹{item.productPrice}
+                                              </Typography>
+                                            </Box>
+                                          ) : (
+                                            `₹${item.productPrice}`
+                                          )}
+                                        </TableCell>
+                                        <TableCell align="right">
+                                          {showAdjusted && item.adjusted ? (
+                                            <Box>
+                                              <Typography
+                                                component="span"
+                                                sx={{ textDecoration: 'line-through', color: 'text.secondary', mr: 1 }}
+                                              >
+                                                {item.originalQuantity?.toFixed(3)}
+                                              </Typography>
+                                              <Typography component="span" color="success.main" fontWeight="bold">
+                                                {item.quantity?.toFixed(3)}
+                                              </Typography>
+                                            </Box>
+                                          ) : (
+                                            item.quantity?.toFixed(3)
+                                          )}
+                                        </TableCell>
+                                        <TableCell align="right">₹{Number(item.totalPrice || 0).toFixed(2)}</TableCell>
+                                        <TableCell>
+                                          {item.adjusted ? (
+                                            <Chip label="Adjusted" size="small" color="warning" />
+                                          ) : (
+                                            <Chip label="No Change" size="small" variant="outlined" />
+                                          )}
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </Box>
+                            </Collapse>
+                          </TableCell>
+                        </TableRow>
+                      </>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <TablePagination
+                component="div"
+                count={totalCount}
+                page={page}
+                onPageChange={handlePageChange}
+                rowsPerPage={rowsPerPage}
+                onRowsPerPageChange={handleRowsPerPageChange}
+                rowsPerPageOptions={PAGE_SIZE_OPTIONS}
+                showFirstButton
+                showLastButton
+              />
+            </Paper>
           )}
         </CardContent>
       </Card>
@@ -589,7 +648,6 @@ export const GstExportTool = () => {
             </TableHead>
             <TableBody>
               {priceRules.map((rule) => {
-                // Example calculation
                 const exampleOrigPrice = Math.floor((rule.minPrice + rule.maxPrice) / 2);
                 const exampleQty = 0.5;
                 const exampleTotal = exampleOrigPrice * exampleQty;
