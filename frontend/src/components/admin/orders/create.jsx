@@ -888,12 +888,21 @@ export const CreateOrder = () => {
   const onPriceChange = (e) => {
     const rawInput = String(e.target.value || '');
 
+    // Update local state immediately for responsive typing
+    setLocalPriceValue(rawInput);
+
+    // Clear any pending debounced update
+    if (priceUpdateTimeoutRef.current) {
+      clearTimeout(priceUpdateTimeoutRef.current);
+    }
+
     if (!bowlPriceLock) {
       // For 'add', do not enforce first-digit lock or weighted rules here
       if (!isNameAdd) {
         const lock = firstDigitLockRef.current;
         if (lock && rawInput && String(rawInput).charAt(0) !== lock) {
           e.preventDefault && e.preventDefault();
+          setLocalPriceValue(formik.values.productPrice || ''); // Revert local state
           return;
         }
       }
@@ -904,18 +913,30 @@ export const CreateOrder = () => {
       // Only block when it's a complete 3-digit value in restricted range
       if (isWeighted && String(rawInput).length >= 3 && isRestrictedPrice(numeric)) {
         e.preventDefault && e.preventDefault();
+        setLocalPriceValue(formik.values.productPrice || ''); // Revert local state
         return;
       }
       
-      formik.setFieldValue('productPrice', rawInput);
-      formik.setFieldValue('totalPrice', Number((numeric * (Number(formik.values.quantity)||0)).toFixed(2)));
+      // Debounce formik update to prevent race conditions
+      priceUpdateTimeoutRef.current = setTimeout(() => {
+        formik.setFieldValue('productPrice', rawInput);
+        formik.setFieldValue('totalPrice', Number((numeric * (Number(formik.values.quantity)||0)).toFixed(2)));
+      }, 10);
       return;
     }
 
     const digitsOnly = rawInput.replace(/\D/g, '');
-    if (digitsOnly.length > 3) { e.preventDefault && e.preventDefault(); return; }
+    if (digitsOnly.length > 3) { 
+      e.preventDefault && e.preventDefault(); 
+      setLocalPriceValue(formik.values.productPrice || ''); // Revert local state
+      return; 
+    }
     const locked = String(firstDigitLockRef.current || '');
-    if (!isNameAdd && locked && digitsOnly.length > 0 && String(digitsOnly).charAt(0) !== locked) { e.preventDefault && e.preventDefault(); return; }
+    if (!isNameAdd && locked && digitsOnly.length > 0 && String(digitsOnly).charAt(0) !== locked) { 
+      e.preventDefault && e.preventDefault(); 
+      setLocalPriceValue(formik.values.productPrice || ''); // Revert local state
+      return; 
+    }
     
     const numeric = Number(digitsOnly) || 0;
     
@@ -923,11 +944,18 @@ export const CreateOrder = () => {
     // Only block when it's a complete 3-digit value in restricted range
     if (isWeighted && digitsOnly.length >= 3 && isRestrictedPrice(numeric)) {
       e.preventDefault && e.preventDefault();
+      setLocalPriceValue(formik.values.productPrice || ''); // Revert local state
       return;
     }
     
-    formik.setFieldValue('productPrice', digitsOnly);
-    formik.setFieldValue('totalPrice', Number((numeric * (Number(formik.values.quantity)||0)).toFixed(2)));
+    // Update local state with digits only for bowl path
+    setLocalPriceValue(digitsOnly);
+    
+    // Debounce formik update to prevent race conditions
+    priceUpdateTimeoutRef.current = setTimeout(() => {
+      formik.setFieldValue('productPrice', digitsOnly);
+      formik.setFieldValue('totalPrice', Number((numeric * (Number(formik.values.quantity)||0)).toFixed(2)));
+    }, 10);
   };
 
   const onPriceBlur = () => {};
