@@ -560,8 +560,8 @@ export const GstExportTool = () => {
                                   <TableHead>
                                     <TableRow>
                                       <TableCell>Product Name</TableCell>
-                                      <TableCell align="right">Product Price</TableCell>
-                                      <TableCell align="right">Quantity</TableCell>
+                                      <TableCell align="right">Rate (₹/kg)</TableCell>
+                                      <TableCell align="right">Weight (kg)</TableCell>
                                       <TableCell align="right">Taxable Value</TableCell>
                                       <TableCell align="right">SGST 2.5%</TableCell>
                                       <TableCell align="right">CGST 2.5%</TableCell>
