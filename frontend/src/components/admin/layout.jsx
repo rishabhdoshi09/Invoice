@@ -278,7 +278,7 @@ export const Layout = () =>  {
                 </DrawerHeader>
                 <Divider />
                 <List>
-                    {pages.map((pageObj) => (
+                    {pages.filter(p => !p.adminOnly || isAdmin).map((pageObj) => (
                         <ListItem key={pageObj.key} disablePadding sx={{ display: 'block' }} onClick={()=>navigate(`/${pageObj.path}`)}>
                             <ListItemButton
                                 sx={{
