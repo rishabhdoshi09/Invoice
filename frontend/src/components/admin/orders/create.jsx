@@ -910,10 +910,12 @@ export const CreateOrder = () => {
   };
 
   const onPriceChange = (e) => {
-    const rawInput = String(e.target.value || '');
+    // Get the input element directly from the event
+    const inputElement = e.target;
+    const rawInput = String(inputElement.value || '');
     
-    // Update local state immediately for responsive typing
-    setLocalPriceValue(rawInput);
+    // DO NOT update local state during typing - let the DOM handle it
+    // Only update formik with debounce for data consistency
 
     // Clear any pending debounced update
     if (priceUpdateTimeoutRef.current) {
@@ -926,7 +928,8 @@ export const CreateOrder = () => {
         const lock = firstDigitLockRef.current;
         if (lock && rawInput && String(rawInput).charAt(0) !== lock) {
           e.preventDefault && e.preventDefault();
-          setLocalPriceValue(formik.values.productPrice || ''); // Revert local state
+          // Revert the input directly using DOM
+          inputElement.value = formik.values.productPrice || '';
           return;
         }
       }
@@ -934,21 +937,23 @@ export const CreateOrder = () => {
       const numeric = Number(rawInput) || 0;
       
       // Block restricted ranges (200-209, 301-309) only for weighted products
-      // Only block when it's a complete 3-digit value in restricted range
       if (isWeighted && String(rawInput).length >= 3 && isRestrictedPrice(numeric)) {
         e.preventDefault && e.preventDefault();
-        setLocalPriceValue(formik.values.productPrice || ''); // Revert local state
+        inputElement.value = formik.values.productPrice || '';
         return;
       }
+      
+      // Update local state for display purposes (non-critical sync)
+      setLocalPriceValue(rawInput);
       
       // Capture current quantity for the debounced callback
       const currentQuantity = Number(formik.values.quantity) || 0;
       
-      // Debounce formik update - use captured values to avoid stale closures
+      // Debounce formik update
       priceUpdateTimeoutRef.current = setTimeout(() => {
         formik.setFieldValue('productPrice', rawInput);
         formik.setFieldValue('totalPrice', Number((numeric * currentQuantity).toFixed(2)));
-      }, 100); // 100ms debounce for better batching during fast typing
+      }, 150); // 150ms debounce
       return;
     }
 
