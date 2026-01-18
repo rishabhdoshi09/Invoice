@@ -172,6 +172,13 @@ export const Layout = () =>  {
             icon: <CloudDownload />,
             path: 'tally-export'
         },
+        {
+            key: 'gst-export',
+            label: 'GST Export Tool', 
+            icon: <Calculate />,
+            path: 'gst-export',
+            adminOnly: true
+        },
     ];
 
     // Add admin dashboard for admins
