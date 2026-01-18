@@ -492,7 +492,7 @@ export const ListPurchases = () => {
                             <Grid container spacing={2} sx={{ mb: 2 }}>
                                 <Grid item xs={6}>
                                     <Typography variant="body2"><strong>Bill Number:</strong> {viewDialog.billNumber}</Typography>
-                                    <Typography variant="body2"><strong>Date:</strong> {moment(viewDialog.billDate).format('DD-MM-YYYY')}</Typography>
+                                    <Typography variant="body2"><strong>Date:</strong> {viewDialog.billDate ? (viewDialog.billDate.includes('-') && viewDialog.billDate.split('-')[0].length === 2 ? viewDialog.billDate : moment(viewDialog.billDate).format('DD-MM-YYYY')) : '-'}</Typography>
                                 </Grid>
                                 <Grid item xs={6}>
                                     <Typography variant="body2"><strong>Supplier:</strong> {viewDialog.supplier?.name}</Typography>
