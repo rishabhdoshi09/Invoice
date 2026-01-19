@@ -207,7 +207,12 @@ export const ListPurchases = () => {
         }
 
         try {
-            await createPurchase(formData);
+            const submitData = {
+                ...formData,
+                paidAmount: isPaid ? formData.total : 0,
+                paymentStatus: isPaid ? 'paid' : 'unpaid'
+            };
+            await createPurchase(submitData);
             handleCloseDialog();
             fetchPurchases();
         } catch (error) {
