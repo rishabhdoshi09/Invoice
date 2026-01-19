@@ -3,7 +3,8 @@ import {
     Box, Button, Card, CardContent, Table, TableBody, TableCell, TableContainer, 
     TableHead, TableRow, Dialog, DialogTitle, DialogContent, DialogActions, 
     Typography, TextField, Select, MenuItem, FormControl, InputLabel, Chip, 
-    IconButton, Collapse, Paper, Grid, Divider, TablePagination, Alert
+    IconButton, Collapse, Paper, Grid, Divider, TablePagination, Alert,
+    FormControlLabel, Switch
 } from '@mui/material';
 import { Delete, ExpandMore, ExpandLess, Download, Visibility, Receipt } from '@mui/icons-material';
 import { listPurchases, createPurchase, deletePurchase } from '../../../services/tally';
@@ -24,6 +25,7 @@ export const ListPurchases = () => {
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(50);
     const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
+    const [isPaid, setIsPaid] = useState(true);  // Toggle for Paid/Unpaid
     const [formData, setFormData] = useState({
         billDate: moment().format('YYYY-MM-DD'),
         supplierId: '',
