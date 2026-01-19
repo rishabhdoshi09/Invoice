@@ -936,8 +936,7 @@ export const CreateOrder = () => {
         const lock = firstDigitLockRef.current;
         if (lock && rawInput && String(rawInput).charAt(0) !== lock) {
           e.preventDefault && e.preventDefault();
-          // Revert the input directly using DOM
-          inputElement.value = formik.values.productPrice || '';
+          // Don't update localPriceValue - keeps showing old value
           return;
         }
       }
@@ -947,7 +946,7 @@ export const CreateOrder = () => {
       // Block restricted ranges (200-209, 301-309) only for weighted products
       if (isWeighted && String(rawInput).length >= 3 && isRestrictedPrice(numeric)) {
         e.preventDefault && e.preventDefault();
-        inputElement.value = formik.values.productPrice || '';
+        // Don't update localPriceValue - keeps showing old value
         return;
       }
       
