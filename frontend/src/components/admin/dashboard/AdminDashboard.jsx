@@ -225,11 +225,21 @@ export const AdminDashboard = () => {
                                 Expected Cash in Drawer:
                             </Typography>
                             <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
-                                ₹{((todaySummary?.openingBalance || 0) + (todaySummary?.totalSales || 0)).toLocaleString('en-IN')}
+                                ₹{((todaySummary?.openingBalance || 0) + (todaySummary?.totalSales || 0) - (todaySummary?.totalReceivables || 0)).toLocaleString('en-IN')}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography variant="caption" color="text.secondary" component="div">
                                 Opening (₹{todaySummary?.openingBalance || 0}) + Sales (₹{todaySummary?.totalSales || 0})
+                                {(todaySummary?.totalReceivables || 0) > 0 && (
+                                    <span style={{ color: '#d32f2f' }}> − Receivables (₹{todaySummary?.totalReceivables || 0})</span>
+                                )}
                             </Typography>
+                            {(todaySummary?.totalReceivables || 0) > 0 && (
+                                <Alert severity="info" sx={{ mt: 1, py: 0 }}>
+                                    <Typography variant="caption">
+                                        Credit Sales Today: ₹{todaySummary?.totalReceivables || 0} (not in drawer)
+                                    </Typography>
+                                </Alert>
+                            )}
                         </Box>
                     </Grid>
                     <Grid item xs={12} sm={4}>
