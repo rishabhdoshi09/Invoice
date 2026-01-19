@@ -525,4 +525,98 @@ module.exports = {
             });
         }
     },
+
+    /**
+     * Toggle payment status between 'paid' and 'unpaid'
+     * Used for quick status changes from the orders list
+     */
+    togglePaymentStatus: async (req, res) => {
+        try {
+            const { orderId } = req.params;
+            const { newStatus } = req.body;
+
+            // Validate new status
+            if (!['paid', 'unpaid'].includes(newStatus)) {
+                return res.status(400).send({
+                    status: 400,
+                    message: 'Invalid payment status. Must be "paid" or "unpaid".'
+                });
+            }
+
+            // Get order
+            const order = await Services.order.getOrder({ id: orderId });
+            if (!order) {
+                return res.status(404).send({
+                    status: 404,
+                    message: 'Order not found'
+                });
+            }
+
+            const oldStatus = order.paymentStatus;
+            
+            // Update order payment status
+            const updateData = {
+                paymentStatus: newStatus,
+                paidAmount: newStatus === 'paid' ? order.total : 0,
+                dueAmount: newStatus === 'paid' ? 0 : order.total,
+                modifiedBy: req.user?.id,
+                modifiedByName: req.user?.name || req.user?.username
+            };
+
+            await Services.order.updateOrder({ id: orderId }, updateData);
+
+            // Update customer balance if customer exists
+            if (order.customerId) {
+                try {
+                    const customer = await db.customer.findByPk(order.customerId);
+                    if (customer) {
+                        // If marking as paid, reduce customer balance
+                        // If marking as unpaid, increase customer balance
+                        const balanceChange = newStatus === 'paid' 
+                            ? -order.total  // Reduce balance when paid
+                            : order.total;  // Increase balance when unpaid
+                        
+                        await customer.update({
+                            currentBalance: Math.max(0, (customer.currentBalance || 0) + balanceChange)
+                        });
+                    }
+                } catch (custError) {
+                    console.error('Error updating customer balance:', custError);
+                    // Continue even if customer update fails
+                }
+            }
+
+            // Create audit log
+            await createAuditLog({
+                userId: req.user?.id,
+                userName: req.user?.name || req.user?.username,
+                userRole: req.user?.role || 'unknown',
+                action: 'UPDATE',
+                entityType: 'ORDER_PAYMENT_STATUS',
+                entityId: orderId,
+                entityName: order.orderNumber,
+                oldValues: { paymentStatus: oldStatus, paidAmount: order.paidAmount },
+                newValues: { paymentStatus: newStatus, paidAmount: updateData.paidAmount },
+                description: `Changed payment status from ${oldStatus} to ${newStatus} for order ${order.orderNumber}`,
+                ipAddress: getClientIP(req),
+                userAgent: req.headers['user-agent']
+            });
+
+            // Get updated order
+            const updatedOrder = await Services.order.getOrder({ id: orderId });
+
+            return res.status(200).send({
+                status: 200,
+                message: `Payment status updated to ${newStatus}`,
+                data: updatedOrder
+            });
+
+        } catch (error) {
+            console.error('Toggle payment status error:', error);
+            return res.status(500).send({
+                status: 500,
+                message: error.message || error
+            });
+        }
+    },
 }
