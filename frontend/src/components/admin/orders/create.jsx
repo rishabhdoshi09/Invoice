@@ -728,6 +728,7 @@ export const CreateOrder = () => {
       if (!allowAddProductName && isAddSpecial) {
         alert("Product 'add' is disabled. Turn ON the switch to use it.");
         formik.resetForm();
+        setLocalPriceValue('');
         setSelectedProduct(null);
         setInputValue('');
         clearQuickHighlight();
