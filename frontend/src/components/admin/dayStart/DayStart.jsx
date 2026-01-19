@@ -116,13 +116,14 @@ export const DayStart = () => {
     // Prepare chart data
     const cashInflowData = [
         { name: 'Opening Balance', value: openingBalance, color: '#9c27b0' },
-        { name: 'Today\'s Sales', value: totalSales, color: '#2196f3' },
+        { name: 'Cash Sales', value: cashSales, color: '#2196f3' },
         { name: 'Customer Receipts', value: customerPayments, color: '#4caf50' },
     ].filter(item => item.value > 0);
 
     const barChartData = [
         { name: 'Opening', amount: openingBalance, fill: '#9c27b0' },
-        { name: 'Sales', amount: totalSales, fill: '#2196f3' },
+        { name: 'Cash Sales', amount: cashSales, fill: '#2196f3' },
+        { name: 'Credit Sales', amount: totalReceivables, fill: '#ff5722' },
         { name: 'Received', amount: customerPayments, fill: '#4caf50' },
         { name: 'Paid Out', amount: -supplierPayments, fill: '#ff9800' },
         { name: 'Expenses', amount: -expenses, fill: '#f44336' },
