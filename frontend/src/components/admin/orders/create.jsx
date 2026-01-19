@@ -968,13 +968,13 @@ export const CreateOrder = () => {
     const digitsOnly = rawInput.replace(/\D/g, '');
     if (digitsOnly.length > 3) { 
       e.preventDefault && e.preventDefault(); 
-      inputElement.value = formik.values.productPrice || '';
+      // Don't update localPriceValue - keeps showing old value
       return; 
     }
     const locked = String(firstDigitLockRef.current || '');
     if (!isNameAdd && locked && digitsOnly.length > 0 && String(digitsOnly).charAt(0) !== locked) { 
       e.preventDefault && e.preventDefault(); 
-      inputElement.value = formik.values.productPrice || '';
+      // Don't update localPriceValue - keeps showing old value
       return; 
     }
     
@@ -983,13 +983,12 @@ export const CreateOrder = () => {
     // Block restricted ranges (200-209, 301-309) for weighted products
     if (isWeighted && digitsOnly.length >= 3 && isRestrictedPrice(numericBowl)) {
       e.preventDefault && e.preventDefault();
-      inputElement.value = formik.values.productPrice || '';
+      // Don't update localPriceValue - keeps showing old value
       return;
     }
     
-    // Update local state and DOM
+    // Update local state (controlled component)
     setLocalPriceValue(digitsOnly);
-    inputElement.value = digitsOnly;
     
     // Capture current quantity for the debounced callback
     const currentQuantityBowl = Number(formik.values.quantity) || 0;
