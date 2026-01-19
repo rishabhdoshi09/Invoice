@@ -185,8 +185,39 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 - GST Export Tool: `/app/frontend/src/components/admin/gstExport/GstExportTool.jsx`
 - GST Export Backend: `/app/backend/src/routes/gstExport.js`
 - Purchase Bills: `/app/frontend/src/components/admin/purchases/list.jsx`
+- Orders List: `/app/frontend/src/components/admin/orders/list.jsx`
+- Order Controller: `/app/backend/src/controller/order.js`
+- Day Start Page: `/app/frontend/src/components/admin/dayStart/DayStart.jsx`
+- Daily Payments: `/app/frontend/src/components/admin/dailyPayments/DailyPayments.jsx`
+
+---
+
+## Completed (Jan 19, 2026)
+
+### ✅ P0 - Day Start Page Cash Calculation (FIXED)
+- **Issue:** Credit sales were incorrectly included in "Expected Cash in Drawer"
+- **Fix:** Formula now calculates `cashSales = totalSales - totalReceivables`
+- **Status:** Verified working with credit sale test
+
+### ✅ P0 - Daily Payments Data Entry (VERIFIED)
+- **Issue:** User reported data entry not working
+- **Status:** Both Quick Expense and Supplier/Customer Payment forms working correctly
+
+### ✅ P0 - Payment Status Toggle on Orders List (NEW FEATURE)
+- **Description:** Admin can now toggle payment status (Paid ↔ Unpaid) directly from orders list
+- **Implementation:**
+  - Click status chip to open confirmation dialog
+  - Shows current vs new status with visual chips
+  - Warning/success messages about receivables impact
+  - Updates customer balance automatically
+  - Audit logging for all changes
+- **Files Modified:**
+  - `/app/frontend/src/components/admin/orders/list.jsx`
+  - `/app/backend/src/controller/order.js`
+  - `/app/backend/src/routes/order.js`
+- **API:** `PATCH /api/orders/:orderId/payment-status`
 
 ---
 
 ## Last Updated
-January 18, 2026
+January 19, 2026
