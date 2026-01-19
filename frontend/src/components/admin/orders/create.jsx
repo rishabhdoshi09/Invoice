@@ -738,6 +738,7 @@ export const CreateOrder = () => {
         formik.setFieldValue('name', value?.value || "");
         formik.setFieldValue('type', "");
         formik.setFieldValue('productPrice', "");
+        setLocalPriceValue("");
         formik.setFieldValue('totalPrice', 0);
         setBowlPriceLock(false);
         setBowlProductIdLocked(null);
