@@ -45,4 +45,15 @@ module.exports = (router) => {
             authenticate,           // Any authenticated user can add notes
             Controller.order.addStaffNote
         );
+
+    // Toggle payment status - admin only
+    router
+        .route('/orders/:orderId/payment-status')
+        .patch(
+            authenticate,
+            canModify,              // Admin only
+            captureOriginal(db.order, 'orderId'),
+            auditMiddleware('ORDER'),
+            Controller.order.togglePaymentStatus
+        );
 };
