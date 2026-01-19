@@ -931,8 +931,8 @@ export const CreateOrder = () => {
     }
 
     if (!bowlPriceLock) {
-      // For 'add' or non-weighted items, do not enforce first-digit lock
-      if (!isNameAdd && isWeighted) {
+      // For 'add' products, do not enforce first-digit lock
+      if (!isNameAdd) {
         const lock = firstDigitLockRef.current;
         if (lock && rawInput && String(rawInput).charAt(0) !== lock) {
           e.preventDefault && e.preventDefault();
