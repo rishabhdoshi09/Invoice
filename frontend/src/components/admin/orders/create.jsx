@@ -805,6 +805,7 @@ export const CreateOrder = () => {
         const success = await weighingScaleHandler();
         if (!success) {
           formik.resetForm();
+          setLocalPriceValue('');
           setSelectedProduct(null);
           setInputValue('');
           clearQuickHighlight();
@@ -820,6 +821,7 @@ export const CreateOrder = () => {
       setTimeout(() => clearQuickHighlight(), 100);
     } else {
       formik.resetForm();
+      setLocalPriceValue('');
       setSelectedProduct(null);
       setInputValue('');
       try { setFetchedViaScale(false); } catch {}
