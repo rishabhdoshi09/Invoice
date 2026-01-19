@@ -1300,6 +1300,7 @@ export const CreateOrder = () => {
 
       setOrderProps(initialOrderProps);
       formik.resetForm();
+      setLocalPriceValue('');
       setFetchedViaScale(false);
       setRecentlyDeleted([]);
       setSelectedHistoryDate('');
