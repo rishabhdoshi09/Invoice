@@ -7,6 +7,7 @@ module.exports = {
     // Get or create today's summary
     getTodaySummary: async () => {
         const today = moment().format('YYYY-MM-DD');
+        const todayDDMMYYYY = moment().format('DD-MM-YYYY');
         
         let summary = await db.dailySummary.findOne({
             where: { date: today }
@@ -27,7 +28,23 @@ module.exports = {
             });
         }
         
-        return summary;
+        // Calculate today's receivables (credit sales - unpaid orders from today)
+        const todayOrders = await db.order.findAll({
+            where: {
+                orderDate: todayDDMMYYYY,
+                paymentStatus: { [Op.in]: ['unpaid', 'partial'] }
+            }
+        });
+        
+        const totalReceivables = todayOrders.reduce((sum, order) => {
+            return sum + (Number(order.dueAmount) || 0);
+        }, 0);
+        
+        // Return summary with calculated receivables
+        return {
+            ...summary.toJSON(),
+            totalReceivables
+        };
     },
 
     // Set opening balance for today
