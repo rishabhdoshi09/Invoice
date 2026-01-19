@@ -564,11 +564,11 @@ export const CreateOrder = () => {
   // Sync local price state with formik ONLY when product changes (not during typing)
   useEffect(() => {
     const currentProductId = formik.values.id;
-    // Only sync when a different product is selected
+    // Sync whenever product changes OR price changes from product selection
     if (currentProductId !== lastProductIdRef.current) {
       lastProductIdRef.current = currentProductId;
       const formikPrice = formik.values.productPrice;
-      setLocalPriceValue(formikPrice || '');
+      setLocalPriceValue(formikPrice ? String(formikPrice) : '');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formik.values.id, formik.values.productPrice]);
