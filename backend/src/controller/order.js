@@ -82,6 +82,49 @@ module.exports = {
                 const SALES_LEDGER_ID = salesLedger.id;
                 const CASH_BANK_LEDGER_ID = cashBankLedger.id;
 
+                // If this is a credit sale (unpaid/partial) with customer info, create/update customer record
+                if (orderObj.dueAmount > 0 && orderObj.customerName && orderObj.customerName.trim()) {
+                    try {
+                        // Check if customer already exists by mobile or name
+                        let existingCustomer = null;
+                        if (orderObj.customerMobile) {
+                            existingCustomer = await db.customer.findOne({
+                                where: { mobile: orderObj.customerMobile },
+                                transaction
+                            });
+                        }
+                        if (!existingCustomer) {
+                            existingCustomer = await db.customer.findOne({
+                                where: { name: orderObj.customerName.trim() },
+                                transaction
+                            });
+                        }
+
+                        if (existingCustomer) {
+                            // Update existing customer's outstanding balance
+                            await existingCustomer.update({
+                                outstandingBalance: (Number(existingCustomer.outstandingBalance) || 0) + orderObj.dueAmount,
+                                lastOrderDate: orderObj.orderDate
+                            }, { transaction });
+                            orderObj.customerId = existingCustomer.id;
+                        } else {
+                            // Create new customer
+                            const newCustomer = await db.customer.create({
+                                id: uuidv4(),
+                                name: orderObj.customerName.trim(),
+                                mobile: orderObj.customerMobile || null,
+                                address: orderObj.customerAddress || null,
+                                outstandingBalance: orderObj.dueAmount,
+                                lastOrderDate: orderObj.orderDate
+                            }, { transaction });
+                            orderObj.customerId = newCustomer.id;
+                        }
+                    } catch (customerError) {
+                        console.error('Failed to create/update customer:', customerError);
+                        // Continue with order - don't fail for customer creation issues
+                    }
+                }
+
                 // Create ledger entries for sale
                 const ledgerEntries = [];
                 
