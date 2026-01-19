@@ -470,6 +470,64 @@ export const ListOrders = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {/* Payment Status Toggle Confirmation Dialog */}
+            <Dialog open={statusDialogOpen} onClose={handleCancelStatusToggle}>
+                <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'primary.main' }}>
+                    <SwapHoriz /> Change Payment Status
+                </DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Are you sure you want to change the payment status of order <strong>{orderToToggle?.orderNumber}</strong>?
+                    </DialogContentText>
+                    <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+                        <Typography variant="body2">
+                            <strong>Customer:</strong> {orderToToggle?.customerName || 'Walk-in'}
+                        </Typography>
+                        <Typography variant="body2">
+                            <strong>Total:</strong> {formatCurrency(orderToToggle?.total)}
+                        </Typography>
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                            <strong>Current Status:</strong>{' '}
+                            <Chip 
+                                label={orderToToggle?.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'} 
+                                size="small" 
+                                color={orderToToggle?.paymentStatus === 'paid' ? 'success' : 'error'}
+                            />
+                        </Typography>
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                            <strong>New Status:</strong>{' '}
+                            <Chip 
+                                label={orderToToggle?.paymentStatus === 'paid' ? 'Unpaid' : 'Paid'} 
+                                size="small" 
+                                color={orderToToggle?.paymentStatus === 'paid' ? 'error' : 'success'}
+                            />
+                        </Typography>
+                    </Box>
+                    {orderToToggle?.paymentStatus === 'paid' && (
+                        <Typography variant="body2" color="warning.main" sx={{ mt: 2 }}>
+                            ⚠️ Marking as "Unpaid" will add ₹{orderToToggle?.total?.toLocaleString('en-IN')} to receivables.
+                        </Typography>
+                    )}
+                    {orderToToggle?.paymentStatus === 'unpaid' && (
+                        <Typography variant="body2" color="success.main" sx={{ mt: 2 }}>
+                            ✓ Marking as "Paid" will remove ₹{orderToToggle?.total?.toLocaleString('en-IN')} from receivables.
+                        </Typography>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCancelStatusToggle} disabled={isTogglingStatus}>Cancel</Button>
+                    <Button 
+                        onClick={handleConfirmStatusToggle} 
+                        color={orderToToggle?.paymentStatus === 'paid' ? 'error' : 'success'} 
+                        variant="contained" 
+                        disabled={isTogglingStatus}
+                        data-testid="confirm-status-toggle-btn"
+                    >
+                        {isTogglingStatus ? 'Updating...' : `Mark as ${orderToToggle?.paymentStatus === 'paid' ? 'Unpaid' : 'Paid'}`}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Paper>
     );
 };
