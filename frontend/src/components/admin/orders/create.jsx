@@ -1748,7 +1748,7 @@ export const CreateOrder = () => {
                   id="productPrice"
                   name="productPrice" 
                   label={isWeighted ? "Product Price (3-digit: 100-399)" : "Product Price"}
-                  defaultValue={localPriceValue}
+                  value={localPriceValue}
                   onChange={onPriceChange}
                   onFocus={onPriceFocus}
                   onBlur={onPriceBlur}
