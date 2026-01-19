@@ -5,7 +5,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import { listOrdersAction, deleteOrderAction } from '../../../store/orders';
 import { Pagination } from '../../common/pagination';
 import { useAuth } from '../../../context/AuthContext';
-import { Note, Warning, Clear, Refresh } from '@mui/icons-material';
+import { Note, Warning, Clear, Refresh, SwapHoriz } from '@mui/icons-material';
+import axios from 'axios';
 
 // Key for storing scroll position
 const SCROLL_POSITION_KEY = 'orders_scroll_position';
