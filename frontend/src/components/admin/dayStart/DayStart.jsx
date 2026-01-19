@@ -198,17 +198,22 @@ export const DayStart = () => {
                         <Typography variant="h4" color="text.secondary">+</Typography>
                     </Grid>
                     
-                    {/* Sales */}
+                    {/* Sales - now showing Cash Sales only */}
                     <Grid item xs={12} md={2}>
                         <Box sx={{ textAlign: 'center', p: 2, bgcolor: '#e3f2fd', borderRadius: 2 }}>
                             <ShoppingCart sx={{ fontSize: 40, color: '#1976d2' }} />
-                            <Typography variant="body2" color="text.secondary">Today's Sales</Typography>
+                            <Typography variant="body2" color="text.secondary">Cash Sales</Typography>
                             <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1976d2' }}>
-                                ₹{totalSales.toLocaleString('en-IN')}
+                                ₹{cashSales.toLocaleString('en-IN')}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                                {todaySummary?.totalOrders || 0} orders
+                                Total: ₹{totalSales.toLocaleString('en-IN')} ({todaySummary?.totalOrders || 0} orders)
                             </Typography>
+                            {totalReceivables > 0 && (
+                                <Typography variant="caption" sx={{ display: 'block', color: '#ff5722', fontWeight: 'bold' }}>
+                                    Credit: ₹{totalReceivables.toLocaleString('en-IN')} (not in drawer)
+                                </Typography>
+                            )}
                         </Box>
                     </Grid>
                     
