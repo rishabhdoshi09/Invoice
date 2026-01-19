@@ -78,6 +78,45 @@ export const ListOrders = () => {
         setOrderToDelete(null);
     };
 
+    // Handle status toggle click - open confirmation dialog
+    const handleStatusToggleClick = (order, e) => {
+        e.stopPropagation();
+        setOrderToToggle(order);
+        setStatusDialogOpen(true);
+    };
+
+    // Confirm status toggle
+    const handleConfirmStatusToggle = async () => {
+        if (!orderToToggle) return;
+        
+        const newStatus = orderToToggle.paymentStatus === 'paid' ? 'unpaid' : 'paid';
+        
+        try {
+            setIsTogglingStatus(true);
+            const token = localStorage.getItem('token');
+            await axios.patch(
+                `${process.env.REACT_APP_BACKEND_URL}/api/orders/${orderToToggle.id}/payment-status`,
+                { newStatus },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            // Refresh the list
+            fetchOrders();
+        } catch (error) {
+            console.error('Failed to toggle payment status:', error);
+            alert(error.response?.data?.message || 'Failed to update payment status');
+        } finally {
+            setIsTogglingStatus(false);
+            setStatusDialogOpen(false);
+            setOrderToToggle(null);
+        }
+    };
+
+    // Cancel status toggle
+    const handleCancelStatusToggle = () => {
+        setStatusDialogOpen(false);
+        setOrderToToggle(null);
+    };
+
     // Fetch orders function
     const fetchOrders = useCallback(() => {
         dispatch(listOrdersAction(filters));
