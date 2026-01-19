@@ -1576,7 +1576,24 @@ export const CreateOrder = () => {
                     control={
                       <Switch
                         checked={isCreditSale}
-                        onChange={(e) => setIsCreditSale(e.target.checked)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            // Show confirmation prompt when enabling credit sale
+                            const confirmed = window.confirm(
+                              "⚠️ CREDIT SALE WARNING\n\n" +
+                              "This order will be marked as UNPAID.\n\n" +
+                              "• Customer name is REQUIRED\n" +
+                              "• Amount will be added to receivables\n" +
+                              "• This will NOT be counted as cash in drawer\n\n" +
+                              "Are you sure you want to create a credit sale?"
+                            );
+                            if (confirmed) {
+                              setIsCreditSale(true);
+                            }
+                          } else {
+                            setIsCreditSale(false);
+                          }
+                        }}
                         color="warning"
                       />
                     }
@@ -1588,7 +1605,7 @@ export const CreateOrder = () => {
                   />
                   {isCreditSale && (
                     <Typography variant="caption" color="warning.dark">
-                      Customer name required for credit tracking
+                      Customer name required • Amount added to receivables • Not counted as cash in drawer
                     </Typography>
                   )}
                 </Box>
