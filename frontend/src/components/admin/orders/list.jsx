@@ -506,12 +506,12 @@ export const ListOrders = () => {
                     </Box>
                     {orderToToggle?.paymentStatus === 'paid' && (
                         <Typography variant="body2" color="warning.main" sx={{ mt: 2 }}>
-                            ⚠️ Marking as "Unpaid" will add ₹{orderToToggle?.total?.toLocaleString('en-IN')} to receivables.
+                            ⚠️ Marking as &quot;Unpaid&quot; will add ₹{orderToToggle?.total?.toLocaleString('en-IN')} to receivables.
                         </Typography>
                     )}
                     {orderToToggle?.paymentStatus === 'unpaid' && (
                         <Typography variant="body2" color="success.main" sx={{ mt: 2 }}>
-                            ✓ Marking as "Paid" will remove ₹{orderToToggle?.total?.toLocaleString('en-IN')} from receivables.
+                            ✓ Marking as &quot;Paid&quot; will remove ₹{orderToToggle?.total?.toLocaleString('en-IN')} from receivables.
                         </Typography>
                     )}
                 </DialogContent>
