@@ -701,20 +701,30 @@ export const ListPurchases = () => {
                             />
                         </Box>
 
-                        <TextField
-                            label="Paid Amount"
-                            name="paidAmount"
-                            type="number"
-                            value={formData.paidAmount}
-                            onChange={handleChange}
-                            fullWidth
-                        />
+                        {/* Paid/Unpaid Toggle */}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2, p: 2, bgcolor: isPaid ? 'success.50' : 'warning.50', borderRadius: 1 }}>
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        checked={isPaid}
+                                        onChange={(e) => setIsPaid(e.target.checked)}
+                                        color={isPaid ? 'success' : 'warning'}
+                                    />
+                                }
+                                label={isPaid ? 'PAID' : 'UNPAID (Credit)'}
+                            />
+                            {!isPaid && (
+                                <Typography variant="body2" color="warning.main">
+                                    ⚠️ This bill will be marked as payable (accounts payable)
+                                </Typography>
+                            )}
+                        </Box>
                     </Box>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseDialog}>Cancel</Button>
-                    <Button onClick={handleSubmit} variant="contained">
-                        Create Purchase Bill
+                    <Button onClick={handleSubmit} variant="contained" color={isPaid ? 'primary' : 'warning'}>
+                        {isPaid ? 'Create Purchase Bill' : 'Create as Credit Purchase'}
                     </Button>
                 </DialogActions>
             </Dialog>
