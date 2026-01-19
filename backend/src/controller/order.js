@@ -101,10 +101,9 @@ module.exports = {
                         }
 
                         if (existingCustomer) {
-                            // Update existing customer's outstanding balance
+                            // Update existing customer's balance
                             await existingCustomer.update({
-                                outstandingBalance: (Number(existingCustomer.outstandingBalance) || 0) + orderObj.dueAmount,
-                                lastOrderDate: orderObj.orderDate
+                                currentBalance: (Number(existingCustomer.currentBalance) || 0) + orderObj.dueAmount
                             }, { transaction });
                             orderObj.customerId = existingCustomer.id;
                         } else {
@@ -114,8 +113,8 @@ module.exports = {
                                 name: orderObj.customerName.trim(),
                                 mobile: orderObj.customerMobile || null,
                                 address: orderObj.customerAddress || null,
-                                outstandingBalance: orderObj.dueAmount,
-                                lastOrderDate: orderObj.orderDate
+                                openingBalance: 0,
+                                currentBalance: orderObj.dueAmount
                             }, { transaction });
                             orderObj.customerId = newCustomer.id;
                         }
