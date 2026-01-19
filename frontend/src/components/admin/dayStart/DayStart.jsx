@@ -103,12 +103,14 @@ export const DayStart = () => {
     // Calculate cash flow values
     const openingBalance = todaySummary?.openingBalance || 0;
     const totalSales = todaySummary?.totalSales || 0;
+    const totalReceivables = todaySummary?.totalReceivables || 0; // Credit sales - not in drawer
+    const cashSales = totalSales - totalReceivables; // Only cash sales go in drawer
     const customerPayments = paymentSummary?.summary?.customers?.amount || 0;
     const supplierPayments = paymentSummary?.summary?.suppliers?.amount || 0;
     const expenses = paymentSummary?.summary?.expenses?.amount || 0;
     
-    // Expected cash = Opening + Sales + Customer Receipts - Supplier Payments - Expenses
-    const expectedCash = openingBalance + totalSales + customerPayments - supplierPayments - expenses;
+    // Expected cash = Opening + Cash Sales (not credit) + Customer Receipts - Supplier Payments - Expenses
+    const expectedCash = openingBalance + cashSales + customerPayments - supplierPayments - expenses;
     const netCashFlow = customerPayments - supplierPayments - expenses;
 
     // Prepare chart data
