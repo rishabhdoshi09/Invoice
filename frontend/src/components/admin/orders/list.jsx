@@ -45,6 +45,11 @@ export const ListOrders = () => {
     const [orderToDelete, setOrderToDelete] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
+    // Payment status toggle dialog state
+    const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+    const [orderToToggle, setOrderToToggle] = useState(null);
+    const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+
     // Handle delete button click - open confirmation dialog
     const handleDeleteClick = (order) => {
         setOrderToDelete(order);
