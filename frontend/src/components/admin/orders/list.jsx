@@ -381,13 +381,28 @@ export const ListOrders = () => {
                                                     {formatCurrency(row.total)}
                                                 </Typography>
                                             </TableCell>
-                                            <TableCell align="center">
-                                                {row.paymentStatus === 'paid' ? (
-                                                    <Chip label="Paid" size="small" color="success" />
-                                                ) : row.paymentStatus === 'partial' ? (
-                                                    <Chip label="Partial" size="small" color="warning" />
+                                            <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                                                {isAdmin ? (
+                                                    <Tooltip title="Click to toggle payment status">
+                                                        <Chip 
+                                                            label={row.paymentStatus === 'paid' ? 'Paid' : row.paymentStatus === 'partial' ? 'Partial' : 'Unpaid'} 
+                                                            size="small" 
+                                                            color={row.paymentStatus === 'paid' ? 'success' : row.paymentStatus === 'partial' ? 'warning' : 'error'}
+                                                            onClick={(e) => handleStatusToggleClick(row, e)}
+                                                            onDelete={row.paymentStatus !== 'partial' ? (e) => handleStatusToggleClick(row, e) : undefined}
+                                                            deleteIcon={row.paymentStatus !== 'partial' ? <SwapHoriz fontSize="small" /> : undefined}
+                                                            sx={{ cursor: 'pointer' }}
+                                                            data-testid={`status-chip-${row.id}`}
+                                                        />
+                                                    </Tooltip>
                                                 ) : (
-                                                    <Chip label="Unpaid" size="small" color="error" />
+                                                    row.paymentStatus === 'paid' ? (
+                                                        <Chip label="Paid" size="small" color="success" />
+                                                    ) : row.paymentStatus === 'partial' ? (
+                                                        <Chip label="Partial" size="small" color="warning" />
+                                                    ) : (
+                                                        <Chip label="Unpaid" size="small" color="error" />
+                                                    )
                                                 )}
                                             </TableCell>
                                             <TableCell align="center" onClick={(e) => e.stopPropagation()}>
