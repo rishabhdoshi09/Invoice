@@ -117,6 +117,7 @@ export const ListPurchases = () => {
             paidAmount: 0,
             purchaseItems: []
         });
+        setIsPaid(true);  // Default to paid
         setOpenDialog(true);
     };
 
