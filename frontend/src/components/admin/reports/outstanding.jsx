@@ -13,14 +13,14 @@ import {
 } from '@mui/icons-material';
 import { listCustomers, updateCustomer } from '../../../services/customer';
 import { listSuppliers, updateSupplier } from '../../../services/supplier';
-import { createPayment, listPayments } from '../../../services/tally';
+import { createPayment, listPayments, getOutstandingReceivables, getOutstandingPayables } from '../../../services/tally';
 import moment from 'moment';
 import axios from 'axios';
 
 export const OutstandingReports = () => {
     const [tab, setTab] = useState(0);
-    const [customers, setCustomers] = useState([]);
-    const [suppliers, setSuppliers] = useState([]);
+    const [receivables, setReceivables] = useState([]);
+    const [payables, setPayables] = useState([]);
     const [selectedParty, setSelectedParty] = useState(null);
     const [partyTransactions, setPartyTransactions] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -28,7 +28,7 @@ export const OutstandingReports = () => {
     
     // Dialog states
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [dialogType, setDialogType] = useState(''); // 'add_bill', 'receive_payment', 'pay_supplier', 'add_supplier_bill'
+    const [dialogType, setDialogType] = useState(''); // 'receive_payment', 'pay_supplier'
     const [submitting, setSubmitting] = useState(false);
     
     // Form data
@@ -43,89 +43,82 @@ export const OutstandingReports = () => {
     const [totalReceivable, setTotalReceivable] = useState(0);
     const [totalPayable, setTotalPayable] = useState(0);
 
-    // Fetch customers
-    const fetchCustomers = useCallback(async () => {
+    // Fetch outstanding receivables (from orders)
+    const fetchReceivables = useCallback(async () => {
         try {
-            const { rows } = await listCustomers({});
-            setCustomers(rows || []);
-            const total = (rows || []).reduce((sum, c) => sum + (c.currentBalance || 0), 0);
-            setTotalReceivable(total);
+            const response = await getOutstandingReceivables();
+            const data = response.data || [];
+            setReceivables(data);
+            setTotalReceivable(response.totalReceivable || data.reduce((sum, c) => sum + (c.totalOutstanding || 0), 0));
         } catch (error) {
-            console.error('Error fetching customers:', error);
+            console.error('Error fetching receivables:', error);
+            setReceivables([]);
         }
     }, []);
 
-    // Fetch suppliers
-    const fetchSuppliers = useCallback(async () => {
+    // Fetch outstanding payables (from purchase bills)
+    const fetchPayables = useCallback(async () => {
         try {
-            const { rows } = await listSuppliers({});
-            setSuppliers(rows || []);
-            const total = (rows || []).reduce((sum, s) => sum + (s.currentBalance || 0), 0);
-            setTotalPayable(total);
+            const response = await getOutstandingPayables();
+            const data = response.data || [];
+            setPayables(data);
+            setTotalPayable(response.totalPayable || data.reduce((sum, s) => sum + (s.totalOutstanding || 0), 0));
         } catch (error) {
-            console.error('Error fetching suppliers:', error);
+            console.error('Error fetching payables:', error);
+            setPayables([]);
         }
     }, []);
 
     // Fetch all data
     const fetchAll = useCallback(async () => {
         setLoading(true);
-        await Promise.all([fetchCustomers(), fetchSuppliers()]);
+        await Promise.all([fetchReceivables(), fetchPayables()]);
         setLoading(false);
-    }, [fetchCustomers, fetchSuppliers]);
+    }, [fetchReceivables, fetchPayables]);
 
     useEffect(() => {
         fetchAll();
     }, [fetchAll]);
 
-    // Fetch transactions for selected party
+    // Fetch transactions/orders for selected party
     const fetchPartyTransactions = async (party, type) => {
         setTransactionsLoading(true);
         try {
-            const token = localStorage.getItem('token');
-            const partyName = party.name;
-            const partyType = type === 'customer' ? 'customer' : 'supplier';
-            
-            // Get payments for this party
-            const response = await axios.get(
-                `${process.env.REACT_APP_BACKEND_URL}/api/payments`,
-                {
-                    params: { partyName, partyType, limit: 100 },
-                    headers: { Authorization: `Bearer ${token}` }
-                }
-            );
-            
-            const payments = response.data?.data?.rows || response.data?.rows || [];
-            
-            // Create transaction list with opening balance
             const transactions = [];
             
-            // Add opening balance as first entry
-            if (party.openingBalance > 0) {
-                transactions.push({
-                    id: 'opening',
-                    date: 'Opening',
-                    description: 'Opening Balance',
-                    type: 'opening',
-                    debit: type === 'customer' ? party.openingBalance : 0,
-                    credit: type === 'supplier' ? party.openingBalance : 0,
+            if (type === 'customer') {
+                // For customers, show their unpaid orders
+                const orders = party.orders || [];
+                orders.forEach(order => {
+                    transactions.push({
+                        id: order.id,
+                        date: moment(order.orderDate).format('DD/MM/YYYY'),
+                        description: `Bill: ${order.orderNumber}`,
+                        type: 'bill',
+                        orderNumber: order.orderNumber,
+                        debit: order.total || 0,
+                        credit: order.paidAmount || 0,
+                        due: order.dueAmount || (order.total - (order.paidAmount || 0)),
+                        status: order.paymentStatus
+                    });
+                });
+            } else {
+                // For suppliers, show their unpaid bills
+                const bills = party.bills || [];
+                bills.forEach(bill => {
+                    transactions.push({
+                        id: bill.id,
+                        date: moment(bill.billDate).format('DD/MM/YYYY'),
+                        description: `Bill: ${bill.billNumber}`,
+                        type: 'bill',
+                        billNumber: bill.billNumber,
+                        credit: bill.total || 0,
+                        debit: bill.paidAmount || 0,
+                        due: bill.dueAmount || (bill.total - (bill.paidAmount || 0)),
+                        status: bill.paymentStatus
+                    });
                 });
             }
-            
-            // Add payments
-            payments.forEach(p => {
-                transactions.push({
-                    id: p.id,
-                    date: moment(p.paymentDate || p.createdAt).format('DD/MM/YYYY'),
-                    description: p.notes || `${p.referenceType} - ${p.paymentNumber}`,
-                    type: 'payment',
-                    paymentNumber: p.paymentNumber,
-                    // For customer: payment received = credit (reduces receivable)
-                    // For supplier: payment made = debit (reduces payable)
-                    debit: type === 'supplier' ? p.amount : 0,
-                    credit: type === 'customer' ? p.amount : 0,
-                });
-            });
             
             setPartyTransactions(transactions);
         } catch (error) {
@@ -138,7 +131,7 @@ export const OutstandingReports = () => {
 
     // Select a party to view ledger
     const handleSelectParty = (party, type) => {
-        setSelectedParty({ ...party, type });
+        setSelectedParty({ ...party, partyType: type });
         fetchPartyTransactions(party, type);
     };
 
@@ -164,71 +157,24 @@ export const OutstandingReports = () => {
 
         setSubmitting(true);
         try {
-            const token = localStorage.getItem('token');
-            
-            if (dialogType === 'add_bill') {
-                // Add customer bill = increase receivable
-                const newBalance = (selectedParty.currentBalance || 0) + amount;
-                await updateCustomer(selectedParty.id, { 
-                    currentBalance: newBalance 
-                });
-                
-                // Record as a transaction
-                await axios.post(
-                    `${process.env.REACT_APP_BACKEND_URL}/api/payments`,
-                    {
-                        paymentDate: formData.date,
-                        partyType: 'customer',
-                        partyName: selectedParty.name,
-                        partyId: selectedParty.id,
-                        amount: -amount, // Negative to indicate bill/debit
-                        referenceType: 'bill',
-                        notes: formData.description || `Bill: ${formData.billNumber || 'N/A'}`
-                    },
-                    { headers: { Authorization: `Bearer ${token}` } }
-                );
-                
-            } else if (dialogType === 'receive_payment') {
-                // Receive payment from customer = decrease receivable
+            if (dialogType === 'receive_payment') {
+                // Receive payment from customer
                 await createPayment({
                     paymentDate: formData.date,
                     partyType: 'customer',
-                    partyName: selectedParty.name,
-                    partyId: selectedParty.id,
+                    partyName: selectedParty.customerName || selectedParty.name,
                     amount: amount,
                     referenceType: 'advance',
                     notes: formData.description || 'Payment received'
                 });
                 
-            } else if (dialogType === 'add_supplier_bill') {
-                // Add supplier bill = increase payable
-                const newBalance = (selectedParty.currentBalance || 0) + amount;
-                await updateSupplier(selectedParty.id, { 
-                    currentBalance: newBalance 
-                });
-                
-                // Record as a transaction
-                await axios.post(
-                    `${process.env.REACT_APP_BACKEND_URL}/api/payments`,
-                    {
-                        paymentDate: formData.date,
-                        partyType: 'supplier',
-                        partyName: selectedParty.name,
-                        partyId: selectedParty.id,
-                        amount: -amount, // Negative to indicate bill/credit
-                        referenceType: 'bill',
-                        notes: formData.description || `Bill: ${formData.billNumber || 'N/A'}`
-                    },
-                    { headers: { Authorization: `Bearer ${token}` } }
-                );
-                
             } else if (dialogType === 'pay_supplier') {
-                // Pay supplier = decrease payable
+                // Pay supplier
                 await createPayment({
                     paymentDate: formData.date,
                     partyType: 'supplier',
-                    partyName: selectedParty.name,
-                    partyId: selectedParty.id,
+                    partyName: selectedParty.supplierName || selectedParty.name,
+                    partyId: selectedParty.supplierId,
                     amount: amount,
                     referenceType: 'advance',
                     notes: formData.description || 'Payment made'
@@ -236,15 +182,8 @@ export const OutstandingReports = () => {
             }
 
             setDialogOpen(false);
+            setSelectedParty(null);
             await fetchAll();
-            if (selectedParty) {
-                const updatedParty = selectedParty.type === 'customer' 
-                    ? customers.find(c => c.id === selectedParty.id)
-                    : suppliers.find(s => s.id === selectedParty.id);
-                if (updatedParty) {
-                    fetchPartyTransactions(updatedParty, selectedParty.type);
-                }
-            }
         } catch (error) {
             console.error('Error:', error);
             alert('Error processing transaction. Please try again.');
@@ -253,24 +192,9 @@ export const OutstandingReports = () => {
         }
     };
 
-    // Calculate running balance
-    const calculateRunningBalance = (transactions, type) => {
-        let balance = 0;
-        return transactions.map(t => {
-            if (type === 'customer') {
-                balance += (t.debit || 0) - (t.credit || 0);
-            } else {
-                balance += (t.credit || 0) - (t.debit || 0);
-            }
-            return { ...t, balance };
-        });
-    };
-
     const getDialogTitle = () => {
         switch(dialogType) {
-            case 'add_bill': return 'Add Customer Bill (Receivable)';
             case 'receive_payment': return 'Receive Payment from Customer';
-            case 'add_supplier_bill': return 'Add Supplier Bill (Payable)';
             case 'pay_supplier': return 'Pay Supplier';
             default: return 'Transaction';
         }
@@ -281,7 +205,7 @@ export const OutstandingReports = () => {
             {/* Header */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <AccountBalance /> Ledger & Transactions
+                    <AccountBalance /> Outstanding Reports
                 </Typography>
                 <Tooltip title="Refresh Data">
                     <IconButton onClick={fetchAll} disabled={loading}>
@@ -297,12 +221,12 @@ export const OutstandingReports = () => {
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <TrendingUp sx={{ color: '#2e7d32', fontSize: 40 }} />
                             <Box>
-                                <Typography variant="body2" color="text.secondary">Total Receivables</Typography>
+                                <Typography variant="body2" color="text.secondary">Total Receivables (from Orders)</Typography>
                                 <Typography variant="h4" color="success.main" fontWeight="bold">
                                     ₹{totalReceivable.toLocaleString('en-IN')}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
-                                    From {customers.filter(c => (c.currentBalance || 0) > 0).length} customers
+                                    From {receivables.length} customer(s) with unpaid orders
                                 </Typography>
                             </Box>
                         </Box>
@@ -313,12 +237,12 @@ export const OutstandingReports = () => {
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <TrendingDown sx={{ color: '#c62828', fontSize: 40 }} />
                             <Box>
-                                <Typography variant="body2" color="text.secondary">Total Payables</Typography>
+                                <Typography variant="body2" color="text.secondary">Total Payables (from Purchase Bills)</Typography>
                                 <Typography variant="h4" color="error.main" fontWeight="bold">
                                     ₹{totalPayable.toLocaleString('en-IN')}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
-                                    To {suppliers.filter(s => (s.currentBalance || 0) > 0).length} suppliers
+                                    To {payables.length} supplier(s) with unpaid bills
                                 </Typography>
                             </Box>
                         </Box>
@@ -328,17 +252,17 @@ export const OutstandingReports = () => {
 
             {/* Tabs */}
             <Tabs value={tab} onChange={(e, v) => { setTab(v); setSelectedParty(null); }} sx={{ mb: 2 }}>
-                <Tab icon={<Person />} label="Customers (Receivables)" />
-                <Tab icon={<LocalShipping />} label="Suppliers (Payables)" />
+                <Tab icon={<Person />} label={`Receivables (${receivables.length})`} />
+                <Tab icon={<LocalShipping />} label={`Payables (${payables.length})`} />
             </Tabs>
 
             <Grid container spacing={2}>
                 {/* Party List */}
-                <Grid item xs={12} md={selectedParty ? 4 : 12}>
+                <Grid item xs={12} md={selectedParty ? 5 : 12}>
                     <Card>
                         <CardContent>
                             <Typography variant="h6" sx={{ mb: 2 }}>
-                                {tab === 0 ? 'Customer List' : 'Supplier List'}
+                                {tab === 0 ? 'Customers with Outstanding' : 'Suppliers with Outstanding'}
                             </Typography>
                             
                             {loading ? (
@@ -351,76 +275,81 @@ export const OutstandingReports = () => {
                                         <TableHead>
                                             <TableRow>
                                                 <TableCell><strong>Name</strong></TableCell>
-                                                <TableCell align="right"><strong>Balance</strong></TableCell>
+                                                <TableCell align="right"><strong>Outstanding</strong></TableCell>
+                                                <TableCell align="right"><strong>Bills</strong></TableCell>
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
                                             {tab === 0 ? (
-                                                customers.length === 0 ? (
+                                                receivables.length === 0 ? (
                                                     <TableRow>
-                                                        <TableCell colSpan={2} align="center">No customers</TableCell>
+                                                        <TableCell colSpan={3} align="center">
+                                                            <Typography color="text.secondary">No outstanding receivables</Typography>
+                                                        </TableCell>
                                                     </TableRow>
                                                 ) : (
-                                                    customers.map(customer => (
+                                                    receivables.map((customer, idx) => (
                                                         <TableRow 
-                                                            key={customer.id} 
+                                                            key={idx} 
                                                             hover 
                                                             onClick={() => handleSelectParty(customer, 'customer')}
-                                                            selected={selectedParty?.id === customer.id}
+                                                            selected={selectedParty?.customerName === customer.customerName}
                                                             sx={{ cursor: 'pointer' }}
                                                         >
                                                             <TableCell>
-                                                                <Typography variant="body2" fontWeight={selectedParty?.id === customer.id ? 'bold' : 'normal'}>
-                                                                    {customer.name}
+                                                                <Typography variant="body2" fontWeight={selectedParty?.customerName === customer.customerName ? 'bold' : 'normal'}>
+                                                                    {customer.customerName || customer.name}
                                                                 </Typography>
-                                                                {customer.mobile && (
+                                                                {customer.customerMobile && (
                                                                     <Typography variant="caption" color="text.secondary">
-                                                                        {customer.mobile}
+                                                                        {customer.customerMobile}
                                                                     </Typography>
                                                                 )}
                                                             </TableCell>
                                                             <TableCell align="right">
-                                                                <Typography 
-                                                                    color={(customer.currentBalance || 0) > 0 ? 'success.main' : 'text.secondary'}
-                                                                    fontWeight="bold"
-                                                                >
-                                                                    ₹{(customer.currentBalance || 0).toLocaleString('en-IN')}
+                                                                <Typography color="success.main" fontWeight="bold">
+                                                                    ₹{(customer.totalOutstanding || 0).toLocaleString('en-IN')}
                                                                 </Typography>
+                                                            </TableCell>
+                                                            <TableCell align="right">
+                                                                <Chip label={customer.orderCount || customer.orders?.length || 0} size="small" />
                                                             </TableCell>
                                                         </TableRow>
                                                     ))
                                                 )
                                             ) : (
-                                                suppliers.length === 0 ? (
+                                                payables.length === 0 ? (
                                                     <TableRow>
-                                                        <TableCell colSpan={2} align="center">No suppliers</TableCell>
+                                                        <TableCell colSpan={3} align="center">
+                                                            <Typography color="text.secondary">No outstanding payables</Typography>
+                                                        </TableCell>
                                                     </TableRow>
                                                 ) : (
-                                                    suppliers.map(supplier => (
+                                                    payables.map((supplier, idx) => (
                                                         <TableRow 
-                                                            key={supplier.id} 
+                                                            key={idx} 
                                                             hover 
                                                             onClick={() => handleSelectParty(supplier, 'supplier')}
-                                                            selected={selectedParty?.id === supplier.id}
+                                                            selected={selectedParty?.supplierId === supplier.supplierId}
                                                             sx={{ cursor: 'pointer' }}
                                                         >
                                                             <TableCell>
-                                                                <Typography variant="body2" fontWeight={selectedParty?.id === supplier.id ? 'bold' : 'normal'}>
-                                                                    {supplier.name}
+                                                                <Typography variant="body2" fontWeight={selectedParty?.supplierId === supplier.supplierId ? 'bold' : 'normal'}>
+                                                                    {supplier.supplierName || supplier.name}
                                                                 </Typography>
-                                                                {supplier.mobile && (
+                                                                {supplier.supplierMobile && (
                                                                     <Typography variant="caption" color="text.secondary">
-                                                                        {supplier.mobile}
+                                                                        {supplier.supplierMobile}
                                                                     </Typography>
                                                                 )}
                                                             </TableCell>
                                                             <TableCell align="right">
-                                                                <Typography 
-                                                                    color={(supplier.currentBalance || 0) > 0 ? 'error.main' : 'text.secondary'}
-                                                                    fontWeight="bold"
-                                                                >
-                                                                    ₹{(supplier.currentBalance || 0).toLocaleString('en-IN')}
+                                                                <Typography color="error.main" fontWeight="bold">
+                                                                    ₹{(supplier.totalOutstanding || 0).toLocaleString('en-IN')}
                                                                 </Typography>
+                                                            </TableCell>
+                                                            <TableCell align="right">
+                                                                <Chip label={supplier.billCount || supplier.bills?.length || 0} size="small" />
                                                             </TableCell>
                                                         </TableRow>
                                                     ))
@@ -434,78 +363,58 @@ export const OutstandingReports = () => {
                     </Card>
                 </Grid>
 
-                {/* Ledger View */}
+                {/* Detail View */}
                 {selectedParty && (
-                    <Grid item xs={12} md={8}>
+                    <Grid item xs={12} md={7}>
                         <Card>
                             <CardContent>
                                 {/* Party Header */}
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                                     <Box>
                                         <Typography variant="h6">
-                                            {selectedParty.name}
+                                            {selectedParty.customerName || selectedParty.supplierName || selectedParty.name}
                                         </Typography>
                                         <Typography variant="body2" color="text.secondary">
-                                            {selectedParty.mobile} {selectedParty.email && `• ${selectedParty.email}`}
+                                            {selectedParty.customerMobile || selectedParty.supplierMobile}
                                         </Typography>
                                     </Box>
                                     <Box>
                                         <Chip 
-                                            label={`Balance: ₹${(selectedParty.currentBalance || 0).toLocaleString('en-IN')}`}
-                                            color={selectedParty.type === 'customer' ? 'success' : 'error'}
+                                            label={`Outstanding: ₹${(selectedParty.totalOutstanding || 0).toLocaleString('en-IN')}`}
+                                            color={selectedParty.partyType === 'customer' ? 'success' : 'error'}
                                             sx={{ fontWeight: 'bold', fontSize: '1rem' }}
                                         />
                                     </Box>
                                 </Box>
 
                                 {/* Action Buttons */}
-                                <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
-                                    {selectedParty.type === 'customer' ? (
-                                        <>
-                                            <Button 
-                                                variant="contained" 
-                                                color="primary"
-                                                startIcon={<Receipt />}
-                                                onClick={() => openDialog('add_bill')}
-                                            >
-                                                Add Bill (Dr)
-                                            </Button>
-                                            <Button 
-                                                variant="contained" 
-                                                color="success"
-                                                startIcon={<Payment />}
-                                                onClick={() => openDialog('receive_payment')}
-                                            >
-                                                Receive Payment (Cr)
-                                            </Button>
-                                        </>
+                                <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                                    {selectedParty.partyType === 'customer' ? (
+                                        <Button 
+                                            variant="contained" 
+                                            color="success"
+                                            startIcon={<Payment />}
+                                            onClick={() => openDialog('receive_payment')}
+                                        >
+                                            Receive Payment
+                                        </Button>
                                     ) : (
-                                        <>
-                                            <Button 
-                                                variant="contained" 
-                                                color="primary"
-                                                startIcon={<Receipt />}
-                                                onClick={() => openDialog('add_supplier_bill')}
-                                            >
-                                                Add Bill (Cr)
-                                            </Button>
-                                            <Button 
-                                                variant="contained" 
-                                                color="error"
-                                                startIcon={<Payment />}
-                                                onClick={() => openDialog('pay_supplier')}
-                                            >
-                                                Pay Supplier (Dr)
-                                            </Button>
-                                        </>
+                                        <Button 
+                                            variant="contained" 
+                                            color="error"
+                                            startIcon={<Payment />}
+                                            onClick={() => openDialog('pay_supplier')}
+                                        >
+                                            Pay Supplier
+                                        </Button>
                                     )}
                                 </Box>
 
                                 <Divider sx={{ mb: 2 }} />
 
-                                {/* Transaction History */}
+                                {/* Outstanding Bills/Orders */}
                                 <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <History /> Transaction History
+                                    <Receipt /> {selectedParty.partyType === 'customer' ? 'Unpaid Orders' : 'Unpaid Bills'}
                                 </Typography>
 
                                 {transactionsLoading ? (
@@ -513,64 +422,51 @@ export const OutstandingReports = () => {
                                         <CircularProgress />
                                     </Box>
                                 ) : (
-                                    <TableContainer sx={{ maxHeight: 400 }}>
+                                    <TableContainer sx={{ maxHeight: 350 }}>
                                         <Table size="small" stickyHeader>
                                             <TableHead>
                                                 <TableRow sx={{ bgcolor: '#f5f5f5' }}>
                                                     <TableCell><strong>Date</strong></TableCell>
-                                                    <TableCell><strong>Particulars</strong></TableCell>
-                                                    <TableCell align="right" sx={{ color: 'error.main' }}><strong>Debit (Dr)</strong></TableCell>
-                                                    <TableCell align="right" sx={{ color: 'success.main' }}><strong>Credit (Cr)</strong></TableCell>
-                                                    <TableCell align="right"><strong>Balance</strong></TableCell>
+                                                    <TableCell><strong>{selectedParty.partyType === 'customer' ? 'Order #' : 'Bill #'}</strong></TableCell>
+                                                    <TableCell align="right"><strong>Total</strong></TableCell>
+                                                    <TableCell align="right"><strong>Paid</strong></TableCell>
+                                                    <TableCell align="right"><strong>Due</strong></TableCell>
+                                                    <TableCell align="center"><strong>Status</strong></TableCell>
                                                 </TableRow>
                                             </TableHead>
                                             <TableBody>
                                                 {partyTransactions.length === 0 ? (
                                                     <TableRow>
-                                                        <TableCell colSpan={5} align="center">
-                                                            <Typography color="text.secondary">No transactions yet</Typography>
+                                                        <TableCell colSpan={6} align="center">
+                                                            <Typography color="text.secondary">No outstanding items</Typography>
                                                         </TableCell>
                                                     </TableRow>
                                                 ) : (
-                                                    calculateRunningBalance(partyTransactions, selectedParty.type).map((txn, idx) => (
+                                                    partyTransactions.map((txn, idx) => (
                                                         <TableRow key={txn.id || idx} hover>
+                                                            <TableCell>{txn.date}</TableCell>
                                                             <TableCell>
-                                                                <Typography variant="body2">{txn.date}</Typography>
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <Typography variant="body2">{txn.description}</Typography>
-                                                                {txn.paymentNumber && (
-                                                                    <Typography variant="caption" color="text.secondary">
-                                                                        {txn.paymentNumber}
-                                                                    </Typography>
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell align="right">
-                                                                {txn.debit > 0 && (
-                                                                    <Typography color="error.main">
-                                                                        ₹{txn.debit.toLocaleString('en-IN')}
-                                                                    </Typography>
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell align="right">
-                                                                {txn.credit > 0 && (
-                                                                    <Typography color="success.main">
-                                                                        ₹{txn.credit.toLocaleString('en-IN')}
-                                                                    </Typography>
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell align="right">
-                                                                <Typography fontWeight="bold">
-                                                                    ₹{Math.abs(txn.balance).toLocaleString('en-IN')}
-                                                                    {txn.balance !== 0 && (
-                                                                        <Typography component="span" variant="caption" sx={{ ml: 0.5 }}>
-                                                                            {selectedParty.type === 'customer' 
-                                                                                ? (txn.balance > 0 ? 'Dr' : 'Cr')
-                                                                                : (txn.balance > 0 ? 'Cr' : 'Dr')
-                                                                            }
-                                                                        </Typography>
-                                                                    )}
+                                                                <Typography variant="body2" color="primary" fontWeight="bold">
+                                                                    {txn.orderNumber || txn.billNumber}
                                                                 </Typography>
+                                                            </TableCell>
+                                                            <TableCell align="right">
+                                                                ₹{(selectedParty.partyType === 'customer' ? txn.debit : txn.credit || 0).toLocaleString('en-IN')}
+                                                            </TableCell>
+                                                            <TableCell align="right">
+                                                                ₹{(selectedParty.partyType === 'customer' ? txn.credit : txn.debit || 0).toLocaleString('en-IN')}
+                                                            </TableCell>
+                                                            <TableCell align="right">
+                                                                <Typography color="error.main" fontWeight="bold">
+                                                                    ₹{(txn.due || 0).toLocaleString('en-IN')}
+                                                                </Typography>
+                                                            </TableCell>
+                                                            <TableCell align="center">
+                                                                <Chip 
+                                                                    label={txn.status || 'unpaid'} 
+                                                                    size="small"
+                                                                    color={txn.status === 'partial' ? 'warning' : 'error'}
+                                                                />
                                                             </TableCell>
                                                         </TableRow>
                                                     ))
@@ -580,11 +476,11 @@ export const OutstandingReports = () => {
                                     </TableContainer>
                                 )}
 
-                                {/* Closing Balance */}
-                                <Box sx={{ mt: 2, p: 2, bgcolor: selectedParty.type === 'customer' ? '#e8f5e9' : '#ffebee', borderRadius: 1 }}>
+                                {/* Total */}
+                                <Box sx={{ mt: 2, p: 2, bgcolor: selectedParty.partyType === 'customer' ? '#e8f5e9' : '#ffebee', borderRadius: 1 }}>
                                     <Typography variant="subtitle1" fontWeight="bold">
-                                        Closing Balance: ₹{(selectedParty.currentBalance || 0).toLocaleString('en-IN')}
-                                        {selectedParty.type === 'customer' ? ' (Receivable)' : ' (Payable)'}
+                                        Total Outstanding: ₹{(selectedParty.totalOutstanding || 0).toLocaleString('en-IN')}
+                                        {selectedParty.partyType === 'customer' ? ' (Receivable)' : ' (Payable)'}
                                     </Typography>
                                 </Box>
                             </CardContent>
@@ -593,16 +489,16 @@ export const OutstandingReports = () => {
                 )}
             </Grid>
 
-            {/* Transaction Dialog */}
+            {/* Payment Dialog */}
             <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
                 <DialogTitle>{getDialogTitle()}</DialogTitle>
                 <DialogContent>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
                         {selectedParty && (
                             <Alert severity="info">
-                                {selectedParty.type === 'customer' ? 'Customer' : 'Supplier'}: <strong>{selectedParty.name}</strong>
+                                {selectedParty.partyType === 'customer' ? 'Customer' : 'Supplier'}: <strong>{selectedParty.customerName || selectedParty.supplierName || selectedParty.name}</strong>
                                 <br />
-                                Current Balance: ₹{(selectedParty.currentBalance || 0).toLocaleString('en-IN')}
+                                Outstanding: ₹{(selectedParty.totalOutstanding || 0).toLocaleString('en-IN')}
                             </Alert>
                         )}
                         
@@ -614,15 +510,6 @@ export const OutstandingReports = () => {
                             fullWidth
                             InputLabelProps={{ shrink: true }}
                         />
-                        
-                        {(dialogType === 'add_bill' || dialogType === 'add_supplier_bill') && (
-                            <TextField
-                                label="Bill Number (optional)"
-                                value={formData.billNumber}
-                                onChange={(e) => setFormData({ ...formData, billNumber: e.target.value })}
-                                fullWidth
-                            />
-                        )}
                         
                         <TextField
                             label="Amount (₹)"
@@ -651,7 +538,7 @@ export const OutstandingReports = () => {
                     <Button 
                         onClick={handleSubmit} 
                         variant="contained" 
-                        color={dialogType.includes('pay') || dialogType.includes('receive') ? 'success' : 'primary'}
+                        color={dialogType === 'receive_payment' ? 'success' : 'error'}
                         disabled={submitting || !formData.amount}
                     >
                         {submitting ? <CircularProgress size={24} /> : 'Save'}
@@ -661,3 +548,4 @@ export const OutstandingReports = () => {
         </Box>
     );
 };
+
