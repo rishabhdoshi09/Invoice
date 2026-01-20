@@ -20,9 +20,9 @@ module.exports = {
             mobile: Joi.string().trim().allow("").optional(),
             email: Joi.string().trim().email().allow("").optional(),
             address: Joi.string().trim().allow("").optional(),
-            gstin: Joi.string().trim().allow("").optional()
-            // ✅ REMOVED: currentBalance - Cannot be manually updated!
-            // Balance can only be updated through orders and payments
+            gstin: Joi.string().trim().allow("").optional(),
+            openingBalance: Joi.number().optional(),
+            currentBalance: Joi.number().optional()
         });
         return Joi.validate(customerObj, schema);
     },
