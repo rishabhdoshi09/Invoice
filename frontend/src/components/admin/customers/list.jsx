@@ -117,18 +117,19 @@ export const ListCustomers = () => {
                                     <TableCell>Mobile</TableCell>
                                     <TableCell>Email</TableCell>
                                     <TableCell>GSTIN</TableCell>
-                                    <TableCell align="right">Current Balance</TableCell>
+                                    <TableCell align="right">Opening Bal.</TableCell>
+                                    <TableCell align="right">Current Bal.</TableCell>
                                     <TableCell align="center">Actions</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {loading ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} align="center">Loading...</TableCell>
+                                        <TableCell colSpan={7} align="center">Loading...</TableCell>
                                     </TableRow>
                                 ) : customers.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} align="center">No customers found</TableCell>
+                                        <TableCell colSpan={7} align="center">No customers found</TableCell>
                                     </TableRow>
                                 ) : (
                                     customers.map((customer) => (
@@ -137,7 +138,10 @@ export const ListCustomers = () => {
                                             <TableCell>{customer.mobile}</TableCell>
                                             <TableCell>{customer.email}</TableCell>
                                             <TableCell>{customer.gstin}</TableCell>
-                                            <TableCell align="right">₹{customer.currentBalance || 0}</TableCell>
+                                            <TableCell align="right">₹{(customer.openingBalance || 0).toLocaleString('en-IN')}</TableCell>
+                                            <TableCell align="right" sx={{ color: (customer.currentBalance || 0) > 0 ? 'success.main' : 'text.primary', fontWeight: 'bold' }}>
+                                                ₹{(customer.currentBalance || 0).toLocaleString('en-IN')}
+                                            </TableCell>
                                             <TableCell align="center">
                                                 <IconButton size="small" onClick={() => handleOpenDialog(customer)}>
                                                     <Edit fontSize="small" />
@@ -198,16 +202,19 @@ export const ListCustomers = () => {
                             onChange={handleChange}
                             fullWidth
                         />
-                        {!editingCustomer && (
-                            <TextField
-                                label="Opening Balance"
-                                name="openingBalance"
-                                type="number"
-                                value={formData.openingBalance}
-                                onChange={handleChange}
-                                fullWidth
-                            />
-                        )}
+                        <TextField
+                            label="Opening Balance (Amount customer owes you)"
+                            name="openingBalance"
+                            type="number"
+                            value={formData.openingBalance}
+                            onChange={handleChange}
+                            fullWidth
+                            helperText={editingCustomer 
+                                ? "⚠️ Only change if correcting initial balance. Current balance will be recalculated."
+                                : "Enter the amount this customer already owes you (receivable)"
+                            }
+                            InputProps={{ inputProps: { min: 0 } }}
+                        />
                     </Box>
                 </DialogContent>
                 <DialogActions>
