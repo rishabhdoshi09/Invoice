@@ -95,6 +95,11 @@ module.exports = {
                 });
             }
 
+            // Set currentBalance equal to openingBalance if provided in the update payload
+            if (value.openingBalance !== undefined) {
+                value.currentBalance = value.openingBalance;
+            }
+
             const response = await Services.supplier.updateSupplier(
                 { id: req.params.supplierId },
                 value
