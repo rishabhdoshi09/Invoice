@@ -29,46 +29,75 @@ module.exports = {
 
                 if (value.partyType === 'customer') {
                     // Customer payment received: Cash/Bank (Debit) to Customer (Credit)
-                    const customer = await Services.customer.getCustomer({ id: value.partyId });
-                    if (customer) {
+                    // Only lookup customer if partyId is provided
+                    let customer = null;
+                    if (value.partyId) {
+                        customer = await Services.customer.getCustomer({ id: value.partyId });
+                    } else if (value.partyName) {
+                        // Try to find customer by name
+                        customer = await db.customer.findOne({ where: { customerName: value.partyName } });
+                    }
+                    
+                    // Always record the cash receipt
+                    ledgerEntries.push({
+                        ledgerId: CASH_BANK_LEDGER_ID,
+                        entryDate: value.paymentDate,
+                        debit: value.amount,
+                        credit: 0,
+                        description: `Payment received from ${value.partyName || customer?.customerName || 'Customer'} - ${value.referenceType}`,
+                        referenceType: 'payment',
+                        referenceId: response.id
+                    });
+                    
+                    // If customer has a ledger, record the credit entry
+                    if (customer && customer.ledgerId) {
                         ledgerEntries.push({
-                            ledgerId: CASH_BANK_LEDGER_ID,
-                            entryDate: value.paymentDate,
-                            debit: value.amount,
-                            credit: 0,
-                            description: `Payment received from ${customer.name} for ${value.referenceType} ${value.referenceId}`,
-                            referenceType: 'payment',
-                            referenceId: response.id
-                        });
-                        ledgerEntries.push({
-                            ledgerId: customer.ledgerId, // Assuming customer has a ledgerId
+                            ledgerId: customer.ledgerId,
                             entryDate: value.paymentDate,
                             debit: 0,
                             credit: value.amount,
-                            description: `Payment received from ${customer.name} for ${value.referenceType} ${value.referenceId}`,
+                            description: `Payment received from ${value.partyName || customer.customerName} - ${value.referenceType}`,
                             referenceType: 'payment',
                             referenceId: response.id
                         });
                     }
+                    
+                    // Update customer balance if found
+                    if (customer) {
+                        await customer.update({
+                            currentBalance: Math.max(0, (customer.currentBalance || 0) - value.amount)
+                        });
+                    }
                 } else if (value.partyType === 'supplier') {
                     // Supplier payment made: Supplier (Debit) to Cash/Bank (Credit)
-                    const supplier = await Services.supplier.getSupplier({ id: value.partyId });
-                    if (supplier) {
+                    // Only lookup supplier if partyId is provided
+                    let supplier = null;
+                    if (value.partyId) {
+                        supplier = await Services.supplier.getSupplier({ id: value.partyId });
+                    } else if (value.partyName) {
+                        // Try to find supplier by name
+                        supplier = await db.supplier.findOne({ where: { name: value.partyName } });
+                    }
+                    
+                    // Always record the cash payment
+                    ledgerEntries.push({
+                        ledgerId: CASH_BANK_LEDGER_ID,
+                        entryDate: value.paymentDate,
+                        debit: 0,
+                        credit: value.amount,
+                        description: `Payment to ${value.partyName || supplier?.name || 'Supplier'} - ${value.referenceType}`,
+                        referenceType: 'payment',
+                        referenceId: response.id
+                    });
+                    
+                    // If supplier has a ledger, record the debit entry
+                    if (supplier && supplier.ledgerId) {
                         ledgerEntries.push({
-                            ledgerId: supplier.ledgerId, // Assuming supplier has a ledgerId
+                            ledgerId: supplier.ledgerId,
                             entryDate: value.paymentDate,
                             debit: value.amount,
                             credit: 0,
-                            description: `Payment made to ${supplier.name} for ${value.referenceType} ${value.referenceId}`,
-                            referenceType: 'payment',
-                            referenceId: response.id
-                        });
-                        ledgerEntries.push({
-                            ledgerId: CASH_BANK_LEDGER_ID,
-                            entryDate: value.paymentDate,
-                            debit: 0,
-                            credit: value.amount,
-                            description: `Payment made to ${supplier.name} for ${value.referenceType} ${value.referenceId}`,
+                            description: `Payment to ${value.partyName || supplier.name} - ${value.referenceType}`,
                             referenceType: 'payment',
                             referenceId: response.id
                         });
