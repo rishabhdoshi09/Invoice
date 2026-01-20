@@ -117,18 +117,19 @@ export const ListSuppliers = () => {
                                     <TableCell>Mobile</TableCell>
                                     <TableCell>Email</TableCell>
                                     <TableCell>GSTIN</TableCell>
-                                    <TableCell align="right">Current Balance</TableCell>
+                                    <TableCell align="right">Opening Bal.</TableCell>
+                                    <TableCell align="right">Current Bal.</TableCell>
                                     <TableCell align="center">Actions</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {loading ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} align="center">Loading...</TableCell>
+                                        <TableCell colSpan={7} align="center">Loading...</TableCell>
                                     </TableRow>
                                 ) : suppliers.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} align="center">No suppliers found</TableCell>
+                                        <TableCell colSpan={7} align="center">No suppliers found</TableCell>
                                     </TableRow>
                                 ) : (
                                     suppliers.map((supplier) => (
@@ -137,7 +138,10 @@ export const ListSuppliers = () => {
                                             <TableCell>{supplier.mobile}</TableCell>
                                             <TableCell>{supplier.email}</TableCell>
                                             <TableCell>{supplier.gstin}</TableCell>
-                                            <TableCell align="right">₹{supplier.currentBalance || 0}</TableCell>
+                                            <TableCell align="right">₹{(supplier.openingBalance || 0).toLocaleString('en-IN')}</TableCell>
+                                            <TableCell align="right" sx={{ color: (supplier.currentBalance || 0) > 0 ? 'error.main' : 'text.primary', fontWeight: 'bold' }}>
+                                                ₹{(supplier.currentBalance || 0).toLocaleString('en-IN')}
+                                            </TableCell>
                                             <TableCell align="center">
                                                 <IconButton size="small" onClick={() => handleOpenDialog(supplier)}>
                                                     <Edit fontSize="small" />
@@ -198,16 +202,19 @@ export const ListSuppliers = () => {
                             onChange={handleChange}
                             fullWidth
                         />
-                        {!editingSupplier && (
-                            <TextField
-                                label="Opening Balance"
-                                name="openingBalance"
-                                type="number"
-                                value={formData.openingBalance}
-                                onChange={handleChange}
-                                fullWidth
-                            />
-                        )}
+                        <TextField
+                            label="Opening Balance (Amount you owe supplier)"
+                            name="openingBalance"
+                            type="number"
+                            value={formData.openingBalance}
+                            onChange={handleChange}
+                            fullWidth
+                            helperText={editingSupplier 
+                                ? "⚠️ Only change if correcting initial balance. Current balance will be recalculated."
+                                : "Enter the amount you already owe this supplier (payable)"
+                            }
+                            InputProps={{ inputProps: { min: 0 } }}
+                        />
                     </Box>
                 </DialogContent>
                 <DialogActions>
