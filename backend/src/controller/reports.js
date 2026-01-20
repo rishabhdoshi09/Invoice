@@ -5,8 +5,38 @@ const { Op } = require('sequelize');
 module.exports = {
     getOutstandingReceivables: async (req, res) => {
         try {
-            // Get outstanding receivables from orders (credit sales)
-            // Include orders where paymentStatus is unpaid/partial OR dueAmount > 0 OR paidAmount < total
+            // Customer map to track all receivables
+            const customerMap = {};
+
+            // 1. Get customers with opening balance (currentBalance > 0)
+            const customersWithBalance = await db.customer.findAll({
+                where: {
+                    currentBalance: { [Op.gt]: 0 }
+                },
+                attributes: ['id', 'name', 'mobile', 'currentBalance', 'openingBalance']
+            });
+
+            // Add customers with balance to the map
+            customersWithBalance.forEach(customer => {
+                const name = (customer.name || '').trim();
+                if (name && customer.currentBalance > 0) {
+                    customerMap[name] = {
+                        customerId: customer.id,
+                        customerName: name,
+                        name: name,
+                        customerMobile: customer.mobile || '',
+                        totalOutstanding: customer.currentBalance,
+                        outstanding: customer.currentBalance,
+                        openingBalance: customer.openingBalance || 0,
+                        orderCount: 0,
+                        count: 0,
+                        orders: [],
+                        hasOpeningBalance: true
+                    };
+                }
+            });
+
+            // 2. Get outstanding receivables from orders (credit sales)
             const unpaidOrders = await db.order.findAll({
                 where: {
                     isDeleted: false,
@@ -16,27 +46,15 @@ module.exports = {
                         db.Sequelize.literal('"paidAmount" < "total"')
                     ]
                 },
-                attributes: ['id', 'orderNumber', 'orderDate', 'customerName', 'customerMobile', 'total', 'paidAmount', 'dueAmount', 'paymentStatus'],
+                attributes: ['id', 'orderNumber', 'orderDate', 'customerName', 'customerMobile', 'customerId', 'total', 'paidAmount', 'dueAmount', 'paymentStatus'],
                 order: [['customerName', 'ASC'], ['orderDate', 'DESC']]
             });
 
-            // Group by customer name
-            const customerMap = {};
+            // Add/merge orders into customer map
             unpaidOrders.forEach(order => {
                 const name = (order.customerName || '').trim() || 'Walk-in Customer';
-                if (!customerMap[name]) {
-                    customerMap[name] = {
-                        customerName: name,
-                        name: name, // alias for compatibility
-                        customerMobile: order.customerMobile || '',
-                        totalOutstanding: 0,
-                        outstanding: 0, // alias for compatibility
-                        orderCount: 0,
-                        count: 0, // alias for compatibility
-                        orders: []
-                    };
-                }
-                // Calculate due amount - handle cases where dueAmount might not be set
+                
+                // Calculate due amount
                 let due = 0;
                 if (order.dueAmount != null && order.dueAmount > 0) {
                     due = order.dueAmount;
@@ -45,8 +63,30 @@ module.exports = {
                 }
                 
                 if (due > 0) {
-                    customerMap[name].totalOutstanding += due;
-                    customerMap[name].outstanding = customerMap[name].totalOutstanding;
+                    if (!customerMap[name]) {
+                        // New customer from orders
+                        customerMap[name] = {
+                            customerId: order.customerId,
+                            customerName: name,
+                            name: name,
+                            customerMobile: order.customerMobile || '',
+                            totalOutstanding: 0,
+                            outstanding: 0,
+                            openingBalance: 0,
+                            orderCount: 0,
+                            count: 0,
+                            orders: [],
+                            hasOpeningBalance: false
+                        };
+                    }
+                    
+                    // Don't double count - if customer has opening balance, 
+                    // orders are already included in currentBalance
+                    if (!customerMap[name].hasOpeningBalance) {
+                        customerMap[name].totalOutstanding += due;
+                        customerMap[name].outstanding = customerMap[name].totalOutstanding;
+                    }
+                    
                     customerMap[name].orderCount += 1;
                     customerMap[name].count = customerMap[name].orderCount;
                     customerMap[name].orders.push({
@@ -62,7 +102,7 @@ module.exports = {
             });
 
             const receivables = Object.values(customerMap).filter(c => c.totalOutstanding > 0);
-            receivables.sort((a, b) => b.totalOutstanding - a.totalOutstanding); // Sort by highest due first
+            receivables.sort((a, b) => b.totalOutstanding - a.totalOutstanding);
 
             const totalReceivable = receivables.reduce((sum, c) => sum + c.totalOutstanding, 0);
 
