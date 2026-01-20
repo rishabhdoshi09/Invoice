@@ -203,6 +203,17 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 - **Issue:** User reported data entry not working
 - **Status:** Both Quick Expense and Supplier/Customer Payment forms working correctly
 
+### ✅ P0 - Payment Data Entry Fix (FIXED - Jan 20, 2026)
+- **Issue:** Supplier and customer payments failing with "WHERE parameter id has invalid undefined value"
+- **Root Cause:** Payment controller was trying to lookup customer/supplier by `partyId` even when only `partyName` was provided
+- **Fix:** Modified `/app/backend/src/controller/payment.js` to:
+  - Handle null `partyId` gracefully
+  - Lookup by `partyName` if `partyId` not provided
+  - Always record cash receipt/payment even if party not found in database
+  - Update customer balance only if customer exists
+- **Files Modified:** `/app/backend/src/controller/payment.js`
+- **Status:** Verified working via API and UI
+
 ### ✅ P0 - Payment Status Toggle on Orders List (NEW FEATURE)
 - **Description:** Admin can now toggle payment status (Paid ↔ Unpaid) directly from orders list
 - **Implementation:**
