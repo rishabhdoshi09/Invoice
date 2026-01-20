@@ -3,17 +3,15 @@ import {
     Box, Card, CardContent, Table, TableBody, TableCell, TableContainer, 
     TableHead, TableRow, Typography, Tabs, Tab, Button, Dialog, DialogTitle,
     DialogContent, DialogActions, TextField, IconButton, Tooltip, Chip,
-    Alert, CircularProgress, Paper, Divider, Grid, FormControl, InputLabel,
-    Select, MenuItem, Autocomplete
+    Alert, CircularProgress, Paper, Divider, Grid, Autocomplete
 } from '@mui/material';
 import { 
-    Add, Payment, Refresh, Edit, Receipt, AccountBalance, 
-    TrendingUp, TrendingDown, History, Person, LocalShipping,
-    Delete
+    Add, Payment, Refresh, Receipt, AccountBalance, 
+    TrendingUp, TrendingDown, Person, LocalShipping, ShoppingCart
 } from '@mui/icons-material';
-import { listCustomers, updateCustomer } from '../../../services/customer';
-import { listSuppliers, updateSupplier } from '../../../services/supplier';
-import { createPayment, listPayments, getOutstandingReceivables, getOutstandingPayables } from '../../../services/tally';
+import { listCustomers } from '../../../services/customer';
+import { listSuppliers } from '../../../services/supplier';
+import { createPayment, getOutstandingReceivables, getOutstandingPayables } from '../../../services/tally';
 import moment from 'moment';
 import axios from 'axios';
 
@@ -21,6 +19,8 @@ export const OutstandingReports = () => {
     const [tab, setTab] = useState(0);
     const [receivables, setReceivables] = useState([]);
     const [payables, setPayables] = useState([]);
+    const [customers, setCustomers] = useState([]);
+    const [suppliers, setSuppliers] = useState([]);
     const [selectedParty, setSelectedParty] = useState(null);
     const [partyTransactions, setPartyTransactions] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -28,7 +28,8 @@ export const OutstandingReports = () => {
     
     // Dialog states
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [dialogType, setDialogType] = useState(''); // 'receive_payment', 'pay_supplier'
+    const [dialogType, setDialogType] = useState(''); 
+    // Types: 'receive_payment', 'pay_supplier', 'add_credit_sale', 'add_purchase_bill'
     const [submitting, setSubmitting] = useState(false);
     
     // Form data
@@ -36,12 +37,36 @@ export const OutstandingReports = () => {
         amount: '',
         description: '',
         billNumber: '',
-        date: moment().format('YYYY-MM-DD')
+        date: moment().format('YYYY-MM-DD'),
+        customerName: '',
+        customerMobile: '',
+        supplierName: '',
+        supplierId: ''
     });
 
     // Totals
     const [totalReceivable, setTotalReceivable] = useState(0);
     const [totalPayable, setTotalPayable] = useState(0);
+
+    // Fetch customers list for autocomplete
+    const fetchCustomers = useCallback(async () => {
+        try {
+            const { rows } = await listCustomers({});
+            setCustomers(rows || []);
+        } catch (error) {
+            console.error('Error fetching customers:', error);
+        }
+    }, []);
+
+    // Fetch suppliers list for autocomplete
+    const fetchSuppliers = useCallback(async () => {
+        try {
+            const { rows } = await listSuppliers({});
+            setSuppliers(rows || []);
+        } catch (error) {
+            console.error('Error fetching suppliers:', error);
+        }
+    }, []);
 
     // Fetch outstanding receivables (from orders)
     const fetchReceivables = useCallback(async () => {
@@ -72,9 +97,9 @@ export const OutstandingReports = () => {
     // Fetch all data
     const fetchAll = useCallback(async () => {
         setLoading(true);
-        await Promise.all([fetchReceivables(), fetchPayables()]);
+        await Promise.all([fetchReceivables(), fetchPayables(), fetchCustomers(), fetchSuppliers()]);
         setLoading(false);
-    }, [fetchReceivables, fetchPayables]);
+    }, [fetchReceivables, fetchPayables, fetchCustomers, fetchSuppliers]);
 
     useEffect(() => {
         fetchAll();
@@ -87,7 +112,6 @@ export const OutstandingReports = () => {
             const transactions = [];
             
             if (type === 'customer') {
-                // For customers, show their unpaid orders
                 const orders = party.orders || [];
                 orders.forEach(order => {
                     transactions.push({
@@ -103,7 +127,6 @@ export const OutstandingReports = () => {
                     });
                 });
             } else {
-                // For suppliers, show their unpaid bills
                 const bills = party.bills || [];
                 bills.forEach(bill => {
                     transactions.push({
@@ -142,7 +165,11 @@ export const OutstandingReports = () => {
             amount: '',
             description: '',
             billNumber: '',
-            date: moment().format('YYYY-MM-DD')
+            date: moment().format('YYYY-MM-DD'),
+            customerName: selectedParty?.customerName || selectedParty?.name || '',
+            customerMobile: selectedParty?.customerMobile || '',
+            supplierName: selectedParty?.supplierName || selectedParty?.name || '',
+            supplierId: selectedParty?.supplierId || ''
         });
         setDialogOpen(true);
     };
@@ -157,8 +184,9 @@ export const OutstandingReports = () => {
 
         setSubmitting(true);
         try {
+            const token = localStorage.getItem('token');
+            
             if (dialogType === 'receive_payment') {
-                // Receive payment from customer
                 await createPayment({
                     paymentDate: formData.date,
                     partyType: 'customer',
@@ -169,7 +197,6 @@ export const OutstandingReports = () => {
                 });
                 
             } else if (dialogType === 'pay_supplier') {
-                // Pay supplier
                 await createPayment({
                     paymentDate: formData.date,
                     partyType: 'supplier',
@@ -179,6 +206,75 @@ export const OutstandingReports = () => {
                     referenceType: 'advance',
                     notes: formData.description || 'Payment made'
                 });
+                
+            } else if (dialogType === 'add_credit_sale') {
+                // Validate customer name
+                if (!formData.customerName?.trim()) {
+                    alert('Please enter customer name');
+                    setSubmitting(false);
+                    return;
+                }
+                
+                // Create a credit sale order
+                const orderDate = moment(formData.date).format('DD-MM-YYYY');
+                const orderPayload = {
+                    orderDate: orderDate,
+                    customerName: formData.customerName.trim(),
+                    customerMobile: formData.customerMobile || '',
+                    paymentStatus: 'unpaid',
+                    paidAmount: 0,
+                    subTotal: amount,
+                    total: amount,
+                    taxPercent: 0,
+                    notes: formData.description || `Credit Sale - ${formData.billNumber || 'Direct Entry'}`,
+                    orderItems: [{
+                        productId: null,
+                        name: formData.description || 'Credit Sale Entry',
+                        quantity: 1,
+                        productPrice: amount,
+                        totalPrice: amount,
+                        type: 'non-weighted'
+                    }]
+                };
+                
+                await axios.post(
+                    `${process.env.REACT_APP_BACKEND_URL}/api/orders`,
+                    orderPayload,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+                
+            } else if (dialogType === 'add_purchase_bill') {
+                // Validate supplier
+                if (!formData.supplierId && !formData.supplierName?.trim()) {
+                    alert('Please select or enter supplier name');
+                    setSubmitting(false);
+                    return;
+                }
+                
+                // Create a purchase bill
+                const billPayload = {
+                    billNumber: formData.billNumber || `PB-${Date.now()}`,
+                    billDate: formData.date,
+                    supplierId: formData.supplierId || null,
+                    supplierName: formData.supplierName,
+                    total: amount,
+                    paidAmount: 0,
+                    dueAmount: amount,
+                    paymentStatus: 'unpaid',
+                    notes: formData.description || 'Purchase Bill - Direct Entry',
+                    items: [{
+                        description: formData.description || 'Purchase Entry',
+                        quantity: 1,
+                        rate: amount,
+                        amount: amount
+                    }]
+                };
+                
+                await axios.post(
+                    `${process.env.REACT_APP_BACKEND_URL}/api/purchases`,
+                    billPayload,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
             }
 
             setDialogOpen(false);
@@ -186,7 +282,7 @@ export const OutstandingReports = () => {
             await fetchAll();
         } catch (error) {
             console.error('Error:', error);
-            alert('Error processing transaction. Please try again.');
+            alert(error.response?.data?.message || 'Error processing transaction. Please try again.');
         } finally {
             setSubmitting(false);
         }
@@ -196,6 +292,8 @@ export const OutstandingReports = () => {
         switch(dialogType) {
             case 'receive_payment': return 'Receive Payment from Customer';
             case 'pay_supplier': return 'Pay Supplier';
+            case 'add_credit_sale': return 'Add Credit Sale (Receivable)';
+            case 'add_purchase_bill': return 'Add Purchase Bill (Payable)';
             default: return 'Transaction';
         }
     };
@@ -207,44 +305,74 @@ export const OutstandingReports = () => {
                 <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <AccountBalance /> Outstanding Reports
                 </Typography>
-                <Tooltip title="Refresh Data">
-                    <IconButton onClick={fetchAll} disabled={loading}>
-                        <Refresh />
-                    </IconButton>
-                </Tooltip>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Tooltip title="Refresh Data">
+                        <IconButton onClick={fetchAll} disabled={loading}>
+                            <Refresh />
+                        </IconButton>
+                    </Tooltip>
+                </Box>
             </Box>
 
             {/* Summary Cards */}
             <Grid container spacing={2} sx={{ mb: 3 }}>
                 <Grid item xs={12} sm={6}>
                     <Paper sx={{ p: 2, bgcolor: '#e8f5e9', border: '2px solid #4caf50' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <TrendingUp sx={{ color: '#2e7d32', fontSize: 40 }} />
-                            <Box>
-                                <Typography variant="body2" color="text.secondary">Total Receivables (from Orders)</Typography>
-                                <Typography variant="h4" color="success.main" fontWeight="bold">
-                                    ₹{totalReceivable.toLocaleString('en-IN')}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                    From {receivables.length} customer(s) with unpaid orders
-                                </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <TrendingUp sx={{ color: '#2e7d32', fontSize: 40 }} />
+                                <Box>
+                                    <Typography variant="body2" color="text.secondary">Total Receivables</Typography>
+                                    <Typography variant="h4" color="success.main" fontWeight="bold">
+                                        ₹{totalReceivable.toLocaleString('en-IN')}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        From {receivables.length} customer(s)
+                                    </Typography>
+                                </Box>
                             </Box>
+                            <Button
+                                variant="contained"
+                                color="success"
+                                startIcon={<Add />}
+                                onClick={() => {
+                                    setSelectedParty(null);
+                                    openDialog('add_credit_sale');
+                                }}
+                                size="small"
+                            >
+                                Add Sale
+                            </Button>
                         </Box>
                     </Paper>
                 </Grid>
                 <Grid item xs={12} sm={6}>
                     <Paper sx={{ p: 2, bgcolor: '#ffebee', border: '2px solid #ef5350' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <TrendingDown sx={{ color: '#c62828', fontSize: 40 }} />
-                            <Box>
-                                <Typography variant="body2" color="text.secondary">Total Payables (from Purchase Bills)</Typography>
-                                <Typography variant="h4" color="error.main" fontWeight="bold">
-                                    ₹{totalPayable.toLocaleString('en-IN')}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                    To {payables.length} supplier(s) with unpaid bills
-                                </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <TrendingDown sx={{ color: '#c62828', fontSize: 40 }} />
+                                <Box>
+                                    <Typography variant="body2" color="text.secondary">Total Payables</Typography>
+                                    <Typography variant="h4" color="error.main" fontWeight="bold">
+                                        ₹{totalPayable.toLocaleString('en-IN')}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        To {payables.length} supplier(s)
+                                    </Typography>
+                                </Box>
                             </Box>
+                            <Button
+                                variant="contained"
+                                color="error"
+                                startIcon={<Add />}
+                                onClick={() => {
+                                    setSelectedParty(null);
+                                    openDialog('add_purchase_bill');
+                                }}
+                                size="small"
+                            >
+                                Add Purchase
+                            </Button>
                         </Box>
                     </Paper>
                 </Grid>
@@ -261,9 +389,22 @@ export const OutstandingReports = () => {
                 <Grid item xs={12} md={selectedParty ? 5 : 12}>
                     <Card>
                         <CardContent>
-                            <Typography variant="h6" sx={{ mb: 2 }}>
-                                {tab === 0 ? 'Customers with Outstanding' : 'Suppliers with Outstanding'}
-                            </Typography>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                <Typography variant="h6">
+                                    {tab === 0 ? 'Customers with Outstanding' : 'Suppliers with Outstanding'}
+                                </Typography>
+                                <Button
+                                    variant="outlined"
+                                    size="small"
+                                    startIcon={<Add />}
+                                    onClick={() => {
+                                        setSelectedParty(null);
+                                        openDialog(tab === 0 ? 'add_credit_sale' : 'add_purchase_bill');
+                                    }}
+                                >
+                                    {tab === 0 ? 'New Credit Sale' : 'New Purchase Bill'}
+                                </Button>
+                            </Box>
                             
                             {loading ? (
                                 <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
@@ -284,7 +425,17 @@ export const OutstandingReports = () => {
                                                 receivables.length === 0 ? (
                                                     <TableRow>
                                                         <TableCell colSpan={3} align="center">
-                                                            <Typography color="text.secondary">No outstanding receivables</Typography>
+                                                            <Typography color="text.secondary" sx={{ py: 2 }}>
+                                                                No outstanding receivables
+                                                            </Typography>
+                                                            <Button
+                                                                variant="contained"
+                                                                color="success"
+                                                                startIcon={<Add />}
+                                                                onClick={() => openDialog('add_credit_sale')}
+                                                            >
+                                                                Add Credit Sale
+                                                            </Button>
                                                         </TableCell>
                                                     </TableRow>
                                                 ) : (
@@ -321,7 +472,17 @@ export const OutstandingReports = () => {
                                                 payables.length === 0 ? (
                                                     <TableRow>
                                                         <TableCell colSpan={3} align="center">
-                                                            <Typography color="text.secondary">No outstanding payables</Typography>
+                                                            <Typography color="text.secondary" sx={{ py: 2 }}>
+                                                                No outstanding payables
+                                                            </Typography>
+                                                            <Button
+                                                                variant="contained"
+                                                                color="error"
+                                                                startIcon={<Add />}
+                                                                onClick={() => openDialog('add_purchase_bill')}
+                                                            >
+                                                                Add Purchase Bill
+                                                            </Button>
                                                         </TableCell>
                                                     </TableRow>
                                                 ) : (
@@ -388,25 +549,45 @@ export const OutstandingReports = () => {
                                 </Box>
 
                                 {/* Action Buttons */}
-                                <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                                <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
                                     {selectedParty.partyType === 'customer' ? (
-                                        <Button 
-                                            variant="contained" 
-                                            color="success"
-                                            startIcon={<Payment />}
-                                            onClick={() => openDialog('receive_payment')}
-                                        >
-                                            Receive Payment
-                                        </Button>
+                                        <>
+                                            <Button 
+                                                variant="contained" 
+                                                color="primary"
+                                                startIcon={<Receipt />}
+                                                onClick={() => openDialog('add_credit_sale')}
+                                            >
+                                                Add Bill
+                                            </Button>
+                                            <Button 
+                                                variant="contained" 
+                                                color="success"
+                                                startIcon={<Payment />}
+                                                onClick={() => openDialog('receive_payment')}
+                                            >
+                                                Receive Payment
+                                            </Button>
+                                        </>
                                     ) : (
-                                        <Button 
-                                            variant="contained" 
-                                            color="error"
-                                            startIcon={<Payment />}
-                                            onClick={() => openDialog('pay_supplier')}
-                                        >
-                                            Pay Supplier
-                                        </Button>
+                                        <>
+                                            <Button 
+                                                variant="contained" 
+                                                color="primary"
+                                                startIcon={<ShoppingCart />}
+                                                onClick={() => openDialog('add_purchase_bill')}
+                                            >
+                                                Add Bill
+                                            </Button>
+                                            <Button 
+                                                variant="contained" 
+                                                color="error"
+                                                startIcon={<Payment />}
+                                                onClick={() => openDialog('pay_supplier')}
+                                            >
+                                                Pay Supplier
+                                            </Button>
+                                        </>
                                     )}
                                 </Box>
 
@@ -489,12 +670,89 @@ export const OutstandingReports = () => {
                 )}
             </Grid>
 
-            {/* Payment Dialog */}
+            {/* Transaction Dialog */}
             <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>{getDialogTitle()}</DialogTitle>
+                <DialogTitle sx={{ 
+                    bgcolor: dialogType.includes('credit') || dialogType.includes('receive') ? 'success.light' : 'error.light',
+                    color: 'white'
+                }}>
+                    {getDialogTitle()}
+                </DialogTitle>
                 <DialogContent>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-                        {selectedParty && (
+                        
+                        {/* For Credit Sale - Customer Selection */}
+                        {dialogType === 'add_credit_sale' && (
+                            <>
+                                <Autocomplete
+                                    freeSolo
+                                    options={customers}
+                                    getOptionLabel={(option) => typeof option === 'string' ? option : option.name || ''}
+                                    value={formData.customerName}
+                                    onChange={(e, value) => {
+                                        if (typeof value === 'string') {
+                                            setFormData({ ...formData, customerName: value, customerMobile: '' });
+                                        } else if (value) {
+                                            setFormData({ 
+                                                ...formData, 
+                                                customerName: value.name,
+                                                customerMobile: value.mobile || ''
+                                            });
+                                        }
+                                    }}
+                                    onInputChange={(e, value) => {
+                                        setFormData({ ...formData, customerName: value });
+                                    }}
+                                    renderInput={(params) => (
+                                        <TextField 
+                                            {...params} 
+                                            label="Customer Name *" 
+                                            placeholder="Type or select customer"
+                                        />
+                                    )}
+                                />
+                                <TextField
+                                    label="Customer Mobile"
+                                    value={formData.customerMobile}
+                                    onChange={(e) => setFormData({ ...formData, customerMobile: e.target.value })}
+                                    fullWidth
+                                />
+                            </>
+                        )}
+
+                        {/* For Purchase Bill - Supplier Selection */}
+                        {dialogType === 'add_purchase_bill' && (
+                            <Autocomplete
+                                freeSolo
+                                options={suppliers}
+                                getOptionLabel={(option) => typeof option === 'string' ? option : option.name || ''}
+                                value={formData.supplierName}
+                                onChange={(e, value) => {
+                                    if (typeof value === 'string') {
+                                        setFormData({ ...formData, supplierName: value, supplierId: '' });
+                                    } else if (value) {
+                                        setFormData({ 
+                                            ...formData, 
+                                            supplierName: value.name,
+                                            supplierId: value.id
+                                        });
+                                    }
+                                }}
+                                onInputChange={(e, value) => {
+                                    setFormData({ ...formData, supplierName: value });
+                                }}
+                                renderInput={(params) => (
+                                    <TextField 
+                                        {...params} 
+                                        label="Supplier Name *" 
+                                        placeholder="Type or select supplier"
+                                    />
+                                )}
+                            />
+                        )}
+
+                        {/* Show party info for payment dialogs */}
+                        {(dialogType === 'receive_payment' || dialogType === 'pay_supplier') && selectedParty && (
                             <Alert severity="info">
                                 {selectedParty.partyType === 'customer' ? 'Customer' : 'Supplier'}: <strong>{selectedParty.customerName || selectedParty.supplierName || selectedParty.name}</strong>
                                 <br />
@@ -510,9 +768,18 @@ export const OutstandingReports = () => {
                             fullWidth
                             InputLabelProps={{ shrink: true }}
                         />
+
+                        {(dialogType === 'add_credit_sale' || dialogType === 'add_purchase_bill') && (
+                            <TextField
+                                label="Bill/Invoice Number (optional)"
+                                value={formData.billNumber}
+                                onChange={(e) => setFormData({ ...formData, billNumber: e.target.value })}
+                                fullWidth
+                            />
+                        )}
                         
                         <TextField
-                            label="Amount (₹)"
+                            label="Amount (₹) *"
                             type="number"
                             value={formData.amount}
                             onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
@@ -528,6 +795,9 @@ export const OutstandingReports = () => {
                             fullWidth
                             multiline
                             rows={2}
+                            placeholder={dialogType === 'add_credit_sale' ? 'e.g., Steel utensils sold' : 
+                                        dialogType === 'add_purchase_bill' ? 'e.g., Raw materials purchased' : 
+                                        'Payment notes'}
                         />
                     </Box>
                 </DialogContent>
@@ -538,7 +808,7 @@ export const OutstandingReports = () => {
                     <Button 
                         onClick={handleSubmit} 
                         variant="contained" 
-                        color={dialogType === 'receive_payment' ? 'success' : 'error'}
+                        color={dialogType.includes('credit') || dialogType.includes('receive') ? 'success' : 'error'}
                         disabled={submitting || !formData.amount}
                     >
                         {submitting ? <CircularProgress size={24} /> : 'Save'}
@@ -548,4 +818,3 @@ export const OutstandingReports = () => {
         </Box>
     );
 };
-
