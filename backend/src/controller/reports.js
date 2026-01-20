@@ -124,7 +124,37 @@ module.exports = {
 
     getOutstandingPayables: async (req, res) => {
         try {
-            // Get outstanding payables from purchase bills
+            // Supplier map to track all payables
+            const supplierMap = {};
+
+            // 1. Get suppliers with opening balance (currentBalance > 0)
+            const suppliersWithBalance = await db.supplier.findAll({
+                where: {
+                    currentBalance: { [Op.gt]: 0 }
+                },
+                attributes: ['id', 'name', 'mobile', 'currentBalance', 'openingBalance']
+            });
+
+            // Add suppliers with balance to the map
+            suppliersWithBalance.forEach(supplier => {
+                if (supplier.currentBalance > 0) {
+                    supplierMap[supplier.id] = {
+                        supplierId: supplier.id,
+                        supplierName: supplier.name,
+                        name: supplier.name,
+                        supplierMobile: supplier.mobile || '',
+                        totalOutstanding: supplier.currentBalance,
+                        outstanding: supplier.currentBalance,
+                        openingBalance: supplier.openingBalance || 0,
+                        billCount: 0,
+                        count: 0,
+                        bills: [],
+                        hasOpeningBalance: true
+                    };
+                }
+            });
+
+            // 2. Get outstanding payables from purchase bills
             const unpaidPurchases = await db.purchaseBill.findAll({
                 where: {
                     paymentStatus: {
@@ -139,33 +169,48 @@ module.exports = {
                 order: [['billDate', 'DESC']]
             });
 
-            // Group by supplier
-            const supplierMap = {};
+            // Add/merge purchase bills into supplier map
             unpaidPurchases.forEach(purchase => {
                 const supplierId = purchase.supplierId;
                 const supplierName = purchase.supplier?.name || 'Unknown';
-                if (!supplierMap[supplierId]) {
-                    supplierMap[supplierId] = {
-                        supplierId: supplierId,
-                        supplierName: supplierName,
-                        supplierMobile: purchase.supplier?.mobile,
-                        totalOutstanding: 0,
-                        billCount: 0,
-                        bills: []
-                    };
-                }
+                
                 const due = purchase.dueAmount || (purchase.total - (purchase.paidAmount || 0));
-                supplierMap[supplierId].totalOutstanding += due;
-                supplierMap[supplierId].billCount += 1;
-                supplierMap[supplierId].bills.push({
-                    id: purchase.id,
-                    billNumber: purchase.billNumber,
-                    billDate: purchase.billDate,
-                    total: purchase.total,
-                    paidAmount: purchase.paidAmount || 0,
-                    dueAmount: due,
-                    paymentStatus: purchase.paymentStatus
-                });
+                
+                if (due > 0) {
+                    if (!supplierMap[supplierId]) {
+                        supplierMap[supplierId] = {
+                            supplierId: supplierId,
+                            supplierName: supplierName,
+                            name: supplierName,
+                            supplierMobile: purchase.supplier?.mobile || '',
+                            totalOutstanding: 0,
+                            outstanding: 0,
+                            openingBalance: 0,
+                            billCount: 0,
+                            count: 0,
+                            bills: [],
+                            hasOpeningBalance: false
+                        };
+                    }
+                    
+                    // Don't double count if supplier has opening balance
+                    if (!supplierMap[supplierId].hasOpeningBalance) {
+                        supplierMap[supplierId].totalOutstanding += due;
+                        supplierMap[supplierId].outstanding = supplierMap[supplierId].totalOutstanding;
+                    }
+                    
+                    supplierMap[supplierId].billCount += 1;
+                    supplierMap[supplierId].count = supplierMap[supplierId].billCount;
+                    supplierMap[supplierId].bills.push({
+                        id: purchase.id,
+                        billNumber: purchase.billNumber,
+                        billDate: purchase.billDate,
+                        total: purchase.total,
+                        paidAmount: purchase.paidAmount || 0,
+                        dueAmount: due,
+                        paymentStatus: purchase.paymentStatus
+                    });
+                }
             });
 
             const payables = Object.values(supplierMap).filter(s => s.totalOutstanding > 0);
