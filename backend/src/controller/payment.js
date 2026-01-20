@@ -35,7 +35,7 @@ module.exports = {
                         customer = await Services.customer.getCustomer({ id: value.partyId });
                     } else if (value.partyName) {
                         // Try to find customer by name
-                        customer = await db.customer.findOne({ where: { customerName: value.partyName } });
+                        customer = await db.customer.findOne({ where: { name: value.partyName } });
                     }
                     
                     // Always record the cash receipt
@@ -44,7 +44,7 @@ module.exports = {
                         entryDate: value.paymentDate,
                         debit: value.amount,
                         credit: 0,
-                        description: `Payment received from ${value.partyName || customer?.customerName || 'Customer'} - ${value.referenceType}`,
+                        description: `Payment received from ${value.partyName || customer?.name || 'Customer'} - ${value.referenceType}`,
                         referenceType: 'payment',
                         referenceId: response.id
                     });
@@ -56,7 +56,7 @@ module.exports = {
                             entryDate: value.paymentDate,
                             debit: 0,
                             credit: value.amount,
-                            description: `Payment received from ${value.partyName || customer.customerName} - ${value.referenceType}`,
+                            description: `Payment received from ${value.partyName || customer.name} - ${value.referenceType}`,
                             referenceType: 'payment',
                             referenceId: response.id
                         });
