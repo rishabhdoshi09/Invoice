@@ -206,8 +206,11 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 - GST Export Tool: `/app/frontend/src/components/admin/gstExport/GstExportTool.jsx`
 - GST Export Backend: `/app/backend/src/routes/gstExport.js`
 - Purchase Bills: `/app/frontend/src/components/admin/purchases/list.jsx`
+- Order List (with toggle): `/app/frontend/src/components/admin/orders/list.jsx`
+- Order Controller: `/app/backend/src/controller/order.js`
+- Reports Controller: `/app/backend/src/controller/reports.js`
 
 ---
 
 ## Last Updated
-January 18, 2026
+January 21, 2026
