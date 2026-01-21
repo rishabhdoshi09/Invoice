@@ -78,6 +78,26 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 
 ---
 
+## Fixed Issues (Jan 21, 2026)
+
+### ✅ P0 - Outstanding Receivables Total Bug (FIXED)
+- **Bug:** Customer "paras" showing ₹75,668 total but had 2 bills totaling ₹80,084
+- **Root Cause:** Customer names with different case/whitespace were not being grouped
+- **Fix:** Normalized customer names (lowercase, trimmed) for grouping in reports.js
+- **Status:** Fixed
+
+### ✅ P0 - Manual Paid/Unpaid Toggle on Order List (IMPLEMENTED)
+- **Feature:** Admin can toggle existing order's payment status between "Paid" and "Unpaid"
+- **Implementation:**
+  - New backend endpoint: POST `/api/orders/:orderId/toggle-payment`
+  - Frontend toggle switch in Status column (visible to admin only)
+  - Confirmation dialog before status change
+  - Updates customer balance when toggling
+  - RTK Query mutation with auto cache invalidation
+- **Status:** Implemented and tested
+
+---
+
 ## Fixed Issues (Jan 18, 2026)
 
 ### ✅ P0 - SequelizeUniqueConstraintError (FIXED)
