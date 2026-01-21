@@ -49,11 +49,11 @@ module.exports = {
                 }
                 
                 if (due > 0) {
-                    customerMap[name].totalOutstanding += due;
-                    customerMap[name].outstanding = customerMap[name].totalOutstanding;
-                    customerMap[name].orderCount += 1;
-                    customerMap[name].count = customerMap[name].orderCount;
-                    customerMap[name].orders.push({
+                    customerMap[normalizedKey].totalOutstanding += due;
+                    customerMap[normalizedKey].outstanding = customerMap[normalizedKey].totalOutstanding;
+                    customerMap[normalizedKey].orderCount += 1;
+                    customerMap[normalizedKey].count = customerMap[normalizedKey].orderCount;
+                    customerMap[normalizedKey].orders.push({
                         id: order.id,
                         orderNumber: order.orderNumber,
                         orderDate: order.orderDate,
