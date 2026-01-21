@@ -90,6 +90,22 @@ export const api = createApi({
             ],
         }),
         
+        togglePaymentStatus: builder.mutation({
+            query: ({ orderId, newStatus }) => ({
+                url: `/orders/${orderId}/toggle-payment`,
+                method: 'POST',
+                body: { newStatus },
+            }),
+            transformResponse: (response) => response.data,
+            invalidatesTags: (result, error, { orderId }) => [
+                { type: 'Orders', id: orderId },
+                { type: 'Orders', id: 'LIST' },
+                { type: 'Receivables', id: 'LIST' },
+                { type: 'Customers', id: 'LIST' },
+                { type: 'Dashboard', id: 'TODAY' }
+            ],
+        }),
+        
         // ==================== PRODUCTS ====================
         getProducts: builder.query({
             query: () => '/products',
