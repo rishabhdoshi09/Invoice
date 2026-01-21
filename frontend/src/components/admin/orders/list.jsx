@@ -462,6 +462,45 @@ export const ListOrders = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {/* Toggle Payment Status Confirmation Dialog */}
+            <Dialog open={toggleDialogOpen} onClose={handleCancelToggle}>
+                <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: orderToToggle?.paymentStatus === 'paid' ? 'error.main' : 'success.main' }}>
+                    {orderToToggle?.paymentStatus === 'paid' ? <Warning /> : <Note />}
+                    Change Payment Status
+                </DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Are you sure you want to mark order <strong>{orderToToggle?.orderNumber}</strong> as{' '}
+                        <strong>{orderToToggle?.paymentStatus === 'paid' ? 'UNPAID' : 'PAID'}</strong>?
+                    </DialogContentText>
+                    <DialogContentText sx={{ mt: 1 }}>
+                        Customer: {orderToToggle?.customerName || 'Walk-in'}<br />
+                        Total: {formatCurrency(orderToToggle?.total)}
+                    </DialogContentText>
+                    {orderToToggle?.paymentStatus === 'paid' && (
+                        <Typography variant="body2" color="warning.main" sx={{ mt: 2 }}>
+                            ⚠️ Marking as unpaid will add this amount to the customer's outstanding balance.
+                        </Typography>
+                    )}
+                    {orderToToggle?.paymentStatus !== 'paid' && (
+                        <Typography variant="body2" color="success.main" sx={{ mt: 2 }}>
+                            ✓ Marking as paid will clear this amount from the customer's outstanding balance.
+                        </Typography>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCancelToggle} disabled={isToggling}>Cancel</Button>
+                    <Button 
+                        onClick={handleConfirmToggle} 
+                        color={orderToToggle?.paymentStatus === 'paid' ? 'error' : 'success'} 
+                        variant="contained" 
+                        disabled={isToggling}
+                    >
+                        {isToggling ? 'Updating...' : `Mark as ${orderToToggle?.paymentStatus === 'paid' ? 'Unpaid' : 'Paid'}`}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Paper>
     );
 };
