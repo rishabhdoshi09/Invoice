@@ -192,13 +192,13 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 ---
 
 ## Upcoming Tasks
-- **P1:** Add "Paid/Not Paid" toggle when creating purchase bills
+- **P0:** Data entry bug on `/daily-payments` page - needs user clarification on exact issue
+- **P1:** Auto-focus/price display bug on `/orders/create` - recurring issue, needs thorough investigation
 
 ## Future/Backlog
 - **P2:** Complete RTK Query migration
-- **P2:** Refactor orders/create.jsx (1900+ lines)
+- **P2:** Refactor orders/create.jsx (1900+ lines) - root cause of many UI bugs
 - **P2:** PDF export for adjusted invoices (GST Export Tool)
-- **P2:** Fix price input race condition on /orders/create
 
 ---
 
