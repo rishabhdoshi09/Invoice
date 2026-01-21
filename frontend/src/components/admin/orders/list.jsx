@@ -375,14 +375,27 @@ export const ListOrders = () => {
                                                     {formatCurrency(row.total)}
                                                 </Typography>
                                             </TableCell>
-                                            <TableCell align="center">
-                                                {row.paymentStatus === 'paid' ? (
-                                                    <Chip label="Paid" size="small" color="success" />
-                                                ) : row.paymentStatus === 'partial' ? (
-                                                    <Chip label="Partial" size="small" color="warning" />
-                                                ) : (
-                                                    <Chip label="Unpaid" size="small" color="error" />
-                                                )}
+                                            <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                                                    {row.paymentStatus === 'paid' ? (
+                                                        <Chip label="Paid" size="small" color="success" />
+                                                    ) : row.paymentStatus === 'partial' ? (
+                                                        <Chip label="Partial" size="small" color="warning" />
+                                                    ) : (
+                                                        <Chip label="Unpaid" size="small" color="error" />
+                                                    )}
+                                                    {isAdmin && row.paymentStatus !== 'partial' && (
+                                                        <Tooltip title={`Mark as ${row.paymentStatus === 'paid' ? 'Unpaid' : 'Paid'}`}>
+                                                            <Switch
+                                                                size="small"
+                                                                checked={row.paymentStatus === 'paid'}
+                                                                onChange={(e) => handleToggleClick(row, e)}
+                                                                disabled={isToggling}
+                                                                color="success"
+                                                            />
+                                                        </Tooltip>
+                                                    )}
+                                                </Box>
                                             </TableCell>
                                             <TableCell align="center" onClick={(e) => e.stopPropagation()}>
                                                 <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
