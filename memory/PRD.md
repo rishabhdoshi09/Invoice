@@ -135,6 +135,7 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 - GET /api/orders/:id
 - PUT /api/orders/:id
 - DELETE /api/orders/:id
+- POST /api/orders/:id/toggle-payment - Toggle paid/unpaid status (admin)
 
 ### GST Export
 - POST /api/gst-export/excel - Generate CSV export with CGST/SGST
