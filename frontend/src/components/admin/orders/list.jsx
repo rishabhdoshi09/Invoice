@@ -45,6 +45,44 @@ export const ListOrders = () => {
     const [orderToDelete, setOrderToDelete] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
+    // Toggle payment status dialog state
+    const [toggleDialogOpen, setToggleDialogOpen] = useState(false);
+    const [orderToToggle, setOrderToToggle] = useState(null);
+    const [togglePaymentStatus, { isLoading: isToggling }] = useTogglePaymentStatusMutation();
+
+    // Handle toggle payment status click
+    const handleToggleClick = (order, e) => {
+        e.stopPropagation(); // Prevent row click
+        setOrderToToggle(order);
+        setToggleDialogOpen(true);
+    };
+
+    // Confirm toggle payment status
+    const handleConfirmToggle = async () => {
+        if (orderToToggle) {
+            try {
+                const newStatus = orderToToggle.paymentStatus === 'paid' ? 'unpaid' : 'paid';
+                await togglePaymentStatus({ 
+                    orderId: orderToToggle.id, 
+                    newStatus 
+                }).unwrap();
+                // Refresh the list after successful toggle
+                fetchOrders();
+            } catch (error) {
+                console.error('Failed to toggle payment status:', error);
+                alert('Failed to update payment status. ' + (error.data?.message || error.message || ''));
+            }
+        }
+        setToggleDialogOpen(false);
+        setOrderToToggle(null);
+    };
+
+    // Cancel toggle
+    const handleCancelToggle = () => {
+        setToggleDialogOpen(false);
+        setOrderToToggle(null);
+    };
+
     // Handle delete button click - open confirmation dialog
     const handleDeleteClick = (order) => {
         setOrderToDelete(order);
