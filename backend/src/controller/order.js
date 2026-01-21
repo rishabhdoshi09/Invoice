@@ -451,6 +451,125 @@ module.exports = {
         }
     },
 
+    // Toggle payment status between paid/unpaid (admin only)
+    togglePaymentStatus: async(req, res) => {
+        try {
+            // Check if user has permission
+            if (req.user && req.user.role !== 'admin') {
+                return res.status(403).send({
+                    status: 403,
+                    message: 'Only administrators can toggle payment status'
+                });
+            }
+
+            const orderId = req.params.orderId;
+            const { newStatus } = req.body; // 'paid' or 'unpaid'
+
+            if (!['paid', 'unpaid'].includes(newStatus)) {
+                return res.status(400).send({
+                    status: 400,
+                    message: 'Invalid status. Must be "paid" or "unpaid"'
+                });
+            }
+
+            // Get original order
+            const order = await Services.order.getOrder({ id: orderId });
+            if (!order) {
+                return res.status(400).send({
+                    status: 400,
+                    message: "Order doesn't exist"
+                });
+            }
+
+            const oldStatus = order.paymentStatus;
+
+            // Perform update in transaction
+            const result = await db.sequelize.transaction(async (transaction) => {
+                const updateData = {
+                    paymentStatus: newStatus,
+                    paidAmount: newStatus === 'paid' ? order.total : 0,
+                    dueAmount: newStatus === 'paid' ? 0 : order.total,
+                    modifiedBy: req.user?.id,
+                    modifiedByName: req.user?.name || req.user?.username
+                };
+
+                await Services.order.updateOrder(
+                    { id: orderId },
+                    updateData
+                );
+
+                // Update customer balance if customer exists
+                if (order.customerName && order.customerName.trim()) {
+                    let customer = null;
+                    if (order.customerMobile) {
+                        customer = await db.customer.findOne({
+                            where: { mobile: order.customerMobile },
+                            transaction
+                        });
+                    }
+                    if (!customer) {
+                        customer = await db.customer.findOne({
+                            where: { name: order.customerName.trim() },
+                            transaction
+                        });
+                    }
+
+                    if (customer) {
+                        // Calculate balance adjustment
+                        let balanceChange = 0;
+                        if (oldStatus !== 'paid' && newStatus === 'paid') {
+                            // Was unpaid, now paid - reduce balance
+                            balanceChange = -order.total;
+                        } else if (oldStatus === 'paid' && newStatus === 'unpaid') {
+                            // Was paid, now unpaid - increase balance
+                            balanceChange = order.total;
+                        }
+
+                        if (balanceChange !== 0) {
+                            await customer.update({
+                                currentBalance: Math.max(0, (Number(customer.currentBalance) || 0) + balanceChange)
+                            }, { transaction });
+                        }
+                    }
+                }
+
+                return orderId;
+            });
+
+            // Get updated order
+            const updatedOrder = await Services.order.getOrder({ id: result });
+
+            // Audit log
+            await createAuditLog({
+                userId: req.user?.id,
+                userName: req.user?.name || req.user?.username || 'Anonymous',
+                userRole: req.user?.role || 'unknown',
+                action: 'UPDATE',
+                entityType: 'ORDER',
+                entityId: orderId,
+                entityName: order.orderNumber,
+                oldValues: { paymentStatus: oldStatus },
+                newValues: { paymentStatus: newStatus },
+                description: `Changed order ${order.orderNumber} status from ${oldStatus} to ${newStatus}`,
+                ipAddress: getClientIP(req),
+                userAgent: req.headers['user-agent']
+            });
+
+            return res.status(200).send({
+                status: 200,
+                message: `Order status changed to ${newStatus}`,
+                data: updatedOrder
+            });
+
+        } catch(error) {
+            console.error('Toggle payment status error:', error);
+            return res.status(500).send({
+                status: 500,
+                message: error.message || error
+            });
+        }
+    },
+
     // Add staff notes to order (accessible by both admin and billing_staff)
     addStaffNote: async(req, res) => {
         try {
