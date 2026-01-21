@@ -28,8 +28,8 @@ module.exports = {
                 const normalizedKey = rawName.toLowerCase().replace(/\s+/g, ' ');
                 // Use the first encountered version of the name for display
                 const name = customerMap[normalizedKey]?.customerName || rawName;
-                if (!customerMap[name]) {
-                    customerMap[name] = {
+                if (!customerMap[normalizedKey]) {
+                    customerMap[normalizedKey] = {
                         customerName: name,
                         name: name, // alias for compatibility
                         customerMobile: order.customerMobile || '',
