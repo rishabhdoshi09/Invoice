@@ -20,10 +20,14 @@ module.exports = {
                 order: [['customerName', 'ASC'], ['orderDate', 'DESC']]
             });
 
-            // Group by customer name
+            // Group by customer name (normalize case and whitespace for proper grouping)
             const customerMap = {};
             unpaidOrders.forEach(order => {
-                const name = (order.customerName || '').trim() || 'Walk-in Customer';
+                // Normalize: trim whitespace, convert to lowercase for grouping key
+                const rawName = (order.customerName || '').trim() || 'Walk-in Customer';
+                const normalizedKey = rawName.toLowerCase().replace(/\s+/g, ' ');
+                // Use the first encountered version of the name for display
+                const name = customerMap[normalizedKey]?.customerName || rawName;
                 if (!customerMap[name]) {
                     customerMap[name] = {
                         customerName: name,
