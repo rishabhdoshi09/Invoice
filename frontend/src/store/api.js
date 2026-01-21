@@ -258,6 +258,7 @@ export const {
     useCreateOrderMutation,
     useUpdateOrderMutation,
     useDeleteOrderMutation,
+    useTogglePaymentStatusMutation,
     
     // Products
     useGetProductsQuery,
