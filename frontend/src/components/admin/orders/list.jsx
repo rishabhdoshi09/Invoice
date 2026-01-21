@@ -480,12 +480,12 @@ export const ListOrders = () => {
                     </DialogContentText>
                     {orderToToggle?.paymentStatus === 'paid' && (
                         <Typography variant="body2" color="warning.main" sx={{ mt: 2 }}>
-                            ⚠️ Marking as unpaid will add this amount to the customer's outstanding balance.
+                            ⚠️ Marking as unpaid will add this amount to the customer&apos;s outstanding balance.
                         </Typography>
                     )}
                     {orderToToggle?.paymentStatus !== 'paid' && (
                         <Typography variant="body2" color="success.main" sx={{ mt: 2 }}>
-                            ✓ Marking as paid will clear this amount from the customer's outstanding balance.
+                            ✓ Marking as paid will clear this amount from the customer&apos;s outstanding balance.
                         </Typography>
                     )}
                 </DialogContent>
