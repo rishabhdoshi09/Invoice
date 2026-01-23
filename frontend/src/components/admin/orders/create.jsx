@@ -261,18 +261,15 @@ export const CreateOrder = () => {
     }
   );
   
-  const customers = useSelector(
-    (s) => s?.applicationState?.customers || [],
-    (a, b) => {
-      if (a === b) return true;
-      if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-      return a.every((item, i) => item === b[i]);
-    }
-  );
+  // Fetch customers using RTK Query instead of Redux selector
+  const { data: customersData } = useGetCustomersQuery(undefined, {
+    refetchOnMountOrArgChange: true
+  });
+  const customers = customersData?.rows || [];
 
   const customerOptions = useMemo(() => customers.map((c) => ({
     ...c,
-    label: c?.name || c?.title || c?.mobile || 'Customer',
+    label: c?.name || c?.customerName || c?.title || c?.mobile || 'Customer',
   })), [customers]);
 
   const productOptions = useMemo(() => (
