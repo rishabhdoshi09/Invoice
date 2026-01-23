@@ -262,10 +262,15 @@ export const CreateOrder = () => {
   );
   
   // Fetch customers using RTK Query instead of Redux selector
-  const { data: customersData } = useGetCustomersQuery(undefined, {
+  const { data: customersData, isLoading: customersLoading, error: customersError } = useGetCustomersQuery(undefined, {
     refetchOnMountOrArgChange: true
   });
   const customers = customersData?.rows || [];
+  
+  // Debug: Log customer data
+  useEffect(() => {
+    console.log('Customers Query:', { customersData, customersLoading, customersError, customerCount: customers.length });
+  }, [customersData, customersLoading, customersError, customers.length]);
 
   const customerOptions = useMemo(() => customers.map((c) => ({
     ...c,
