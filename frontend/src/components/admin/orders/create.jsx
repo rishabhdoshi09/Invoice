@@ -1635,10 +1635,39 @@ export const CreateOrder = () => {
                   size="small"
                   options={customerOptions}
                   value={orderProps.customer}
-                  onChange={(_, val) => setOrderProps(prev => ({...prev, customer: val}))}
+                  onChange={(_, val) => {
+                    if (val) {
+                      // When customer is selected, auto-fill name and mobile
+                      setOrderProps(prev => ({
+                        ...prev, 
+                        customer: val,
+                        customerName: val.name || val.customerName || val.label || '',
+                        customerMobile: val.mobile || ''
+                      }));
+                    } else {
+                      setOrderProps(prev => ({...prev, customer: null}));
+                    }
+                  }}
                   renderInput={(params) => <TextField {...params} label="Select Customer" />}
                   getOptionLabel={(opt) => opt?.label || ''}
                   isOptionEqualToValue={(o, v) => (o?.id ?? o?._id ?? o?.label) === (v?.id ?? v?._id ?? v?.label)}
+                  renderOption={(props, option) => (
+                    <li {...props} key={option.id || option.label}>
+                      <Box>
+                        <Typography variant="body2">{option.label}</Typography>
+                        {option.mobile && (
+                          <Typography variant="caption" color="text.secondary">
+                            {option.mobile}
+                          </Typography>
+                        )}
+                        {option.currentBalance > 0 && (
+                          <Typography variant="caption" color="error.main" sx={{ ml: 1 }}>
+                            (Due: ₹{option.currentBalance})
+                          </Typography>
+                        )}
+                      </Box>
+                    </li>
+                  )}
                 />
               </Grid>
 
