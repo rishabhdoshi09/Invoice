@@ -1086,17 +1086,17 @@ export const CreateOrder = () => {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === "=" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        const valid = Boolean(
-          formik.values.name &&
-          (!isWeighted || (formik.values.productPrice && !isWeightedPriceInvalid)) &&
-          (allowAddProductName || !isAddName(formik.values.name))
-        );
-        if (valid) { e.preventDefault(); addProductHandler(); }
+        // Global '=' to add product - just need a product name selected
+        if (formik.values.name) {
+          e.preventDefault();
+          e.stopPropagation();
+          addProductHandler();
+        }
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [formik, isWeighted, isWeightedPriceInvalid, addProductHandler, allowAddProductName]);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [formik.values.name, addProductHandler]);
 
   const fetchWeightLatestRef = useRef(weighingScaleHandler);
   useEffect(() => { fetchWeightLatestRef.current = weighingScaleHandler; });
