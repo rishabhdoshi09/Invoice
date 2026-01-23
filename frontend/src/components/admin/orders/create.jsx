@@ -863,6 +863,12 @@ export const CreateOrder = () => {
   };
 
   const onPriceKeyDown = (e) => {
+    // '=' key triggers add to list globally - prevent typing '=' in price field
+    if (e.key === '=') {
+      e.preventDefault();
+      return;
+    }
+    
     const isUp = e.key === 'ArrowUp';
     const isDown = e.key === 'ArrowDown';
 
