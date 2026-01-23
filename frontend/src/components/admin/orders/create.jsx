@@ -36,32 +36,6 @@ import { useAuth } from '../../../context/AuthContext';
 import { api, useGetCustomersQuery } from '../../../store/api'; // RTK Query API for cache invalidation
 
 /* -------------------------
-  Safe font loader for pdfMake
-------------------------- */
-try {
-  const vfsFonts = require('pdfmake/build/vfs_fonts');
-  if (vfsFonts?.pdfMake?.vfs) {
-    pdfMake.vfs = vfsFonts.pdfMake.vfs;
-  } else if (vfsFonts?.vfs) {
-    pdfMake.vfs = vfsFonts.vfs;
-  } else if (typeof vfsFonts === 'object') {
-    pdfMake.vfs = vfsFonts;
-  }
-} catch (e) {
-  console.warn('pdfMake fonts not loaded:', e);
-}
-
-// Set default fonts to avoid Roboto-Medium.ttf error
-pdfMake.fonts = {
-  Roboto: {
-    normal: 'Roboto-Regular.ttf',
-    bold: 'Roboto-Medium.ttf',
-    italics: 'Roboto-Italic.ttf',
-    bolditalics: 'Roboto-MediumItalic.ttf'
-  }
-};
-
-/* -------------------------
   Utility + storage helpers
 ------------------------- */
 
