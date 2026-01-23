@@ -24,6 +24,10 @@ import {
 } from '@mui/material';
 import { CreateProduct } from '../products/create';
 import pdfMake from 'pdfmake/build/pdfmake';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
+
+// Initialize pdfMake with fonts
+pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs || pdfFonts;
 import { generatePdfDefinition, generatePdfDefinition2 } from './helper';
 import { Delete, Sync, Info } from '@mui/icons-material';
 import { fetchWeightsAction, createOrderAction } from '../../../store/orders';
