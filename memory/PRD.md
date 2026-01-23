@@ -78,6 +78,18 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 
 ---
 
+## Fixed Issues (Jan 23, 2026)
+
+### ✅ Customer Selection Not Working on Order Create (FIXED)
+- **Bug:** Existing customers from past credit sales and `/customers` page not showing in "Select Customer" dropdown
+- **Root Cause:** Component was using `applicationState.customers` from Redux which was always empty - customers were never loaded into that state
+- **Fix:** Replaced with RTK Query `useGetCustomersQuery` hook that fetches customers directly from API
+- **Enhancement:** Dropdown now shows customer phone and outstanding balance
+- **Files:** `/app/frontend/src/components/admin/orders/create.jsx`
+- **Status:** Fixed
+
+---
+
 ## Fixed Issues (Jan 21, 2026)
 
 ### ✅ P0 - Outstanding Receivables Total Bug (FIXED)
