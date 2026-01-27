@@ -95,7 +95,7 @@ export const ListOrders = () => {
             setIsTogglingStatus(true);
             const token = localStorage.getItem('token');
             await axios.patch(
-                `${process.env.REACT_APP_BACKEND_URL}/api/orders/${orderToToggle.id}/payment-status`,
+                `/api/orders/${orderToToggle.id}/payment-status`,
                 { newStatus },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
