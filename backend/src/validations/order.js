@@ -5,7 +5,7 @@ module.exports = {
     validateCreateOrderObj: (orderObj) => {
         
         const orderItems = Joi.object().keys({
-            productId: Joi.string().trim().required(),
+            productId: Joi.string().trim().allow(null, "").optional(), // Allow null for direct entries
             name: Joi.string().trim().required(),
             altName: Joi.string().trim().allow("").optional(),
             quantity: Joi.number().greater(0).required(),
@@ -21,11 +21,12 @@ module.exports = {
             customerMobile: Joi.string().trim().allow("").optional(),
             subTotal: Joi.number().greater(0).required(),
             total: Joi.number().greater(0).required(),
-            tax: Joi.number().greater(-1).required(),
-            taxPercent: Joi.number().greater(-1).required(),
+            tax: Joi.number().greater(-1).optional().default(0), // Optional, defaults to 0
+            taxPercent: Joi.number().greater(-1).optional().default(0), // Optional, defaults to 0
             paidAmount: Joi.number().greater(-1).optional(),
             dueAmount: Joi.number().greater(-1).optional(),
             paymentStatus: Joi.string().trim().valid('paid', 'partial', 'unpaid').optional(),
+            notes: Joi.string().trim().allow("").optional(), // Allow notes field
             orderItems: Joi.array().items(orderItems).required()
         });
         return Joi.validate(orderObj, schema, { convert: true });
