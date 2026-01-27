@@ -271,7 +271,7 @@ export const OutstandingReports = () => {
                 };
                 
                 await axios.post(
-                    `${process.env.REACT_APP_BACKEND_URL}/api/purchases`,
+                    '/api/purchases',
                     billPayload,
                     { headers: { Authorization: `Bearer ${token}` } }
                 );
