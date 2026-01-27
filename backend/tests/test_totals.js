@@ -4,7 +4,7 @@
 
 const axios = require('axios');
 
-const API_URL = process.env.API_URL || 'https://ca-billing-tool.preview.emergentagent.com/api';
+const API_URL = process.env.API_URL || 'https://orders-fix.preview.emergentagent.com/api';
 const USERNAME = 'admin';
 const PASSWORD = 'admin123';
 
