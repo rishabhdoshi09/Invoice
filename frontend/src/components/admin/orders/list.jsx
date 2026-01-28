@@ -83,6 +83,11 @@ export const ListOrders = () => {
     const handleStatusToggleClick = (order, e) => {
         e.stopPropagation();
         setOrderToToggle(order);
+        // Pre-fill customer info if available
+        setCustomerInfo({
+            customerName: order.customerName || '',
+            customerMobile: order.customerMobile || ''
+        });
         setStatusDialogOpen(true);
     };
 
