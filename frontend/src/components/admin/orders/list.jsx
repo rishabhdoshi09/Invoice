@@ -49,6 +49,7 @@ export const ListOrders = () => {
     const [statusDialogOpen, setStatusDialogOpen] = useState(false);
     const [orderToToggle, setOrderToToggle] = useState(null);
     const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+    const [customerInfo, setCustomerInfo] = useState({ customerName: '', customerMobile: '' });
 
     // Handle delete button click - open confirmation dialog
     const handleDeleteClick = (order) => {
