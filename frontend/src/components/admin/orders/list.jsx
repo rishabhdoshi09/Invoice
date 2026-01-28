@@ -488,7 +488,7 @@ export const ListOrders = () => {
             </Dialog>
 
             {/* Payment Status Toggle Confirmation Dialog */}
-            <Dialog open={statusDialogOpen} onClose={handleCancelStatusToggle}>
+            <Dialog open={statusDialogOpen} onClose={handleCancelStatusToggle} maxWidth="sm" fullWidth>
                 <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'primary.main' }}>
                     <SwapHoriz /> Change Payment Status
                 </DialogTitle>
@@ -520,6 +520,33 @@ export const ListOrders = () => {
                             />
                         </Typography>
                     </Box>
+                    
+                    {/* Show customer info fields when toggling to unpaid */}
+                    {orderToToggle?.paymentStatus === 'paid' && (
+                        <Box sx={{ mt: 3 }}>
+                            <Typography variant="subtitle2" sx={{ mb: 2 }}>
+                                Customer Details (for credit tracking):
+                            </Typography>
+                            <TextField
+                                label="Customer Name"
+                                value={customerInfo.customerName}
+                                onChange={(e) => setCustomerInfo({ ...customerInfo, customerName: e.target.value })}
+                                fullWidth
+                                size="small"
+                                sx={{ mb: 2 }}
+                                placeholder="Enter customer name"
+                            />
+                            <TextField
+                                label="Customer Mobile"
+                                value={customerInfo.customerMobile}
+                                onChange={(e) => setCustomerInfo({ ...customerInfo, customerMobile: e.target.value })}
+                                fullWidth
+                                size="small"
+                                placeholder="Enter mobile number"
+                            />
+                        </Box>
+                    )}
+                    
                     {orderToToggle?.paymentStatus === 'paid' && (
                         <Typography variant="body2" color="warning.main" sx={{ mt: 2 }}>
                             ⚠️ Marking as &quot;Unpaid&quot; will add ₹{orderToToggle?.total?.toLocaleString('en-IN')} to receivables.
