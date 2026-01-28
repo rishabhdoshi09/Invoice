@@ -549,7 +549,11 @@ export const DailyPayments = () => {
             {/* Summary Cards */}
             <Grid container spacing={2} sx={{ mb: 3 }}>
                 <Grid item xs={12} sm={6} md={2.4}>
-                    <Paper elevation={2} sx={{ p: 2, bgcolor: '#e3f2fd' }}>
+                    <Paper 
+                        elevation={2} 
+                        sx={{ p: 2, bgcolor: '#e3f2fd', cursor: 'pointer', '&:hover': { bgcolor: '#bbdefb', transform: 'translateY(-2px)' }, transition: 'all 0.2s' }}
+                        onClick={() => handleOpenDetails('all', 'All Payments')}
+                    >
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <AccountBalance color="primary" />
                             <Box>
@@ -565,7 +569,11 @@ export const DailyPayments = () => {
                     </Paper>
                 </Grid>
                 <Grid item xs={12} sm={6} md={2.4}>
-                    <Paper elevation={2} sx={{ p: 2, bgcolor: '#e8f5e9' }}>
+                    <Paper 
+                        elevation={2} 
+                        sx={{ p: 2, bgcolor: '#e8f5e9', cursor: 'pointer', '&:hover': { bgcolor: '#c8e6c9', transform: 'translateY(-2px)' }, transition: 'all 0.2s' }}
+                        onClick={() => handleOpenDetails('customers', 'Payments From Customers')}
+                    >
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <People color="success" />
                             <Box>
@@ -581,7 +589,11 @@ export const DailyPayments = () => {
                     </Paper>
                 </Grid>
                 <Grid item xs={12} sm={6} md={2.4}>
-                    <Paper elevation={2} sx={{ p: 2, bgcolor: '#fff3e0' }}>
+                    <Paper 
+                        elevation={2} 
+                        sx={{ p: 2, bgcolor: '#fff3e0', cursor: 'pointer', '&:hover': { bgcolor: '#ffe0b2', transform: 'translateY(-2px)' }, transition: 'all 0.2s' }}
+                        onClick={() => handleOpenDetails('suppliers', 'Payments To Suppliers')}
+                    >
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <LocalShipping color="warning" />
                             <Box>
@@ -597,7 +609,11 @@ export const DailyPayments = () => {
                     </Paper>
                 </Grid>
                 <Grid item xs={12} sm={6} md={2.4}>
-                    <Paper elevation={2} sx={{ p: 2, bgcolor: '#ffebee' }}>
+                    <Paper 
+                        elevation={2} 
+                        sx={{ p: 2, bgcolor: '#ffebee', cursor: 'pointer', '&:hover': { bgcolor: '#ffcdd2', transform: 'translateY(-2px)' }, transition: 'all 0.2s' }}
+                        onClick={() => handleOpenDetails('expenses', 'Expenses')}
+                    >
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <AccountBalance sx={{ color: '#d32f2f' }} />
                             <Box>
