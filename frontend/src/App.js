@@ -81,6 +81,7 @@ const AppContent = () => {
         <Route path="purchases" element={<ListPurchases />} />
         <Route path="payments" element={<ListPayments />} />
         <Route path="daily-payments" element={<DailyPayments />} />
+        <Route path="stock" element={<StockManagement />} />
         <Route path="reports">
           <Route index element={<OutstandingReports />} />
           <Route path="outstanding" element={<OutstandingReports />} />
