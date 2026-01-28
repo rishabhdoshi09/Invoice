@@ -22,6 +22,7 @@ import { AdminDashboard } from "./components/admin/dashboard/AdminDashboard";
 import { UserManagement } from "./components/admin/users/UserManagement";
 import { DayStart } from "./components/admin/dayStart/DayStart";
 import { GstExportTool } from "./components/admin/gstExport/GstExportTool";
+import { StockManagement } from "./components/admin/stock/StockManagement";
 import { CircularProgress, Box } from "@mui/material";
 
 const theme = createTheme();
