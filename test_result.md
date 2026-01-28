@@ -333,8 +333,9 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Daily Payments API - Daily Summary Endpoint"
-    - "Daily Payments API - Date Filtering"
+    - "Order Creation without tax fields"
+    - "Payment Status Toggle with Customer Info"
+    - "Stock Management APIs"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
