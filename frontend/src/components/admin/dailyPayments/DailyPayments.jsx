@@ -1306,6 +1306,114 @@ export const DailyPayments = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {/* Details Dialog for Summary Cards */}
+            <Dialog 
+                open={detailsDialog.open} 
+                onClose={handleCloseDetails}
+                maxWidth="md"
+                fullWidth
+            >
+                <DialogTitle sx={{ 
+                    bgcolor: detailsDialog.type === 'customers' ? '#e8f5e9' : 
+                             detailsDialog.type === 'suppliers' ? '#fff3e0' : 
+                             detailsDialog.type === 'expenses' ? '#ffebee' : '#e3f2fd',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1
+                }}>
+                    {detailsDialog.type === 'customers' && <People color="success" />}
+                    {detailsDialog.type === 'suppliers' && <LocalShipping color="warning" />}
+                    {detailsDialog.type === 'expenses' && <Receipt sx={{ color: '#d32f2f' }} />}
+                    {detailsDialog.type === 'all' && <AccountBalance color="primary" />}
+                    {detailsDialog.title} - {moment(selectedDate).format('DD/MM/YYYY')}
+                </DialogTitle>
+                <DialogContent>
+                    {getFilteredPayments(detailsDialog.type).length === 0 ? (
+                        <Alert severity="info" sx={{ mt: 2 }}>
+                            No {detailsDialog.type === 'all' ? 'payments' : detailsDialog.type} recorded for this date.
+                        </Alert>
+                    ) : (
+                        <TableContainer sx={{ mt: 2 }}>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                        <TableCell><strong>Time</strong></TableCell>
+                                        <TableCell><strong>Party Name</strong></TableCell>
+                                        <TableCell><strong>Type</strong></TableCell>
+                                        <TableCell align="right"><strong>Amount</strong></TableCell>
+                                        <TableCell><strong>Reference</strong></TableCell>
+                                        <TableCell><strong>Notes</strong></TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {getFilteredPayments(detailsDialog.type).map((payment) => (
+                                        <TableRow key={payment.id} hover>
+                                            <TableCell>
+                                                {moment(payment.createdAt).format('hh:mm A')}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" fontWeight="bold">
+                                                    {payment.partyName || '-'}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Chip 
+                                                    label={payment.partyType} 
+                                                    size="small"
+                                                    color={payment.partyType === 'customer' ? 'success' : 
+                                                           payment.partyType === 'supplier' ? 'warning' : 'error'}
+                                                />
+                                            </TableCell>
+                                            <TableCell align="right">
+                                                <Typography 
+                                                    fontWeight="bold"
+                                                    color={payment.partyType === 'customer' ? 'success.main' : 
+                                                           payment.partyType === 'supplier' ? 'warning.main' : 'error.main'}
+                                                >
+                                                    {payment.partyType === 'customer' ? '+' : '-'}₹{payment.amount?.toLocaleString('en-IN')}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                {payment.referenceType && (
+                                                    <Typography variant="caption">
+                                                        {payment.referenceType}
+                                                        {payment.referenceNumber && ` - ${payment.referenceNumber}`}
+                                                    </Typography>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {payment.notes || '-'}
+                                                </Typography>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {/* Total Row */}
+                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                        <TableCell colSpan={3}>
+                                            <Typography fontWeight="bold">Total</Typography>
+                                        </TableCell>
+                                        <TableCell align="right">
+                                            <Typography fontWeight="bold" color="primary">
+                                                ₹{getFilteredPayments(detailsDialog.type).reduce((sum, p) => sum + (p.amount || 0), 0).toLocaleString('en-IN')}
+                                            </Typography>
+                                        </TableCell>
+                                        <TableCell colSpan={2}>
+                                            <Typography variant="body2" color="text.secondary">
+                                                {getFilteredPayments(detailsDialog.type).length} entries
+                                            </Typography>
+                                        </TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseDetails}>Close</Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 };
