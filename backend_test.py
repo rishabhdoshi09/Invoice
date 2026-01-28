@@ -64,606 +64,6 @@ class BackendTester:
         except requests.exceptions.RequestException as e:
             return None, str(e)
     
-    def test_supplier_management(self):
-        """Test supplier management with opening balance"""
-        print("\n=== TESTING SUPPLIER MANAGEMENT ===")
-        
-        # Test 1: Create supplier with opening balance
-        supplier_data = {
-            "name": "ABC Traders Ltd",
-            "mobile": "9876543210",
-            "email": "abc@traders.com",
-            "address": "123 Business Street, Mumbai",
-            "openingBalance": 5000
-        }
-        
-        response = self.make_request('POST', '/suppliers', supplier_data)
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                supplier_id = response_json['data'].get('id')
-                current_balance = response_json['data'].get('currentBalance')
-                opening_balance = response_json['data'].get('openingBalance')
-                
-                if current_balance == opening_balance == 5000:
-                    self.log_result("Create Supplier with Opening Balance", True, 
-                                  f"Supplier created with correct balance mapping (opening: {opening_balance}, current: {current_balance})")
-                    self.created_suppliers.append(supplier_id)
-                else:
-                    self.log_result("Create Supplier with Opening Balance", False, 
-                                  f"Balance mismatch - opening: {opening_balance}, current: {current_balance}", response_json)
-            else:
-                self.log_result("Create Supplier with Opening Balance", False, 
-                              "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Create Supplier with Opening Balance", False, 
-                          f"Request failed: {error_msg}")
-        
-        # Test 2: Create supplier without opening balance
-        supplier_data_no_balance = {
-            "name": "XYZ Suppliers",
-            "mobile": "9876543211",
-            "email": "xyz@suppliers.com"
-        }
-        
-        response = self.make_request('POST', '/suppliers', supplier_data_no_balance)
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                supplier_id = response_json['data'].get('id')
-                current_balance = response_json['data'].get('currentBalance')
-                opening_balance = response_json['data'].get('openingBalance')
-                
-                # Both should be null or undefined, not 0
-                if current_balance is None and opening_balance is None:
-                    self.log_result("Create Supplier without Opening Balance", True, 
-                                  "Supplier created with null balances (correct)")
-                    self.created_suppliers.append(supplier_id)
-                else:
-                    self.log_result("Create Supplier without Opening Balance", False, 
-                                  f"Expected null balances but got opening: {opening_balance}, current: {current_balance}", response_json)
-            else:
-                self.log_result("Create Supplier without Opening Balance", False, 
-                              "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Create Supplier without Opening Balance", False, 
-                          f"Request failed: {error_msg}")
-        
-        # Test 3: Get supplier by ID
-        if self.created_suppliers:
-            supplier_id = self.created_suppliers[0]
-            response = self.make_request('GET', f'/suppliers/{supplier_id}')
-            if response and response.status_code == 200:
-                response_json = response.json()
-                if response_json.get('status') == 200 and 'data' in response_json:
-                    self.log_result("Get Supplier by ID", True, "Supplier retrieved successfully")
-                else:
-                    self.log_result("Get Supplier by ID", False, "Invalid response structure", response_json)
-            else:
-                error_msg = response.text if response else "Connection failed"
-                self.log_result("Get Supplier by ID", False, f"Request failed: {error_msg}")
-        
-        # Test 4: List suppliers
-        response = self.make_request('GET', '/suppliers')
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                suppliers_count = len(response_json['data'])
-                self.log_result("List Suppliers", True, f"Retrieved {suppliers_count} suppliers")
-            else:
-                self.log_result("List Suppliers", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("List Suppliers", False, f"Request failed: {error_msg}")
-        
-        # Test 5: Update supplier
-        if self.created_suppliers:
-            supplier_id = self.created_suppliers[0]
-            update_data = {"name": "ABC Traders Ltd (Updated)"}
-            response = self.make_request('PUT', f'/suppliers/{supplier_id}', update_data)
-            if response and response.status_code == 200:
-                response_json = response.json()
-                if response_json.get('status') == 200:
-                    self.log_result("Update Supplier", True, "Supplier updated successfully")
-                else:
-                    self.log_result("Update Supplier", False, "Update failed", response_json)
-            else:
-                error_msg = response.text if response else "Connection failed"
-                self.log_result("Update Supplier", False, f"Request failed: {error_msg}")
-    
-    def test_customer_management(self):
-        """Test customer management with opening balance"""
-        print("\n=== TESTING CUSTOMER MANAGEMENT ===")
-        
-        # Test 1: Create customer with opening balance
-        customer_data = {
-            "name": "Reliable Corp Ltd",
-            "mobile": "9876543220",
-            "email": "reliable@corp.com",
-            "address": "456 Corporate Avenue, Delhi",
-            "openingBalance": 3000
-        }
-        
-        response = self.make_request('POST', '/customers', customer_data)
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                customer_id = response_json['data'].get('id')
-                current_balance = response_json['data'].get('currentBalance')
-                opening_balance = response_json['data'].get('openingBalance')
-                
-                if current_balance == opening_balance == 3000:
-                    self.log_result("Create Customer with Opening Balance", True, 
-                                  f"Customer created with correct balance mapping (opening: {opening_balance}, current: {current_balance})")
-                    self.created_customers.append(customer_id)
-                else:
-                    self.log_result("Create Customer with Opening Balance", False, 
-                                  f"Balance mismatch - opening: {opening_balance}, current: {current_balance}", response_json)
-            else:
-                self.log_result("Create Customer with Opening Balance", False, 
-                              "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Create Customer with Opening Balance", False, 
-                          f"Request failed: {error_msg}")
-        
-        # Test 2: Create customer without opening balance
-        customer_data_no_balance = {
-            "name": "Quick Services",
-            "mobile": "9876543221",
-            "email": "quick@services.com"
-        }
-        
-        response = self.make_request('POST', '/customers', customer_data_no_balance)
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                customer_id = response_json['data'].get('id')
-                current_balance = response_json['data'].get('currentBalance')
-                opening_balance = response_json['data'].get('openingBalance')
-                
-                if current_balance is None and opening_balance is None:
-                    self.log_result("Create Customer without Opening Balance", True, 
-                                  "Customer created with null balances (correct)")
-                    self.created_customers.append(customer_id)
-                else:
-                    self.log_result("Create Customer without Opening Balance", False, 
-                                  f"Expected null balances but got opening: {opening_balance}, current: {current_balance}", response_json)
-            else:
-                self.log_result("Create Customer without Opening Balance", False, 
-                              "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Create Customer without Opening Balance", False, 
-                          f"Request failed: {error_msg}")
-        
-        # Test 3: Get customer by ID
-        if self.created_customers:
-            customer_id = self.created_customers[0]
-            response = self.make_request('GET', f'/customers/{customer_id}')
-            if response and response.status_code == 200:
-                response_json = response.json()
-                if response_json.get('status') == 200 and 'data' in response_json:
-                    self.log_result("Get Customer by ID", True, "Customer retrieved successfully")
-                else:
-                    self.log_result("Get Customer by ID", False, "Invalid response structure", response_json)
-            else:
-                error_msg = response.text if response else "Connection failed"
-                self.log_result("Get Customer by ID", False, f"Request failed: {error_msg}")
-        
-        # Test 4: List customers
-        response = self.make_request('GET', '/customers')
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                customers_count = len(response_json['data'])
-                self.log_result("List Customers", True, f"Retrieved {customers_count} customers")
-            else:
-                self.log_result("List Customers", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("List Customers", False, f"Request failed: {error_msg}")
-        
-        # Test 5: Update customer
-        if self.created_customers:
-            customer_id = self.created_customers[0]
-            update_data = {"name": "Reliable Corp Ltd (Updated)"}
-            response = self.make_request('PUT', f'/customers/{customer_id}', update_data)
-            if response and response.status_code == 200:
-                response_json = response.json()
-                if response_json.get('status') == 200:
-                    self.log_result("Update Customer", True, "Customer updated successfully")
-                else:
-                    self.log_result("Update Customer", False, "Update failed", response_json)
-            else:
-                error_msg = response.text if response else "Connection failed"
-                self.log_result("Update Customer", False, f"Request failed: {error_msg}")
-    
-    def test_purchase_bill_management(self):
-        """Test purchase bill management"""
-        print("\n=== TESTING PURCHASE BILL MANAGEMENT ===")
-        
-        if not self.created_suppliers:
-            self.log_result("Purchase Bill Management", False, "No suppliers available for testing")
-            return
-        
-        # Test 1: Create purchase bill
-        purchase_data = {
-            "supplierId": self.created_suppliers[0],
-            "billDate": datetime.now().strftime('%Y-%m-%d'),
-            "subTotal": 10000,
-            "total": 11800,  # Including tax
-            "tax": 1800,
-            "taxPercent": 18,
-            "paidAmount": 0,
-            "purchaseItems": [
-                {
-                    "name": "Office Supplies",
-                    "quantity": 10,
-                    "price": 500,
-                    "totalPrice": 5000,
-                    "type": "weighted"
-                },
-                {
-                    "name": "Stationery Items",
-                    "quantity": 20,
-                    "price": 250,
-                    "totalPrice": 5000,
-                    "type": "non-weighted"
-                }
-            ]
-        }
-        
-        response = self.make_request('POST', '/purchases', purchase_data)
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                purchase_id = response_json['data'].get('id')
-                self.log_result("Create Purchase Bill", True, "Purchase bill created successfully")
-                self.created_purchases.append(purchase_id)
-            else:
-                self.log_result("Create Purchase Bill", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Create Purchase Bill", False, f"Request failed: {error_msg}")
-        
-        # Test 2: List purchase bills
-        response = self.make_request('GET', '/purchases')
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                purchases_count = len(response_json['data'])
-                self.log_result("List Purchase Bills", True, f"Retrieved {purchases_count} purchase bills")
-            else:
-                self.log_result("List Purchase Bills", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("List Purchase Bills", False, f"Request failed: {error_msg}")
-        
-        # Test 3: Get purchase bill by ID
-        if self.created_purchases:
-            purchase_id = self.created_purchases[0]
-            response = self.make_request('GET', f'/purchases/{purchase_id}')
-            if response and response.status_code == 200:
-                response_json = response.json()
-                if response_json.get('status') == 200 and 'data' in response_json:
-                    self.log_result("Get Purchase Bill by ID", True, "Purchase bill retrieved successfully")
-                else:
-                    self.log_result("Get Purchase Bill by ID", False, "Invalid response structure", response_json)
-            else:
-                error_msg = response.text if response else "Connection failed"
-                self.log_result("Get Purchase Bill by ID", False, f"Request failed: {error_msg}")
-    
-    def test_payment_management(self):
-        """Test payment management"""
-        print("\n=== TESTING PAYMENT MANAGEMENT ===")
-        
-        if not self.created_suppliers:
-            self.log_result("Payment Management", False, "No suppliers available for testing")
-            return
-        
-        # Test 1: Create payment (partial payment scenario)
-        payment_data = {
-            "partyType": "supplier",
-            "partyId": self.created_suppliers[0],
-            "partyName": "ABC Traders Ltd",
-            "amount": 2500,  # Partial payment
-            "paymentDate": datetime.now().strftime('%Y-%m-%d'),
-            "referenceType": "advance",  # Using advance since we don't have a specific purchase bill
-            "notes": "Partial payment for outstanding bills"
-        }
-        
-        response = self.make_request('POST', '/payments', payment_data)
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                payment_id = response_json['data'].get('id')
-                self.log_result("Create Payment", True, "Payment recorded successfully")
-                self.created_payments.append(payment_id)
-            else:
-                self.log_result("Create Payment", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Create Payment", False, f"Request failed: {error_msg}")
-        
-        # Test 2: List payments
-        response = self.make_request('GET', '/payments')
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                payments_count = len(response_json['data'])
-                self.log_result("List Payments", True, f"Retrieved {payments_count} payments")
-            else:
-                self.log_result("List Payments", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("List Payments", False, f"Request failed: {error_msg}")
-        
-        # Test 3: Get payment by ID
-        if self.created_payments:
-            payment_id = self.created_payments[0]
-            response = self.make_request('GET', f'/payments/{payment_id}')
-            if response and response.status_code == 200:
-                response_json = response.json()
-                if response_json.get('status') == 200 and 'data' in response_json:
-                    self.log_result("Get Payment by ID", True, "Payment retrieved successfully")
-                else:
-                    self.log_result("Get Payment by ID", False, "Invalid response structure", response_json)
-            else:
-                error_msg = response.text if response else "Connection failed"
-                self.log_result("Get Payment by ID", False, f"Request failed: {error_msg}")
-    
-    def test_reports(self):
-        """Test reports functionality"""
-        print("\n=== TESTING REPORTS ===")
-        
-        # Test 1: Outstanding receivables report
-        response = self.make_request('GET', '/reports/outstanding-receivables')
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200:
-                self.log_result("Outstanding Receivables Report", True, "Report generated successfully")
-            else:
-                self.log_result("Outstanding Receivables Report", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Outstanding Receivables Report", False, f"Request failed: {error_msg}")
-        
-        # Test 2: Outstanding payables report
-        response = self.make_request('GET', '/reports/outstanding-payables')
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200:
-                self.log_result("Outstanding Payables Report", True, "Report generated successfully")
-            else:
-                self.log_result("Outstanding Payables Report", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Outstanding Payables Report", False, f"Request failed: {error_msg}")
-    
-    def test_product_management(self):
-        """Test product management CRUD operations"""
-        print("\n=== TESTING PRODUCT MANAGEMENT ===")
-        
-        # Test 1: Create weighted product
-        product_data = {
-            "name": "Premium Rice",
-            "pricePerKg": 85.50,
-            "type": "weighted"
-        }
-        
-        response = self.make_request('POST', '/products', product_data)
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                product_id = response_json['data'].get('id')
-                self.log_result("Create Weighted Product", True, "Weighted product created successfully")
-                self.created_products = getattr(self, 'created_products', [])
-                self.created_products.append(product_id)
-            else:
-                self.log_result("Create Weighted Product", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Create Weighted Product", False, f"Request failed: {error_msg}")
-        
-        # Test 2: Create non-weighted product
-        product_data_nonweighted = {
-            "name": "Notebook Pack",
-            "pricePerKg": 25.00,
-            "type": "non-weighted"
-        }
-        
-        response = self.make_request('POST', '/products', product_data_nonweighted)
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                product_id = response_json['data'].get('id')
-                self.log_result("Create Non-Weighted Product", True, "Non-weighted product created successfully")
-                self.created_products = getattr(self, 'created_products', [])
-                self.created_products.append(product_id)
-            else:
-                self.log_result("Create Non-Weighted Product", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Create Non-Weighted Product", False, f"Request failed: {error_msg}")
-        
-        # Test 3: List products
-        response = self.make_request('GET', '/products')
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                products_count = len(response_json['data'])
-                self.log_result("List Products", True, f"Retrieved {products_count} products")
-            else:
-                self.log_result("List Products", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("List Products", False, f"Request failed: {error_msg}")
-        
-        # Test 4: Get product by ID
-        if hasattr(self, 'created_products') and self.created_products:
-            product_id = self.created_products[0]
-            response = self.make_request('GET', f'/products/{product_id}')
-            if response and response.status_code == 200:
-                response_json = response.json()
-                if response_json.get('status') == 200 and 'data' in response_json:
-                    self.log_result("Get Product by ID", True, "Product retrieved successfully")
-                else:
-                    self.log_result("Get Product by ID", False, "Invalid response structure", response_json)
-            else:
-                error_msg = response.text if response else "Connection failed"
-                self.log_result("Get Product by ID", False, f"Request failed: {error_msg}")
-        
-        # Test 5: Update product
-        if hasattr(self, 'created_products') and self.created_products:
-            product_id = self.created_products[0]
-            update_data = {"name": "Premium Basmati Rice", "pricePerKg": 95.00}
-            response = self.make_request('PUT', f'/products/{product_id}', update_data)
-            if response and response.status_code == 200:
-                response_json = response.json()
-                if response_json.get('status') == 200:
-                    self.log_result("Update Product", True, "Product updated successfully")
-                else:
-                    self.log_result("Update Product", False, "Update failed", response_json)
-            else:
-                error_msg = response.text if response else "Connection failed"
-                self.log_result("Update Product", False, f"Request failed: {error_msg}")
-        
-        # Test 6: Get weights (hardware feature - may not work in container)
-        response = self.make_request('GET', '/weights')
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200:
-                weight_value = response_json.get('data', {}).get('weight', 0)
-                self.log_result("Get Weights", True, f"Weight reading: {weight_value}")
-            else:
-                self.log_result("Get Weights", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Get Weights", False, f"Request failed: {error_msg}")
-    
-    def test_order_management(self):
-        """Test order/sales management"""
-        print("\n=== TESTING ORDER MANAGEMENT ===")
-        
-        # Ensure we have products for order items
-        if not hasattr(self, 'created_products') or not self.created_products:
-            self.log_result("Order Management", False, "No products available for testing orders")
-            return
-        
-        # Test 1: Create order with items
-        order_data = {
-            "orderDate": datetime.now().strftime('%Y-%m-%d'),
-            "customerName": "Retail Customer",
-            "customerMobile": "9876543230",
-            "subTotal": 1000,
-            "total": 1180,  # Including tax
-            "tax": 180,
-            "taxPercent": 18,
-            "paidAmount": 1180,  # Fully paid
-            "orderItems": [
-                {
-                    "productId": self.created_products[0],
-                    "name": "Premium Rice",
-                    "quantity": 5,
-                    "productPrice": 85.50,
-                    "totalPrice": 427.50,
-                    "type": "weighted"
-                },
-                {
-                    "productId": self.created_products[1] if len(self.created_products) > 1 else self.created_products[0],
-                    "name": "Notebook Pack",
-                    "quantity": 23,
-                    "productPrice": 25.00,
-                    "totalPrice": 575.00,
-                    "type": "non-weighted"
-                }
-            ]
-        }
-        
-        response = self.make_request('POST', '/orders', order_data)
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                order_id = response_json['data'].get('id')
-                payment_status = response_json['data'].get('paymentStatus')
-                self.log_result("Create Order", True, f"Order created successfully with payment status: {payment_status}")
-                self.created_orders = getattr(self, 'created_orders', [])
-                self.created_orders.append(order_id)
-            else:
-                self.log_result("Create Order", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Create Order", False, f"Request failed: {error_msg}")
-        
-        # Test 2: Create partial payment order
-        order_data_partial = {
-            "orderDate": datetime.now().strftime('%Y-%m-%d'),
-            "customerName": "Credit Customer",
-            "customerMobile": "9876543231",
-            "subTotal": 500,
-            "total": 590,
-            "tax": 90,
-            "taxPercent": 18,
-            "paidAmount": 300,  # Partial payment
-            "orderItems": [
-                {
-                    "productId": self.created_products[0],
-                    "name": "Premium Rice",
-                    "quantity": 2.5,
-                    "productPrice": 85.50,
-                    "totalPrice": 213.75,
-                    "type": "weighted"
-                }
-            ]
-        }
-        
-        response = self.make_request('POST', '/orders', order_data_partial)
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                order_id = response_json['data'].get('id')
-                payment_status = response_json['data'].get('paymentStatus')
-                due_amount = response_json['data'].get('dueAmount')
-                self.log_result("Create Partial Payment Order", True, f"Order created with payment status: {payment_status}, due: {due_amount}")
-                self.created_orders = getattr(self, 'created_orders', [])
-                self.created_orders.append(order_id)
-            else:
-                self.log_result("Create Partial Payment Order", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Create Partial Payment Order", False, f"Request failed: {error_msg}")
-        
-        # Test 3: List orders
-        response = self.make_request('GET', '/orders')
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                orders_count = len(response_json['data'])
-                self.log_result("List Orders", True, f"Retrieved {orders_count} orders")
-            else:
-                self.log_result("List Orders", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("List Orders", False, f"Request failed: {error_msg}")
-        
-        # Test 4: Get order by ID
-        if hasattr(self, 'created_orders') and self.created_orders:
-            order_id = self.created_orders[0]
-            response = self.make_request('GET', f'/orders/{order_id}')
-            if response and response.status_code == 200:
-                response_json = response.json()
-                if response_json.get('status') == 200 and 'data' in response_json:
-                    order_items = response_json['data'].get('orderItems', [])
-                    self.log_result("Get Order by ID", True, f"Order retrieved with {len(order_items)} items")
-                else:
-                    self.log_result("Get Order by ID", False, "Invalid response structure", response_json)
-            else:
-                error_msg = response.text if response else "Connection failed"
-                self.log_result("Get Order by ID", False, f"Request failed: {error_msg}")
-
     def test_authentication(self):
         """Test authentication and get JWT token"""
         print("\n=== TESTING AUTHENTICATION ===")
@@ -719,220 +119,297 @@ class BackendTester:
         
         return False
 
-    def test_daily_payments_api(self):
-        """Test Daily Payments API endpoints"""
-        print("\n=== TESTING DAILY PAYMENTS API ===")
+    def test_order_creation_without_tax(self):
+        """Test order creation without tax fields - should default to 0"""
+        print("\n=== TESTING ORDER CREATION WITHOUT TAX FIELDS ===")
         
         if not self.auth_token:
-            self.log_result("Daily Payments API", False, "No authentication token available")
+            self.log_result("Order Creation Without Tax", False, "No authentication token available")
             return
         
-        # Test 1: Daily Summary Endpoint with today's date (default)
-        response = self.make_request('GET', '/payments/daily-summary')
+        # Create a minimal order without tax/taxPercent fields
+        order_data = {
+            "orderDate": datetime.now().strftime('%Y-%m-%d'),
+            "customerName": "Cash Customer",
+            "subTotal": 1000,
+            "total": 1000,  # Same as subTotal since no tax
+            "orderItems": [
+                {
+                    "productId": None,  # Test with null productId
+                    "name": "Test Product",
+                    "quantity": 2,
+                    "productPrice": 500,
+                    "totalPrice": 1000,
+                    "type": "non-weighted"
+                }
+            ]
+        }
+        
+        response = self.make_request('POST', '/orders', order_data)
         if response and response.status_code == 200:
             response_json = response.json()
             if response_json.get('status') == 200 and 'data' in response_json:
-                data = response_json['data']
-                required_fields = ['date', 'totalCount', 'totalAmount', 'summary', 'byReferenceType', 'payments']
+                order = response_json['data']
+                order_id = order.get('id')
+                tax = order.get('tax', 'not_set')
+                tax_percent = order.get('taxPercent', 'not_set')
                 
-                if all(field in data for field in required_fields):
-                    # Check summary structure
-                    summary = data.get('summary', {})
-                    by_ref_type = data.get('byReferenceType', {})
-                    
-                    if ('customers' in summary and 'suppliers' in summary and 
-                        'orders' in by_ref_type and 'purchases' in by_ref_type and 'advances' in by_ref_type):
-                        self.log_result("Daily Summary - Default Date", True, 
-                                      f"Daily summary retrieved successfully for {data['date']} - Total: {data['totalCount']} payments, Amount: {data['totalAmount']}")
-                    else:
-                        self.log_result("Daily Summary - Default Date", False, 
-                                      "Response missing required summary structure", response_json)
+                # Verify tax defaults to 0
+                if tax == 0 and tax_percent == 0:
+                    self.log_result("Order Creation Without Tax", True, 
+                                  f"Order created successfully with tax defaulting to 0 (tax: {tax}, taxPercent: {tax_percent})")
+                    self.created_orders.append(order_id)
                 else:
-                    missing_fields = [f for f in required_fields if f not in data]
-                    self.log_result("Daily Summary - Default Date", False, 
-                                  f"Response missing required fields: {missing_fields}", response_json)
+                    self.log_result("Order Creation Without Tax", False, 
+                                  f"Tax did not default to 0 - tax: {tax}, taxPercent: {tax_percent}", response_json)
             else:
-                self.log_result("Daily Summary - Default Date", False, "Invalid response structure", response_json)
+                self.log_result("Order Creation Without Tax", False, "Invalid response structure", response_json)
         else:
             error_msg = response.text if response else "Connection failed"
-            self.log_result("Daily Summary - Default Date", False, f"Request failed: {error_msg}")
+            self.log_result("Order Creation Without Tax", False, f"Request failed: {error_msg}")
+
+    def test_payment_status_toggle(self):
+        """Test payment status toggle with customer info"""
+        print("\n=== TESTING PAYMENT STATUS TOGGLE WITH CUSTOMER INFO ===")
         
-        # Test 2: Daily Summary with specific date parameter
-        test_date = "2025-01-26"
-        response = self.make_request('GET', '/payments/daily-summary', params={'date': test_date})
+        if not self.auth_token:
+            self.log_result("Payment Status Toggle", False, "No authentication token available")
+            return
+        
+        # First create a paid order
+        order_data = {
+            "orderDate": datetime.now().strftime('%Y-%m-%d'),
+            "customerName": "Test Customer",
+            "customerMobile": "9876543210",
+            "subTotal": 500,
+            "total": 590,
+            "tax": 90,
+            "taxPercent": 18,
+            "paidAmount": 590,  # Fully paid
+            "orderItems": [
+                {
+                    "productId": "",  # Test with empty string productId
+                    "name": "Test Item",
+                    "quantity": 1,
+                    "productPrice": 500,
+                    "totalPrice": 500,
+                    "type": "weighted"
+                }
+            ]
+        }
+        
+        response = self.make_request('POST', '/orders', order_data)
         if response and response.status_code == 200:
             response_json = response.json()
             if response_json.get('status') == 200 and 'data' in response_json:
-                data = response_json['data']
-                if data.get('date') == test_date:
-                    self.log_result("Daily Summary - Specific Date", True, 
-                                  f"Daily summary retrieved for specific date {test_date} - Total: {data['totalCount']} payments")
-                else:
-                    self.log_result("Daily Summary - Specific Date", False, 
-                                  f"Expected date {test_date} but got {data.get('date')}", response_json)
-            else:
-                self.log_result("Daily Summary - Specific Date", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Daily Summary - Specific Date", False, f"Request failed: {error_msg}")
-        
-        # Test 3: Payments List with date filtering
-        response = self.make_request('GET', '/payments', params={'date': test_date})
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                payments = response_json['data']
-                self.log_result("Payments List - Date Filter", True, 
-                              f"Payments list with date filter retrieved successfully - {len(payments)} payments for {test_date}")
-            else:
-                self.log_result("Payments List - Date Filter", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Payments List - Date Filter", False, f"Request failed: {error_msg}")
-        
-        # Test 4: Payments List with date range filtering
-        start_date = "2025-01-01"
-        end_date = "2025-01-26"
-        response = self.make_request('GET', '/payments', params={'startDate': start_date, 'endDate': end_date})
-        if response and response.status_code == 200:
-            response_json = response.json()
-            if response_json.get('status') == 200 and 'data' in response_json:
-                payments = response_json['data']
-                self.log_result("Payments List - Date Range Filter", True, 
-                              f"Payments list with date range filter retrieved successfully - {len(payments)} payments from {start_date} to {end_date}")
-            else:
-                self.log_result("Payments List - Date Range Filter", False, "Invalid response structure", response_json)
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Payments List - Date Range Filter", False, f"Request failed: {error_msg}")
-        
-        # Test 5: Create a test payment to verify the daily summary works with actual data
-        if self.created_suppliers:
-            payment_data = {
-                "partyType": "supplier",
-                "partyId": self.created_suppliers[0],
-                "partyName": "Test Supplier for Daily Payments",
-                "amount": 1500,
-                "paymentDate": test_date,
-                "referenceType": "advance",
-                "notes": "Test payment for daily summary verification"
-            }
-            
-            response = self.make_request('POST', '/payments', payment_data)
-            if response and response.status_code == 200:
-                response_json = response.json()
-                if response_json.get('status') == 200 and 'data' in response_json:
-                    payment_id = response_json['data'].get('id')
-                    self.created_payments.append(payment_id)
-                    self.log_result("Create Test Payment for Daily Summary", True, "Test payment created successfully")
-                    
-                    # Now test daily summary again to see if it includes our test payment
-                    response = self.make_request('GET', '/payments/daily-summary', params={'date': test_date})
-                    if response and response.status_code == 200:
-                        response_json = response.json()
-                        if response_json.get('status') == 200 and 'data' in response_json:
-                            data = response_json['data']
-                            # Check if our payment is included
-                            test_payment_found = any(p.get('id') == payment_id for p in data.get('payments', []))
-                            if test_payment_found:
-                                self.log_result("Daily Summary - With Test Data", True, 
-                                              f"Daily summary correctly includes test payment - Total: {data['totalCount']} payments, Amount: {data['totalAmount']}")
-                            else:
-                                self.log_result("Daily Summary - With Test Data", False, 
-                                              "Daily summary does not include the test payment", response_json)
+                order = response_json['data']
+                order_id = order.get('id')
+                initial_status = order.get('paymentStatus')
+                
+                self.log_result("Create Paid Order for Toggle Test", True, 
+                              f"Order created with payment status: {initial_status}")
+                self.created_orders.append(order_id)
+                
+                # Now toggle to unpaid with customer info
+                toggle_data = {
+                    "newStatus": "unpaid",
+                    "customerName": "Updated Customer Name",
+                    "customerMobile": "9876543211"
+                }
+                
+                response = self.make_request('PATCH', f'/orders/{order_id}/payment-status', toggle_data)
+                if response and response.status_code == 200:
+                    response_json = response.json()
+                    if response_json.get('status') == 200 and 'data' in response_json:
+                        updated_order = response_json['data']
+                        new_status = updated_order.get('paymentStatus')
+                        new_customer_name = updated_order.get('customerName')
+                        new_customer_mobile = updated_order.get('customerMobile')
+                        
+                        if (new_status == 'unpaid' and 
+                            new_customer_name == 'Updated Customer Name' and 
+                            new_customer_mobile == '9876543211'):
+                            self.log_result("Payment Status Toggle", True, 
+                                          f"Payment status toggled to {new_status} and customer info updated successfully")
                         else:
-                            self.log_result("Daily Summary - With Test Data", False, "Invalid response structure", response_json)
+                            self.log_result("Payment Status Toggle", False, 
+                                          f"Toggle failed - status: {new_status}, name: {new_customer_name}, mobile: {new_customer_mobile}", response_json)
                     else:
-                        error_msg = response.text if response else "Connection failed"
-                        self.log_result("Daily Summary - With Test Data", False, f"Request failed: {error_msg}")
+                        self.log_result("Payment Status Toggle", False, "Invalid toggle response structure", response_json)
                 else:
-                    self.log_result("Create Test Payment for Daily Summary", False, "Invalid response structure", response_json)
+                    error_msg = response.text if response else "Connection failed"
+                    self.log_result("Payment Status Toggle", False, f"Toggle request failed: {error_msg}")
             else:
-                error_msg = response.text if response else "Connection failed"
-                self.log_result("Create Test Payment for Daily Summary", False, f"Request failed: {error_msg}")
-        else:
-            self.log_result("Create Test Payment for Daily Summary", False, "No suppliers available for creating test payment")
-        """Test Tally export functionality"""
-        print("\n=== TESTING TALLY EXPORT ===")
-        
-        # Test 1: Export sales CSV
-        response = self.make_request('GET', '/export/tally/sales')
-        if response and response.status_code == 200:
-            # Check if response is CSV format
-            content_type = response.headers.get('content-type', '')
-            if 'csv' in content_type.lower() or 'text' in content_type.lower():
-                self.log_result("Tally Export Sales CSV", True, "Sales CSV export successful")
-            else:
-                self.log_result("Tally Export Sales CSV", True, "Sales export successful (format may vary)")
+                self.log_result("Create Paid Order for Toggle Test", False, "Invalid response structure", response_json)
         else:
             error_msg = response.text if response else "Connection failed"
-            self.log_result("Tally Export Sales CSV", False, f"Request failed: {error_msg}")
+            self.log_result("Create Paid Order for Toggle Test", False, f"Request failed: {error_msg}")
+
+    def test_stock_management_apis(self):
+        """Test all stock management APIs"""
+        print("\n=== TESTING STOCK MANAGEMENT APIS ===")
         
-        # Test 2: Export purchases CSV
-        response = self.make_request('GET', '/export/tally/purchases')
+        if not self.auth_token:
+            self.log_result("Stock Management APIs", False, "No authentication token available")
+            return
+        
+        # First create a product for stock testing
+        product_data = {
+            "name": "Stock Test Product",
+            "pricePerKg": 100.00,
+            "type": "weighted"
+        }
+        
+        response = self.make_request('POST', '/products', product_data)
         if response and response.status_code == 200:
-            content_type = response.headers.get('content-type', '')
-            if 'csv' in content_type.lower() or 'text' in content_type.lower():
-                self.log_result("Tally Export Purchases CSV", True, "Purchases CSV export successful")
+            response_json = response.json()
+            if response_json.get('status') == 200 and 'data' in response_json:
+                product_id = response_json['data'].get('id')
+                self.created_products.append(product_id)
+                self.log_result("Create Product for Stock Test", True, "Product created successfully")
+                
+                # Test 1: GET /api/stocks - List stocks
+                response = self.make_request('GET', '/stocks')
+                if response and response.status_code == 200:
+                    response_json = response.json()
+                    if response_json.get('status') == 200:
+                        self.log_result("List Stocks", True, "Stocks list retrieved successfully")
+                    else:
+                        self.log_result("List Stocks", False, "Invalid response structure", response_json)
+                else:
+                    error_msg = response.text if response else "Connection failed"
+                    self.log_result("List Stocks", False, f"Request failed: {error_msg}")
+                
+                # Test 2: GET /api/stocks/summary - Stock summary
+                response = self.make_request('GET', '/stocks/summary')
+                if response and response.status_code == 200:
+                    response_json = response.json()
+                    if response_json.get('status') == 200:
+                        self.log_result("Stock Summary", True, "Stock summary retrieved successfully")
+                    else:
+                        self.log_result("Stock Summary", False, "Invalid response structure", response_json)
+                else:
+                    error_msg = response.text if response else "Connection failed"
+                    self.log_result("Stock Summary", False, f"Request failed: {error_msg}")
+                
+                # Test 3: POST /api/stocks/initialize - Initialize stock
+                init_data = {
+                    "productId": product_id,
+                    "initialStock": 100,
+                    "minStockLevel": 10,
+                    "unit": "kg"
+                }
+                
+                response = self.make_request('POST', '/stocks/initialize', init_data)
+                if response and response.status_code == 200:
+                    response_json = response.json()
+                    if response_json.get('status') == 200:
+                        self.log_result("Initialize Stock", True, "Stock initialized successfully")
+                    else:
+                        self.log_result("Initialize Stock", False, "Invalid response structure", response_json)
+                else:
+                    error_msg = response.text if response else "Connection failed"
+                    self.log_result("Initialize Stock", False, f"Request failed: {error_msg}")
+                
+                # Test 4: POST /api/stocks/in - Add stock
+                add_stock_data = {
+                    "productId": product_id,
+                    "quantity": 50,
+                    "notes": "Test stock addition",
+                    "transactionDate": datetime.now().strftime('%Y-%m-%d')
+                }
+                
+                response = self.make_request('POST', '/stocks/in', add_stock_data)
+                if response and response.status_code == 200:
+                    response_json = response.json()
+                    if response_json.get('status') == 200:
+                        self.log_result("Add Stock", True, "Stock added successfully")
+                    else:
+                        self.log_result("Add Stock", False, "Invalid response structure", response_json)
+                else:
+                    error_msg = response.text if response else "Connection failed"
+                    self.log_result("Add Stock", False, f"Request failed: {error_msg}")
+                
+                # Test 5: POST /api/stocks/out - Remove stock
+                remove_stock_data = {
+                    "productId": product_id,
+                    "quantity": 20,
+                    "notes": "Test stock removal",
+                    "transactionDate": datetime.now().strftime('%Y-%m-%d')
+                }
+                
+                response = self.make_request('POST', '/stocks/out', remove_stock_data)
+                if response and response.status_code == 200:
+                    response_json = response.json()
+                    if response_json.get('status') == 200:
+                        self.log_result("Remove Stock", True, "Stock removed successfully")
+                    else:
+                        self.log_result("Remove Stock", False, "Invalid response structure", response_json)
+                else:
+                    error_msg = response.text if response else "Connection failed"
+                    self.log_result("Remove Stock", False, f"Request failed: {error_msg}")
+                
+                # Test 6: POST /api/stocks/adjust - Adjust stock
+                adjust_stock_data = {
+                    "productId": product_id,
+                    "newStock": 125,
+                    "notes": "Test stock adjustment"
+                }
+                
+                response = self.make_request('POST', '/stocks/adjust', adjust_stock_data)
+                if response and response.status_code == 200:
+                    response_json = response.json()
+                    if response_json.get('status') == 200:
+                        self.log_result("Adjust Stock", True, "Stock adjusted successfully")
+                    else:
+                        self.log_result("Adjust Stock", False, "Invalid response structure", response_json)
+                else:
+                    error_msg = response.text if response else "Connection failed"
+                    self.log_result("Adjust Stock", False, f"Request failed: {error_msg}")
+                
+                # Test 7: GET /api/stocks/transactions - List transactions
+                response = self.make_request('GET', '/stocks/transactions')
+                if response and response.status_code == 200:
+                    response_json = response.json()
+                    if response_json.get('status') == 200:
+                        transactions = response_json.get('data', [])
+                        self.log_result("List Stock Transactions", True, 
+                                      f"Stock transactions retrieved successfully - {len(transactions)} transactions")
+                    else:
+                        self.log_result("List Stock Transactions", False, "Invalid response structure", response_json)
+                else:
+                    error_msg = response.text if response else "Connection failed"
+                    self.log_result("List Stock Transactions", False, f"Request failed: {error_msg}")
+                    
             else:
-                self.log_result("Tally Export Purchases CSV", True, "Purchases export successful (format may vary)")
+                self.log_result("Create Product for Stock Test", False, "Invalid response structure", response_json)
         else:
             error_msg = response.text if response else "Connection failed"
-            self.log_result("Tally Export Purchases CSV", False, f"Request failed: {error_msg}")
-        
-        # Test 3: Export payments CSV
-        response = self.make_request('GET', '/export/tally/payments')
-        if response and response.status_code == 200:
-            content_type = response.headers.get('content-type', '')
-            if 'csv' in content_type.lower() or 'text' in content_type.lower():
-                self.log_result("Tally Export Payments CSV", True, "Payments CSV export successful")
-            else:
-                self.log_result("Tally Export Payments CSV", True, "Payments export successful (format may vary)")
-        else:
-            error_msg = response.text if response else "Connection failed"
-            self.log_result("Tally Export Payments CSV", False, f"Request failed: {error_msg}")
-    
+            self.log_result("Create Product for Stock Test", False, f"Request failed: {error_msg}")
+
     def cleanup_test_data(self):
         """Clean up test data"""
         print("\n=== CLEANING UP TEST DATA ===")
         
-        # Delete created orders first (they may reference products)
-        if hasattr(self, 'created_orders'):
-            for order_id in self.created_orders:
-                response = self.make_request('DELETE', f'/orders/{order_id}')
-                if response and response.status_code == 200:
-                    self.log_result("Cleanup Order", True, f"Order {order_id} deleted")
-                else:
-                    self.log_result("Cleanup Order", False, f"Failed to delete order {order_id}")
+        # Delete created orders
+        for order_id in self.created_orders:
+            response = self.make_request('DELETE', f'/orders/{order_id}')
+            if response and response.status_code == 200:
+                self.log_result("Cleanup Order", True, f"Order {order_id} deleted")
+            else:
+                self.log_result("Cleanup Order", False, f"Failed to delete order {order_id}")
         
         # Delete created products
-        if hasattr(self, 'created_products'):
-            for product_id in self.created_products:
-                response = self.make_request('DELETE', f'/products/{product_id}')
-                if response and response.status_code == 200:
-                    self.log_result("Cleanup Product", True, f"Product {product_id} deleted")
-                else:
-                    self.log_result("Cleanup Product", False, f"Failed to delete product {product_id}")
-        
-        # Delete created suppliers
-        for supplier_id in self.created_suppliers:
-            response = self.make_request('DELETE', f'/suppliers/{supplier_id}')
+        for product_id in self.created_products:
+            response = self.make_request('DELETE', f'/products/{product_id}')
             if response and response.status_code == 200:
-                self.log_result("Cleanup Supplier", True, f"Supplier {supplier_id} deleted")
+                self.log_result("Cleanup Product", True, f"Product {product_id} deleted")
             else:
-                self.log_result("Cleanup Supplier", False, f"Failed to delete supplier {supplier_id}")
-        
-        # Delete created customers
-        for customer_id in self.created_customers:
-            response = self.make_request('DELETE', f'/customers/{customer_id}')
-            if response and response.status_code == 200:
-                self.log_result("Cleanup Customer", True, f"Customer {customer_id} deleted")
-            else:
-                self.log_result("Cleanup Customer", False, f"Failed to delete customer {customer_id}")
-    
+                self.log_result("Cleanup Product", False, f"Failed to delete product {product_id}")
+
     def run_all_tests(self):
-        """Run all backend tests"""
-        print(f"Starting comprehensive backend API testing...")
+        """Run all backend tests for new features"""
+        print(f"Starting backend API testing for new features...")
         print(f"Backend URL: {self.base_url}")
         print("=" * 60)
         
@@ -942,14 +419,13 @@ class BackendTester:
             self.print_summary()
             return
         
-        # Test Daily Payments API (main focus)
-        self.test_daily_payments_api()
+        # Test the specific new features
+        self.test_order_creation_without_tax()
+        self.test_payment_status_toggle()
+        self.test_stock_management_apis()
         
-        # Run other tests in priority order (only if we have time/need)
-        self.test_product_management()  # Test products first (needed for orders)
-        self.test_supplier_management()
-        self.test_customer_management()
-        self.test_payment_management()  # Regular payment management
+        # Clean up test data
+        self.cleanup_test_data()
         
         # Summary
         self.print_summary()
