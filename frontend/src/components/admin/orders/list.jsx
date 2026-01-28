@@ -100,9 +100,17 @@ export const ListOrders = () => {
         try {
             setIsTogglingStatus(true);
             const token = localStorage.getItem('token');
+            
+            // Include customer info when toggling to unpaid
+            const payload = { newStatus };
+            if (newStatus === 'unpaid') {
+                payload.customerName = customerInfo.customerName;
+                payload.customerMobile = customerInfo.customerMobile;
+            }
+            
             await axios.patch(
                 `/api/orders/${orderToToggle.id}/payment-status`,
-                { newStatus },
+                payload,
                 { headers: { Authorization: `Bearer ${token}` } }
             );
             // Refresh the list
@@ -114,6 +122,7 @@ export const ListOrders = () => {
             setIsTogglingStatus(false);
             setStatusDialogOpen(false);
             setOrderToToggle(null);
+            setCustomerInfo({ customerName: '', customerMobile: '' });
         }
     };
 
