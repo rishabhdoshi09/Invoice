@@ -533,7 +533,7 @@ module.exports = {
     togglePaymentStatus: async (req, res) => {
         try {
             const { orderId } = req.params;
-            const { newStatus } = req.body;
+            const { newStatus, customerName, customerMobile } = req.body;
 
             // Validate new status
             if (!['paid', 'unpaid'].includes(newStatus)) {
@@ -554,7 +554,7 @@ module.exports = {
 
             const oldStatus = order.paymentStatus;
             
-            // Update order payment status
+            // Update order payment status and customer info
             const updateData = {
                 paymentStatus: newStatus,
                 paidAmount: newStatus === 'paid' ? order.total : 0,
@@ -562,6 +562,16 @@ module.exports = {
                 modifiedBy: req.user?.id,
                 modifiedByName: req.user?.name || req.user?.username
             };
+            
+            // Add customer info if toggling to unpaid and provided
+            if (newStatus === 'unpaid') {
+                if (customerName && customerName.trim()) {
+                    updateData.customerName = customerName.trim();
+                }
+                if (customerMobile && customerMobile.trim()) {
+                    updateData.customerMobile = customerMobile.trim();
+                }
+            }
 
             await Services.order.updateOrder({ id: orderId }, updateData);
 
