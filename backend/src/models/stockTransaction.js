@@ -59,5 +59,12 @@ module.exports = (sequelize, Sequelize) => {
         }
     );
 
+    stockTransaction.associate = (models) => {
+        stockTransaction.belongsTo(models.product, {
+            foreignKey: 'productId',
+            as: 'product'
+        });
+    };
+
     return stockTransaction;
 };
