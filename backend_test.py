@@ -18,10 +18,8 @@ class BackendTester:
     def __init__(self):
         self.base_url = BASE_URL
         self.test_results = []
-        self.created_suppliers = []
-        self.created_customers = []
-        self.created_purchases = []
-        self.created_payments = []
+        self.created_orders = []
+        self.created_products = []
         self.auth_token = None
         
     def log_result(self, test_name, success, message, response_data=None):
@@ -55,6 +53,8 @@ class BackendTester:
                 response = requests.post(url, json=data, headers=headers, timeout=30)
             elif method.upper() == 'PUT':
                 response = requests.put(url, json=data, headers=headers, timeout=30)
+            elif method.upper() == 'PATCH':
+                response = requests.patch(url, json=data, headers=headers, timeout=30)
             elif method.upper() == 'DELETE':
                 response = requests.delete(url, headers=headers, timeout=30)
             else:
