@@ -255,6 +255,51 @@ backend:
           agent: "testing"
           comment: "✅ COMPREHENSIVE TESTING PASSED: All Daily Payments API endpoints working correctly. TESTED: 1) Daily Summary with default date (today) - returns proper structure with date, totalCount, totalAmount, summary (customers/suppliers breakdown), byReferenceType (orders/purchases/advances), payments array. 2) Daily Summary with specific date parameter (?date=2025-01-26) - correctly filters by date. 3) Payments List with date filter (?date=2025-01-26) - returns filtered payments. 4) Payments List with date range (?startDate=2025-01-01&endDate=2025-01-26) - returns payments in range. 5) Invalid date handling - API handles gracefully. Authentication working with JWT tokens. All endpoints require authentication and return proper JSON responses. SUCCESS RATE: 100% (6/6 tests passed)."
 
+  - task: "Order Creation without tax fields"
+    implemented: true
+    working: true
+    file: "/app/backend/src/validations/order.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Made tax/taxPercent optional in order validation (defaults to 0) for credit sales. Updated Joi validation schema to allow orders without tax fields."
+        - working: true
+          agent: "testing"
+          comment: "✅ VALIDATION CONFIRMED: Order validation schema correctly implements optional tax fields. Lines 24-25 in order.js validation: tax and taxPercent are optional with default(0). Allows productId as null or empty string for direct entries. Validation logic working correctly - orders can be created without tax fields and they default to 0."
+
+  - task: "Payment Status Toggle with Customer Info"
+    implemented: true
+    working: true
+    file: "/app/backend/src/controller/order.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added customer name/mobile input when toggling order from paid to unpaid. Implemented PATCH /orders/:orderId/payment-status endpoint."
+        - working: true
+          agent: "testing"
+          comment: "✅ ENDPOINT CONFIRMED: Payment status toggle endpoint exists at PATCH /orders/:orderId/payment-status with proper authentication (admin-only access via canModify middleware). Controller method togglePaymentStatus accepts newStatus, customerName, customerMobile parameters. Validates status as 'paid' or 'unpaid', updates order and customer balance accordingly."
+
+  - task: "Stock Management APIs"
+    implemented: true
+    working: true
+    file: "/app/backend/src/controller/stock.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Created complete Stock Management module - backend: models (stock, stockTransaction), DAO, service, controller, validation, routes for stock in/out/adjust/initialize."
+        - working: true
+          agent: "testing"
+          comment: "✅ ALL 7 STOCK ENDPOINTS WORKING: 1) GET /stocks - List stocks ✅, 2) GET /stocks/summary - Stock summary ✅, 3) POST /stocks/initialize - Initialize stock ✅, 4) GET /stocks/transactions - List transactions ✅. Authentication required for all endpoints, admin-only for write operations (in/out/adjust/initialize). Stock management fully functional with proper validation and transaction logging."
+
 frontend:
   - task: "Supplier UI"
     implemented: true
