@@ -130,6 +130,7 @@ export const ListOrders = () => {
     const handleCancelStatusToggle = () => {
         setStatusDialogOpen(false);
         setOrderToToggle(null);
+        setCustomerInfo({ customerName: '', customerMobile: '' });
     };
 
     // Fetch orders function
