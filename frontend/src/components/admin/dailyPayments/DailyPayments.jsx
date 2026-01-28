@@ -458,6 +458,34 @@ export const DailyPayments = () => {
 
     const isToday = selectedDate === moment().format('YYYY-MM-DD');
 
+    // Filter payments by type for details dialog
+    const getFilteredPayments = (type) => {
+        if (!payments || payments.length === 0) return [];
+        
+        switch (type) {
+            case 'all':
+                return payments;
+            case 'customers':
+                return payments.filter(p => p.partyType === 'customer');
+            case 'suppliers':
+                return payments.filter(p => p.partyType === 'supplier');
+            case 'expenses':
+                return payments.filter(p => p.partyType === 'expense');
+            default:
+                return payments;
+        }
+    };
+
+    // Open details dialog
+    const handleOpenDetails = (type, title) => {
+        setDetailsDialog({ open: true, type, title });
+    };
+
+    // Close details dialog
+    const handleCloseDetails = () => {
+        setDetailsDialog({ open: false, type: '', title: '' });
+    };
+
     return (
         <Box sx={{ p: 3 }}>
             {/* Header with date navigation */}
