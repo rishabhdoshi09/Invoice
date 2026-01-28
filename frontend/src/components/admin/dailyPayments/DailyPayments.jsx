@@ -125,6 +125,9 @@ export const DailyPayments = () => {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [paymentToDelete, setPaymentToDelete] = useState(null);
     
+    // Details dialog for summary cards
+    const [detailsDialog, setDetailsDialog] = useState({ open: false, type: '', title: '' });
+    
     // Simple form for quick expense recording
     const [simpleForm, setSimpleForm] = useState({
         amount: '',
