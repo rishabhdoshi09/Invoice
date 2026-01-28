@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-Comprehensive Backend API Testing for Invoice App with Tally Features
-Tests all backend APIs with focus on opening balance functionality
+Backend API Testing for New Features:
+1. Order Creation without tax fields
+2. Payment Status Toggle with Customer Info
+3. Stock Management APIs
 """
 
 import requests
@@ -9,8 +11,8 @@ import json
 import sys
 from datetime import datetime
 
-# Backend URL from frontend .env
-BASE_URL = "http://localhost:8001/api"
+# Backend URL from frontend .env - use production URL
+BASE_URL = "https://orders-fix.preview.emergentagent.com/api"
 
 class BackendTester:
     def __init__(self):
