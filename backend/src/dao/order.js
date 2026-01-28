@@ -43,11 +43,13 @@ module.exports = {
                 isDeleted: false  // Always filter out deleted orders
             };
             
-            // Add search filter if provided
+            // Add search filter if provided - search across orderNumber, customerName, and customerMobile
             if (filterObj.q && filterObj.q !== "") {
-                whereClause.orderNumber = {
-                    [db.Sequelize.Op.iLike]: `%${filterObj.q}%`
-                };
+                whereClause[db.Sequelize.Op.or] = [
+                    { orderNumber: { [db.Sequelize.Op.iLike]: `%${filterObj.q}%` } },
+                    { customerName: { [db.Sequelize.Op.iLike]: `%${filterObj.q}%` } },
+                    { customerMobile: { [db.Sequelize.Op.iLike]: `%${filterObj.q}%` } }
+                ];
             }
             
             // Add date filter if provided
