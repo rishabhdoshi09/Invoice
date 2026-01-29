@@ -105,7 +105,6 @@ export const DailyPayments = () => {
     
     // Expanded rows for viewing bills
     const [expandedCustomers, setExpandedCustomers] = useState({});
-    const [expandedSuppliers, setExpandedSuppliers] = useState({});
     
     // Bill preview dialog
     const [billPreviewDialog, setBillPreviewDialog] = useState({ open: false, order: null });
