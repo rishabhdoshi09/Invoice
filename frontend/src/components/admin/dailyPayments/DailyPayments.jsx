@@ -99,7 +99,7 @@ export const DailyPayments = () => {
         refetchOnReconnect: true,
     });
     
-    const [createPaymentMutation] = useCreatePaymentMutation();
+    const [createPaymentMutation, { isLoading: isSubmitting }] = useCreatePaymentMutation();
     const [deletePaymentMutation, { isLoading: deletingPayment }] = useDeletePaymentMutation();
     
     // Extract data from RTK Query
