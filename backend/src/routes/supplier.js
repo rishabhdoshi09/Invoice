@@ -16,6 +16,14 @@ module.exports = (router) => {
             Controller.supplier.listSuppliers
         );
 
+    // Get suppliers with debit/credit/balance
+    router
+        .route('/suppliers/with-balance')
+        .get(
+            authenticate,
+            Controller.supplier.listSuppliersWithBalance
+        );
+
     router
         .route('/suppliers/:supplierId')
         .get(
@@ -35,5 +43,13 @@ module.exports = (router) => {
             captureOriginal(db.supplier, 'supplierId'),
             auditMiddleware('SUPPLIER'),
             Controller.supplier.deleteSupplier
+        );
+
+    // Get supplier with full transaction history
+    router
+        .route('/suppliers/:supplierId/transactions')
+        .get(
+            authenticate,
+            Controller.supplier.getSupplierWithTransactions
         );
 };
