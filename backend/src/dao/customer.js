@@ -66,17 +66,20 @@ module.exports = {
             const customer = await db.customer.findByPk(customerId);
             if (!customer) return null;
 
-            // Get all orders (sales - what customer owes us = Debit for us/receivable)
+            // Get all orders - check both customerId and customerName for backwards compatibility
             const orders = await db.order.findAll({
                 where: { 
-                    customerName: customer.name,
+                    [db.Sequelize.Op.or]: [
+                        { customerId: customerId },
+                        { customerName: customer.name }
+                    ],
                     isDeleted: false
                 },
                 attributes: ['id', 'orderNumber', 'orderDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus'],
                 order: [['orderDate', 'DESC']]
             });
 
-            // Get all payments from this customer (reduces their debt = Credit)
+            // Get all payments from this customer - check both partyId and partyName
             const payments = await db.payment.findAll({
                 where: { 
                     [db.Sequelize.Op.or]: [
