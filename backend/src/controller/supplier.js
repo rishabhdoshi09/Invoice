@@ -59,6 +59,52 @@ module.exports = {
             });
         }
     },
+
+    // List suppliers with debit/credit/balance
+    listSuppliersWithBalance: async (req, res) => {
+        try {
+            const response = await Services.supplier.listSuppliersWithBalance(req.query);
+
+            return res.status(200).send({
+                status: 200,
+                message: 'suppliers with balance fetched successfully',
+                data: response
+            });
+
+        } catch (error) {
+            console.log(error);
+            return res.status(500).send({
+                status: 500,
+                message: error.message
+            });
+        }
+    },
+
+    // Get supplier with full transaction details
+    getSupplierWithTransactions: async (req, res) => {
+        try {
+            const response = await Services.supplier.getSupplierWithTransactions(req.params.supplierId);
+
+            if (response) {
+                return res.status(200).send({
+                    status: 200,
+                    message: 'supplier with transactions fetched successfully',
+                    data: response
+                });
+            }
+
+            return res.status(400).send({
+                status: 400,
+                message: "supplier doesn't exist"
+            });
+
+        } catch (error) {
+            return res.status(500).send({
+                status: 500,
+                message: error.message
+            });
+        }
+    },
     
     getSupplier: async (req, res) => {
         try {
