@@ -77,21 +77,28 @@ module.exports = {
             // Get all purchases (increases balance - what we owe)
             const purchases = await db.purchaseBill.findAll({
                 where: { supplierId },
-                attributes: ['id', 'billNumber', 'billDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus']
+                attributes: ['id', 'billNumber', 'billDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus'],
+                order: [['billDate', 'DESC']]
             });
 
-            // Get all payments to this supplier (reduces balance - what we paid)
+            // Get all payments to this supplier - check both partyId and partyName for backwards compatibility
             const payments = await db.payment.findAll({
                 where: { 
-                    partyName: supplier.name,
-                    partyType: 'supplier'
+                    [db.Sequelize.Op.or]: [
+                        { partyId: supplierId },
+                        { 
+                            partyName: supplier.name,
+                            partyType: 'supplier'
+                        }
+                    ]
                 },
-                attributes: ['id', 'paymentNumber', 'paymentDate', 'amount', 'referenceType', 'notes']
+                attributes: ['id', 'paymentNumber', 'paymentDate', 'amount', 'referenceType', 'notes'],
+                order: [['paymentDate', 'DESC']]
             });
 
             // Calculate totals
-            const totalDebit = purchases.reduce((sum, p) => sum + (p.total || 0), 0) + (supplier.openingBalance || 0); // What we owe (purchases + opening)
-            const totalCredit = payments.reduce((sum, p) => sum + (p.amount || 0), 0); // What we paid
+            const totalDebit = purchases.reduce((sum, p) => sum + (p.total || 0), 0) + (supplier.openingBalance || 0);
+            const totalCredit = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
             const balance = totalDebit - totalCredit;
 
             return {
