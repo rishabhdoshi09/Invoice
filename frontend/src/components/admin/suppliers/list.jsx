@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Box, Button, Card, CardContent, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Typography, IconButton } from '@mui/material';
-import { Delete, Edit } from '@mui/icons-material';
+import { Box, Button, Card, CardContent, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Typography, IconButton, Chip, Tooltip } from '@mui/material';
+import { Delete, Edit, Visibility, Refresh } from '@mui/icons-material';
 import { listSuppliers, createSupplier, updateSupplier, deleteSupplier } from '../../../services/supplier';
+import axios from 'axios';
 
 export const ListSuppliers = () => {
     const [suppliers, setSuppliers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [openDialog, setOpenDialog] = useState(false);
     const [editingSupplier, setEditingSupplier] = useState(null);
+    const [detailsDialog, setDetailsDialog] = useState({ open: false, supplier: null });
     const [formData, setFormData] = useState({
         name: '',
         mobile: '',
@@ -20,12 +22,36 @@ export const ListSuppliers = () => {
     const fetchSuppliers = async () => {
         try {
             setLoading(true);
-            const { rows } = await listSuppliers({});
-            setSuppliers(rows);
+            const token = localStorage.getItem('token');
+            // Use the new endpoint with balance
+            const { data } = await axios.get('/api/suppliers/with-balance', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setSuppliers(data.data?.rows || []);
         } catch (error) {
             console.error('Error fetching suppliers:', error);
+            // Fallback to regular list
+            try {
+                const { rows } = await listSuppliers({});
+                setSuppliers(rows);
+            } catch (fallbackError) {
+                console.error('Fallback error:', fallbackError);
+            }
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchSupplierDetails = async (supplierId) => {
+        try {
+            const token = localStorage.getItem('token');
+            const { data } = await axios.get(`/api/suppliers/${supplierId}/transactions`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setDetailsDialog({ open: true, supplier: data.data });
+        } catch (error) {
+            console.error('Error fetching supplier details:', error);
+            alert('Error fetching supplier details');
         }
     };
 
