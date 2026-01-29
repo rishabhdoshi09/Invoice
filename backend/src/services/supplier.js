@@ -40,5 +40,21 @@ module.exports = {
         } catch (error) {
             throw error;
         }
+    },
+    getSupplierWithTransactions: async (supplierId) => {
+        try {
+            const res = await Dao.supplier.getSupplierWithTransactions(supplierId);
+            return res;
+        } catch (error) {
+            throw error;
+        }
+    },
+    listSuppliersWithBalance: async (payload) => {
+        try {
+            const res = await Dao.supplier.listSuppliersWithBalance(payload);
+            return res;
+        } catch (error) {
+            throw error;
+        }
     }
 };
