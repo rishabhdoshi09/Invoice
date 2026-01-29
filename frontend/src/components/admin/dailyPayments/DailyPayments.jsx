@@ -387,11 +387,14 @@ export const DailyPayments = () => {
             
             // Use RTK Query mutation - cache invalidation is automatic!
             await createPaymentMutation(payload).unwrap();
+            
+            // Show success and close
+            alert(`✅ Expense of ₹${parseFloat(simpleForm.amount).toLocaleString('en-IN')} recorded successfully!`);
             handleCloseDialog();
             // No manual refetch needed - RTK Query handles it!
         } catch (error) {
             console.error('Error recording expense:', error);
-            alert('Error recording expense. Please try again.');
+            alert('❌ Error recording expense. Please try again.');
         }
     };
 
