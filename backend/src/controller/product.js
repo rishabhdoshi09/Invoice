@@ -2,6 +2,8 @@ const Services = require('../services');
 const Validations = require('../validations');
 
 let weight = 0;
+let connectionStatus = 'disconnected'; // 'connected', 'disconnected', 'error'
+let lastDataReceived = null; // Timestamp of last data received
 
 const fs = require('fs');
 const { SerialPort } = require('serialport');
@@ -25,25 +27,36 @@ if (fs.existsSync(devPath)) {
 
         port.on('open', () => {
             console.log("Serial port opened successfully");
+            connectionStatus = 'connected';
         });
 
         parser.on('data', (line) => {
             const data = Number(line.trim());
             if (!isNaN(data) && data !== weight) {
                 weight = data;
+                lastDataReceived = Date.now();
+                connectionStatus = 'connected';
             }
         });
 
         port.on('error', (e) => {
             console.log("SerialPort Error:", e.message);
+            connectionStatus = 'error';
+        });
+
+        port.on('close', () => {
+            console.log("Serial port closed");
+            connectionStatus = 'disconnected';
         });
 
     } catch (err) {
         console.log("Failed to open serial port:", err.message);
+        connectionStatus = 'error';
     }
 
 } else {
     console.log("Serial device NOT found → skipping serial initialization");
+    connectionStatus = 'disconnected';
 }
 
 
