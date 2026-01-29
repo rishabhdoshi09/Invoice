@@ -12,7 +12,6 @@ module.exports = {
                 });
             }
 
-            // Set currentBalance equal to openingBalance if provided
             if (value.openingBalance !== undefined) {
                 value.currentBalance = value.openingBalance;
             }
@@ -59,6 +58,52 @@ module.exports = {
             });
         }
     },
+
+    // List customers with debit/credit/balance
+    listCustomersWithBalance: async (req, res) => {
+        try {
+            const response = await Services.customer.listCustomersWithBalance(req.query);
+
+            return res.status(200).send({
+                status: 200,
+                message: 'customers with balance fetched successfully',
+                data: response
+            });
+
+        } catch (error) {
+            console.log(error);
+            return res.status(500).send({
+                status: 500,
+                message: error.message
+            });
+        }
+    },
+
+    // Get customer with full transaction details
+    getCustomerWithTransactions: async (req, res) => {
+        try {
+            const response = await Services.customer.getCustomerWithTransactions(req.params.customerId);
+
+            if (response) {
+                return res.status(200).send({
+                    status: 200,
+                    message: 'customer with transactions fetched successfully',
+                    data: response
+                });
+            }
+
+            return res.status(400).send({
+                status: 400,
+                message: "customer doesn't exist"
+            });
+
+        } catch (error) {
+            return res.status(500).send({
+                status: 500,
+                message: error.message
+            });
+        }
+    },
     
     getCustomer: async (req, res) => {
         try {
@@ -95,7 +140,6 @@ module.exports = {
                 });
             }
 
-            // Set currentBalance equal to openingBalance if provided in the update payload
             if (value.openingBalance !== undefined) {
                 value.currentBalance = value.openingBalance;
             }
@@ -143,7 +187,6 @@ module.exports = {
             });
             
         } catch (error) {
-            // Check if it's a foreign key constraint error
             if (error.name === 'SequelizeForeignKeyConstraintError' || error.original?.code === '23503') {
                 return res.status(400).send({
                     status: 400,
