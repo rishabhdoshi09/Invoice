@@ -128,9 +128,16 @@ export const ListSuppliers = () => {
         <Box sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
                 <Typography variant="h5">Suppliers</Typography>
-                <Button variant="contained" onClick={() => handleOpenDialog()}>
-                    Add Supplier
-                </Button>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Tooltip title="Refresh">
+                        <IconButton onClick={fetchSuppliers} disabled={loading}>
+                            <Refresh />
+                        </IconButton>
+                    </Tooltip>
+                    <Button variant="contained" onClick={() => handleOpenDialog()}>
+                        Add Supplier
+                    </Button>
+                </Box>
             </Box>
 
             <Card>
@@ -138,43 +145,67 @@ export const ListSuppliers = () => {
                     <TableContainer>
                         <Table>
                             <TableHead>
-                                <TableRow>
-                                    <TableCell>Name</TableCell>
-                                    <TableCell>Mobile</TableCell>
-                                    <TableCell>Email</TableCell>
-                                    <TableCell>GSTIN</TableCell>
-                                    <TableCell align="right">Opening Bal.</TableCell>
-                                    <TableCell align="right">Current Bal.</TableCell>
-                                    <TableCell align="center">Actions</TableCell>
+                                <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                    <TableCell><strong>Name</strong></TableCell>
+                                    <TableCell><strong>Mobile</strong></TableCell>
+                                    <TableCell><strong>GSTIN</strong></TableCell>
+                                    <TableCell align="right"><strong>Opening Bal.</strong></TableCell>
+                                    <TableCell align="right"><strong>Total Debit</strong></TableCell>
+                                    <TableCell align="right"><strong>Total Credit</strong></TableCell>
+                                    <TableCell align="right"><strong>Balance</strong></TableCell>
+                                    <TableCell align="center"><strong>Actions</strong></TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {loading ? (
                                     <TableRow>
-                                        <TableCell colSpan={7} align="center">Loading...</TableCell>
+                                        <TableCell colSpan={8} align="center">Loading...</TableCell>
                                     </TableRow>
                                 ) : suppliers.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={7} align="center">No suppliers found</TableCell>
+                                        <TableCell colSpan={8} align="center">No suppliers found</TableCell>
                                     </TableRow>
                                 ) : (
                                     suppliers.map((supplier) => (
-                                        <TableRow key={supplier.id}>
-                                            <TableCell>{supplier.name}</TableCell>
-                                            <TableCell>{supplier.mobile}</TableCell>
-                                            <TableCell>{supplier.email}</TableCell>
-                                            <TableCell>{supplier.gstin}</TableCell>
-                                            <TableCell align="right">₹{(supplier.openingBalance || 0).toLocaleString('en-IN')}</TableCell>
-                                            <TableCell align="right" sx={{ color: (supplier.currentBalance || 0) > 0 ? 'error.main' : 'text.primary', fontWeight: 'bold' }}>
-                                                ₹{(supplier.currentBalance || 0).toLocaleString('en-IN')}
+                                        <TableRow key={supplier.id} hover>
+                                            <TableCell>
+                                                <Typography fontWeight="bold">{supplier.name}</Typography>
+                                            </TableCell>
+                                            <TableCell>{supplier.mobile || '-'}</TableCell>
+                                            <TableCell>{supplier.gstin || '-'}</TableCell>
+                                            <TableCell align="right">
+                                                ₹{(supplier.openingBalance || 0).toLocaleString('en-IN')}
+                                            </TableCell>
+                                            <TableCell align="right" sx={{ color: 'error.main' }}>
+                                                ₹{(supplier.totalDebit || 0).toLocaleString('en-IN')}
+                                            </TableCell>
+                                            <TableCell align="right" sx={{ color: 'success.main' }}>
+                                                ₹{(supplier.totalCredit || 0).toLocaleString('en-IN')}
+                                            </TableCell>
+                                            <TableCell align="right">
+                                                <Chip 
+                                                    label={`₹${(supplier.balance || 0).toLocaleString('en-IN')}`}
+                                                    color={(supplier.balance || 0) > 0 ? 'error' : 'success'}
+                                                    size="small"
+                                                    sx={{ fontWeight: 'bold' }}
+                                                />
                                             </TableCell>
                                             <TableCell align="center">
-                                                <IconButton size="small" onClick={() => handleOpenDialog(supplier)}>
-                                                    <Edit fontSize="small" />
-                                                </IconButton>
-                                                <IconButton size="small" onClick={() => handleDelete(supplier.id)}>
-                                                    <Delete fontSize="small" />
-                                                </IconButton>
+                                                <Tooltip title="View Details">
+                                                    <IconButton size="small" onClick={() => fetchSupplierDetails(supplier.id)}>
+                                                        <Visibility fontSize="small" color="primary" />
+                                                    </IconButton>
+                                                </Tooltip>
+                                                <Tooltip title="Edit">
+                                                    <IconButton size="small" onClick={() => handleOpenDialog(supplier)}>
+                                                        <Edit fontSize="small" />
+                                                    </IconButton>
+                                                </Tooltip>
+                                                <Tooltip title="Delete">
+                                                    <IconButton size="small" onClick={() => handleDelete(supplier.id)}>
+                                                        <Delete fontSize="small" color="error" />
+                                                    </IconButton>
+                                                </Tooltip>
                                             </TableCell>
                                         </TableRow>
                                     ))
