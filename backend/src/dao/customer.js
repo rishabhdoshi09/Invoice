@@ -131,10 +131,18 @@ module.exports = {
             });
 
             const customersWithBalance = await Promise.all(customers.map(async (customer) => {
-                // Get all orders (debit - what they owe)
-                const orderTotal = await db.order.sum('total', {
+                // Get all orders - check both customerId and customerName
+                const orderByIdTotal = await db.order.sum('total', {
+                    where: { 
+                        customerId: customer.id,
+                        isDeleted: false
+                    }
+                }) || 0;
+                
+                const orderByNameTotal = await db.order.sum('total', {
                     where: { 
                         customerName: customer.name,
+                        customerId: null,
                         isDeleted: false
                     }
                 }) || 0;
@@ -153,7 +161,7 @@ module.exports = {
                     }
                 }) || 0;
 
-                const totalDebit = orderTotal + (customer.openingBalance || 0);
+                const totalDebit = orderByIdTotal + orderByNameTotal + (customer.openingBalance || 0);
                 const totalCredit = paymentByIdTotal + paymentByNameTotal;
                 const balance = totalDebit - totalCredit;
 
