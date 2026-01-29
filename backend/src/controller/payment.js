@@ -102,6 +102,13 @@ module.exports = {
                             referenceId: response.id
                         });
                     }
+                    
+                    // Update supplier balance if found (reduce balance when payment is made)
+                    if (supplier) {
+                        await supplier.update({
+                            currentBalance: Math.max(0, (supplier.currentBalance || 0) - value.amount)
+                        }, { transaction });
+                    }
                 } else if (value.partyType === 'expense') {
                     // Simple expense: Cash/Bank (Credit) - money going out
                     // Try to get or create an Expenses ledger
