@@ -200,10 +200,19 @@ module.exports = {
 
     getWeights: async (req, res) => {
         try {
+            // Check if connection seems stale (no data in last 30 seconds while expecting continuous data)
+            const isStale = lastDataReceived && (Date.now() - lastDataReceived > 30000);
+            const effectiveStatus = isStale ? 'stale' : connectionStatus;
+            
             return res.status(200).send({
                 status: 200,
                 message: 'weights fetched successfully',
-                data: { weight: weight }
+                data: { 
+                    weight: weight,
+                    connectionStatus: effectiveStatus,
+                    lastDataReceived: lastDataReceived,
+                    isConnected: connectionStatus === 'connected' && !isStale
+                }
             });
 
         } catch (error) {
