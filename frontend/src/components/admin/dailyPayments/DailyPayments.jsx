@@ -1189,9 +1189,15 @@ export const DailyPayments = () => {
                     )}
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={handleCloseDialog}>Cancel</Button>
-                    <Button onClick={handleSubmit} variant="contained" color="primary">
-                        {dialogMode === 'simple' ? 'Record Expense' : 'Record Payment'}
+                    <Button onClick={handleCloseDialog} disabled={isSubmitting}>Cancel</Button>
+                    <Button 
+                        onClick={handleSubmit} 
+                        variant="contained" 
+                        color="primary"
+                        disabled={isSubmitting}
+                        startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : null}
+                    >
+                        {isSubmitting ? 'Saving...' : (dialogMode === 'simple' ? 'Record Expense' : 'Record Payment')}
                     </Button>
                 </DialogActions>
             </Dialog>
