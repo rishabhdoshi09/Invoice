@@ -534,8 +534,31 @@ export const DailyPayments = () => {
                     <Button variant="contained" onClick={() => handleOpenDialog('simple')} startIcon={<Add />}>
                         Quick Expense
                     </Button>
+                    <Button 
+                        variant="contained" 
+                        color="warning"
+                        onClick={() => {
+                            setFormData({
+                                paymentDate: selectedDate,
+                                partyId: '',
+                                partyName: '',
+                                partyType: 'supplier',
+                                amount: '',
+                                referenceType: 'advance',
+                                referenceId: '',
+                                referenceNumber: '',
+                                notes: ''
+                            });
+                            setSelectedPartyOutstanding(null);
+                            setDialogMode('advanced');
+                            setOpenDialog(true);
+                        }}
+                        startIcon={<LocalShipping />}
+                    >
+                        Supplier Advance
+                    </Button>
                     <Button variant="outlined" onClick={() => handleOpenDialog('advanced')}>
-                        Supplier/Customer Payment
+                        Other Payment
                     </Button>
                 </Box>
             </Box>
