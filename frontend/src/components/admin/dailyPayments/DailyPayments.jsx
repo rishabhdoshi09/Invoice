@@ -425,11 +425,14 @@ export const DailyPayments = () => {
             
             // Use RTK Query mutation - cache invalidation is automatic!
             await createPaymentMutation(payload).unwrap();
+            
+            // Show success and close
+            alert(`✅ Payment of ₹${parseFloat(formData.amount).toLocaleString('en-IN')} to ${formData.partyName} recorded!`);
             handleCloseDialog();
             // No manual refetch needed - RTK Query handles it!
         } catch (error) {
             console.error('Error creating payment:', error);
-            alert('Error creating payment');
+            alert('❌ Error creating payment. Please try again.');
         }
     };
 
