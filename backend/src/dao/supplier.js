@@ -137,16 +137,21 @@ module.exports = {
                     where: { supplierId: supplier.id }
                 }) || 0;
 
-                // Get all payments to this supplier (credit - what we paid)
-                const paymentTotal = await db.payment.sum('amount', {
+                // Get all payments to this supplier - check both partyId and partyName
+                const paymentByIdTotal = await db.payment.sum('amount', {
+                    where: { partyId: supplier.id }
+                }) || 0;
+                
+                const paymentByNameTotal = await db.payment.sum('amount', {
                     where: { 
                         partyName: supplier.name,
-                        partyType: 'supplier'
+                        partyType: 'supplier',
+                        partyId: null  // Only count name-based if no ID linked
                     }
                 }) || 0;
 
                 const totalDebit = purchaseTotal + (supplier.openingBalance || 0);
-                const totalCredit = paymentTotal;
+                const totalCredit = paymentByIdTotal + paymentByNameTotal;
                 const balance = totalDebit - totalCredit;
 
                 return {
