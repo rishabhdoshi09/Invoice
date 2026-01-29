@@ -40,5 +40,21 @@ module.exports = {
         } catch (error) {
             throw error;
         }
+    },
+    getCustomerWithTransactions: async (customerId) => {
+        try {
+            const res = await Dao.customer.getCustomerWithTransactions(customerId);
+            return res;
+        } catch (error) {
+            throw error;
+        }
+    },
+    listCustomersWithBalance: async (payload) => {
+        try {
+            const res = await Dao.customer.listCustomersWithBalance(payload);
+            return res;
+        } catch (error) {
+            throw error;
+        }
     }
 };
