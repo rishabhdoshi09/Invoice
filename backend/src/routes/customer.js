@@ -16,6 +16,14 @@ module.exports = (router) => {
             Controller.customer.listCustomers
         );
 
+    // Get customers with debit/credit/balance
+    router
+        .route('/customers/with-balance')
+        .get(
+            authenticate,
+            Controller.customer.listCustomersWithBalance
+        );
+
     router
         .route('/customers/:customerId')
         .get(
@@ -35,5 +43,13 @@ module.exports = (router) => {
             captureOriginal(db.customer, 'customerId'),
             auditMiddleware('CUSTOMER'),
             Controller.customer.deleteCustomer
+        );
+
+    // Get customer with full transaction history
+    router
+        .route('/customers/:customerId/transactions')
+        .get(
+            authenticate,
+            Controller.customer.getCustomerWithTransactions
         );
 };
