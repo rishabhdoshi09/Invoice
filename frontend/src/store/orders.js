@@ -126,14 +126,28 @@ export const fetchWeightsAction = () => {
         try{
             dispatch(startLoading());
             const { data: { data }} = await fetchWeights();
-            dispatch(setNotification({ open: true, severity: 'success', message: 'Weights fetched successfully'}));
             dispatch(stopLoading());
+            
+            // Check connection status
+            if (!data.isConnected) {
+                const statusMsg = data.connectionStatus === 'disconnected' 
+                    ? '⚠️ Scale disconnected! Check RS232 connection.'
+                    : data.connectionStatus === 'error'
+                    ? '❌ Scale connection error! Check cable and restart.'
+                    : data.connectionStatus === 'stale'
+                    ? '⚠️ Scale not responding! No data received recently. Check connection.'
+                    : '⚠️ Scale connection issue!';
+                dispatch(setNotification({ open: true, severity: 'warning', message: statusMsg }));
+            } else {
+                dispatch(setNotification({ open: true, severity: 'success', message: 'Weight fetched successfully'}));
+            }
+            
             return data;
         }
         catch(error){
             console.log(error);
             dispatch(stopLoading());
-            dispatch(setNotification({ open: true, severity: 'error', message: 'Something went wrong, please try again!'}));
+            dispatch(setNotification({ open: true, severity: 'error', message: '❌ Failed to fetch weight! Check if scale is connected.'}));
             return {};
         }
     }
