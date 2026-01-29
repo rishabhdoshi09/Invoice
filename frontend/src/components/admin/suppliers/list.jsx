@@ -1,15 +1,24 @@
 import { useEffect, useState } from 'react';
-import { Box, Button, Card, CardContent, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Typography, IconButton, Chip, Tooltip } from '@mui/material';
-import { Delete, Edit, Visibility, Refresh } from '@mui/icons-material';
+import { 
+    Box, Button, Card, CardContent, Table, TableBody, TableCell, TableContainer, 
+    TableHead, TableRow, TextField, Dialog, DialogTitle, DialogContent, DialogActions, 
+    Typography, IconButton, Chip, Tooltip, Grid, Paper, Tabs, Tab, Alert,
+    FormControl, InputLabel, Select, MenuItem, CircularProgress
+} from '@mui/material';
+import { Delete, Edit, Visibility, Refresh, Add, Payment, Receipt, LocalShipping } from '@mui/icons-material';
 import { listSuppliers, createSupplier, updateSupplier, deleteSupplier } from '../../../services/supplier';
 import axios from 'axios';
+import moment from 'moment';
 
 export const ListSuppliers = () => {
     const [suppliers, setSuppliers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [openDialog, setOpenDialog] = useState(false);
     const [editingSupplier, setEditingSupplier] = useState(null);
-    const [detailsDialog, setDetailsDialog] = useState({ open: false, supplier: null });
+    const [detailsDialog, setDetailsDialog] = useState({ open: false, supplier: null, tab: 0 });
+    const [paymentDialog, setPaymentDialog] = useState({ open: false, supplier: null });
+    const [submitting, setSubmitting] = useState(false);
+    
     const [formData, setFormData] = useState({
         name: '',
         mobile: '',
@@ -19,18 +28,23 @@ export const ListSuppliers = () => {
         openingBalance: 0
     });
 
+    const [paymentForm, setPaymentForm] = useState({
+        amount: '',
+        referenceType: 'advance',
+        notes: '',
+        paymentDate: moment().format('YYYY-MM-DD')
+    });
+
     const fetchSuppliers = async () => {
         try {
             setLoading(true);
             const token = localStorage.getItem('token');
-            // Use the new endpoint with balance
             const { data } = await axios.get('/api/suppliers/with-balance', {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setSuppliers(data.data?.rows || []);
         } catch (error) {
             console.error('Error fetching suppliers:', error);
-            // Fallback to regular list
             try {
                 const { rows } = await listSuppliers({});
                 setSuppliers(rows);
@@ -48,7 +62,7 @@ export const ListSuppliers = () => {
             const { data } = await axios.get(`/api/suppliers/${supplierId}/transactions`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setDetailsDialog({ open: true, supplier: data.data });
+            setDetailsDialog({ open: true, supplier: data.data, tab: 0 });
         } catch (error) {
             console.error('Error fetching supplier details:', error);
             alert('Error fetching supplier details');
@@ -72,14 +86,7 @@ export const ListSuppliers = () => {
             });
         } else {
             setEditingSupplier(null);
-            setFormData({
-                name: '',
-                mobile: '',
-                email: '',
-                address: '',
-                gstin: '',
-                openingBalance: 0
-            });
+            setFormData({ name: '', mobile: '', email: '', address: '', gstin: '', openingBalance: 0 });
         }
         setOpenDialog(true);
     };
@@ -90,10 +97,7 @@ export const ListSuppliers = () => {
     };
 
     const handleChange = (e) => {
-        setFormData({
-            ...formData,
-            [e.target.name]: e.target.value
-        });
+        setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
     const handleSubmit = async () => {
@@ -117,28 +121,105 @@ export const ListSuppliers = () => {
                 await deleteSupplier(supplierId);
                 fetchSuppliers();
             } catch (error) {
-                console.error('Error deleting supplier:', error);
-                const errorMessage = error.response?.data?.message || 'Error deleting supplier. Please try again.';
+                const errorMessage = error.response?.data?.message || 'Error deleting supplier.';
                 alert(errorMessage);
             }
+        }
+    };
+
+    // Payment Dialog handlers
+    const openPaymentDialog = (supplier) => {
+        setPaymentForm({
+            amount: '',
+            referenceType: 'advance',
+            notes: '',
+            paymentDate: moment().format('YYYY-MM-DD')
+        });
+        setPaymentDialog({ open: true, supplier });
+    };
+
+    const handlePaymentSubmit = async () => {
+        if (!paymentForm.amount || parseFloat(paymentForm.amount) <= 0) {
+            alert('Please enter a valid amount');
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            const token = localStorage.getItem('token');
+            const payload = {
+                paymentDate: paymentForm.paymentDate,
+                partyType: 'supplier',
+                partyName: paymentDialog.supplier.name,
+                partyId: paymentDialog.supplier.id,
+                amount: parseFloat(paymentForm.amount),
+                referenceType: paymentForm.referenceType,
+                notes: paymentForm.notes
+            };
+
+            await axios.post('/api/payments', payload, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            alert(`✅ Payment of ₹${parseFloat(paymentForm.amount).toLocaleString('en-IN')} to ${paymentDialog.supplier.name} recorded!`);
+            setPaymentDialog({ open: false, supplier: null });
+            fetchSuppliers();
+            
+            // Also refresh details if open
+            if (detailsDialog.open && detailsDialog.supplier?.id === paymentDialog.supplier.id) {
+                fetchSupplierDetails(paymentDialog.supplier.id);
+            }
+        } catch (error) {
+            console.error('Error recording payment:', error);
+            alert('❌ Error recording payment. Please try again.');
+        } finally {
+            setSubmitting(false);
         }
     };
 
     return (
         <Box sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-                <Typography variant="h5">Suppliers</Typography>
+                <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <LocalShipping /> Suppliers
+                </Typography>
                 <Box sx={{ display: 'flex', gap: 1 }}>
                     <Tooltip title="Refresh">
                         <IconButton onClick={fetchSuppliers} disabled={loading}>
                             <Refresh />
                         </IconButton>
                     </Tooltip>
-                    <Button variant="contained" onClick={() => handleOpenDialog()}>
+                    <Button variant="contained" onClick={() => handleOpenDialog()} startIcon={<Add />}>
                         Add Supplier
                     </Button>
                 </Box>
             </Box>
+
+            {/* Summary Cards */}
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={12} sm={4}>
+                    <Paper sx={{ p: 2, bgcolor: '#e3f2fd' }}>
+                        <Typography variant="body2" color="text.secondary">Total Suppliers</Typography>
+                        <Typography variant="h4" color="primary" fontWeight="bold">{suppliers.length}</Typography>
+                    </Paper>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                    <Paper sx={{ p: 2, bgcolor: '#ffebee' }}>
+                        <Typography variant="body2" color="text.secondary">Total Payable (Debit)</Typography>
+                        <Typography variant="h4" color="error" fontWeight="bold">
+                            ₹{suppliers.reduce((sum, s) => sum + (s.totalDebit || 0), 0).toLocaleString('en-IN')}
+                        </Typography>
+                    </Paper>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                    <Paper sx={{ p: 2, bgcolor: '#e8f5e9' }}>
+                        <Typography variant="body2" color="text.secondary">Total Paid (Credit)</Typography>
+                        <Typography variant="h4" color="success.main" fontWeight="bold">
+                            ₹{suppliers.reduce((sum, s) => sum + (s.totalCredit || 0), 0).toLocaleString('en-IN')}
+                        </Typography>
+                    </Paper>
+                </Grid>
+            </Grid>
 
             <Card>
                 <CardContent>
@@ -149,9 +230,9 @@ export const ListSuppliers = () => {
                                     <TableCell><strong>Name</strong></TableCell>
                                     <TableCell><strong>Mobile</strong></TableCell>
                                     <TableCell><strong>GSTIN</strong></TableCell>
-                                    <TableCell align="right"><strong>Opening Bal.</strong></TableCell>
-                                    <TableCell align="right"><strong>Total Debit</strong></TableCell>
-                                    <TableCell align="right"><strong>Total Credit</strong></TableCell>
+                                    <TableCell align="right"><strong>Opening</strong></TableCell>
+                                    <TableCell align="right"><strong>Purchases (Dr)</strong></TableCell>
+                                    <TableCell align="right"><strong>Paid (Cr)</strong></TableCell>
                                     <TableCell align="right"><strong>Balance</strong></TableCell>
                                     <TableCell align="center"><strong>Actions</strong></TableCell>
                                 </TableRow>
@@ -159,7 +240,7 @@ export const ListSuppliers = () => {
                             <TableBody>
                                 {loading ? (
                                     <TableRow>
-                                        <TableCell colSpan={8} align="center">Loading...</TableCell>
+                                        <TableCell colSpan={8} align="center"><CircularProgress size={24} /></TableCell>
                                     </TableRow>
                                 ) : suppliers.length === 0 ? (
                                     <TableRow>
@@ -191,7 +272,12 @@ export const ListSuppliers = () => {
                                                 />
                                             </TableCell>
                                             <TableCell align="center">
-                                                <Tooltip title="View Details">
+                                                <Tooltip title="Make Payment">
+                                                    <IconButton size="small" color="success" onClick={() => openPaymentDialog(supplier)}>
+                                                        <Payment fontSize="small" />
+                                                    </IconButton>
+                                                </Tooltip>
+                                                <Tooltip title="View Ledger">
                                                     <IconButton size="small" onClick={() => fetchSupplierDetails(supplier.id)}>
                                                         <Visibility fontSize="small" color="primary" />
                                                     </IconButton>
@@ -216,63 +302,16 @@ export const ListSuppliers = () => {
                 </CardContent>
             </Card>
 
+            {/* Add/Edit Supplier Dialog */}
             <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-                <DialogTitle>{editingSupplier ? 'Edit Supplier' : 'Add Supplier'}</DialogTitle>
+                <DialogTitle>{editingSupplier ? 'Edit Supplier' : 'Add New Supplier'}</DialogTitle>
                 <DialogContent>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-                        <TextField
-                            label="Supplier Name *"
-                            name="name"
-                            value={formData.name}
-                            onChange={handleChange}
-                            fullWidth
-                            required
-                        />
-                        <TextField
-                            label="Mobile"
-                            name="mobile"
-                            value={formData.mobile}
-                            onChange={handleChange}
-                            fullWidth
-                        />
-                        <TextField
-                            label="Email"
-                            name="email"
-                            type="email"
-                            value={formData.email}
-                            onChange={handleChange}
-                            fullWidth
-                        />
-                        <TextField
-                            label="Address"
-                            name="address"
-                            value={formData.address}
-                            onChange={handleChange}
-                            fullWidth
-                            multiline
-                            rows={2}
-                        />
-                        <TextField
-                            label="GSTIN"
-                            name="gstin"
-                            value={formData.gstin}
-                            onChange={handleChange}
-                            fullWidth
-                        />
-                        <TextField
-                            label="Opening Balance (Amount you owe supplier)"
-                            name="openingBalance"
-                            type="number"
-                            value={formData.openingBalance}
-                            onChange={handleChange}
-                            fullWidth
-                            helperText={editingSupplier 
-                                ? "⚠️ Only change if correcting initial balance. Current balance will be recalculated."
-                                : "Enter the amount you already owe this supplier (payable)"
-                            }
-                            InputProps={{ inputProps: { min: 0 } }}
-                        />
-                    </Box>
+                    <TextField label="Name *" name="name" value={formData.name} onChange={handleChange} fullWidth margin="normal" />
+                    <TextField label="Mobile" name="mobile" value={formData.mobile} onChange={handleChange} fullWidth margin="normal" />
+                    <TextField label="Email" name="email" value={formData.email} onChange={handleChange} fullWidth margin="normal" />
+                    <TextField label="Address" name="address" value={formData.address} onChange={handleChange} fullWidth margin="normal" multiline rows={2} />
+                    <TextField label="GSTIN" name="gstin" value={formData.gstin} onChange={handleChange} fullWidth margin="normal" />
+                    <TextField label="Opening Balance" name="openingBalance" type="number" value={formData.openingBalance} onChange={handleChange} fullWidth margin="normal" />
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseDialog}>Cancel</Button>
@@ -282,131 +321,219 @@ export const ListSuppliers = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Supplier Details Dialog */}
+            {/* Payment Dialog */}
+            <Dialog open={paymentDialog.open} onClose={() => setPaymentDialog({ open: false, supplier: null })} maxWidth="sm" fullWidth>
+                <DialogTitle sx={{ bgcolor: '#e8f5e9' }}>
+                    💰 Make Payment to {paymentDialog.supplier?.name}
+                </DialogTitle>
+                <DialogContent>
+                    <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
+                        Current Balance: <strong>₹{(paymentDialog.supplier?.balance || 0).toLocaleString('en-IN')}</strong>
+                    </Alert>
+                    
+                    <TextField
+                        label="Payment Date"
+                        type="date"
+                        value={paymentForm.paymentDate}
+                        onChange={(e) => setPaymentForm({ ...paymentForm, paymentDate: e.target.value })}
+                        fullWidth
+                        margin="normal"
+                        InputLabelProps={{ shrink: true }}
+                    />
+                    
+                    <TextField
+                        label="Amount *"
+                        type="number"
+                        value={paymentForm.amount}
+                        onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+                        fullWidth
+                        margin="normal"
+                        autoFocus
+                        InputProps={{ inputProps: { min: 0, step: 0.01 } }}
+                    />
+                    
+                    <FormControl fullWidth margin="normal">
+                        <InputLabel>Payment Type</InputLabel>
+                        <Select
+                            value={paymentForm.referenceType}
+                            label="Payment Type"
+                            onChange={(e) => setPaymentForm({ ...paymentForm, referenceType: e.target.value })}
+                        >
+                            <MenuItem value="advance">Advance Payment</MenuItem>
+                            <MenuItem value="purchase">Against Purchase Bill</MenuItem>
+                            <MenuItem value="adjustment">Adjustment</MenuItem>
+                        </Select>
+                    </FormControl>
+                    
+                    <TextField
+                        label="Notes"
+                        value={paymentForm.notes}
+                        onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+                        fullWidth
+                        margin="normal"
+                        multiline
+                        rows={2}
+                        placeholder="Optional notes about this payment"
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setPaymentDialog({ open: false, supplier: null })} disabled={submitting}>
+                        Cancel
+                    </Button>
+                    <Button 
+                        onClick={handlePaymentSubmit} 
+                        variant="contained" 
+                        color="success"
+                        disabled={submitting || !paymentForm.amount}
+                        startIcon={submitting ? <CircularProgress size={20} /> : <Payment />}
+                    >
+                        {submitting ? 'Recording...' : 'Record Payment'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Supplier Ledger Details Dialog */}
             <Dialog 
                 open={detailsDialog.open} 
-                onClose={() => setDetailsDialog({ open: false, supplier: null })}
-                maxWidth="md"
+                onClose={() => setDetailsDialog({ open: false, supplier: null, tab: 0 })}
+                maxWidth="lg"
                 fullWidth
             >
-                <DialogTitle sx={{ bgcolor: '#fff3e0' }}>
-                    Supplier Details: {detailsDialog.supplier?.name}
+                <DialogTitle sx={{ bgcolor: '#fff3e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Receipt /> Supplier Ledger: {detailsDialog.supplier?.name}
+                    </Box>
+                    <Button 
+                        variant="contained" 
+                        color="success" 
+                        size="small"
+                        startIcon={<Payment />}
+                        onClick={() => {
+                            setDetailsDialog({ ...detailsDialog, open: false });
+                            openPaymentDialog(detailsDialog.supplier);
+                        }}
+                    >
+                        Make Payment
+                    </Button>
                 </DialogTitle>
                 <DialogContent>
                     {detailsDialog.supplier && (
                         <Box sx={{ mt: 2 }}>
-                            {/* Summary */}
-                            <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
-                                <Card sx={{ flex: 1, minWidth: 150, bgcolor: '#e3f2fd' }}>
-                                    <CardContent>
+                            {/* Summary Cards */}
+                            <Grid container spacing={2} sx={{ mb: 3 }}>
+                                <Grid item xs={6} sm={3}>
+                                    <Paper sx={{ p: 2, bgcolor: '#e3f2fd', textAlign: 'center' }}>
                                         <Typography variant="caption" color="text.secondary">Opening Balance</Typography>
                                         <Typography variant="h6">₹{(detailsDialog.supplier.openingBalance || 0).toLocaleString('en-IN')}</Typography>
-                                    </CardContent>
-                                </Card>
-                                <Card sx={{ flex: 1, minWidth: 150, bgcolor: '#ffebee' }}>
-                                    <CardContent>
-                                        <Typography variant="caption" color="text.secondary">Total Debit (Purchases)</Typography>
+                                    </Paper>
+                                </Grid>
+                                <Grid item xs={6} sm={3}>
+                                    <Paper sx={{ p: 2, bgcolor: '#ffebee', textAlign: 'center' }}>
+                                        <Typography variant="caption" color="text.secondary">Total Purchases (Dr)</Typography>
                                         <Typography variant="h6" color="error">₹{(detailsDialog.supplier.totalDebit || 0).toLocaleString('en-IN')}</Typography>
-                                    </CardContent>
-                                </Card>
-                                <Card sx={{ flex: 1, minWidth: 150, bgcolor: '#e8f5e9' }}>
-                                    <CardContent>
-                                        <Typography variant="caption" color="text.secondary">Total Credit (Payments)</Typography>
+                                    </Paper>
+                                </Grid>
+                                <Grid item xs={6} sm={3}>
+                                    <Paper sx={{ p: 2, bgcolor: '#e8f5e9', textAlign: 'center' }}>
+                                        <Typography variant="caption" color="text.secondary">Total Paid (Cr)</Typography>
                                         <Typography variant="h6" color="success.main">₹{(detailsDialog.supplier.totalCredit || 0).toLocaleString('en-IN')}</Typography>
-                                    </CardContent>
-                                </Card>
-                                <Card sx={{ flex: 1, minWidth: 150, bgcolor: (detailsDialog.supplier.balance || 0) > 0 ? '#ffebee' : '#e8f5e9' }}>
-                                    <CardContent>
+                                    </Paper>
+                                </Grid>
+                                <Grid item xs={6} sm={3}>
+                                    <Paper sx={{ p: 2, bgcolor: (detailsDialog.supplier.balance || 0) > 0 ? '#ffebee' : '#e8f5e9', textAlign: 'center' }}>
                                         <Typography variant="caption" color="text.secondary">Balance Due</Typography>
                                         <Typography variant="h6" fontWeight="bold" color={(detailsDialog.supplier.balance || 0) > 0 ? 'error' : 'success.main'}>
                                             ₹{(detailsDialog.supplier.balance || 0).toLocaleString('en-IN')}
                                         </Typography>
-                                    </CardContent>
-                                </Card>
-                            </Box>
+                                    </Paper>
+                                </Grid>
+                            </Grid>
 
-                            {/* Purchases Section */}
-                            <Typography variant="subtitle1" fontWeight="bold" sx={{ mt: 2, mb: 1 }}>
-                                📦 Purchases (Debit)
-                            </Typography>
-                            {detailsDialog.supplier.purchases?.length > 0 ? (
-                                <TableContainer>
-                                    <Table size="small">
-                                        <TableHead>
-                                            <TableRow sx={{ bgcolor: '#ffebee' }}>
-                                                <TableCell><strong>Bill No</strong></TableCell>
-                                                <TableCell><strong>Date</strong></TableCell>
-                                                <TableCell align="right"><strong>Total</strong></TableCell>
-                                                <TableCell align="right"><strong>Paid</strong></TableCell>
-                                                <TableCell align="right"><strong>Due</strong></TableCell>
-                                                <TableCell><strong>Status</strong></TableCell>
-                                            </TableRow>
-                                        </TableHead>
-                                        <TableBody>
-                                            {detailsDialog.supplier.purchases.map((purchase) => (
-                                                <TableRow key={purchase.id} hover>
-                                                    <TableCell>{purchase.billNumber}</TableCell>
-                                                    <TableCell>{purchase.billDate}</TableCell>
-                                                    <TableCell align="right">₹{(purchase.total || 0).toLocaleString('en-IN')}</TableCell>
-                                                    <TableCell align="right">₹{(purchase.paidAmount || 0).toLocaleString('en-IN')}</TableCell>
-                                                    <TableCell align="right">₹{(purchase.dueAmount || 0).toLocaleString('en-IN')}</TableCell>
-                                                    <TableCell>
-                                                        <Chip 
-                                                            label={purchase.paymentStatus} 
-                                                            size="small" 
-                                                            color={purchase.paymentStatus === 'paid' ? 'success' : 'warning'}
-                                                        />
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </TableContainer>
-                            ) : (
-                                <Typography color="text.secondary">No purchases found</Typography>
+                            <Tabs value={detailsDialog.tab} onChange={(e, v) => setDetailsDialog({ ...detailsDialog, tab: v })} sx={{ mb: 2 }}>
+                                <Tab label={`Purchases (${detailsDialog.supplier.purchases?.length || 0})`} />
+                                <Tab label={`Payments (${detailsDialog.supplier.payments?.length || 0})`} />
+                            </Tabs>
+
+                            {detailsDialog.tab === 0 && (
+                                <>
+                                    <Typography variant="subtitle2" sx={{ mb: 1 }}>📦 Purchase Bills (Debit Entries)</Typography>
+                                    {detailsDialog.supplier.purchases?.length > 0 ? (
+                                        <TableContainer sx={{ maxHeight: 300 }}>
+                                            <Table size="small" stickyHeader>
+                                                <TableHead>
+                                                    <TableRow sx={{ bgcolor: '#ffebee' }}>
+                                                        <TableCell><strong>Bill No</strong></TableCell>
+                                                        <TableCell><strong>Date</strong></TableCell>
+                                                        <TableCell align="right"><strong>Total</strong></TableCell>
+                                                        <TableCell align="right"><strong>Paid</strong></TableCell>
+                                                        <TableCell align="right"><strong>Due</strong></TableCell>
+                                                        <TableCell><strong>Status</strong></TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {detailsDialog.supplier.purchases.map((purchase) => (
+                                                        <TableRow key={purchase.id} hover>
+                                                            <TableCell>{purchase.billNumber}</TableCell>
+                                                            <TableCell>{purchase.billDate}</TableCell>
+                                                            <TableCell align="right" sx={{ color: 'error.main', fontWeight: 'bold' }}>
+                                                                ₹{(purchase.total || 0).toLocaleString('en-IN')}
+                                                            </TableCell>
+                                                            <TableCell align="right">₹{(purchase.paidAmount || 0).toLocaleString('en-IN')}</TableCell>
+                                                            <TableCell align="right">₹{(purchase.dueAmount || 0).toLocaleString('en-IN')}</TableCell>
+                                                            <TableCell>
+                                                                <Chip label={purchase.paymentStatus} size="small" color={purchase.paymentStatus === 'paid' ? 'success' : 'warning'} />
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </TableContainer>
+                                    ) : (
+                                        <Alert severity="info">No purchase bills found</Alert>
+                                    )}
+                                </>
                             )}
 
-                            {/* Payments Section */}
-                            <Typography variant="subtitle1" fontWeight="bold" sx={{ mt: 3, mb: 1 }}>
-                                💰 Payments (Credit)
-                            </Typography>
-                            {detailsDialog.supplier.payments?.length > 0 ? (
-                                <TableContainer>
-                                    <Table size="small">
-                                        <TableHead>
-                                            <TableRow sx={{ bgcolor: '#e8f5e9' }}>
-                                                <TableCell><strong>Payment No</strong></TableCell>
-                                                <TableCell><strong>Date</strong></TableCell>
-                                                <TableCell align="right"><strong>Amount</strong></TableCell>
-                                                <TableCell><strong>Type</strong></TableCell>
-                                                <TableCell><strong>Notes</strong></TableCell>
-                                            </TableRow>
-                                        </TableHead>
-                                        <TableBody>
-                                            {detailsDialog.supplier.payments.map((payment) => (
-                                                <TableRow key={payment.id} hover>
-                                                    <TableCell>{payment.paymentNumber}</TableCell>
-                                                    <TableCell>{payment.paymentDate}</TableCell>
-                                                    <TableCell align="right" sx={{ color: 'success.main', fontWeight: 'bold' }}>
-                                                        ₹{(payment.amount || 0).toLocaleString('en-IN')}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Chip label={payment.referenceType} size="small" variant="outlined" />
-                                                    </TableCell>
-                                                    <TableCell>{payment.notes || '-'}</TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </TableContainer>
-                            ) : (
-                                <Typography color="text.secondary">No payments found</Typography>
+                            {detailsDialog.tab === 1 && (
+                                <>
+                                    <Typography variant="subtitle2" sx={{ mb: 1 }}>💰 Payments Made (Credit Entries)</Typography>
+                                    {detailsDialog.supplier.payments?.length > 0 ? (
+                                        <TableContainer sx={{ maxHeight: 300 }}>
+                                            <Table size="small" stickyHeader>
+                                                <TableHead>
+                                                    <TableRow sx={{ bgcolor: '#e8f5e9' }}>
+                                                        <TableCell><strong>Payment No</strong></TableCell>
+                                                        <TableCell><strong>Date</strong></TableCell>
+                                                        <TableCell align="right"><strong>Amount</strong></TableCell>
+                                                        <TableCell><strong>Type</strong></TableCell>
+                                                        <TableCell><strong>Notes</strong></TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {detailsDialog.supplier.payments.map((payment) => (
+                                                        <TableRow key={payment.id} hover>
+                                                            <TableCell>{payment.paymentNumber}</TableCell>
+                                                            <TableCell>{payment.paymentDate}</TableCell>
+                                                            <TableCell align="right" sx={{ color: 'success.main', fontWeight: 'bold' }}>
+                                                                ₹{(payment.amount || 0).toLocaleString('en-IN')}
+                                                            </TableCell>
+                                                            <TableCell><Chip label={payment.referenceType} size="small" variant="outlined" /></TableCell>
+                                                            <TableCell>{payment.notes || '-'}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </TableContainer>
+                                    ) : (
+                                        <Alert severity="info">No payments found. Click "Make Payment" to add one.</Alert>
+                                    )}
+                                </>
                             )}
                         </Box>
                     )}
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setDetailsDialog({ open: false, supplier: null })}>Close</Button>
+                    <Button onClick={() => setDetailsDialog({ open: false, supplier: null, tab: 0 })}>Close</Button>
                 </DialogActions>
             </Dialog>
         </Box>
