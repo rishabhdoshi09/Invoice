@@ -1166,7 +1166,6 @@ export const CreateOrder = () => {
             setModalOpen(false);
             setModalSuppress(false);
           }, 150);
-          }, 100);
         }
       }
     };
