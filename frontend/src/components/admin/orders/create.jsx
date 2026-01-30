@@ -2061,29 +2061,32 @@ export const CreateOrder = () => {
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                 <Typography variant="subtitle2">Last Invoice: {lastInvoiceTotal != null ? `₹ ${Number(lastInvoiceTotal).toLocaleString('en-IN')}` : '—'}</Typography>
               </Box>
-              <Button 
-                size="small" 
-                variant="outlined" 
-                onClick={printPdf}
-                disabled={!archivedOrderProps}
-                title={!archivedOrderProps ? 'Submit an order first to enable printing' : 'Print PDF'}
-              >
-                Print PDF
-              </Button>
+              {archivedOrderProps && (
+                <Button 
+                  size="small" 
+                  variant="outlined" 
+                  onClick={printPdf}
+                  title='Print PDF'
+                >
+                  Print PDF
+                </Button>
+              )}
             </Box>
 
             <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
               {visiblePdfUrl ? (
                 <>
-                  <Box sx={{ mb: 1, display: 'flex', gap: 1 }}>
-                    <Button 
-                      size="small" 
-                      variant="outlined"
-                      onClick={() => window.open(visiblePdfUrl, '_blank')}
-                    >
-                      Open PDF in New Tab
-                    </Button>
-                  </Box>
+                  {archivedOrderProps && (
+                    <Box sx={{ mb: 1, display: 'flex', gap: 1 }}>
+                      <Button 
+                        size="small" 
+                        variant="outlined"
+                        onClick={() => window.open(visiblePdfUrl, '_blank')}
+                      >
+                        Open PDF in New Tab
+                      </Button>
+                    </Box>
+                  )}
                   <Box sx={{ flexGrow: 1, '& iframe, & embed, & object': { width: '100%', height: '100%', border: 'none' } }}>
                     <object
                       key={visiblePdfUrl}
