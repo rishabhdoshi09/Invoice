@@ -1108,7 +1108,11 @@ export const CreateOrder = () => {
         if (productIsWeighted) {
           // For weighted products: fetch weight from scale
           // Validate price (3-digit, not in restricted ranges, etc.)
-          if (!currentFormik.values.productPrice || isWeightedPriceInvalid) return;
+          const priceVal = Number(currentFormik.values.productPrice) || 0;
+          const priceString = String(priceVal);
+          const isPriceInvalid = priceString.length !== 3 || priceVal < 100 || priceVal > 399;
+          
+          if (!currentFormik.values.productPrice || isPriceInvalid) return;
           
           // Fetch weight
           const result = await dispatch(fetchWeightsAction());
