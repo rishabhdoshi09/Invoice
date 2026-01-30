@@ -114,9 +114,17 @@ export const OutstandingReports = () => {
             if (type === 'customer') {
                 const orders = party.orders || [];
                 orders.forEach(order => {
+                    // Handle various date formats
+                    const dateStr = order.orderDate;
+                    let formattedDate = 'N/A';
+                    if (dateStr) {
+                        // Try parsing with different formats
+                        const parsedDate = moment(dateStr, ['DD-MM-YYYY', 'YYYY-MM-DD', 'DD/MM/YYYY', 'MM-DD-YYYY']);
+                        formattedDate = parsedDate.isValid() ? parsedDate.format('DD/MM/YYYY') : dateStr;
+                    }
                     transactions.push({
                         id: order.id,
-                        date: moment(order.orderDate).format('DD/MM/YYYY'),
+                        date: formattedDate,
                         description: `Bill: ${order.orderNumber}`,
                         type: 'bill',
                         orderNumber: order.orderNumber,
