@@ -1084,43 +1084,54 @@ export const CreateOrder = () => {
   useEffect(() => {
     const handleKeyDown = async (e) => {
       if (e.key === "=" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        // Only for weighted products
-        if (!isWeighted) return;
-        
         // Check if product is selected
         if (!formik.values.name) return;
         
         // Check if 'add' product is allowed
         if (!allowAddProductName && isAddName(formik.values.name)) return;
         
-        // Validate price (3-digit, not in restricted ranges, etc.)
-        if (!formik.values.productPrice || isWeightedPriceInvalid) return;
-        
         e.preventDefault();
         
-        // Fetch weight
-        const result = await dispatch(fetchWeightsAction());
-        
-        // Check if we got a result with weight
-        const weight = result?.weight;
-        if (weight == null || Number(weight) <= 0) {
-          alert("Weight fetched is zero or invalid. Please ensure the scale is ready.");
-          return;
-        }
-        
-        // Set the weight and calculate total
-        formik.setFieldValue('quantity', weight);
-        setFetchedViaScale(true);
-        const price = Number(formik.values.productPrice) || 0;
-        formik.setFieldValue('totalPrice', Number((price * weight).toFixed(2)));
-        
-        // Small delay to ensure state is updated, then submit
-        setTimeout(() => {
+        if (isWeighted) {
+          // For weighted products: fetch weight from scale
+          // Validate price (3-digit, not in restricted ranges, etc.)
+          if (!formik.values.productPrice || isWeightedPriceInvalid) return;
+          
+          // Fetch weight
+          const result = await dispatch(fetchWeightsAction());
+          
+          // Check if we got a result with weight
+          const weight = result?.weight;
+          if (weight == null || Number(weight) <= 0) {
+            alert("Weight fetched is zero or invalid. Please ensure the scale is ready.");
+            return;
+          }
+          
+          // Set the weight and calculate total
+          formik.setFieldValue('quantity', weight);
+          setFetchedViaScale(true);
+          const price = Number(formik.values.productPrice) || 0;
+          formik.setFieldValue('totalPrice', Number((price * weight).toFixed(2)));
+          
+          // Small delay to ensure state is updated, then submit
+          setTimeout(() => {
+            formik.handleSubmit();
+            setModalOpen(false);
+            setModalSuppress(false);
+          }, 50);
+        } else {
+          // For non-weighted products: validate quantity and add directly
+          const currentQty = Number(formik.values.quantity) || 0;
+          if (currentQty <= 0) {
+            alert("Please enter a valid quantity before adding.");
+            return;
+          }
+          
+          // Submit directly
           formik.handleSubmit();
-          // Close modal after submission
           setModalOpen(false);
           setModalSuppress(false);
-        }, 50);
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
