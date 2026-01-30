@@ -473,7 +473,11 @@ export const ListCustomers = () => {
                                                     {detailsDialog.customer.orders.map((order) => (
                                                         <TableRow key={order.id} hover>
                                                             <TableCell>{order.orderNumber}</TableCell>
-                                                            <TableCell>{order.orderDate}</TableCell>
+                                                            <TableCell>
+                                                                {order.orderDate ? 
+                                                                    moment(order.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD', 'DD/MM/YYYY']).format('DD/MM/YYYY') 
+                                                                    : '-'}
+                                                            </TableCell>
                                                             <TableCell align="right" sx={{ color: 'success.main', fontWeight: 'bold' }}>
                                                                 ₹{(order.total || 0).toLocaleString('en-IN')}
                                                             </TableCell>
