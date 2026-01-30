@@ -2069,14 +2069,35 @@ export const CreateOrder = () => {
               </Button>
             </Box>
 
-            <Box sx={{ flexGrow: 1, '& iframe': { width: '100%', height: '100%', border: 'none' } }}>
+            <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
               {visiblePdfUrl ? (
-                <iframe 
-                  key={visiblePdfUrl}
-                  ref={pdfRef} 
-                  src={archivedOrderProps ? visiblePdfUrl : `${visiblePdfUrl}#toolbar=0`} 
-                  title='Invoice' 
-                />
+                <>
+                  <Box sx={{ mb: 1, display: 'flex', gap: 1 }}>
+                    <Button 
+                      size="small" 
+                      variant="outlined"
+                      onClick={() => window.open(visiblePdfUrl, '_blank')}
+                    >
+                      Open PDF in New Tab
+                    </Button>
+                  </Box>
+                  <Box sx={{ flexGrow: 1, '& iframe, & embed, & object': { width: '100%', height: '100%', border: 'none' } }}>
+                    <object
+                      key={visiblePdfUrl}
+                      data={`${visiblePdfUrl}#toolbar=0&navpanes=0`}
+                      type="application/pdf"
+                      style={{ width: '100%', height: '100%' }}
+                    >
+                      <iframe 
+                        key={`iframe-${visiblePdfUrl}`}
+                        ref={pdfRef} 
+                        src={archivedOrderProps ? visiblePdfUrl : `${visiblePdfUrl}#toolbar=0`} 
+                        title='Invoice'
+                        style={{ width: '100%', height: '100%', border: 'none' }}
+                      />
+                    </object>
+                  </Box>
+                </>
               ) : (
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'text.secondary' }}>
                   <Typography>Add products to preview invoice</Typography>
