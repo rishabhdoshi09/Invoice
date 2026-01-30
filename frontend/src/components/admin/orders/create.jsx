@@ -2071,6 +2071,7 @@ export const CreateOrder = () => {
 
             <Box sx={{ flexGrow: 1, '& iframe': { width: '100%', height: '100%', border: 'none' } }}>
               <iframe 
+                key={visiblePdfUrl}
                 ref={pdfRef} 
                 src={archivedOrderProps ? visiblePdfUrl : `${visiblePdfUrl}#toolbar=0`} 
                 title='Invoice' 
