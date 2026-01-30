@@ -3,6 +3,27 @@
 ## Original Problem Statement
 A billing/invoicing system with React frontend + Node.js backend + PostgreSQL database for managing customer invoices, orders, payments, and financial tracking.
 
+---
+
+## Recent Changes (January 30, 2026)
+
+### Bug Fix: Product Selection for Weighted Products
+**Issue:** Products were not being added to the invoice after pressing `=` key. Weighted products would disappear immediately after selection.
+
+**Root Cause:** When selecting a weighted product, the code immediately attempted to fetch weight from the RS232 scale. Without a physical scale connected, this always failed and reset the entire form, making it impossible to even have a product selected.
+
+**Fix Applied:** Removed auto-fetch weight on product selection in `frontend/src/components/admin/orders/create.jsx` (line 803-813). Now:
+1. User selects a weighted product → stays selected
+2. Price auto-fills from product database
+3. User can modify price if needed
+4. User presses `=` to fetch weight from scale and add product
+5. If scale not connected, clear error message is shown
+
+**Files Modified:**
+- `frontend/src/components/admin/orders/create.jsx` - Removed auto-weight-fetch on product selection
+
+---
+
 ## User Personas
 - **Admin:** Full access to all features, dashboard, audit logs, user management, GST Export Tool
 - **Billing Staff:** Limited access for creating orders, recording payments
