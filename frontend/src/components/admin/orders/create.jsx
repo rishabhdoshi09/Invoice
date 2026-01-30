@@ -2070,12 +2070,18 @@ export const CreateOrder = () => {
             </Box>
 
             <Box sx={{ flexGrow: 1, '& iframe': { width: '100%', height: '100%', border: 'none' } }}>
-              <iframe 
-                key={visiblePdfUrl}
-                ref={pdfRef} 
-                src={archivedOrderProps ? visiblePdfUrl : `${visiblePdfUrl}#toolbar=0`} 
-                title='Invoice' 
-              />
+              {visiblePdfUrl ? (
+                <iframe 
+                  key={visiblePdfUrl}
+                  ref={pdfRef} 
+                  src={archivedOrderProps ? visiblePdfUrl : `${visiblePdfUrl}#toolbar=0`} 
+                  title='Invoice' 
+                />
+              ) : (
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'text.secondary' }}>
+                  <Typography>Add products to preview invoice</Typography>
+                </Box>
+              )}
             </Box>
 
             {/* Past Totals Panel (now privacy-friendly dropdown) */}
