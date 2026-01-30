@@ -801,19 +801,11 @@ export const CreateOrder = () => {
       } catch {}
 
       setFetchedViaScale(false);
-      if (looksWeighted) {
-        const success = await weighingScaleHandler();
-        if (!success) {
-          formik.resetForm();
-          setLocalPriceValue('');
-          setSelectedProduct(null);
-          setInputValue('');
-          clearQuickHighlight();
-          return;
-        }
-      }
+      // NOTE: Do NOT auto-fetch weight on product selection
+      // User should select product, set price, then press '=' to fetch weight and add
+      // This allows the product to remain selected even without a connected scale
 
-      // After product selection (and weight fetch if any), focus the productPrice input with 2xx logic
+      // After product selection, focus the productPrice input with 2xx logic
       if (!modalOpen) {
         focusMainPriceInput();
       }
