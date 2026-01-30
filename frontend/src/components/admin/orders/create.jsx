@@ -375,16 +375,22 @@ export const CreateOrder = () => {
   const generatePdf = useCallback((pdfProps) => {
     return new Promise((resolve) => {
       const updatedProps = JSON.parse(JSON.stringify(pdfProps));
-      updatedProps.orderItems = updatedProps.orderItems?.map(item => ({
-        name: (item.altName && item.altName.trim()) ? item.altName.trim() : safeGetProductName(rows, item),
-        productPrice: item.productPrice,
-        quantity: item.quantity,
-        totalPrice: item.totalPrice
-      })) ?? [];
+      console.log('[PDF] Generating with', pdfProps.orderItems?.length || 0, 'items');
+      updatedProps.orderItems = updatedProps.orderItems?.map(item => {
+        const itemData = {
+          name: (item.altName && item.altName.trim()) ? item.altName.trim() : safeGetProductName(rows, item),
+          productPrice: item.productPrice,
+          quantity: item.quantity,
+          totalPrice: item.totalPrice
+        };
+        console.log('[PDF] Item:', itemData.name, 'qty:', itemData.quantity, 'price:', itemData.totalPrice);
+        return itemData;
+      }) ?? [];
       const chosen = TEMPLATE_MAP[template] ?? template;
       const pdfObject = chosen === 1 ? generatePdfDefinition(updatedProps) : generatePdfDefinition2(updatedProps);
       pdfMake.createPdf(pdfObject).getBlob((blob) => { 
         const url = URL.createObjectURL(blob); 
+        console.log('[PDF] URL created:', url.substring(0, 50));
         setPdfUrl(url);
         resolve(url);
       });
