@@ -516,7 +516,11 @@ export const ListCustomers = () => {
                                                     {detailsDialog.customer.payments.map((payment) => (
                                                         <TableRow key={payment.id} hover>
                                                             <TableCell>{payment.paymentNumber}</TableCell>
-                                                            <TableCell>{payment.paymentDate}</TableCell>
+                                                            <TableCell>
+                                                                {payment.paymentDate ? 
+                                                                    moment(payment.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD', 'DD/MM/YYYY']).format('DD/MM/YYYY') 
+                                                                    : '-'}
+                                                            </TableCell>
                                                             <TableCell align="right" sx={{ color: 'warning.main', fontWeight: 'bold' }}>
                                                                 ₹{(payment.amount || 0).toLocaleString('en-IN')}
                                                             </TableCell>
