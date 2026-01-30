@@ -1047,9 +1047,17 @@ export const CreateOrder = () => {
       }
 
       if (isWeighted) {
-        const success = await weighingScaleHandler();
-        if (!success) { alert("Failed to fetch weight. Product not added."); return; }
-        await formik.submitForm();
+        // Check if weight was already fetched (via '=' key, '/' key, or Sync button)
+        const currentQuantity = Number(formik.values.quantity) || 0;
+        if (fetchedViaScale && currentQuantity > 0) {
+          // Weight already fetched, just submit
+          await formik.submitForm();
+        } else {
+          // Need to fetch weight first
+          const success = await weighingScaleHandler();
+          if (!success) { alert("Failed to fetch weight. Product not added."); return; }
+          await formik.submitForm();
+        }
       } else {
         await formik.submitForm();
       }
@@ -1071,7 +1079,7 @@ export const CreateOrder = () => {
         focusMainPriceInput();
       }
     }
-  }, [weighingScaleHandler, formik, isWeighted, archivedOrderProps, archivedPdfUrl, allowAddProductName, modalOpen, focusMainPriceInput]);
+  }, [weighingScaleHandler, formik, isWeighted, archivedOrderProps, archivedPdfUrl, allowAddProductName, modalOpen, focusMainPriceInput, fetchedViaScale]);
 
   useEffect(() => {
     const handleKeyDown = async (e) => {
