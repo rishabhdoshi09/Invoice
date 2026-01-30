@@ -474,7 +474,11 @@ export const ListSuppliers = () => {
                                                     {detailsDialog.supplier.purchases.map((purchase) => (
                                                         <TableRow key={purchase.id} hover>
                                                             <TableCell>{purchase.billNumber}</TableCell>
-                                                            <TableCell>{purchase.billDate}</TableCell>
+                                                            <TableCell>
+                                                                {purchase.billDate ? 
+                                                                    moment(purchase.billDate, ['DD-MM-YYYY', 'YYYY-MM-DD', 'DD/MM/YYYY']).format('DD/MM/YYYY') 
+                                                                    : '-'}
+                                                            </TableCell>
                                                             <TableCell align="right" sx={{ color: 'error.main', fontWeight: 'bold' }}>
                                                                 ₹{(purchase.total || 0).toLocaleString('en-IN')}
                                                             </TableCell>
