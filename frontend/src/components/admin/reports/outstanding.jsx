@@ -137,9 +137,16 @@ export const OutstandingReports = () => {
             } else {
                 const bills = party.bills || [];
                 bills.forEach(bill => {
+                    // Handle various date formats
+                    const dateStr = bill.billDate;
+                    let formattedDate = 'N/A';
+                    if (dateStr) {
+                        const parsedDate = moment(dateStr, ['DD-MM-YYYY', 'YYYY-MM-DD', 'DD/MM/YYYY', 'MM-DD-YYYY']);
+                        formattedDate = parsedDate.isValid() ? parsedDate.format('DD/MM/YYYY') : dateStr;
+                    }
                     transactions.push({
                         id: bill.id,
-                        date: moment(bill.billDate).format('DD/MM/YYYY'),
+                        date: formattedDate,
                         description: `Bill: ${bill.billNumber}`,
                         type: 'bill',
                         billNumber: bill.billNumber,
