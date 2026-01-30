@@ -1491,7 +1491,10 @@ export const CreateOrder = () => {
     return () => { H.pushState=originalPush; H.replaceState=originalReplace };
   }, []);
 
-  const visiblePdfUrl = archivedPdfUrl || pdfUrl;
+  // Show live preview (pdfUrl) when there are items in current order,
+  // otherwise show archived PDF from last submitted order
+  const hasCurrentOrderItems = orderProps.orderItems && orderProps.orderItems.length > 0;
+  const visiblePdfUrl = hasCurrentOrderItems ? pdfUrl : (archivedPdfUrl || pdfUrl);
   const visibleOrderDisplay = archivedOrderProps || orderProps;
 
   // When price enters 300–399 (and name is set) and user hasn't suppressed, open the modal.
