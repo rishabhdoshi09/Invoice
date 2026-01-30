@@ -1375,6 +1375,8 @@ export const CreateOrder = () => {
       setIsCreditSale(false); // Reset credit sale toggle
       setSelectedProduct(null); // Reset selected product
       setInputValue(''); // Reset input value
+      // Note: Keep archivedOrderProps/archivedPdfUrl to show the just-submitted order's PDF
+      // User can start adding new items while viewing the submitted PDF
     } catch (err) {
       console.error("createOrder unexpected error:", err);
       setLastSubmitError({ type: "unexpected", message: String(err?.message || err), raw: err });
