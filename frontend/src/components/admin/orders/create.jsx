@@ -1081,21 +1081,34 @@ export const CreateOrder = () => {
     }
   }, [weighingScaleHandler, formik, isWeighted, archivedOrderProps, archivedPdfUrl, allowAddProductName, modalOpen, focusMainPriceInput, fetchedViaScale]);
 
+  // Use ref to always have access to latest formik values in keydown handler
+  const formikRef = useRef(formik);
+  useEffect(() => { formikRef.current = formik; }, [formik]);
+
   useEffect(() => {
     const handleKeyDown = async (e) => {
       if (e.key === "=" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const currentFormik = formikRef.current;
+        
         // Check if product is selected
-        if (!formik.values.name) return;
+        if (!currentFormik.values.name) return;
         
         // Check if 'add' product is allowed
-        if (!allowAddProductName && isAddName(formik.values.name)) return;
+        if (!allowAddProductName && isAddName(currentFormik.values.name)) return;
         
         e.preventDefault();
         
-        if (isWeighted) {
+        // Get quantity from DOM input directly (more reliable than formik state)
+        const qtyInput = document.getElementById('quantity');
+        const qtyFromDOM = qtyInput ? Number(qtyInput.value) || 0 : 0;
+        
+        const productIsWeighted = currentFormik.values.type === 'weighted' || 
+          String(currentFormik.values.type || '').toLowerCase() === 'weighted';
+        
+        if (productIsWeighted) {
           // For weighted products: fetch weight from scale
           // Validate price (3-digit, not in restricted ranges, etc.)
-          if (!formik.values.productPrice || isWeightedPriceInvalid) return;
+          if (!currentFormik.values.productPrice || isWeightedPriceInvalid) return;
           
           // Fetch weight
           const result = await dispatch(fetchWeightsAction());
@@ -1108,35 +1121,46 @@ export const CreateOrder = () => {
           }
           
           // Set the weight and calculate total
-          formik.setFieldValue('quantity', weight);
+          currentFormik.setFieldValue('quantity', weight);
           setFetchedViaScale(true);
-          const price = Number(formik.values.productPrice) || 0;
-          formik.setFieldValue('totalPrice', Number((price * weight).toFixed(2)));
+          const price = Number(currentFormik.values.productPrice) || 0;
+          currentFormik.setFieldValue('totalPrice', Number((price * weight).toFixed(2)));
           
           // Small delay to ensure state is updated, then submit
-          setTimeout(() => {
-            formik.handleSubmit();
+          setTimeout(async () => {
+            await currentFormik.submitForm();
             setModalOpen(false);
             setModalSuppress(false);
-          }, 50);
+          }, 100);
         } else {
           // For non-weighted products: validate quantity and add directly
-          const currentQty = Number(formik.values.quantity) || 0;
+          // Use DOM value as it's more up-to-date than formik state
+          const currentQty = qtyFromDOM > 0 ? qtyFromDOM : (Number(currentFormik.values.quantity) || 0);
+          
           if (currentQty <= 0) {
             alert("Please enter a valid quantity before adding.");
             return;
           }
           
-          // Submit directly
-          formik.handleSubmit();
-          setModalOpen(false);
-          setModalSuppress(false);
+          // Ensure formik has the correct quantity value from DOM
+          if (qtyFromDOM > 0 && qtyFromDOM !== Number(currentFormik.values.quantity)) {
+            currentFormik.setFieldValue('quantity', qtyFromDOM);
+            const price = Number(currentFormik.values.productPrice) || 0;
+            currentFormik.setFieldValue('totalPrice', Number((price * qtyFromDOM).toFixed(2)));
+          }
+          
+          // Small delay to ensure state is updated, then submit
+          setTimeout(async () => {
+            await currentFormik.submitForm();
+            setModalOpen(false);
+            setModalSuppress(false);
+          }, 100);
         }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [formik, isWeighted, isWeightedPriceInvalid, allowAddProductName, dispatch]);
+  }, [isWeightedPriceInvalid, allowAddProductName, dispatch]);
 
   const fetchWeightLatestRef = useRef(weighingScaleHandler);
   useEffect(() => { fetchWeightLatestRef.current = weighingScaleHandler; });
