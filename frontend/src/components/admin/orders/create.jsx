@@ -1117,6 +1117,9 @@ export const CreateOrder = () => {
         // Small delay to ensure state is updated, then submit
         setTimeout(() => {
           formik.handleSubmit();
+          // Close modal after submission
+          setModalOpen(false);
+          setModalSuppress(false);
         }, 50);
       }
     };
