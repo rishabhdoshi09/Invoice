@@ -1147,17 +1147,18 @@ export const CreateOrder = () => {
           }
           
           // Ensure formik has the correct quantity value from DOM
-          if (qtyFromDOM > 0 && qtyFromDOM !== Number(currentFormik.values.quantity)) {
-            currentFormik.setFieldValue('quantity', qtyFromDOM);
-            const price = Number(currentFormik.values.productPrice) || 0;
-            currentFormik.setFieldValue('totalPrice', Number((price * qtyFromDOM).toFixed(2)));
+          const price = Number(currentFormik.values.productPrice) || 0;
+          if (qtyFromDOM > 0) {
+            await currentFormik.setFieldValue('quantity', qtyFromDOM);
+            await currentFormik.setFieldValue('totalPrice', Number((price * qtyFromDOM).toFixed(2)));
           }
           
-          // Small delay to ensure state is updated, then submit
+          // Longer delay to ensure state is fully updated, then submit
           setTimeout(async () => {
             await currentFormik.submitForm();
             setModalOpen(false);
             setModalSuppress(false);
+          }, 150);
           }, 100);
         }
       }
