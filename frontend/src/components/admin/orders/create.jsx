@@ -1101,13 +1101,8 @@ export const CreateOrder = () => {
         // Fetch weight
         const result = await dispatch(fetchWeightsAction());
         
-        // Check connection status
-        if (!result.isConnected) {
-          // Warning already shown by fetchWeightsAction, don't add product
-          return;
-        }
-        
-        const weight = result.weight;
+        // Check if we got a result with weight
+        const weight = result?.weight;
         if (weight == null || Number(weight) <= 0) {
           alert("Weight fetched is zero or invalid. Please ensure the scale is ready.");
           return;
