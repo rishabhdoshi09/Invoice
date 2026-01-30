@@ -1369,6 +1369,8 @@ export const CreateOrder = () => {
       setRecentlyDeleted([]);
       setSelectedHistoryDate('');
       setIsCreditSale(false); // Reset credit sale toggle
+      setSelectedProduct(null); // Reset selected product
+      setInputValue(''); // Reset input value
     } catch (err) {
       console.error("createOrder unexpected error:", err);
       setLastSubmitError({ type: "unexpected", message: String(err?.message || err), raw: err });
