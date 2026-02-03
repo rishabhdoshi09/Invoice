@@ -156,6 +156,121 @@ export const ListCustomers = () => {
         }
     };
 
+    // Fetch products for Add Sale dialog
+    const fetchProducts = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const { data } = await axios.get('/api/products', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const productList = data.data?.rows || data.rows || {};
+            // Convert object to array if needed
+            const productsArray = Array.isArray(productList) 
+                ? productList 
+                : Object.values(productList);
+            setProducts(productsArray);
+        } catch (error) {
+            console.error('Error fetching products:', error);
+        }
+    };
+
+    // Open Add Sale dialog for a customer
+    const handleOpenSaleDialog = (customer) => {
+        setSaleDialog({ open: true, customer });
+        setSaleItems([]);
+        setSelectedProduct(null);
+        setSaleQuantity('');
+        setSalePrice('');
+        setSaleTaxPercent(0);
+        fetchProducts();
+    };
+
+    // Add item to sale
+    const handleAddSaleItem = () => {
+        if (!selectedProduct || !saleQuantity || !salePrice) {
+            alert('Please select a product and enter quantity and price');
+            return;
+        }
+        
+        const qty = parseFloat(saleQuantity) || 0;
+        const price = parseFloat(salePrice) || 0;
+        const totalPrice = qty * price;
+        
+        const newItem = {
+            id: Date.now(),
+            productId: selectedProduct.id,
+            productName: selectedProduct.name,
+            quantity: qty,
+            price: price,
+            totalPrice: totalPrice
+        };
+        
+        setSaleItems([...saleItems, newItem]);
+        setSelectedProduct(null);
+        setSaleQuantity('');
+        setSalePrice('');
+    };
+
+    // Remove item from sale
+    const handleRemoveSaleItem = (itemId) => {
+        setSaleItems(saleItems.filter(item => item.id !== itemId));
+    };
+
+    // Calculate sale totals
+    const saleSubTotal = saleItems.reduce((sum, item) => sum + item.totalPrice, 0);
+    const saleTax = Math.round(saleSubTotal * (saleTaxPercent / 100));
+    const saleTotal = saleSubTotal + saleTax;
+
+    // Submit sale/order
+    const handleSubmitSale = async () => {
+        if (saleItems.length === 0) {
+            alert('Please add at least one item to the sale');
+            return;
+        }
+        
+        setSaleSubmitting(true);
+        
+        try {
+            const token = localStorage.getItem('token');
+            
+            const orderData = {
+                customerName: saleDialog.customer?.name || '',
+                customerMobile: saleDialog.customer?.mobile || '',
+                customerId: saleDialog.customer?.id,
+                orderDate: moment().format('DD-MM-YYYY'),
+                paymentStatus: 'unpaid',
+                subTotal: saleSubTotal,
+                tax: saleTax,
+                taxPercent: saleTaxPercent,
+                total: saleTotal,
+                orderItems: saleItems.map(item => ({
+                    productId: item.productId,
+                    productName: item.productName,
+                    quantity: item.quantity,
+                    price: item.price,
+                    totalPrice: item.totalPrice
+                }))
+            };
+            
+            const { data } = await axios.post('/api/orders', orderData, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            
+            alert(`Sale created successfully! Invoice: ${data.data?.orderNumber || 'Created'}`);
+            
+            // Close dialog and refresh customers
+            setSaleDialog({ open: false, customer: null });
+            setSaleItems([]);
+            fetchCustomers();
+            
+        } catch (error) {
+            console.error('Error creating sale:', error);
+            alert('Error creating sale: ' + (error.response?.data?.message || error.message));
+        } finally {
+            setSaleSubmitting(false);
+        }
+    };
+
     useEffect(() => {
         fetchCustomers();
     }, []);
