@@ -5,10 +5,12 @@ import {
     Typography, IconButton, Chip, Tooltip, Grid, Paper, Tabs, Tab, Alert,
     FormControl, InputLabel, Select, MenuItem, CircularProgress
 } from '@mui/material';
-import { Delete, Edit, Visibility, Refresh, Add, Payment, Receipt, People } from '@mui/icons-material';
+import { Delete, Edit, Visibility, Refresh, Add, Payment, Receipt, People, Close, Print, OpenInNew } from '@mui/icons-material';
 import { listCustomers, createCustomer, updateCustomer, deleteCustomer } from '../../../services/customer';
 import axios from 'axios';
 import moment from 'moment';
+import pdfMake from 'pdfmake/build/pdfmake';
+import { generatePdfDefinition, generatePdfDefinition2 } from '../orders/helper';
 
 export const ListCustomers = () => {
     const [customers, setCustomers] = useState([]);
@@ -18,6 +20,7 @@ export const ListCustomers = () => {
     const [detailsDialog, setDetailsDialog] = useState({ open: false, customer: null, tab: 0 });
     const [paymentDialog, setPaymentDialog] = useState({ open: false, customer: null });
     const [submitting, setSubmitting] = useState(false);
+    const [invoiceDialog, setInvoiceDialog] = useState({ open: false, order: null, pdfUrl: null, loading: false });
     
     const [formData, setFormData] = useState({
         name: '',
