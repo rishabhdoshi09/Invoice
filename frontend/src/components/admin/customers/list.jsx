@@ -200,6 +200,7 @@ export const ListCustomers = () => {
             id: Date.now(),
             productId: selectedProduct.id,
             productName: selectedProduct.name,
+            type: selectedProduct.type || 'non-weighted',
             quantity: qty,
             price: price,
             totalPrice: totalPrice
