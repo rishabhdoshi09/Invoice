@@ -30,6 +30,7 @@ import { fetchWeightsAction, createOrderAction } from '../../../store/orders';
 import { ProductType } from '../../../enums/product';
 import { useAuth } from '../../../context/AuthContext';
 import { api } from '../../../store/api'; // RTK Query API for cache invalidation
+import axios from 'axios';
 
 /* -------------------------
   Safe font loader for pdfMake
