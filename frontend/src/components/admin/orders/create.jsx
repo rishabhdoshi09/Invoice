@@ -1383,6 +1383,19 @@ export const CreateOrder = () => {
       setArchivedOrderProps(savedOrder);
       setArchivedPdfUrl(newPdfUrl || pdfUrl || "");
       setLastInvoiceTotal(savedOrder.total);
+      
+      // Save recently submitted order for display until new item is added
+      setRecentlySubmittedOrder({
+        orderNumber: savedOrder.orderNumber,
+        orderDate: savedOrder.orderDate,
+        customerName: savedOrder.customerName,
+        customerMobile: savedOrder.customerMobile,
+        orderItems: savedOrder.orderItems || orderProps.orderItems || [],
+        subTotal: savedOrder.subTotal,
+        tax: savedOrder.tax,
+        total: savedOrder.total,
+        pdfUrl: newPdfUrl || pdfUrl || ""
+      });
 
       // refresh history panel
       refreshHistory();
