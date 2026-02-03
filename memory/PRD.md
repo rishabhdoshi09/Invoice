@@ -252,4 +252,37 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 ---
 
 ## Last Updated
-January 19, 2026
+February 3, 2026
+
+---
+
+## Completed (Feb 3, 2026)
+
+### ✅ P0 - View Recently Deleted Items After Submit (COMPLETED)
+- **User Requirement:** User wants to verify which items were deleted from an invoice before printing, even after clicking submit
+- **Implementation:**
+  - Deleted items persist in a "Recently deleted items" section after invoice submission
+  - Section header shows "Items removed from Invoice #[number]" after submit
+  - Restore button is available BEFORE submit, hidden AFTER submit
+  - Info message: "This list will clear when you add a new item"
+  - Deleted items list clears only when first item is added to next invoice
+- **Files Modified:**
+  - `/app/frontend/src/components/admin/orders/create.jsx`
+    - Line 555-561: Added `setRecentlyDeleted([])` when adding new item to next invoice
+    - Line 1416-1422: Removed `setRecentlyDeleted([])` from createOrder to persist after submit
+    - Line 2111-2148: Enhanced UI section with conditional rendering
+- **Test Status:** All 6 test cases PASSED (verified by testing agent)
+
+---
+
+## Known Issues
+
+### Backend - SequelizeUniqueConstraintError (Intermittent)
+- **Issue:** Order creation sometimes fails with unique constraint error on invoice number
+- **Impact:** Occasional order creation failures
+- **Workaround:** Retry order submission
+
+### Infrastructure - Database Not Persistent
+- **Issue:** PostgreSQL database resets on environment restarts
+- **Impact:** Data loss, need to re-seed after each restart
+- **Status:** Requires infrastructure-level fix (persistent volumes)
