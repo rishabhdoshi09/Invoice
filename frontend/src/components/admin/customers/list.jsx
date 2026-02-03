@@ -247,9 +247,10 @@ export const ListCustomers = () => {
                 total: saleTotal,
                 orderItems: saleItems.map(item => ({
                     productId: item.productId,
-                    productName: item.productName,
+                    name: item.productName,
+                    type: item.type || 'non-weighted',
                     quantity: item.quantity,
-                    price: item.price,
+                    productPrice: item.price,
                     totalPrice: item.totalPrice
                 }))
             };
