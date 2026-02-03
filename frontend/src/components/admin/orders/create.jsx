@@ -2113,7 +2113,7 @@ export const CreateOrder = () => {
             <Box sx={{ mt: 2, p: 1, border: '1px dashed #ff9800', borderRadius: 1, backgroundColor: '#fff8e1' }}>
               <Typography variant="subtitle2" sx={{ mb: 1, color: '#e65100', fontWeight: 'bold' }}>
                 {archivedOrderProps 
-                  ? `🗑️ Items removed from Invoice #${archivedOrderProps.orderNumber}` 
+                  ? `🗑️ Items removed from Invoice ${archivedOrderProps.orderNumber ? `#${archivedOrderProps.orderNumber}` : '(submitted)'}` 
                   : '🗑️ Recently deleted items'}
               </Typography>
               {recentlyDeleted.map((item, idx) => (
