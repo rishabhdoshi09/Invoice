@@ -262,18 +262,40 @@ export const CreateOrder = () => {
     }
   );
   
-  const customers = useSelector(
-    (s) => s?.applicationState?.customers || [],
-    (a, b) => {
-      if (a === b) return true;
-      if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-      return a.every((item, i) => item === b[i]);
-    }
-  );
+  // Local state for customers fetched from API
+  const [customers, setCustomers] = useState([]);
+  
+  // Fetch customers from database on mount
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const { data } = await axios.get('/api/customers/with-balance', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setCustomers(data.data?.rows || []);
+      } catch (error) {
+        console.error('Error fetching customers:', error);
+        // Fallback to basic customers endpoint
+        try {
+          const token = localStorage.getItem('token');
+          const { data } = await axios.get('/api/customers', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setCustomers(data.data?.rows || data.rows || []);
+        } catch (e) {
+          console.error('Fallback error:', e);
+        }
+      }
+    };
+    fetchCustomers();
+  }, []);
 
   const customerOptions = useMemo(() => customers.map((c) => ({
     ...c,
-    label: c?.name || c?.title || c?.mobile || 'Customer',
+    label: `${c?.name || 'Customer'}${c?.mobile ? ` (${c.mobile})` : ''}`,
+    name: c?.name || '',
+    mobile: c?.mobile || '',
   })), [customers]);
 
   const productOptions = useMemo(() => (
