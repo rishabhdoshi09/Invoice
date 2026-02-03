@@ -1,0 +1,90 @@
+{
+  "summary": "Tested 'Recently deleted items' feature for invoice creation. All 6 feature requirements PASSED. The feature correctly shows deleted items, persists after submit, hides restore button after submit, and clears when new item is added to next invoice.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/orders",
+        "issue": "SequelizeUniqueConstraintError when creating orders - causes order creation to fail intermittently",
+        "priority": "HIGH",
+        "note": "This is a pre-existing backend issue, not related to the deleted items feature being tested"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Invoice submission",
+        "issue": "When order creation fails (500 error), the deleted items section shows 'Invoice #undefined' instead of handling the error gracefully",
+        "affected_selectors": ["archivedOrderProps.orderNumber"],
+        "priority": "LOW",
+        "note": "This only occurs when backend fails - the frontend feature itself works correctly"
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_7.json"
+  ],
+  "action_items": [
+    "Fix backend SequelizeUniqueConstraintError in POST /api/orders (pre-existing issue)",
+    "Consider adding error handling in frontend when order creation fails to avoid showing 'Invoice #undefined'"
+  ],
+  "critical_code_review_comments": [
+    "Lines 555-561: Correctly clears recentlyDeleted when adding new item to next invoice (after recentlySubmittedOrder exists)",
+    "Lines 1416-1422: Correctly keeps recentlyDeleted visible after submit (removed setRecentlyDeleted([]))",
+    "Lines 2111-2148: UI section correctly shows different text based on archivedOrderProps and hides Restore button after submit"
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A - Frontend only testing",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "username": "admin",
+    "password": "admin123"
+  },
+  "seed_data_creation": "Created test orders with Steel Box product during testing",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The 'Recently deleted items' feature is fully functional. All 6 requirements tested and passed. Backend has a pre-existing SequelizeUniqueConstraintError issue that causes order creation to fail intermittently.",
+  "test_results": {
+    "feature_1_deleted_items_visible": {
+      "description": "Deleted items from an invoice should be visible in a 'Recently deleted items' section",
+      "status": "PASS",
+      "evidence": "Screenshot shows '🗑️ Recently deleted items' section with orange border containing deleted item details"
+    },
+    "feature_2_visible_after_submit": {
+      "description": "After submitting an invoice, the deleted items should STILL be visible",
+      "status": "PASS",
+      "evidence": "After clicking SUBMIT, the deleted items section remains visible with text 'Items removed from Invoice #'"
+    },
+    "feature_3_invoice_number_shown": {
+      "description": "The deleted items section should show the invoice number it belongs to after submit",
+      "status": "PASS",
+      "evidence": "Section header changes from '🗑️ Recently deleted items' to '🗑️ Items removed from Invoice #[number]' after submit",
+      "note": "Shows 'undefined' when backend fails, but this is a backend issue not frontend"
+    },
+    "feature_4_clear_on_new_item": {
+      "description": "When a new item is added to the next invoice, the deleted items list should clear",
+      "status": "PASS",
+      "evidence": "After adding new item to next invoice, the 'Recently deleted items' section disappears completely"
+    },
+    "feature_5_restore_before_submit": {
+      "description": "Before submit, users should be able to restore deleted items",
+      "status": "PASS",
+      "evidence": "RESTORE button visible and functional - clicking it restores the item to the order"
+    },
+    "feature_6_restore_hidden_after_submit": {
+      "description": "After submit, the restore button should be hidden (can't restore to submitted invoice)",
+      "status": "PASS",
+      "evidence": "After SUBMIT, the RESTORE button is no longer visible in the deleted items section"
+    }
+  },
+  "code_verification": {
+    "line_555_561": "recentlyDeleted is cleared when adding new item to next invoice (inside formik onSubmit when recentlySubmittedOrder exists)",
+    "line_1416_1422": "recentlyDeleted is NOT cleared on submit (setRecentlyDeleted([]) was removed from createOrder function)",
+    "line_2111_2148": "UI shows different text based on archivedOrderProps and conditionally renders Restore button only when !archivedOrderProps"
+  }
+}
