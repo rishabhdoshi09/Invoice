@@ -72,6 +72,78 @@ export const ListCustomers = () => {
         }
     };
 
+    // Function to view invoice PDF
+    const handleViewInvoice = async (order) => {
+        setInvoiceDialog({ open: true, order, pdfUrl: null, loading: true });
+        
+        try {
+            const token = localStorage.getItem('token');
+            // Fetch full order details with items
+            const { data } = await axios.get(`/api/orders/${order.id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            
+            const orderData = data.data || data;
+            
+            // Prepare order items for PDF
+            const orderItems = (orderData.orderItems || orderData.items || []).map(item => ({
+                name: item.productName || item.name || 'Item',
+                productPrice: item.price || item.productPrice || 0,
+                quantity: item.quantity || 0,
+                totalPrice: item.totalPrice || (item.price * item.quantity) || 0
+            }));
+            
+            // Calculate totals
+            const subTotal = orderItems.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
+            const tax = orderData.tax || 0;
+            const total = orderData.total || subTotal + tax;
+            
+            // Prepare PDF data
+            const pdfData = {
+                orderNumber: orderData.orderNumber || order.orderNumber,
+                orderDate: orderData.orderDate || order.orderDate,
+                customerName: orderData.customerName || order.customerName || '',
+                customerMobile: orderData.customerMobile || order.customerMobile || '',
+                orderItems,
+                subTotal,
+                tax,
+                taxPercent: orderData.taxPercent || 0,
+                total
+            };
+            
+            // Generate PDF
+            const pdfObject = generatePdfDefinition2(pdfData);
+            pdfMake.createPdf(pdfObject).getBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                setInvoiceDialog(prev => ({ ...prev, pdfUrl: url, loading: false }));
+            });
+            
+        } catch (error) {
+            console.error('Error fetching order details:', error);
+            setInvoiceDialog(prev => ({ ...prev, loading: false }));
+            alert('Error loading invoice. Please try again.');
+        }
+    };
+
+    const handleCloseInvoice = () => {
+        if (invoiceDialog.pdfUrl) {
+            URL.revokeObjectURL(invoiceDialog.pdfUrl);
+        }
+        setInvoiceDialog({ open: false, order: null, pdfUrl: null, loading: false });
+    };
+
+    const handlePrintInvoice = () => {
+        if (invoiceDialog.pdfUrl) {
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = invoiceDialog.pdfUrl;
+            document.body.appendChild(iframe);
+            iframe.onload = () => {
+                iframe.contentWindow.print();
+            };
+        }
+    };
+
     useEffect(() => {
         fetchCustomers();
     }, []);
