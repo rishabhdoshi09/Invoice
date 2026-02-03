@@ -239,6 +239,7 @@ export const ListCustomers = () => {
                 customerId: saleDialog.customer?.id,
                 orderDate: moment().format('DD-MM-YYYY'),
                 paymentStatus: 'unpaid',
+                paidAmount: 0, // Credit sale - customer owes this amount
                 subTotal: saleSubTotal,
                 tax: saleTax,
                 taxPercent: saleTaxPercent,
