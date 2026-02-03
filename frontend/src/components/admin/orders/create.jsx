@@ -2108,32 +2108,41 @@ export const CreateOrder = () => {
             </Card>
           ))}
 
-          {/* Recently deleted items list */}
+          {/* Recently deleted items list - visible before and after submit */}
           {recentlyDeleted.length > 0 && (
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Recently deleted items
+            <Box sx={{ mt: 2, p: 1, border: '1px dashed #ff9800', borderRadius: 1, backgroundColor: '#fff8e1' }}>
+              <Typography variant="subtitle2" sx={{ mb: 1, color: '#e65100', fontWeight: 'bold' }}>
+                {archivedOrderProps 
+                  ? `🗑️ Items removed from Invoice #${archivedOrderProps.orderNumber}` 
+                  : '🗑️ Recently deleted items'}
               </Typography>
               {recentlyDeleted.map((item, idx) => (
-                <Card key={idx} sx={{ padding: '4px 10px', margin: '3px 1px', backgroundColor: '#fff8e1' }}>
+                <Card key={idx} sx={{ padding: '4px 10px', margin: '3px 1px', backgroundColor: '#ffffff' }}>
                   <Grid container alignItems="center">
                     <Grid item xs={8}>
                       <Typography variant="body2">
-                        {safeGetProductName(rows, item)} | Qty: {item.quantity} | Price: {item.totalPrice}
+                        {safeGetProductName(rows, item)} | Qty: {item.quantity} | ₹{item.totalPrice}
                       </Typography>
                     </Grid>
                     <Grid item xs={4} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => restoreDeletedItem(idx)}
-                      >
-                        Restore
-                      </Button>
+                      {!archivedOrderProps && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => restoreDeletedItem(idx)}
+                        >
+                          Restore
+                        </Button>
+                      )}
                     </Grid>
                   </Grid>
                 </Card>
               ))}
+              {archivedOrderProps && (
+                <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#666' }}>
+                  ℹ️ This list will clear when you add a new item
+                </Typography>
+              )}
             </Box>
           )}
         </Grid>
