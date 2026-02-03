@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
     Box, Button, Card, CardContent, Table, TableBody, TableCell, TableContainer, 
     TableHead, TableRow, TextField, Dialog, DialogTitle, DialogContent, DialogActions, 
     Typography, IconButton, Chip, Tooltip, Grid, Paper, Tabs, Tab, Alert,
-    FormControl, InputLabel, Select, MenuItem, CircularProgress
+    FormControl, InputLabel, Select, MenuItem, CircularProgress, Autocomplete
 } from '@mui/material';
-import { Delete, Edit, Visibility, Refresh, Add, Payment, Receipt, People, Close, Print, OpenInNew } from '@mui/icons-material';
+import { Delete, Edit, Visibility, Refresh, Add, Payment, Receipt, People, Close, Print, OpenInNew, ShoppingCart, AddShoppingCart } from '@mui/icons-material';
 import { listCustomers, createCustomer, updateCustomer, deleteCustomer } from '../../../services/customer';
 import axios from 'axios';
 import moment from 'moment';
@@ -13,6 +14,7 @@ import pdfMake from 'pdfmake/build/pdfmake';
 import { generatePdfDefinition, generatePdfDefinition2 } from '../orders/helper';
 
 export const ListCustomers = () => {
+    const navigate = useNavigate();
     const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [openDialog, setOpenDialog] = useState(false);
@@ -21,6 +23,16 @@ export const ListCustomers = () => {
     const [paymentDialog, setPaymentDialog] = useState({ open: false, customer: null });
     const [submitting, setSubmitting] = useState(false);
     const [invoiceDialog, setInvoiceDialog] = useState({ open: false, order: null, pdfUrl: null, loading: false });
+    
+    // Add Sale Dialog state
+    const [saleDialog, setSaleDialog] = useState({ open: false, customer: null });
+    const [products, setProducts] = useState([]);
+    const [saleItems, setSaleItems] = useState([]);
+    const [selectedProduct, setSelectedProduct] = useState(null);
+    const [saleQuantity, setSaleQuantity] = useState('');
+    const [salePrice, setSalePrice] = useState('');
+    const [saleTaxPercent, setSaleTaxPercent] = useState(0);
+    const [saleSubmitting, setSaleSubmitting] = useState(false);
     
     const [formData, setFormData] = useState({
         name: '',
