@@ -1417,7 +1417,8 @@ export const CreateOrder = () => {
       formik.resetForm();
       setLocalPriceValue('');
       setFetchedViaScale(false);
-      setRecentlyDeleted([]);
+      // NOTE: Keep recentlyDeleted visible after submit so user can verify deleted items
+      // It will be cleared when the first item is added to the next invoice
       setSelectedHistoryDate('');
       setIsCreditSale(false); // Reset credit sale toggle
       setSelectedProduct(null); // Reset selected product
