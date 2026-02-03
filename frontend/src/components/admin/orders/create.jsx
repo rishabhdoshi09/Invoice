@@ -552,6 +552,13 @@ export const CreateOrder = () => {
         }]
       };
 
+      // Clear recently submitted order when adding new item to new invoice
+      if (recentlySubmittedOrder) {
+        setRecentlySubmittedOrder(null);
+        setArchivedOrderProps(null);
+        setArchivedPdfUrl('');
+      }
+
       setOrderProps((prevProps) => { 
         const np={...prevProps, ...newItem}; 
         try { generatePdf(np); } catch {}
