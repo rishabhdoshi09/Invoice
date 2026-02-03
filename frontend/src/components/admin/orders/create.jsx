@@ -552,11 +552,12 @@ export const CreateOrder = () => {
         }]
       };
 
-      // Clear recently submitted order when adding new item to new invoice
+      // Clear recently submitted order and deleted items when adding new item to new invoice
       if (recentlySubmittedOrder) {
         setRecentlySubmittedOrder(null);
         setArchivedOrderProps(null);
         setArchivedPdfUrl('');
+        setRecentlyDeleted([]); // Clear deleted items from previous invoice
       }
 
       setOrderProps((prevProps) => { 
