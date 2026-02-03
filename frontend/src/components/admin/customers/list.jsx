@@ -829,6 +829,209 @@ export const ListCustomers = () => {
                     )}
                 </DialogContent>
             </Dialog>
+
+            {/* Add Sale Dialog */}
+            <Dialog 
+                open={saleDialog.open} 
+                onClose={() => !saleSubmitting && setSaleDialog({ open: false, customer: null })}
+                maxWidth="md"
+                fullWidth
+            >
+                <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box>
+                        <Typography variant="h6">
+                            <AddShoppingCart sx={{ mr: 1, verticalAlign: 'middle' }} />
+                            Add Sale for {saleDialog.customer?.name}
+                        </Typography>
+                        {saleDialog.customer?.mobile && (
+                            <Typography variant="caption" color="text.secondary">
+                                📱 {saleDialog.customer.mobile}
+                            </Typography>
+                        )}
+                    </Box>
+                    <IconButton onClick={() => !saleSubmitting && setSaleDialog({ open: false, customer: null })}>
+                        <Close />
+                    </IconButton>
+                </DialogTitle>
+                <DialogContent dividers>
+                    {/* Product Selection */}
+                    <Grid container spacing={2} sx={{ mb: 2 }}>
+                        <Grid item xs={12} md={4}>
+                            <Autocomplete
+                                size="small"
+                                options={products}
+                                value={selectedProduct}
+                                onChange={(_, val) => {
+                                    setSelectedProduct(val);
+                                    if (val?.pricePerKg) {
+                                        setSalePrice(val.pricePerKg.toString());
+                                    }
+                                }}
+                                getOptionLabel={(opt) => opt?.name || ''}
+                                renderInput={(params) => (
+                                    <TextField {...params} label="Select Product" placeholder="Search products..." />
+                                )}
+                                renderOption={(props, option) => (
+                                    <li {...props} key={option.id}>
+                                        <Box>
+                                            <Typography variant="body2">{option.name}</Typography>
+                                            <Typography variant="caption" color="text.secondary">
+                                                ₹{option.pricePerKg}/kg • {option.type}
+                                            </Typography>
+                                        </Box>
+                                    </li>
+                                )}
+                            />
+                        </Grid>
+                        <Grid item xs={6} md={2}>
+                            <TextField
+                                size="small"
+                                fullWidth
+                                label="Quantity"
+                                type="number"
+                                value={saleQuantity}
+                                onChange={(e) => setSaleQuantity(e.target.value)}
+                                inputProps={{ step: '0.01', min: '0' }}
+                            />
+                        </Grid>
+                        <Grid item xs={6} md={2}>
+                            <TextField
+                                size="small"
+                                fullWidth
+                                label="Price"
+                                type="number"
+                                value={salePrice}
+                                onChange={(e) => setSalePrice(e.target.value)}
+                                inputProps={{ step: '0.01', min: '0' }}
+                            />
+                        </Grid>
+                        <Grid item xs={6} md={2}>
+                            <Typography variant="body2" color="text.secondary">Total</Typography>
+                            <Typography variant="h6" color="primary">
+                                ₹{((parseFloat(saleQuantity) || 0) * (parseFloat(salePrice) || 0)).toLocaleString('en-IN')}
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={6} md={2}>
+                            <Button 
+                                variant="contained" 
+                                onClick={handleAddSaleItem}
+                                disabled={!selectedProduct || !saleQuantity || !salePrice}
+                                fullWidth
+                                sx={{ height: '100%' }}
+                            >
+                                <Add /> Add
+                            </Button>
+                        </Grid>
+                    </Grid>
+
+                    {/* Items List */}
+                    {saleItems.length > 0 ? (
+                        <TableContainer component={Paper} sx={{ mb: 2 }}>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                        <TableCell><strong>Product</strong></TableCell>
+                                        <TableCell align="right"><strong>Qty</strong></TableCell>
+                                        <TableCell align="right"><strong>Price</strong></TableCell>
+                                        <TableCell align="right"><strong>Total</strong></TableCell>
+                                        <TableCell align="center"><strong>Action</strong></TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {saleItems.map((item) => (
+                                        <TableRow key={item.id}>
+                                            <TableCell>{item.productName}</TableCell>
+                                            <TableCell align="right">{item.quantity}</TableCell>
+                                            <TableCell align="right">₹{item.price.toLocaleString('en-IN')}</TableCell>
+                                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                                                ₹{item.totalPrice.toLocaleString('en-IN')}
+                                            </TableCell>
+                                            <TableCell align="center">
+                                                <IconButton 
+                                                    size="small" 
+                                                    color="error" 
+                                                    onClick={() => handleRemoveSaleItem(item.id)}
+                                                >
+                                                    <Delete fontSize="small" />
+                                                </IconButton>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    ) : (
+                        <Alert severity="info" sx={{ mb: 2 }}>
+                            No items added yet. Select a product, enter quantity and price, then click Add.
+                        </Alert>
+                    )}
+
+                    {/* Tax and Totals */}
+                    <Grid container spacing={2} justifyContent="flex-end">
+                        <Grid item xs={12} md={4}>
+                            <Paper sx={{ p: 2, bgcolor: '#f9f9f9' }}>
+                                <Grid container spacing={1}>
+                                    <Grid item xs={6}>
+                                        <Typography variant="body2">Sub Total:</Typography>
+                                    </Grid>
+                                    <Grid item xs={6}>
+                                        <Typography variant="body2" align="right">
+                                            ₹{saleSubTotal.toLocaleString('en-IN')}
+                                        </Typography>
+                                    </Grid>
+                                    <Grid item xs={6}>
+                                        <TextField
+                                            size="small"
+                                            label="Tax %"
+                                            type="number"
+                                            value={saleTaxPercent}
+                                            onChange={(e) => setSaleTaxPercent(parseFloat(e.target.value) || 0)}
+                                            inputProps={{ min: '0', max: '100' }}
+                                            sx={{ width: 80 }}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={6}>
+                                        <Typography variant="body2" align="right">
+                                            ₹{saleTax.toLocaleString('en-IN')}
+                                        </Typography>
+                                    </Grid>
+                                    <Grid item xs={12}>
+                                        <Box sx={{ borderTop: '2px solid #333', pt: 1, mt: 1 }}>
+                                            <Grid container>
+                                                <Grid item xs={6}>
+                                                    <Typography variant="h6" fontWeight="bold">Total:</Typography>
+                                                </Grid>
+                                                <Grid item xs={6}>
+                                                    <Typography variant="h6" fontWeight="bold" align="right" color="primary">
+                                                        ₹{saleTotal.toLocaleString('en-IN')}
+                                                    </Typography>
+                                                </Grid>
+                                            </Grid>
+                                        </Box>
+                                    </Grid>
+                                </Grid>
+                            </Paper>
+                        </Grid>
+                    </Grid>
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button 
+                        onClick={() => setSaleDialog({ open: false, customer: null })}
+                        disabled={saleSubmitting}
+                    >
+                        Cancel
+                    </Button>
+                    <Button 
+                        variant="contained" 
+                        color="primary"
+                        onClick={handleSubmitSale}
+                        disabled={saleItems.length === 0 || saleSubmitting}
+                        startIcon={saleSubmitting ? <CircularProgress size={20} /> : <Receipt />}
+                    >
+                        {saleSubmitting ? 'Creating...' : 'Create Invoice'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 };
