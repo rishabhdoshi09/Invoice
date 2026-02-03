@@ -331,6 +331,9 @@ export const CreateOrder = () => {
   const [archivedOrderProps, setArchivedOrderProps] = useState(null);
   const [archivedPdfUrl, setArchivedPdfUrl] = useState('');
 
+  // Track recently submitted invoice items - shown until new item is added
+  const [recentlySubmittedOrder, setRecentlySubmittedOrder] = useState(null);
+
   const [lastSubmitError, setLastSubmitError] = useState(null);
   const [lastSubmitResponse, setLastSubmitResponse] = useState(null);
   const [lastInvoiceTotal, setLastInvoiceTotal] = useState(null);
