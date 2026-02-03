@@ -1737,11 +1737,47 @@ export const CreateOrder = () => {
                 <Autocomplete
                   size="small"
                   options={customerOptions}
-                  value={orderProps.customer}
-                  onChange={(_, val) => setOrderProps(prev => ({...prev, customer: val}))}
-                  renderInput={(params) => <TextField {...params} label="Select Customer" />}
+                  value={orderProps.customer || null}
+                  onChange={(_, val) => {
+                    // Auto-fill customerName and customerMobile when a customer is selected
+                    setOrderProps(prev => ({
+                      ...prev, 
+                      customer: val,
+                      customerName: val?.name || prev.customerName || '',
+                      customerMobile: val?.mobile || prev.customerMobile || ''
+                    }));
+                  }}
+                  renderInput={(params) => (
+                    <TextField 
+                      {...params} 
+                      label="Select Customer from Database" 
+                      placeholder="Type to search customers..."
+                    />
+                  )}
                   getOptionLabel={(opt) => opt?.label || ''}
                   isOptionEqualToValue={(o, v) => (o?.id ?? o?._id ?? o?.label) === (v?.id ?? v?._id ?? v?.label)}
+                  freeSolo
+                  filterOptions={(options, { inputValue }) => {
+                    const filtered = options.filter(opt => 
+                      opt.label?.toLowerCase().includes(inputValue.toLowerCase()) ||
+                      opt.name?.toLowerCase().includes(inputValue.toLowerCase()) ||
+                      opt.mobile?.includes(inputValue)
+                    );
+                    return filtered.slice(0, 10); // Limit to 10 suggestions
+                  }}
+                  renderOption={(props, option) => (
+                    <li {...props} key={option.id || option._id || option.label}>
+                      <Box>
+                        <Typography variant="body2" fontWeight="bold">{option.name}</Typography>
+                        {option.mobile && (
+                          <Typography variant="caption" color="text.secondary">
+                            📱 {option.mobile}
+                          </Typography>
+                        )}
+                      </Box>
+                    </li>
+                  )}
+                  noOptionsText="No customers found. Enter name manually above."
                 />
               </Grid>
 
