@@ -473,6 +473,11 @@ export const ListCustomers = () => {
                                                 />
                                             </TableCell>
                                             <TableCell align="center">
+                                                <Tooltip title="Add Sale">
+                                                    <IconButton size="small" color="primary" onClick={() => handleOpenSaleDialog(customer)}>
+                                                        <AddShoppingCart fontSize="small" />
+                                                    </IconButton>
+                                                </Tooltip>
                                                 <Tooltip title="Receive Payment">
                                                     <IconButton size="small" color="success" onClick={() => openPaymentDialog(customer)}>
                                                         <Payment fontSize="small" />
