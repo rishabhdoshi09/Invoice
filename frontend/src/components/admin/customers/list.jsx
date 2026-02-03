@@ -631,6 +631,72 @@ export const ListCustomers = () => {
                     <Button onClick={() => setDetailsDialog({ open: false, customer: null, tab: 0 })}>Close</Button>
                 </DialogActions>
             </Dialog>
+
+            {/* Invoice View Dialog */}
+            <Dialog 
+                open={invoiceDialog.open} 
+                onClose={handleCloseInvoice}
+                maxWidth="md"
+                fullWidth
+                PaperProps={{ sx: { height: '90vh' } }}
+            >
+                <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box>
+                        <Typography variant="h6">
+                            Invoice: {invoiceDialog.order?.orderNumber}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            {invoiceDialog.order?.orderDate ? 
+                                moment(invoiceDialog.order.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD', 'DD/MM/YYYY']).format('DD MMM YYYY') 
+                                : ''}
+                        </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Tooltip title="Print Invoice">
+                            <IconButton onClick={handlePrintInvoice} disabled={!invoiceDialog.pdfUrl}>
+                                <Print />
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Open in New Tab">
+                            <IconButton 
+                                onClick={() => invoiceDialog.pdfUrl && window.open(invoiceDialog.pdfUrl, '_blank')} 
+                                disabled={!invoiceDialog.pdfUrl}
+                            >
+                                <OpenInNew />
+                            </IconButton>
+                        </Tooltip>
+                        <IconButton onClick={handleCloseInvoice}>
+                            <Close />
+                        </IconButton>
+                    </Box>
+                </DialogTitle>
+                <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column' }}>
+                    {invoiceDialog.loading ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                            <CircularProgress />
+                            <Typography sx={{ ml: 2 }}>Loading invoice...</Typography>
+                        </Box>
+                    ) : invoiceDialog.pdfUrl ? (
+                        <Box sx={{ flexGrow: 1, height: '100%' }}>
+                            <object
+                                data={`${invoiceDialog.pdfUrl}#toolbar=1&navpanes=0`}
+                                type="application/pdf"
+                                style={{ width: '100%', height: '100%', border: 'none' }}
+                            >
+                                <iframe 
+                                    src={invoiceDialog.pdfUrl} 
+                                    title="Invoice PDF"
+                                    style={{ width: '100%', height: '100%', border: 'none' }}
+                                />
+                            </object>
+                        </Box>
+                    ) : (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                            <Alert severity="error">Failed to load invoice PDF</Alert>
+                        </Box>
+                    )}
+                </DialogContent>
+            </Dialog>
         </Box>
     );
 };
