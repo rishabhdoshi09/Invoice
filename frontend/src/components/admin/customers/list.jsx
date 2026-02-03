@@ -530,7 +530,7 @@ export const ListCustomers = () => {
 
                             {detailsDialog.tab === 0 && (
                                 <>
-                                    <Typography variant="subtitle2" sx={{ mb: 1 }}>🧾 Sales/Orders (Debit Entries)</Typography>
+                                    <Typography variant="subtitle2" sx={{ mb: 1 }}>🧾 Sales/Orders (Debit Entries) - <em>Click row to view invoice</em></Typography>
                                     {detailsDialog.customer.orders?.length > 0 ? (
                                         <TableContainer sx={{ maxHeight: 300 }}>
                                             <Table size="small" stickyHeader>
@@ -542,12 +542,18 @@ export const ListCustomers = () => {
                                                         <TableCell align="right"><strong>Paid</strong></TableCell>
                                                         <TableCell align="right"><strong>Due</strong></TableCell>
                                                         <TableCell><strong>Status</strong></TableCell>
+                                                        <TableCell align="center"><strong>View</strong></TableCell>
                                                     </TableRow>
                                                 </TableHead>
                                                 <TableBody>
                                                     {detailsDialog.customer.orders.map((order) => (
-                                                        <TableRow key={order.id} hover>
-                                                            <TableCell>{order.orderNumber}</TableCell>
+                                                        <TableRow 
+                                                            key={order.id} 
+                                                            hover 
+                                                            sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#e3f2fd' } }}
+                                                            onClick={() => handleViewInvoice(order)}
+                                                        >
+                                                            <TableCell sx={{ color: 'primary.main', fontWeight: 'medium' }}>{order.orderNumber}</TableCell>
                                                             <TableCell>
                                                                 {order.orderDate ? 
                                                                     moment(order.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD', 'DD/MM/YYYY']).format('DD/MM/YYYY') 
@@ -560,6 +566,13 @@ export const ListCustomers = () => {
                                                             <TableCell align="right">₹{(order.dueAmount || 0).toLocaleString('en-IN')}</TableCell>
                                                             <TableCell>
                                                                 <Chip label={order.paymentStatus} size="small" color={order.paymentStatus === 'paid' ? 'success' : 'warning'} />
+                                                            </TableCell>
+                                                            <TableCell align="center">
+                                                                <Tooltip title="View Invoice">
+                                                                    <IconButton size="small" color="primary">
+                                                                        <Visibility fontSize="small" />
+                                                                    </IconButton>
+                                                                </Tooltip>
                                                             </TableCell>
                                                         </TableRow>
                                                     ))}
