@@ -548,10 +548,12 @@ async function testPersistence() {
         
         // Verify data is in database
         const verifyOrder = await db.order.findByPk(orderId);
-        if (verifyOrder && verifyOrder.total === testData.total) {
+        // Convert DECIMAL (may be string) to Number for comparison
+        const verifyTotal = Number(verifyOrder?.total) || 0;
+        if (verifyOrder && Money.equals(verifyTotal, testData.total)) {
             logSuccess('PERSISTENCE', 'Order verified in database');
         } else {
-            logError('PERSISTENCE', 'Order not found or data mismatch');
+            logError('PERSISTENCE', `Order not found or data mismatch (expected: ${testData.total}, got: ${verifyTotal})`);
             testResults.persistence = { passed: false, details: { reason: 'Data not found' } };
             return false;
         }
