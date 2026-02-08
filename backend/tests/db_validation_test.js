@@ -301,7 +301,7 @@ async function runDatabaseValidation() {
         if (createdOrderIds.length > 0) {
             try {
                 // Delete order items first
-                await db.orderItem.destroy({
+                await db.orderItems.destroy({
                     where: { orderId: createdOrderIds }
                 });
                 
