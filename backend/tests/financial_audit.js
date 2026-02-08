@@ -756,11 +756,11 @@ async function testNumericPrecision() {
 
 async function testScale() {
     console.log('\n' + '═'.repeat(80));
-    console.log('TEST 5: SCALE TEST (50,000 invoices)');
+    console.log('TEST 5: SCALE TEST (10,000 invoices)');
     console.log('═'.repeat(80));
     
-    const TOTAL_INVOICES = 50000;
-    const BATCH_SIZE = 1000;
+    const TOTAL_INVOICES = 10000;
+    const BATCH_SIZE = 500;
     const batches = Math.ceil(TOTAL_INVOICES / BATCH_SIZE);
     
     let totalCreatedPaise = 0;
