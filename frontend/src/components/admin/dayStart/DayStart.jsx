@@ -448,7 +448,8 @@ export const DayStart = () => {
                 </Grid>
             </Grid>
 
-            {/* Set Opening Balance Card */}
+            {/* Set Opening Balance Card - Only show for today */}
+            {isToday && (
             <Grid container spacing={3}>
                 <Grid item xs={12} md={6}>
                     <Card>
@@ -461,9 +462,9 @@ export const DayStart = () => {
                                 Enter the cash amount in the drawer at the start of the day.
                             </Typography>
                             
-                            {todaySummary?.openingBalanceSetAt && (
+                            {summaryData?.openingBalanceSetAt && (
                                 <Alert severity="info" sx={{ mb: 2 }}>
-                                    Current: ₹{openingBalance.toLocaleString('en-IN')} - Set by <strong>{todaySummary?.openingBalanceSetBy}</strong> at {moment(todaySummary?.openingBalanceSetAt).format('hh:mm A')}
+                                    Current: ₹{openingBalance.toLocaleString('en-IN')} - Set by <strong>{summaryData?.openingBalanceSetBy}</strong> at {moment(summaryData?.openingBalanceSetAt).format('hh:mm A')}
                                 </Alert>
                             )}
                             
