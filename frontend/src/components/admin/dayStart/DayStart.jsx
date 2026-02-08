@@ -509,7 +509,7 @@ export const DayStart = () => {
                             <Grid container spacing={2}>
                                 <Grid item xs={6}>
                                     <Typography variant="body2" color="text.secondary">Orders Created</Typography>
-                                    <Typography variant="h5">{todaySummary?.totalOrders || 0}</Typography>
+                                    <Typography variant="h5">{summaryData?.totalOrders || 0}</Typography>
                                 </Grid>
                                 <Grid item xs={6}>
                                     <Typography variant="body2" color="text.secondary">Total Sales</Typography>
@@ -528,6 +528,41 @@ export const DayStart = () => {
                     </Card>
                 </Grid>
             </Grid>
+            )}
+            
+            {/* Historical Data Summary - Show for past dates */}
+            {!isToday && (
+            <Grid container spacing={3} sx={{ mb: 3 }}>
+                <Grid item xs={12}>
+                    <Card>
+                        <CardContent>
+                            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <History color="primary" />
+                                {moment(selectedDate).format('dddd, MMMM D, YYYY')} - Summary
+                            </Typography>
+                            <Grid container spacing={2}>
+                                <Grid item xs={6} md={3}>
+                                    <Typography variant="body2" color="text.secondary">Orders Created</Typography>
+                                    <Typography variant="h5">{summaryData?.totalOrders || 0}</Typography>
+                                </Grid>
+                                <Grid item xs={6} md={3}>
+                                    <Typography variant="body2" color="text.secondary">Total Sales</Typography>
+                                    <Typography variant="h5" color="primary">₹{totalSales.toLocaleString('en-IN')}</Typography>
+                                </Grid>
+                                <Grid item xs={6} md={3}>
+                                    <Typography variant="body2" color="text.secondary">Cash Sales</Typography>
+                                    <Typography variant="h5" color="success.main">₹{cashSales.toLocaleString('en-IN')}</Typography>
+                                </Grid>
+                                <Grid item xs={6} md={3}>
+                                    <Typography variant="body2" color="text.secondary">Credit Sales</Typography>
+                                    <Typography variant="h5" color="warning.main">₹{totalReceivables.toLocaleString('en-IN')}</Typography>
+                                </Grid>
+                            </Grid>
+                        </CardContent>
+                    </Card>
+                </Grid>
+            </Grid>
+            )}
 
             {/* Info Section */}
             <Box sx={{ mt: 3 }}>
