@@ -14,7 +14,7 @@ const uuidv4 = require('uuid/v4');
 const moment = require('moment');
 
 const TEST_PREFIX = 'VALIDATION-TEST';
-const NUM_INVOICES = 100; // Smaller number for actual DB test
+const NUM_INVOICES = 750; // Larger scale test
 
 // Deterministic random for reproducibility
 let seed = 54321;
