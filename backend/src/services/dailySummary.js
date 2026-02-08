@@ -161,8 +161,12 @@ module.exports = {
         if (summary) {
             const orderIds = (summary.orderIds || []).filter(id => id !== order.id);
             
+            // Convert DECIMAL (returned as string from PostgreSQL) to Number
+            const currentSales = Number(summary.totalSales) || 0;
+            const orderTotal = Number(order.total) || 0;
+            
             await summary.update({
-                totalSales: Math.max(0, (summary.totalSales || 0) - (order.total || 0)),
+                totalSales: Math.max(0, currentSales - orderTotal),
                 totalOrders: Math.max(0, (summary.totalOrders || 0) - 1),
                 orderIds
             }, options);
