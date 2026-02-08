@@ -130,8 +130,12 @@ module.exports = {
             
             orderIds.push(order.id);
             
+            // Convert DECIMAL (returned as string from PostgreSQL) to Number
+            const currentSales = Number(summary.totalSales) || 0;
+            const orderTotal = Number(order.total) || 0;
+            
             await summary.update({
-                totalSales: (summary.totalSales || 0) + (order.total || 0),
+                totalSales: currentSales + orderTotal,
                 totalOrders: (summary.totalOrders || 0) + 1,
                 lastInvoiceNumber: (summary.lastInvoiceNumber || 0) + 1,
                 orderIds
