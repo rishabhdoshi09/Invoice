@@ -282,7 +282,7 @@ export const DayStart = () => {
                                 ₹{cashSales.toLocaleString('en-IN')}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                                Total: ₹{totalSales.toLocaleString('en-IN')} ({todaySummary?.totalOrders || 0} orders)
+                                Total: ₹{totalSales.toLocaleString('en-IN')} ({summaryData?.totalOrders || 0} orders)
                             </Typography>
                             {totalReceivables > 0 && (
                                 <Typography variant="caption" sx={{ display: 'block', color: '#ff5722', fontWeight: 'bold' }}>
