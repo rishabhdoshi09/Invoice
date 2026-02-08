@@ -203,6 +203,13 @@ export const api = createApi({
             providesTags: [{ type: 'Dashboard', id: 'TODAY' }],
         }),
         
+        // Get summary by specific date (for viewing historical data)
+        getSummaryByDate: builder.query({
+            query: (date) => `/dashboard/summary/date/${date}`,
+            transformResponse: (response) => response.data,
+            providesTags: (result, error, date) => [{ type: 'Dashboard', id: date }],
+        }),
+        
         setOpeningBalance: builder.mutation({
             query: (amount) => ({
                 url: '/dashboard/summary/opening-balance',
