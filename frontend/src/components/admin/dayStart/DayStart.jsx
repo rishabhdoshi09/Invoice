@@ -10,7 +10,9 @@ import {
     Alert,
     CircularProgress,
     Paper,
-    Divider
+    Divider,
+    ToggleButton,
+    ToggleButtonGroup
 } from '@mui/material';
 import { 
     AccountBalance, 
@@ -20,12 +22,15 @@ import {
     People,
     LocalShipping,
     ShoppingCart,
-    Receipt
+    Receipt,
+    Today,
+    History
 } from '@mui/icons-material';
 import { useAuth } from '../../../context/AuthContext';
 import { 
     useGetTodaySummaryQuery, 
     useGetDailySummaryQuery,
+    useGetSummaryByDateQuery,
     useSetOpeningBalanceMutation 
 } from '../../../store/api';
 import moment from 'moment';
@@ -46,6 +51,11 @@ export const DayStart = () => {
     const { user } = useAuth();
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    
+    // Date selection state - default to today
+    const [selectedDate, setSelectedDate] = useState(moment().format('YYYY-MM-DD'));
+    const isToday = selectedDate === moment().format('YYYY-MM-DD');
+    const isYesterday = selectedDate === moment().subtract(1, 'days').format('YYYY-MM-DD');
     
     // Opening balance state
     const [openingBalanceInput, setOpeningBalanceInput] = useState('');
