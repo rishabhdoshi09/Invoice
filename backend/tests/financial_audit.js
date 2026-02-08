@@ -21,11 +21,11 @@ const { Sequelize, Op } = require('sequelize');
 // ============================================================================
 
 const Money = {
-    // Convert rupees to paise (integer)
-    toPaise: (rupees) => Math.round(rupees * 100),
+    // Convert rupees to paise (integer) - use Math.round for precision
+    toPaise: (rupees) => Math.round(Number(rupees) * 100),
     
     // Convert paise to rupees (2 decimal places)
-    toRupees: (paise) => paise / 100,
+    toRupees: (paise) => Number((paise / 100).toFixed(2)),
     
     // Safe addition in paise
     add: (...amounts) => amounts.reduce((sum, amt) => sum + Money.toPaise(amt), 0),
@@ -33,14 +33,18 @@ const Money = {
     // Safe subtraction in paise
     subtract: (a, b) => Money.toPaise(a) - Money.toPaise(b),
     
-    // Safe multiplication (price * quantity)
-    multiply: (price, quantity) => Math.round(Money.toPaise(price) * quantity),
+    // Safe multiplication (price * quantity) - handles sub-paisa values
+    multiply: (price, quantity) => {
+        // Convert to high precision, multiply, then round to paise
+        const result = Number(price) * Number(quantity) * 100;
+        return Math.round(result);
+    },
     
     // Calculate tax in paise
     calculateTax: (amountPaise, taxPercent) => Math.round(amountPaise * taxPercent / 100),
     
     // Round to 2 decimal places (rupees)
-    round: (amount) => Math.round(amount * 100) / 100,
+    round: (amount) => Math.round(Number(amount) * 100) / 100,
     
     // Compare two amounts (returns true if equal within 1 paisa)
     equals: (a, b) => Math.abs(Money.toPaise(a) - Money.toPaise(b)) <= 1
