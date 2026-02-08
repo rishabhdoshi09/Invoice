@@ -133,10 +133,10 @@ export const DayStart = () => {
         }
     };
 
-    // Calculate cash flow values
-    const openingBalance = todaySummary?.openingBalance || 0;
-    const totalSales = todaySummary?.totalSales || 0;
-    const totalReceivables = todaySummary?.totalReceivables || 0; // Credit sales - not in drawer
+    // Calculate cash flow values - using summaryData which switches between today and historical
+    const openingBalance = summaryData?.openingBalance || 0;
+    const totalSales = summaryData?.totalSales || 0;
+    const totalReceivables = summaryData?.totalReceivables || 0; // Credit sales - not in drawer
     const cashSales = totalSales - totalReceivables; // Only cash sales go in drawer
     const customerPayments = paymentSummary?.summary?.customers?.amount || 0;
     const supplierPayments = paymentSummary?.summary?.suppliers?.amount || 0;
