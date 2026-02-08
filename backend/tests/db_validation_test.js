@@ -171,7 +171,7 @@ async function runDatabaseValidation() {
                     id: uuidv4(),
                     orderId: order.id
                 }));
-                await db.orderItem.bulkCreate(itemsWithOrderId, { transaction });
+                await db.orderItems.bulkCreate(itemsWithOrderId, { transaction });
                 
                 // Record in daily summary
                 await Services.dailySummary.recordOrderCreated(order, transaction);
