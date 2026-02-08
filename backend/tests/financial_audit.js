@@ -835,8 +835,10 @@ async function testScale() {
                 });
                 
                 if (summary) {
+                    // Convert DECIMAL (returned as string from PostgreSQL) to Number
+                    const currentSales = Number(summary.totalSales) || 0;
                     await summary.update({
-                        totalSales: (summary.totalSales || 0) + Money.toRupees(batchTotalPaise),
+                        totalSales: currentSales + Money.toRupees(batchTotalPaise),
                         totalOrders: (summary.totalOrders || 0) + batchSize
                     }, { transaction });
                 }
