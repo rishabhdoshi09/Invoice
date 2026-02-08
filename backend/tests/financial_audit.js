@@ -413,10 +413,10 @@ async function testMutation() {
         const orderToVoid = await db.order.findByPk(createdIds[1]);
         const voidAmount = orderToVoid.total;
         
-        // Mark as voided and record refund
+        // Mark as voided (using isDeleted flag since 'voided' isn't a valid status)
         await db.sequelize.transaction(async (transaction) => {
             await orderToVoid.update({
-                paymentStatus: 'voided',
+                paymentStatus: 'unpaid',  // Mark as unpaid for refund
                 isDeleted: true,
                 notes: 'VOIDED - Refund processed'
             }, { transaction });
