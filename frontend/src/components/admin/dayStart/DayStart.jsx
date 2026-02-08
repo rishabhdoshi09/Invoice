@@ -61,22 +61,41 @@ export const DayStart = () => {
     const [openingBalanceInput, setOpeningBalanceInput] = useState('');
 
     // RTK Query hooks - automatic caching and refetch!
+    // For today, use the dedicated today endpoint
     const { 
-        data: todaySummary, 
-        isLoading: loadingSummary,
-        isFetching: fetchingSummary,
-        refetch: refetchSummary 
+        data: todaySummaryData, 
+        isLoading: loadingTodaySummary,
+        isFetching: fetchingTodaySummary,
+        refetch: refetchTodaySummary 
     } = useGetTodaySummaryQuery(undefined, {
+        skip: !isToday, // Only fetch if viewing today
         refetchOnFocus: true,
         refetchOnReconnect: true,
     });
     
-    const todayDate = moment().format('YYYY-MM-DD');
+    // For historical dates, use the date-specific endpoint
+    const { 
+        data: historicalSummary, 
+        isLoading: loadingHistoricalSummary,
+        isFetching: fetchingHistoricalSummary,
+        refetch: refetchHistoricalSummary 
+    } = useGetSummaryByDateQuery(selectedDate, {
+        skip: isToday, // Only fetch if viewing a past date
+        refetchOnFocus: true,
+        refetchOnReconnect: true,
+    });
+    
+    // Use the appropriate data based on selected date
+    const summaryData = isToday ? todaySummaryData : historicalSummary;
+    const loadingSummary = isToday ? loadingTodaySummary : loadingHistoricalSummary;
+    const fetchingSummary = isToday ? fetchingTodaySummary : fetchingHistoricalSummary;
+    
+    // Payment summary for selected date
     const { 
         data: paymentSummary,
         isLoading: loadingPayments,
         refetch: refetchPayments
-    } = useGetDailySummaryQuery(todayDate, {
+    } = useGetDailySummaryQuery(selectedDate, {
         refetchOnFocus: true,
         refetchOnReconnect: true,
     });
@@ -86,7 +105,11 @@ export const DayStart = () => {
     const loading = loadingSummary || loadingPayments;
 
     const handleRefreshAll = () => {
-        refetchSummary();
+        if (isToday) {
+            refetchTodaySummary();
+        } else {
+            refetchHistoricalSummary();
+        }
         refetchPayments();
     };
 
