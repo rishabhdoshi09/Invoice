@@ -1,0 +1,277 @@
+# =============================================================================
+# Kubernetes Deployment with Persistent PostgreSQL Storage
+# =============================================================================
+# This configuration ensures database persistence across pod restarts.
+# 
+# IMPORTANT: This is a reference configuration for production deployment.
+# The actual deployment on Emergent platform uses the /app volume which is
+# already persistent. This manifest is provided for self-hosted deployments.
+# =============================================================================
+
+---
+# PersistentVolumeClaim for PostgreSQL Data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data-pvc
+  labels:
+    app: invoice-system
+    component: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi  # Adjust based on expected data volume
+  storageClassName: standard  # Use your cluster's storage class
+
+---
+# PersistentVolumeClaim for Backups
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-backup-pvc
+  labels:
+    app: invoice-system
+    component: backup
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard
+
+---
+# ConfigMap for PostgreSQL Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  labels:
+    app: invoice-system
+data:
+  POSTGRES_USER: "Rishabh"
+  POSTGRES_DB: "customerInvoice"
+  PGDATA: "/var/lib/postgresql/data/pgdata"
+
+---
+# Secret for PostgreSQL Password
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  labels:
+    app: invoice-system
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: "yttriumR"  # Change in production!
+
+---
+# PostgreSQL Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: invoice-system
+  labels:
+    app: invoice-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: invoice-system
+  template:
+    metadata:
+      labels:
+        app: invoice-system
+    spec:
+      containers:
+        # Application Container
+        - name: app
+          image: your-registry/invoice-system:latest
+          ports:
+            - containerPort: 3000
+              name: frontend
+            - containerPort: 8001
+              name: backend
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://Rishabh:yttriumR@localhost:5432/customerInvoice"
+            - name: MONGO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: MONGO_URL
+          volumeMounts:
+            - name: app-data
+              mountPath: /app
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8001
+            initialDelaySeconds: 5
+            periodSeconds: 5
+        
+        # PostgreSQL Sidecar Container
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: POSTGRES_DB
+            - name: PGDATA
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: PGDATA
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: postgres-backup
+              mountPath: /backups
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - Rishabh
+                - -d
+                - customerInvoice
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - Rishabh
+                - -d
+                - customerInvoice
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      
+      volumes:
+        - name: app-data
+          persistentVolumeClaim:
+            claimName: app-data-pvc
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-data-pvc
+        - name: postgres-backup
+          persistentVolumeClaim:
+            claimName: postgres-backup-pvc
+      
+      # Ensure PostgreSQL starts before the app
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.28
+          command: ['sh', '-c', 'until nc -z localhost 5432; do echo waiting for postgres; sleep 2; done;']
+
+---
+# Service for the Application
+apiVersion: v1
+kind: Service
+metadata:
+  name: invoice-system-service
+  labels:
+    app: invoice-system
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 3000
+      protocol: TCP
+      name: frontend
+    - port: 8001
+      targetPort: 8001
+      protocol: TCP
+      name: backend
+  selector:
+    app: invoice-system
+
+---
+# CronJob for Automated Backups
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  labels:
+    app: invoice-system
+spec:
+  schedule: "0 2 * * *"  # Run daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: backup
+              image: postgres:15-alpine
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+                  BACKUP_FILE="/backups/backup_$TIMESTAMP.sql.gz"
+                  
+                  echo "Starting backup at $(date)"
+                  pg_dump -h invoice-system-service -U Rishabh customerInvoice | gzip > "$BACKUP_FILE"
+                  
+                  if [ $? -eq 0 ]; then
+                    echo "Backup created: $BACKUP_FILE"
+                    # Keep only last 7 backups
+                    ls -t /backups/*.sql.gz | tail -n +8 | xargs rm -f
+                  else
+                    echo "Backup failed!"
+                    exit 1
+                  fi
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-secret
+                      key: POSTGRES_PASSWORD
+              volumeMounts:
+                - name: backup-volume
+                  mountPath: /backups
+          volumes:
+            - name: backup-volume
+              persistentVolumeClaim:
+                claimName: postgres-backup-pvc
+          restartPolicy: OnFailure
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
