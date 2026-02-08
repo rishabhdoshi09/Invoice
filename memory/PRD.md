@@ -5,6 +5,50 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 
 ---
 
+## Critical Updates (February 8, 2026)
+
+### P0 RESOLVED: Database Persistence
+**Issue:** PostgreSQL data was lost on every pod restart because data was stored on ephemeral overlay filesystem.
+
+**Solution Implemented:**
+1. ✅ Migrated PostgreSQL data directory to `/app/pgdata` (persistent NVMe volume)
+2. ✅ Created initialization scripts for automatic recovery
+3. ✅ Implemented backup/restore infrastructure
+4. ✅ Crash simulation test passed - 100% data recovery
+
+**Files Created:**
+- `/app/backend/scripts/setup_postgres_persistent.sh` - Initial setup
+- `/app/backend/scripts/init_postgres.sh` - Pod startup script
+- `/app/backend/scripts/backup_postgres.sh` - Backup utility
+- `/app/backend/scripts/restore_postgres.sh` - Restore utility
+- `/app/backend/scripts/postgres_health.sh` - Health check
+- `/app/backend/scripts/crash_simulation_test.sh` - Crash test
+- `/app/backend/k8s/deployment.yaml` - Kubernetes reference
+- `/app/backend/docs/DATABASE_PERSISTENCE.md` - Full documentation
+
+### Financial Integrity Audit (February 8, 2026)
+**All 5 production-level tests PASSED:**
+| Test | Status |
+|------|--------|
+| Concurrency (100 simultaneous) | ✅ PASSED |
+| Mutation (Edit/Delete/Void/Refund) | ✅ PASSED |
+| Persistence (Crash survival) | ✅ PASSED |
+| Numeric Precision (DECIMAL columns) | ✅ PASSED |
+| Scale (10,000 invoices) | ✅ PASSED |
+
+**Fixes Applied:**
+1. Converted all monetary columns from DOUBLE PRECISION → DECIMAL(15,2)
+2. Created Money utility module for fixed-decimal arithmetic
+3. Fixed Sequelize DECIMAL string handling
+
+**Files Created:**
+- `/app/backend/src/utils/money.js` - Currency utility module
+- `/app/backend/migrations/fix_decimal_columns.js` - Schema migration
+- `/app/backend/tests/financial_audit.js` - Full audit suite
+- `/app/backend/tests/FINANCIAL_AUDIT_REPORT.md` - Detailed report
+
+---
+
 ## Recent Changes (January 30, 2026)
 
 ### Bug Fix: Product Selection for Weighted Products
