@@ -203,9 +203,51 @@ export const DayStart = () => {
                 </Alert>
             )}
 
+            {/* Date Selector - Today / Yesterday / Custom */}
+            <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                <ToggleButtonGroup
+                    value={isToday ? 'today' : isYesterday ? 'yesterday' : 'custom'}
+                    exclusive
+                    onChange={(e, newValue) => {
+                        if (newValue === 'today') {
+                            setSelectedDate(moment().format('YYYY-MM-DD'));
+                        } else if (newValue === 'yesterday') {
+                            setSelectedDate(moment().subtract(1, 'days').format('YYYY-MM-DD'));
+                        }
+                        // For custom, user uses the date picker
+                    }}
+                    size="small"
+                >
+                    <ToggleButton value="today" sx={{ px: 2 }}>
+                        <Today sx={{ mr: 1 }} /> Today
+                    </ToggleButton>
+                    <ToggleButton value="yesterday" sx={{ px: 2 }}>
+                        <History sx={{ mr: 1 }} /> Yesterday
+                    </ToggleButton>
+                </ToggleButtonGroup>
+                
+                <TextField
+                    type="date"
+                    size="small"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    inputProps={{ max: moment().format('YYYY-MM-DD') }}
+                    sx={{ width: 180 }}
+                />
+                
+                {!isToday && (
+                    <Alert severity="info" sx={{ py: 0.5 }}>
+                        Viewing historical data - Read only
+                    </Alert>
+                )}
+            </Box>
+
             {/* Date Display */}
             <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
-                {moment().format('dddd, MMMM D, YYYY')}
+                {moment(selectedDate).format('dddd, MMMM D, YYYY')}
+                {isToday && ' (Today)'}
+                {isYesterday && ' (Yesterday)'}
             </Typography>
 
             {/* Main Cash Summary Section */}
