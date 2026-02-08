@@ -236,7 +236,7 @@ async function runDatabaseValidation() {
         for (let i = 0; i < Math.min(EDGE_CASES.length, createdOrderIds.length); i++) {
             const order = await db.order.findOne({
                 where: { id: createdOrderIds[i] },
-                include: [{ model: db.orderItem, as: 'orderItems' }]
+                include: [{ model: db.orderItems, as: 'orderItems' }]
             });
             
             if (order && order.orderItems && order.orderItems.length > 0) {
