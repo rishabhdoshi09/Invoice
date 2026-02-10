@@ -237,10 +237,9 @@ export const ListCustomers = () => {
             const orderData = {
                 customerName: saleDialog.customer?.name || '',
                 customerMobile: saleDialog.customer?.mobile || '',
-                customerId: saleDialog.customer?.id,
+                // Note: customerId is NOT sent - backend will auto-link customer by name/mobile
                 orderDate: moment().format('DD-MM-YYYY'),
-                paymentStatus: 'unpaid',
-                paidAmount: 0, // Credit sale - customer owes this amount
+                paidAmount: 0, // Credit sale - customer owes this amount (will set paymentStatus to 'unpaid')
                 subTotal: saleSubTotal,
                 tax: saleTax,
                 taxPercent: saleTaxPercent,
