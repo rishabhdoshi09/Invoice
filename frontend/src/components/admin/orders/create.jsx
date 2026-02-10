@@ -776,6 +776,7 @@ export const CreateOrder = () => {
         formik.setFieldValue('name', value?.value || "");
         formik.setFieldValue('type', "");
         formik.setFieldValue('productPrice', "");
+        formik.setFieldValue('altName', ""); // Clear altName when selecting new product
         setLocalPriceValue("");
         formik.setFieldValue('totalPrice', 0);
         setBowlPriceLock(false);
@@ -789,6 +790,7 @@ export const CreateOrder = () => {
       formik.setFieldValue('id', productId ?? "");
       formik.setFieldValue('name', rows[productId]?.name || "");
       formik.setFieldValue('type', rows[productId]?.type || "");
+      formik.setFieldValue('altName', ""); // Clear altName when selecting new product
       const price = rows[productId]?.pricePerKg || 0;
       const productName = rows[productId]?.name || "";
       
