@@ -539,13 +539,21 @@ module.exports = {
     togglePaymentStatus: async (req, res) => {
         try {
             const { orderId } = req.params;
-            const { newStatus, customerName, customerMobile } = req.body;
+            const { newStatus, customerName, customerMobile, customerId } = req.body;
 
             // Validate new status
             if (!['paid', 'unpaid'].includes(newStatus)) {
                 return res.status(400).send({
                     status: 400,
                     message: 'Invalid payment status. Must be "paid" or "unpaid".'
+                });
+            }
+
+            // Require customer name when marking as unpaid
+            if (newStatus === 'unpaid' && (!customerName || !customerName.trim())) {
+                return res.status(400).send({
+                    status: 400,
+                    message: 'Customer name is required when marking order as unpaid.'
                 });
             }
 
@@ -569,13 +577,15 @@ module.exports = {
                 modifiedByName: req.user?.name || req.user?.username
             };
             
-            // Add customer info if toggling to unpaid and provided
+            // Add customer info if toggling to unpaid
             if (newStatus === 'unpaid') {
-                if (customerName && customerName.trim()) {
-                    updateData.customerName = customerName.trim();
-                }
+                updateData.customerName = customerName.trim();
                 if (customerMobile && customerMobile.trim()) {
                     updateData.customerMobile = customerMobile.trim();
+                }
+                // Link to customer if customerId provided
+                if (customerId) {
+                    updateData.customerId = customerId;
                 }
             }
 
