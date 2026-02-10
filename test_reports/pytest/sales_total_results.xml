@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="6" skipped="0" tests="8" time="1.425" timestamp="2026-02-10T17:20:19.192601+00:00" hostname="agent-env-c1288811-b82c-48e0-b871-cdf16fb510d2"><testcase classname="backend.tests.test_sales_total_bug.TestSalesTotalBugFix" name="test_01_unpaid_order_should_not_add_to_total_sales" time="0.227"><failure message="AssertionError: Failed to create order: {&quot;status&quot;:400,&quot;message&quot;:&quot;\&quot;subTotal\&quot; is required&quot;}&#10;assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">backend/tests/test_sales_total_bug.py:137: in test_01_unpaid_order_should_not_add_to_total_sales
+    order = self.create_order(paid_amount=0, total=500)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/test_sales_total_bug.py:95: in create_order
+    assert response.status_code == 200, f"Failed to create order: {response.text}"
+E   AssertionError: Failed to create order: {"status":400,"message":"\"subTotal\" is required"}
+E   assert 400 == 200
+E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_sales_total_bug.TestSalesTotalBugFix" name="test_02_paid_order_should_add_to_total_sales" time="0.180"><failure message="AssertionError: Failed to create order: {&quot;status&quot;:400,&quot;message&quot;:&quot;\&quot;subTotal\&quot; is required&quot;}&#10;assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">backend/tests/test_sales_total_bug.py:170: in test_02_paid_order_should_add_to_total_sales
+    order = self.create_order(paid_amount=order_total, total=order_total)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/test_sales_total_bug.py:95: in create_order
+    assert response.status_code == 200, f"Failed to create order: {response.text}"
+E   AssertionError: Failed to create order: {"status":400,"message":"\"subTotal\" is required"}
+E   assert 400 == 200
+E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_sales_total_bug.TestSalesTotalBugFix" name="test_03_toggle_unpaid_to_paid_should_add_to_total_sales" time="0.150"><failure message="AssertionError: Failed to create order: {&quot;status&quot;:400,&quot;message&quot;:&quot;\&quot;subTotal\&quot; is required&quot;}&#10;assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">backend/tests/test_sales_total_bug.py:200: in test_03_toggle_unpaid_to_paid_should_add_to_total_sales
+    order = self.create_order(paid_amount=0, total=order_total)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/test_sales_total_bug.py:95: in create_order
+    assert response.status_code == 200, f"Failed to create order: {response.text}"
+E   AssertionError: Failed to create order: {"status":400,"message":"\"subTotal\" is required"}
+E   assert 400 == 200
+E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_sales_total_bug.TestSalesTotalBugFix" name="test_04_toggle_paid_to_unpaid_should_subtract_from_total_sales" time="0.140"><failure message="AssertionError: Failed to create order: {&quot;status&quot;:400,&quot;message&quot;:&quot;\&quot;subTotal\&quot; is required&quot;}&#10;assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">backend/tests/test_sales_total_bug.py:241: in test_04_toggle_paid_to_unpaid_should_subtract_from_total_sales
+    order = self.create_order(paid_amount=order_total, total=order_total)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/test_sales_total_bug.py:95: in create_order
+    assert response.status_code == 200, f"Failed to create order: {response.text}"
+E   AssertionError: Failed to create order: {"status":400,"message":"\"subTotal\" is required"}
+E   assert 400 == 200
+E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_sales_total_bug.TestSalesTotalBugFix" name="test_05_delete_paid_order_should_subtract_from_total_sales" time="0.130"><failure message="AssertionError: Failed to create order: {&quot;status&quot;:400,&quot;message&quot;:&quot;\&quot;subTotal\&quot; is required&quot;}&#10;assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">backend/tests/test_sales_total_bug.py:282: in test_05_delete_paid_order_should_subtract_from_total_sales
+    order = self.create_order(paid_amount=order_total, total=order_total)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/test_sales_total_bug.py:95: in create_order
+    assert response.status_code == 200, f"Failed to create order: {response.text}"
+E   AssertionError: Failed to create order: {"status":400,"message":"\"subTotal\" is required"}
+E   assert 400 == 200
+E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_sales_total_bug.TestSalesTotalBugFix" name="test_06_delete_unpaid_order_should_not_affect_total_sales" time="0.139"><failure message="AssertionError: Failed to create order: {&quot;status&quot;:400,&quot;message&quot;:&quot;\&quot;subTotal\&quot; is required&quot;}&#10;assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">backend/tests/test_sales_total_bug.py:322: in test_06_delete_unpaid_order_should_not_affect_total_sales
+    order = self.create_order(paid_amount=0, total=order_total)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/test_sales_total_bug.py:95: in create_order
+    assert response.status_code == 200, f"Failed to create order: {response.text}"
+E   AssertionError: Failed to create order: {"status":400,"message":"\"subTotal\" is required"}
+E   assert 400 == 200
+E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_sales_total_bug.TestDayStartPageCalculations" name="test_07_today_summary_api_returns_correct_structure" time="0.136" /><testcase classname="backend.tests.test_sales_total_bug.TestDayStartPageCalculations" name="test_08_cash_sales_calculation" time="0.139" /></testsuite></testsuites>
