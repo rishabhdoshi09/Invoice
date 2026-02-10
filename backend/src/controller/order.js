@@ -58,7 +58,13 @@ module.exports = {
                 const response = await Services.order.createOrder(orderObj, transaction);
                 const orderId = response.id;
 
-                orderItems = orderItems.map(item => { return {...item, orderId: orderId } });
+                orderItems = orderItems.map((item, index) => { 
+                    return {
+                        ...item, 
+                        orderId: orderId,
+                        sortOrder: item.sortOrder !== undefined ? item.sortOrder : index
+                    }; 
+                });
                 await Services.orderItems.addOrderItems(orderItems, transaction);
 
                 // Update daily summary
