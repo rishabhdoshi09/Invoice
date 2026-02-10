@@ -78,7 +78,10 @@ class TestSalesTotalBugFix:
             "customerName": "TEST_SalesTotal_Customer",
             "customerMobile": "9999999999",
             "orderDate": today,
+            "subTotal": total,  # Required field
             "total": total,
+            "tax": 0,
+            "taxPercent": 0,
             "paidAmount": paid_amount,  # 0 = unpaid, total = paid
             "orderItems": [
                 {
