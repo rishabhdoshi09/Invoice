@@ -134,7 +134,7 @@ const toNum = (v) => {
 const sanitizeOrderForServer = (props = {}, isCreditSale = false) => {
   const { orderItems = [] } = props;
 
-  const clean = orderItems.map((it) => {
+  const clean = orderItems.map((it, index) => {
     const cpy = { ...it } || {};
     cpy.productId = String(cpy.productId || cpy.id || '').trim();
     cpy.name = String(cpy.name || '').trim();
@@ -143,6 +143,7 @@ const sanitizeOrderForServer = (props = {}, isCreditSale = false) => {
     cpy.quantity = toNum(cpy.quantity);
     cpy.productPrice = toNum(cpy.productPrice);
     cpy.totalPrice = toNum(cpy.totalPrice);
+    cpy.sortOrder = it.sortOrder !== undefined ? it.sortOrder : index; // Preserve order
     return cpy;
   });
 
