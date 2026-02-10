@@ -79,7 +79,11 @@ module.exports = {
             const res = await db.order.findAndCountAll({ 
                 where: whereClause,
                 order: [['createdAt', 'DESC']], 
-                include: [ { model: db.orderItems }], 
+                include: [ { 
+                    model: db.orderItems,
+                    separate: true,
+                    order: [['sortOrder', 'ASC']]
+                }], 
                 distinct: true,
                 limit: filterObj.limit ?? 25,
                 offset: filterObj.offset ?? 0
