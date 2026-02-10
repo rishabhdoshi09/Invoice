@@ -1280,7 +1280,7 @@ export const CreateOrder = () => {
           subTotal,
           tax,
           total: subTotal + tax,
-          orderItems: [...prevOrder.orderItems, item]
+          orderItems: [...prevOrder.orderItems, { ...item, sortOrder: prevOrder.orderItems.length }]
         };
         try { generatePdf(next); } catch {}
         return next;
