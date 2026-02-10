@@ -599,19 +599,22 @@ module.exports = {
                 // Continue even if summary update fails
             }
 
+            // Determine which customer to update balance for
+            const customerIdToUpdate = customerId || order.customerId;
+            
             // Update customer balance if customer exists
-            if (order.customerId) {
+            if (customerIdToUpdate) {
                 try {
-                    const customer = await db.customer.findByPk(order.customerId);
+                    const customer = await db.customer.findByPk(customerIdToUpdate);
                     if (customer) {
                         // If marking as paid, reduce customer balance
                         // If marking as unpaid, increase customer balance
                         const balanceChange = newStatus === 'paid' 
-                            ? -order.total  // Reduce balance when paid
-                            : order.total;  // Increase balance when unpaid
+                            ? -Number(order.total)  // Reduce balance when paid
+                            : Number(order.total);  // Increase balance when unpaid
                         
                         await customer.update({
-                            currentBalance: Math.max(0, (customer.currentBalance || 0) + balanceChange)
+                            currentBalance: Math.max(0, (Number(customer.currentBalance) || 0) + balanceChange)
                         });
                     }
                 } catch (custError) {
