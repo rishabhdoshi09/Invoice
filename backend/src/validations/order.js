@@ -11,7 +11,8 @@ module.exports = {
             quantity: Joi.number().greater(0).required(),
             productPrice: Joi.number().greater(0).required(),
             totalPrice: Joi.number().greater(0).required(),
-            type: Joi.string().trim().valid(Object.values(Enums.product)).required()
+            type: Joi.string().trim().valid(Object.values(Enums.product)).required(),
+            sortOrder: Joi.number().integer().min(0).optional().default(0)
         });
         
         const schema = Joi.object().keys({
