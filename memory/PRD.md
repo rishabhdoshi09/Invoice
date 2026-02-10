@@ -5,6 +5,34 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 
 ---
 
+## Critical Updates (February 10, 2026)
+
+### P0 RESOLVED: Sales Total Discrepancy Fix
+**Issue:** "Today's Sales" total on Day Start page was showing incorrect values because totalSales included ALL orders (paid + unpaid) instead of only PAID orders.
+
+**Root Cause:** The `recordOrderCreated()` function in dailySummary.js was adding ALL order totals to `totalSales` regardless of payment status.
+
+**Solution Implemented:**
+1. ✅ Modified `recordOrderCreated()` to only add to totalSales when order.paymentStatus === 'paid'
+2. ✅ Modified `recordOrderDeleted()` to only subtract from totalSales when order was PAID
+3. ✅ Added new `recordPaymentStatusChange()` function to handle status toggle updates
+4. ✅ Updated `togglePaymentStatus()` in order controller to call the new function
+5. ✅ Updated `recalculateSummary()` to only include paid orders
+6. ✅ Fixed frontend DayStart.jsx to properly convert API string values to numbers
+7. ✅ Created SQL migration script for users to fix historical data
+
+**Files Modified:**
+- `/app/backend/src/services/dailySummary.js` - recordOrderCreated(), recordOrderDeleted(), recordPaymentStatusChange(), recalculateSummary()
+- `/app/backend/src/controller/order.js` - togglePaymentStatus()
+- `/app/frontend/src/components/admin/dayStart/DayStart.jsx` - Fixed Number() conversions
+
+**Files Created:**
+- `/app/backend/migrations/fix_daily_summary_totals.sql` - SQL script for users to fix historical data
+
+**Test Results:** All 8 test cases PASSED (see /app/test_reports/iteration_8.json)
+
+---
+
 ## Critical Updates (February 8, 2026)
 
 ### P0 RESOLVED: Database Persistence
