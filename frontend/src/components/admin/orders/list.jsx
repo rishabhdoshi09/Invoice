@@ -50,6 +50,27 @@ export const ListOrders = () => {
     const [orderToToggle, setOrderToToggle] = useState(null);
     const [isTogglingStatus, setIsTogglingStatus] = useState(false);
     const [customerInfo, setCustomerInfo] = useState({ customerName: '', customerMobile: '' });
+    const [customers, setCustomers] = useState([]);
+    const [selectedCustomer, setSelectedCustomer] = useState(null);
+    const [isNewCustomer, setIsNewCustomer] = useState(false);
+    const [loadingCustomers, setLoadingCustomers] = useState(false);
+
+    // Fetch customers for autocomplete
+    const fetchCustomers = async () => {
+        try {
+            setLoadingCustomers(true);
+            const token = localStorage.getItem('token');
+            const { data } = await axios.get('/api/customers', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const customerList = data.data?.rows || data.rows || [];
+            setCustomers(Array.isArray(customerList) ? customerList : Object.values(customerList));
+        } catch (error) {
+            console.error('Error fetching customers:', error);
+        } finally {
+            setLoadingCustomers(false);
+        }
+    };
 
     // Handle delete button click - open confirmation dialog
     const handleDeleteClick = (order) => {
