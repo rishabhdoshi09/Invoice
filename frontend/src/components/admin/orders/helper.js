@@ -115,7 +115,7 @@ export const generatePdfDefinition = (data) => {
                         ],
                         ...itemsWithTax.map((item, index) => [
                             { text: `${index + 1}`, alignment: 'center' },
-                            item.name,
+                            { text: item.altName ? `${item.name}\n(${item.altName})` : item.name },
                             { text: `₹${item.basePrice}`, alignment: 'right' },
                             { text: `${item.quantity}`, alignment: 'center' },
                             { text: `₹${item.baseTotal}`, alignment: 'right' },
