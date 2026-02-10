@@ -5,9 +5,16 @@ export const generatePdfDefinition = (data) => {
     const SGST_RATE = 0.025;
     const CGST_RATE = 0.025;
 
+    // Sort items by sortOrder to maintain the order they were added
+    const sortedItems = [...(data.orderItems || [])].sort((a, b) => {
+        const sortA = a.sortOrder !== undefined ? a.sortOrder : 999;
+        const sortB = b.sortOrder !== undefined ? b.sortOrder : 999;
+        return sortA - sortB;
+    });
+
     // Calculate tax-inclusive values for each item
     // Product price is inclusive of GST, so we need to extract base price
-    const itemsWithTax = data.orderItems.map(item => {
+    const itemsWithTax = sortedItems.map(item => {
         const inclusivePrice = Number(item.productPrice) || 0;
         const quantity = Number(item.quantity) || 0;
         const inclusiveTotal = Number(item.totalPrice) || 0;
