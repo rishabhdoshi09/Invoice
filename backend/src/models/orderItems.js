@@ -28,6 +28,11 @@ module.exports = (sequelize, Sequelize) => {
             },
             type: {
                 type: Sequelize.ENUM(Object.values(Enums.product))
+            },
+            sortOrder: {
+                type: Sequelize.INTEGER,
+                defaultValue: 0,
+                allowNull: false
             }
         }
     );
