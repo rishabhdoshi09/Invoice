@@ -16,7 +16,11 @@ module.exports = {
         try {
             const options = {
                 where: { id: filterObj.id },
-                include: [ { model: db.orderItems }]
+                include: [ { 
+                    model: db.orderItems,
+                    separate: true,
+                    order: [['sortOrder', 'ASC']]
+                }]
             };
             if (transaction) {
                 options.transaction = transaction;
