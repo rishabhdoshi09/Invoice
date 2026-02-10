@@ -186,6 +186,52 @@ module.exports = {
         return summary;
     },
 
+    // Update summary when order payment status changes
+    // Called when toggling between paid/unpaid status
+    recordPaymentStatusChange: async (order, oldStatus, newStatus, transaction = null) => {
+        // If status didn't actually change, do nothing
+        if (oldStatus === newStatus) {
+            return null;
+        }
+        
+        const orderDate = order.orderDate 
+            ? moment(order.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('YYYY-MM-DD')
+            : moment(order.createdAt).format('YYYY-MM-DD');
+        
+        const options = transaction ? { transaction } : {};
+        
+        const summary = await db.dailySummary.findOne({
+            where: { date: orderDate },
+            ...options
+        });
+        
+        if (summary) {
+            const currentSales = Number(summary.totalSales) || 0;
+            const orderTotal = Number(order.total) || 0;
+            
+            let newTotalSales = currentSales;
+            
+            // If changed FROM paid TO unpaid: subtract from totalSales
+            if (oldStatus === 'paid' && newStatus !== 'paid') {
+                newTotalSales = Math.max(0, currentSales - orderTotal);
+                console.log(`Order ${order.id} changed from paid to ${newStatus}: subtracting ${orderTotal} from totalSales`);
+            }
+            // If changed FROM unpaid TO paid: add to totalSales
+            else if (oldStatus !== 'paid' && newStatus === 'paid') {
+                newTotalSales = currentSales + orderTotal;
+                console.log(`Order ${order.id} changed from ${oldStatus} to paid: adding ${orderTotal} to totalSales`);
+            }
+            
+            if (newTotalSales !== currentSales) {
+                await summary.update({
+                    totalSales: newTotalSales
+                }, options);
+            }
+        }
+        
+        return summary;
+    },
+
     // Get summaries for date range
     getSummariesInRange: async (startDate, endDate) => {
         const start = moment(startDate).format('YYYY-MM-DD');
