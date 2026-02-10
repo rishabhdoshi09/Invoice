@@ -324,7 +324,18 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 ---
 
 ## Last Updated
-February 3, 2026
+February 10, 2026
+
+---
+
+## Completed (Feb 10, 2026)
+
+### ✅ P0 - Sales Total Discrepancy (FIXED)
+- **Issue:** "Today's Sales" total showing incorrect values - included unpaid orders
+- **Root Cause:** Backend was adding ALL orders to totalSales instead of only PAID orders
+- **Fix:** Modified dailySummary.js functions to only track PAID orders in totalSales
+- **Files Modified:** dailySummary.js, order.js, DayStart.jsx
+- **Test Status:** 8/8 test cases PASSED
 
 ---
 
