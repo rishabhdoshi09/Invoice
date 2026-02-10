@@ -290,6 +290,13 @@ export const generatePdfDefinition = (data) => {
 
 
 export const generatePdfDefinition2 = (data) => {
+    // Sort items by sortOrder to maintain the order they were added
+    const sortedItems = [...(data.orderItems || [])].sort((a, b) => {
+        const sortA = a.sortOrder !== undefined ? a.sortOrder : 999;
+        const sortB = b.sortOrder !== undefined ? b.sortOrder : 999;
+        return sortA - sortB;
+    });
+
     return {
         content: [
             {
@@ -339,9 +346,9 @@ export const generatePdfDefinition2 = (data) => {
                             { text: 'Qty', style: 'tableHeader' },
                             { text: 'Price', style: 'tableHeader' }
                         ],
-                        ...data.orderItems.map((item, index) => [
+                        ...sortedItems.map((item, index) => [
                             `${index + 1}.`,
-                            item.name,
+                            (item.altName && item.altName.trim()) ? item.altName.trim() : item.name,
                             `₹ ${item.productPrice}`,
                             item.quantity,
                             `₹ ${item.totalPrice}`
