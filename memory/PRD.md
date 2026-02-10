@@ -289,7 +289,7 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 
 ### ✅ P0 - Day Start Page Cash Calculation (FIXED)
 - **Issue:** Credit sales were incorrectly included in "Expected Cash in Drawer"
-- **Fix:** Formula now calculates `cashSales = totalSales - totalReceivables`
+- **Fix:** Updated formula: `cashSales = totalSales` (since totalSales now only includes PAID orders)
 - **Status:** Verified working with credit sale test
 
 ### ✅ P0 - Daily Payments Data Entry (VERIFIED)
