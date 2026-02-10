@@ -129,6 +129,12 @@ export const ListOrders = () => {
         
         const newStatus = orderToToggle.paymentStatus === 'paid' ? 'unpaid' : 'paid';
         
+        // Validate customer name is required when toggling to unpaid
+        if (newStatus === 'unpaid' && !customerInfo.customerName?.trim()) {
+            alert('Customer name is required when marking as Unpaid');
+            return;
+        }
+        
         try {
             setIsTogglingStatus(true);
             const token = localStorage.getItem('token');
@@ -136,8 +142,12 @@ export const ListOrders = () => {
             // Include customer info when toggling to unpaid
             const payload = { newStatus };
             if (newStatus === 'unpaid') {
-                payload.customerName = customerInfo.customerName;
-                payload.customerMobile = customerInfo.customerMobile;
+                payload.customerName = customerInfo.customerName.trim();
+                payload.customerMobile = customerInfo.customerMobile?.trim() || '';
+                // Include customerId if selected from database
+                if (selectedCustomer?.id) {
+                    payload.customerId = selectedCustomer.id;
+                }
             }
             
             await axios.patch(
@@ -155,6 +165,8 @@ export const ListOrders = () => {
             setStatusDialogOpen(false);
             setOrderToToggle(null);
             setCustomerInfo({ customerName: '', customerMobile: '' });
+            setSelectedCustomer(null);
+            setIsNewCustomer(false);
         }
     };
 
