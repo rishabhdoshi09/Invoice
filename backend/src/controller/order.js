@@ -581,6 +581,14 @@ module.exports = {
 
             await Services.order.updateOrder({ id: orderId }, updateData);
 
+            // Update daily summary when payment status changes
+            try {
+                await Services.dailySummary.recordPaymentStatusChange(order, oldStatus, newStatus);
+            } catch (summaryError) {
+                console.error('Failed to update daily summary for payment status change:', summaryError);
+                // Continue even if summary update fails
+            }
+
             // Update customer balance if customer exists
             if (order.customerId) {
                 try {
