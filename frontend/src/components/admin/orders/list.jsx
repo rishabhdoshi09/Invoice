@@ -109,6 +109,17 @@ export const ListOrders = () => {
             customerName: order.customerName || '',
             customerMobile: order.customerMobile || ''
         });
+        // Reset selection states
+        setSelectedCustomer(null);
+        setIsNewCustomer(false);
+        // Fetch customers when opening dialog (for toggling to unpaid)
+        if (order.paymentStatus === 'paid') {
+            fetchCustomers();
+            // Try to find existing customer match
+            if (order.customerName) {
+                // Will be matched after customers are loaded
+            }
+        }
         setStatusDialogOpen(true);
     };
 
