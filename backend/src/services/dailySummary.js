@@ -152,6 +152,7 @@ module.exports = {
     },
 
     // Update summary when order is deleted (admin only)
+    // IMPORTANT: Only subtract from totalSales if the order was PAID
     recordOrderDeleted: async (order, transaction = null) => {
         const orderDate = order.orderDate 
             ? moment(order.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('YYYY-MM-DD')
@@ -171,8 +172,12 @@ module.exports = {
             const currentSales = Number(summary.totalSales) || 0;
             const orderTotal = Number(order.total) || 0;
             
+            // Only subtract from totalSales if the order was PAID
+            const wasPaid = order.paymentStatus === 'paid';
+            const salesReduction = wasPaid ? orderTotal : 0;
+            
             await summary.update({
-                totalSales: Math.max(0, currentSales - orderTotal),
+                totalSales: Math.max(0, currentSales - salesReduction),
                 totalOrders: Math.max(0, (summary.totalOrders || 0) - 1),
                 orderIds
             }, options);
