@@ -175,6 +175,8 @@ export const ListOrders = () => {
         setStatusDialogOpen(false);
         setOrderToToggle(null);
         setCustomerInfo({ customerName: '', customerMobile: '' });
+        setSelectedCustomer(null);
+        setIsNewCustomer(false);
     };
 
     // Fetch orders function
