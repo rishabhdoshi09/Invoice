@@ -293,6 +293,7 @@ module.exports = {
     },
 
     // Recalculate summary from actual orders (admin utility)
+    // IMPORTANT: totalSales only includes PAID orders
     recalculateSummary: async (date) => {
         const dateStr = moment(date).format('YYYY-MM-DD');
         const startOfDay = moment(dateStr).startOf('day').toDate();
@@ -307,7 +308,10 @@ module.exports = {
             }
         });
         
-        const totalSales = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+        // Only sum PAID orders for totalSales
+        const totalSales = orders
+            .filter(o => o.paymentStatus === 'paid')
+            .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
         const totalOrders = orders.length;
         const orderIds = orders.map(o => o.id);
         
