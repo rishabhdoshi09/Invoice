@@ -693,7 +693,7 @@ export const ListOrders = () => {
                         onClick={handleConfirmStatusToggle} 
                         color={orderToToggle?.paymentStatus === 'paid' ? 'error' : 'success'} 
                         variant="contained" 
-                        disabled={isTogglingStatus}
+                        disabled={isTogglingStatus || (orderToToggle?.paymentStatus === 'paid' && !customerInfo.customerName?.trim())}
                         data-testid="confirm-status-toggle-btn"
                     >
                         {isTogglingStatus ? 'Updating...' : `Mark as ${orderToToggle?.paymentStatus === 'paid' ? 'Unpaid' : 'Paid'}`}
