@@ -548,7 +548,8 @@ export const CreateOrder = () => {
           productPrice: priceNumLocal,
           totalPrice: Number((((Number(values.productPrice)||0)*(Number(values.quantity)||0)).toFixed(2))),
           type: values.type,
-          altName: (values.altName || '').trim()
+          altName: (values.altName || '').trim(),
+          sortOrder: orderProps.orderItems.length // Add sortOrder based on current position
         }]
       };
 
