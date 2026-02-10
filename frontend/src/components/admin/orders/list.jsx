@@ -570,26 +570,109 @@ export const ListOrders = () => {
                     {/* Show customer info fields when toggling to unpaid */}
                     {orderToToggle?.paymentStatus === 'paid' && (
                         <Box sx={{ mt: 3 }}>
+                            <Alert severity="info" sx={{ mb: 2 }}>
+                                Customer name is <strong>required</strong> when marking as unpaid (credit sale).
+                            </Alert>
+                            
                             <Typography variant="subtitle2" sx={{ mb: 2 }}>
-                                Customer Details (for credit tracking):
+                                Select Customer from Database:
                             </Typography>
-                            <TextField
-                                label="Customer Name"
-                                value={customerInfo.customerName}
-                                onChange={(e) => setCustomerInfo({ ...customerInfo, customerName: e.target.value })}
-                                fullWidth
-                                size="small"
+                            
+                            <Autocomplete
+                                options={customers}
+                                value={selectedCustomer}
+                                loading={loadingCustomers}
+                                onChange={(_, newValue) => {
+                                    setSelectedCustomer(newValue);
+                                    if (newValue) {
+                                        setCustomerInfo({
+                                            customerName: newValue.name || '',
+                                            customerMobile: newValue.mobile || ''
+                                        });
+                                        setIsNewCustomer(false);
+                                    }
+                                }}
+                                getOptionLabel={(option) => option?.name || ''}
+                                renderOption={(props, option) => (
+                                    <li {...props} key={option.id}>
+                                        <Box>
+                                            <Typography variant="body2" fontWeight="bold">{option.name}</Typography>
+                                            <Typography variant="caption" color="text.secondary">
+                                                {option.mobile || 'No mobile'} • Balance: ₹{(option.currentBalance || 0).toLocaleString('en-IN')}
+                                            </Typography>
+                                        </Box>
+                                    </li>
+                                )}
+                                renderInput={(params) => (
+                                    <TextField 
+                                        {...params} 
+                                        label="Search Existing Customer"
+                                        placeholder="Type to search..."
+                                        size="small"
+                                        InputProps={{
+                                            ...params.InputProps,
+                                            endAdornment: (
+                                                <>
+                                                    {loadingCustomers ? <CircularProgress size={20} /> : null}
+                                                    {params.InputProps.endAdornment}
+                                                </>
+                                            ),
+                                        }}
+                                    />
+                                )}
+                                noOptionsText="No customers found"
                                 sx={{ mb: 2 }}
-                                placeholder="Enter customer name"
                             />
-                            <TextField
-                                label="Customer Mobile"
-                                value={customerInfo.customerMobile}
-                                onChange={(e) => setCustomerInfo({ ...customerInfo, customerMobile: e.target.value })}
-                                fullWidth
-                                size="small"
-                                placeholder="Enter mobile number"
-                            />
+                            
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                                <Typography variant="body2" color="text.secondary">— OR —</Typography>
+                                <Button 
+                                    size="small" 
+                                    variant={isNewCustomer ? "contained" : "outlined"}
+                                    startIcon={<PersonAdd />}
+                                    onClick={() => {
+                                        setIsNewCustomer(!isNewCustomer);
+                                        if (!isNewCustomer) {
+                                            setSelectedCustomer(null);
+                                            setCustomerInfo({ customerName: '', customerMobile: '' });
+                                        }
+                                    }}
+                                >
+                                    {isNewCustomer ? 'Entering New Customer' : 'Enter New Customer'}
+                                </Button>
+                            </Box>
+                            
+                            {isNewCustomer && (
+                                <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                                    <TextField
+                                        label="Customer Name *"
+                                        value={customerInfo.customerName}
+                                        onChange={(e) => setCustomerInfo({ ...customerInfo, customerName: e.target.value })}
+                                        fullWidth
+                                        size="small"
+                                        sx={{ mb: 2 }}
+                                        placeholder="Enter new customer name"
+                                        required
+                                        error={!customerInfo.customerName?.trim()}
+                                        helperText={!customerInfo.customerName?.trim() ? 'Customer name is required' : ''}
+                                    />
+                                    <TextField
+                                        label="Customer Mobile"
+                                        value={customerInfo.customerMobile}
+                                        onChange={(e) => setCustomerInfo({ ...customerInfo, customerMobile: e.target.value })}
+                                        fullWidth
+                                        size="small"
+                                        placeholder="Enter mobile number"
+                                    />
+                                </Box>
+                            )}
+                            
+                            {selectedCustomer && (
+                                <Alert severity="success" sx={{ mt: 2 }}>
+                                    Selected: <strong>{selectedCustomer.name}</strong> 
+                                    {selectedCustomer.mobile && ` (${selectedCustomer.mobile})`}
+                                </Alert>
+                            )}
                         </Box>
                     )}
                     
