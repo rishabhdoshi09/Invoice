@@ -93,6 +93,8 @@ module.exports = {
     },
 
     // Update summary when order is created
+    // IMPORTANT: totalSales only tracks PAID orders (cash sales)
+    // Unpaid/credit sales are tracked via totalReceivables calculated dynamically
     recordOrderCreated: async (order, transaction = null) => {
         const today = moment().format('YYYY-MM-DD');
         const options = transaction ? { transaction } : {};
@@ -102,11 +104,16 @@ module.exports = {
             ...options
         });
         
+        // Only add to totalSales if order is PAID
+        const isPaidOrder = order.paymentStatus === 'paid';
+        const orderTotal = Number(order.total) || 0;
+        const salesAmount = isPaidOrder ? orderTotal : 0;
+        
         if (!summary) {
             summary = await db.dailySummary.create({
                 id: uuidv4(),
                 date: today,
-                totalSales: order.total || 0,
+                totalSales: salesAmount, // Only paid orders count as sales
                 totalOrders: 1,
                 totalPurchases: 0,
                 totalPaymentsReceived: 0,
@@ -132,10 +139,9 @@ module.exports = {
             
             // Convert DECIMAL (returned as string from PostgreSQL) to Number
             const currentSales = Number(summary.totalSales) || 0;
-            const orderTotal = Number(order.total) || 0;
             
             await summary.update({
-                totalSales: currentSales + orderTotal,
+                totalSales: currentSales + salesAmount, // Only add if paid
                 totalOrders: (summary.totalOrders || 0) + 1,
                 lastInvoiceNumber: (summary.lastInvoiceNumber || 0) + 1,
                 orderIds
