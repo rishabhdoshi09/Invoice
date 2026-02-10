@@ -337,6 +337,20 @@ February 10, 2026
 - **Files Modified:** dailySummary.js, order.js, DayStart.jsx
 - **Test Status:** 8/8 test cases PASSED
 
+### ✅ P1 - Customer & Supplier Ledger Pages Redesigned
+- **What:** Complete professional redesign of /customers and /suppliers pages
+- **Features Added:**
+  - 5 summary cards with color-coded metrics
+  - Search by name, mobile, GSTIN
+  - Filter by balance status (with/without outstanding)
+  - Pagination (5, 10, 25, 50 rows)
+  - Export to CSV functionality
+  - "Add Purchase Bill" feature for suppliers
+- **Bug Fixed:** "customerId is not allowed" validation error when creating credit sales
+- **Files Modified:** 
+  - /frontend/src/components/admin/customers/list.jsx (complete rewrite)
+  - /frontend/src/components/admin/suppliers/list.jsx (complete rewrite)
+
 ---
 
 ## Completed (Feb 3, 2026)
