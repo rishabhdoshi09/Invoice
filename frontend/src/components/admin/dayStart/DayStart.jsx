@@ -138,7 +138,8 @@ export const DayStart = () => {
     const openingBalance = Number(summaryData?.openingBalance) || 0;
     const totalSales = Number(summaryData?.totalSales) || 0;
     const totalReceivables = Number(summaryData?.totalReceivables) || 0; // Credit sales - not in drawer
-    const cashSales = totalSales - totalReceivables; // Only cash sales go in drawer
+    // After bug fix: totalSales now only includes PAID orders, so cashSales = totalSales
+    const cashSales = totalSales; // totalSales already represents cash sales (PAID orders only)
     const customerPayments = Number(paymentSummary?.summary?.customers?.amount) || 0;
     const supplierPayments = Number(paymentSummary?.summary?.suppliers?.amount) || 0;
     const expenses = Number(paymentSummary?.summary?.expenses?.amount) || 0;
