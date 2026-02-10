@@ -134,13 +134,14 @@ export const DayStart = () => {
     };
 
     // Calculate cash flow values - using summaryData which switches between today and historical
-    const openingBalance = summaryData?.openingBalance || 0;
-    const totalSales = summaryData?.totalSales || 0;
-    const totalReceivables = summaryData?.totalReceivables || 0; // Credit sales - not in drawer
+    // Convert string values from API to numbers (PostgreSQL DECIMAL returns as strings)
+    const openingBalance = Number(summaryData?.openingBalance) || 0;
+    const totalSales = Number(summaryData?.totalSales) || 0;
+    const totalReceivables = Number(summaryData?.totalReceivables) || 0; // Credit sales - not in drawer
     const cashSales = totalSales - totalReceivables; // Only cash sales go in drawer
-    const customerPayments = paymentSummary?.summary?.customers?.amount || 0;
-    const supplierPayments = paymentSummary?.summary?.suppliers?.amount || 0;
-    const expenses = paymentSummary?.summary?.expenses?.amount || 0;
+    const customerPayments = Number(paymentSummary?.summary?.customers?.amount) || 0;
+    const supplierPayments = Number(paymentSummary?.summary?.suppliers?.amount) || 0;
+    const expenses = Number(paymentSummary?.summary?.expenses?.amount) || 0;
     
     // Expected cash = Opening + Cash Sales (not credit) + Customer Receipts - Supplier Payments - Expenses
     const expectedCash = openingBalance + cashSales + customerPayments - supplierPayments - expenses;
