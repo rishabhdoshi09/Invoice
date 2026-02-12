@@ -44,6 +44,7 @@ export const ListCustomers = () => {
     const [salePrice, setSalePrice] = useState('');
     const [saleTaxPercent, setSaleTaxPercent] = useState(0);
     const [saleSubmitting, setSaleSubmitting] = useState(false);
+    const [saleDate, setSaleDate] = useState(moment().format('YYYY-MM-DD'));
     
     const [formData, setFormData] = useState({
         name: '',
