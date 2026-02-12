@@ -301,7 +301,7 @@ export const ListCustomers = () => {
             const orderData = {
                 customerName: saleDialog.customer?.name || '',
                 customerMobile: saleDialog.customer?.mobile || '',
-                orderDate: moment().format('DD-MM-YYYY'),
+                orderDate: moment(saleDate).format('DD-MM-YYYY'),
                 paidAmount: 0,
                 subTotal: saleSubTotal,
                 tax: saleTax,
