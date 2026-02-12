@@ -248,6 +248,7 @@ export const ListCustomers = () => {
         setSaleQuantity('');
         setSalePrice('');
         setSaleTaxPercent(0);
+        setSaleDate(moment().format('YYYY-MM-DD'));
         fetchProducts();
     };
 
