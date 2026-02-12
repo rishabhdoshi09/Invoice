@@ -67,6 +67,7 @@ module.exports = {
             if (!customer) return null;
 
             // Get all orders - check both customerId and customerName for backwards compatibility
+            // Sort by createdAt DESC (most recent first - date added)
             const orders = await db.order.findAll({
                 where: { 
                     [db.Sequelize.Op.or]: [
@@ -75,11 +76,12 @@ module.exports = {
                     ],
                     isDeleted: false
                 },
-                attributes: ['id', 'orderNumber', 'orderDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus'],
-                order: [['orderDate', 'DESC']]
+                attributes: ['id', 'orderNumber', 'orderDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus', 'createdAt'],
+                order: [['createdAt', 'DESC']]
             });
 
             // Get all payments from this customer - check both partyId and partyName
+            // Sort by createdAt DESC (most recent first - date added)
             const payments = await db.payment.findAll({
                 where: { 
                     [db.Sequelize.Op.or]: [
@@ -90,15 +92,15 @@ module.exports = {
                         }
                     ]
                 },
-                attributes: ['id', 'paymentNumber', 'paymentDate', 'amount', 'referenceType', 'notes'],
-                order: [['paymentDate', 'DESC']]
+                attributes: ['id', 'paymentNumber', 'paymentDate', 'amount', 'referenceType', 'notes', 'createdAt'],
+                order: [['createdAt', 'DESC']]
             });
 
             // Calculate totals
             // Debit = Opening + Sales (what they owe us)
-            const totalDebit = orders.reduce((sum, o) => sum + (o.total || 0), 0) + (customer.openingBalance || 0);
+            const totalDebit = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0) + (Number(customer.openingBalance) || 0);
             // Credit = Payments received
-            const totalCredit = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+            const totalCredit = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
             const balance = totalDebit - totalCredit; // Positive = they owe us
 
             return {
