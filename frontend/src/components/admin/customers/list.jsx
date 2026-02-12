@@ -1014,6 +1014,29 @@ export const ListCustomers = () => {
                     <IconButton onClick={() => !saleSubmitting && setSaleDialog({ open: false, customer: null })}><Close /></IconButton>
                 </DialogTitle>
                 <DialogContent dividers>
+                    {/* Sale Date - for proper bookkeeping */}
+                    <Box sx={{ mb: 3, p: 2, bgcolor: '#fff8e1', borderRadius: 1, border: '1px solid #ffe082' }}>
+                        <Grid container spacing={2} alignItems="center">
+                            <Grid item xs={12} sm={4}>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    label="Invoice Date *"
+                                    type="date"
+                                    value={saleDate}
+                                    onChange={(e) => setSaleDate(e.target.value)}
+                                    InputLabelProps={{ shrink: true }}
+                                    helperText="Set date for bookkeeping"
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={8}>
+                                <Typography variant="body2" color="text.secondary">
+                                    📅 Invoice will be dated: <strong>{moment(saleDate).format('DD MMM YYYY')}</strong>
+                                </Typography>
+                            </Grid>
+                        </Grid>
+                    </Box>
+
                     <Grid container spacing={2} sx={{ mb: 2 }}>
                         <Grid item xs={12} md={4}>
                             <Autocomplete
