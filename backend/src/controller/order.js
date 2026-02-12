@@ -577,15 +577,57 @@ module.exports = {
                 modifiedByName: req.user?.name || req.user?.username
             };
             
+            let customerIdToUpdate = customerId || order.customerId;
+            
             // Add customer info if toggling to unpaid
             if (newStatus === 'unpaid') {
                 updateData.customerName = customerName.trim();
                 if (customerMobile && customerMobile.trim()) {
                     updateData.customerMobile = customerMobile.trim();
                 }
-                // Link to customer if customerId provided
+                
+                // If customerId provided, link to existing customer
                 if (customerId) {
                     updateData.customerId = customerId;
+                    customerIdToUpdate = customerId;
+                } 
+                // If no customerId but customerName provided, create new customer or find by name
+                else if (!customerIdToUpdate) {
+                    try {
+                        // Try to find existing customer by mobile or name
+                        let existingCustomer = null;
+                        if (customerMobile && customerMobile.trim()) {
+                            existingCustomer = await db.customer.findOne({
+                                where: { mobile: customerMobile.trim() }
+                            });
+                        }
+                        if (!existingCustomer) {
+                            existingCustomer = await db.customer.findOne({
+                                where: { name: customerName.trim() }
+                            });
+                        }
+                        
+                        if (existingCustomer) {
+                            // Use existing customer
+                            updateData.customerId = existingCustomer.id;
+                            customerIdToUpdate = existingCustomer.id;
+                        } else {
+                            // Create new customer
+                            const uuidv4 = require('uuid/v4');
+                            const newCustomer = await db.customer.create({
+                                id: uuidv4(),
+                                name: customerName.trim(),
+                                mobile: customerMobile?.trim() || null,
+                                openingBalance: 0,
+                                currentBalance: 0
+                            });
+                            updateData.customerId = newCustomer.id;
+                            customerIdToUpdate = newCustomer.id;
+                        }
+                    } catch (custCreateError) {
+                        console.error('Error creating/finding customer:', custCreateError);
+                        // Continue without creating customer - order will still have customerName
+                    }
                 }
             }
 
@@ -599,9 +641,6 @@ module.exports = {
                 // Continue even if summary update fails
             }
 
-            // Determine which customer to update balance for
-            const customerIdToUpdate = customerId || order.customerId;
-            
             // Update customer balance if customer exists
             if (customerIdToUpdate) {
                 try {
