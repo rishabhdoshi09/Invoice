@@ -1434,6 +1434,7 @@ export const CreateOrder = () => {
       setIsCreditSale(false); // Reset credit sale toggle
       setSelectedProduct(null); // Reset selected product
       setInputValue(''); // Reset input value
+      setManualDateSet(false); // Reset manual date flag - next invoice will use today's date
       // Note: Keep archivedOrderProps/archivedPdfUrl to show the just-submitted order's PDF
       // User can start adding new items while viewing the submitted PDF
     } catch (err) {
