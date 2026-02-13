@@ -297,6 +297,7 @@ export const CreateOrder = () => {
     label: `${c?.name || 'Customer'}${c?.mobile ? ` (${c.mobile})` : ''}`,
     name: c?.name || '',
     mobile: c?.mobile || '',
+    balance: Number(c?.balance) || Number(c?.currentBalance) || 0,
   })), [customers]);
 
   const productOptions = useMemo(() => (
