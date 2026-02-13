@@ -1767,27 +1767,8 @@ export const CreateOrder = () => {
               <Grid item xs={12} md={4}>
                 <TextField size="small" id="customerMobile" name="customerMobile" label="Customer Mobile" value={orderProps.customerMobile} onChange={(e)=>{ const { id, value } = e.target; setOrderProps((prevProps) => ({ ...prevProps, [id]: value })); }} fullWidth />
               </Grid>
-              
-              {/* Invoice Date - for bookkeeping */}
-              <Grid item xs={12} md={2}>
-                <TextField
-                  size="small"
-                  type="date"
-                  label="Invoice Date"
-                  value={moment(orderProps.orderDate, 'DD-MM-YYYY').format('YYYY-MM-DD')}
-                  onChange={(e) => {
-                    const newDate = moment(e.target.value).format('DD-MM-YYYY');
-                    setOrderProps(prev => ({ ...prev, orderDate: newDate }));
-                    setManualDateSet(true); // Mark that user manually set the date
-                  }}
-                  InputLabelProps={{ shrink: true }}
-                  fullWidth
-                  helperText={manualDateSet ? "Custom date" : ""}
-                />
-              </Grid>
-              
-              <Grid item xs={12} md={2}>
-                <TextField size="small" type='number' id="taxPercent" name="taxPercent" label="Tax %" value={orderProps.taxPercent} onChange={(e)=>{ const { id, value } = e.target; const obj = {}; if (id === 'taxPercent') { const taxPct = Number(value) || 0; obj['taxPercent'] = taxPct; const subTotal = orderProps.subTotal; obj['tax'] = Math.round(subTotal * (taxPct / 100)); obj['total'] = subTotal + obj['tax']; } setOrderProps((prevProps) => ({ ...prevProps, [id]: value, ...obj })); }} required fullWidth />
+              <Grid item xs={12} md={4}>
+                <TextField size="small" type='number' id="taxPercent" name="taxPercent" label="Tax Percentage" value={orderProps.taxPercent} onChange={(e)=>{ const { id, value } = e.target; const obj = {}; if (id === 'taxPercent') { const taxPct = Number(value) || 0; obj['taxPercent'] = taxPct; const subTotal = orderProps.subTotal; obj['tax'] = Math.round(subTotal * (taxPct / 100)); obj['total'] = subTotal + obj['tax']; } setOrderProps((prevProps) => ({ ...prevProps, [id]: value, ...obj })); }} required fullWidth />
               </Grid>
 
               <Grid item xs={12} md={6} mt={2}>
