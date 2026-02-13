@@ -548,31 +548,44 @@ export const ListSuppliers = () => {
                                             />
                                         </TableCell>
                                         <TableCell align="center">
-                                            <Tooltip title="Add Purchase Bill">
-                                                <IconButton size="small" color="primary" onClick={() => handleOpenPurchaseDialog(supplier)}>
-                                                    <ShoppingBag fontSize="small" />
-                                                </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title="Make Payment">
-                                                <IconButton size="small" color="success" onClick={() => openPaymentDialog(supplier)}>
-                                                    <Payment fontSize="small" />
-                                                </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title="View Ledger">
-                                                <IconButton size="small" onClick={() => fetchSupplierDetails(supplier.id)}>
-                                                    <Visibility fontSize="small" color="info" />
-                                                </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title="Edit">
+                                            <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center', flexWrap: 'wrap' }}>
+                                                <Button 
+                                                    size="small" 
+                                                    variant="outlined" 
+                                                    color="primary" 
+                                                    startIcon={<ShoppingBag />}
+                                                    onClick={() => handleOpenPurchaseDialog(supplier)}
+                                                    sx={{ fontSize: '0.7rem', py: 0.3, minWidth: 'auto' }}
+                                                >
+                                                    Bill
+                                                </Button>
+                                                <Button 
+                                                    size="small" 
+                                                    variant="outlined" 
+                                                    color="success" 
+                                                    startIcon={<Payment />}
+                                                    onClick={() => openPaymentDialog(supplier)}
+                                                    sx={{ fontSize: '0.7rem', py: 0.3, minWidth: 'auto' }}
+                                                >
+                                                    Pay
+                                                </Button>
+                                                <Button 
+                                                    size="small" 
+                                                    variant="contained" 
+                                                    color="info" 
+                                                    startIcon={<Visibility />}
+                                                    onClick={() => fetchSupplierDetails(supplier.id)}
+                                                    sx={{ fontSize: '0.7rem', py: 0.3, minWidth: 'auto' }}
+                                                >
+                                                    View
+                                                </Button>
                                                 <IconButton size="small" onClick={() => handleOpenDialog(supplier)}>
                                                     <Edit fontSize="small" />
                                                 </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title="Delete">
                                                 <IconButton size="small" onClick={() => handleDelete(supplier.id)}>
                                                     <Delete fontSize="small" color="error" />
                                                 </IconButton>
-                                            </Tooltip>
+                                            </Box>
                                         </TableCell>
                                     </TableRow>
                                 ))
