@@ -211,7 +211,6 @@ export const ListSuppliers = () => {
             
             const purchaseData = {
                 supplierId: purchaseDialog.supplier?.id,
-                supplierName: purchaseDialog.supplier?.name || '',
                 billNumber: purchaseBillNumber,
                 billDate: moment(purchaseBillDate).format('DD-MM-YYYY'),
                 paymentStatus: 'unpaid',
@@ -232,7 +231,7 @@ export const ListSuppliers = () => {
                 headers: { Authorization: `Bearer ${token}` }
             });
             
-            alert(`Purchase bill created successfully! Bill: ${purchaseBillNumber}`);
+            alert(`Purchase bill created successfully! Bill: ${purchaseBillNumber || 'Auto-generated'}`);
             setPurchaseDialog({ open: false, supplier: null });
             setPurchaseItems([]);
             fetchSuppliers();
