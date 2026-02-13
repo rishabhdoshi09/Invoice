@@ -397,55 +397,80 @@ module.exports = {
                 });
             }
 
-            // Update daily summary to subtract deleted order
-            try {
-                await Services.dailySummary.recordOrderDeleted(order);
-            } catch (summaryError) {
-                console.error('Failed to update daily summary for deletion:', summaryError);
-            }
+            // Use transaction for all delete operations
+            await db.sequelize.transaction(async (transaction) => {
+                // Update daily summary to subtract deleted order
+                try {
+                    await Services.dailySummary.recordOrderDeleted(order, transaction);
+                } catch (summaryError) {
+                    console.error('Failed to update daily summary for deletion:', summaryError);
+                }
 
-            const response = await Services.order.deleteOrder({ id: orderId });
-            
-            if(response) {
-                // Audit log for order deletion
-                await createAuditLog({
-                    userId: req.user?.id,
-                    userName: req.user?.name || req.user?.username || 'Anonymous',
-                    userRole: req.user?.role || 'unknown',
-                    action: 'DELETE',
-                    entityType: 'ORDER',
-                    entityId: orderId,
-                    entityName: order.orderNumber,
-                    oldValues: {
-                        orderNumber: order.orderNumber,
-                        total: order.total,
-                        customerName: order.customerName,
-                        orderDate: order.orderDate,
-                        items: order.orderItems?.map(i => ({
-                            name: i.name,
-                            quantity: i.quantity,
-                            price: i.productPrice
-                        }))
-                    },
-                    description: `DELETED order ${order.orderNumber} (₹${order.total}) - Customer: ${order.customerName}`,
-                    ipAddress: getClientIP(req),
-                    userAgent: req.headers['user-agent'],
-                    metadata: {
-                        deletedAt: new Date().toISOString(),
-                        reason: req.body.reason || 'No reason provided'
+                // CRITICAL: Reverse customer balance if this was a credit sale
+                if (order.customerId && order.paymentStatus !== 'paid') {
+                    try {
+                        const customer = await db.customer.findByPk(order.customerId);
+                        if (customer) {
+                            const dueAmount = Number(order.dueAmount) || Number(order.total) || 0;
+                            await customer.update({
+                                currentBalance: Math.max(0, (Number(customer.currentBalance) || 0) - dueAmount)
+                            }, { transaction });
+                            console.log(`Reversed customer ${customer.name} balance by ₹${dueAmount}`);
+                        }
+                    } catch (custError) {
+                        console.error('Failed to reverse customer balance:', custError);
                     }
-                });
-                
-                return res.status(200).send({
-                    status: 200,
-                    message: 'order deleted successfully',
-                    data: response
-                });
-            }
+                }
 
-            return res.status(400).send({
-                status: 400,
-                message: "order doesn't exist"
+                // Delete ledger entries for this order
+                await db.ledgerEntry.destroy({
+                    where: {
+                        referenceType: 'order',
+                        referenceId: orderId
+                    },
+                    transaction
+                });
+
+                // Soft delete the order
+                await db.order.update(
+                    { isDeleted: true },
+                    { where: { id: orderId }, transaction }
+                );
+            });
+
+            // Audit log for order deletion
+            await createAuditLog({
+                userId: req.user?.id,
+                userName: req.user?.name || req.user?.username || 'Anonymous',
+                userRole: req.user?.role || 'unknown',
+                action: 'DELETE',
+                entityType: 'ORDER',
+                entityId: orderId,
+                entityName: order.orderNumber,
+                oldValues: {
+                    orderNumber: order.orderNumber,
+                    total: order.total,
+                    customerName: order.customerName,
+                    orderDate: order.orderDate,
+                    items: order.orderItems?.map(i => ({
+                        name: i.name,
+                        quantity: i.quantity,
+                        price: i.productPrice
+                    }))
+                },
+                description: `DELETED order ${order.orderNumber} (₹${order.total}) - Customer: ${order.customerName}`,
+                ipAddress: getClientIP(req),
+                userAgent: req.headers['user-agent'],
+                metadata: {
+                    deletedAt: new Date().toISOString(),
+                    reason: req.body.reason || 'No reason provided'
+                }
+            });
+            
+            return res.status(200).send({
+                status: 200,
+                message: 'order deleted successfully',
+                data: { id: orderId }
             });
             
         } catch(error) {
