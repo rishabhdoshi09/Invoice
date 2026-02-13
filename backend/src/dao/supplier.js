@@ -119,6 +119,7 @@ module.exports = {
 
     // List suppliers with calculated balance (NOT stored balance)
     // This ensures balance is always accurate from actual transactions
+    // IMPORTANT: Only match payments by partyId to prevent name collision issues
     listSuppliersWithBalance: async (params = {}) => {
         try {
             // Get all suppliers with dynamically calculated balance
@@ -143,7 +144,7 @@ module.exports = {
                     COALESCE((
                         SELECT SUM(amount) 
                         FROM payments 
-                        WHERE ("partyId" = s.id OR "partyName" = s.name) 
+                        WHERE "partyId" = s.id
                         AND "partyType" = 'supplier'
                     ), 0) as balance,
                     COALESCE((
@@ -154,7 +155,7 @@ module.exports = {
                     COALESCE((
                         SELECT SUM(amount) 
                         FROM payments 
-                        WHERE ("partyId" = s.id OR "partyName" = s.name) 
+                        WHERE "partyId" = s.id
                         AND "partyType" = 'supplier'
                     ), 0) as "totalCredit"
                 FROM suppliers s
