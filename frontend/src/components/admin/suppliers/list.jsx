@@ -220,7 +220,7 @@ export const ListSuppliers = () => {
                 tax: purchaseTax,
                 taxPercent: purchaseTaxPercent,
                 total: purchaseTotal,
-                items: purchaseItems.map(item => ({
+                purchaseItems: purchaseItems.map(item => ({
                     name: item.name,
                     quantity: item.quantity,
                     price: item.price,
