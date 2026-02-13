@@ -326,81 +326,96 @@ module.exports = {
                 });
             }
 
-            // Reverse the payment updates
-            if (payment.referenceType === 'order' && payment.referenceId) {
-                const order = await Services.order.getOrder({ id: payment.referenceId });
-                if (order) {
-                    const newPaidAmount = (order.paidAmount || 0) - payment.amount;
-                    const newDueAmount = order.total - newPaidAmount;
-                    let paymentStatus = 'unpaid';
-                    
-                    if (newPaidAmount >= order.total) {
-                        paymentStatus = 'paid';
-                    } else if (newPaidAmount > 0) {
-                        paymentStatus = 'partial';
-                    }
-
-                    await Services.order.updateOrder(
-                        { id: payment.referenceId },
-                        { 
-                            paidAmount: newPaidAmount, 
-                            dueAmount: newDueAmount,
-                            paymentStatus: paymentStatus
+            // Use transaction for all reversal operations
+            await db.sequelize.transaction(async (transaction) => {
+                // Reverse the payment updates
+                if (payment.referenceType === 'order' && payment.referenceId) {
+                    const order = await Services.order.getOrder({ id: payment.referenceId });
+                    if (order) {
+                        const newPaidAmount = Math.max(0, (Number(order.paidAmount) || 0) - Number(payment.amount));
+                        const newDueAmount = Number(order.total) - newPaidAmount;
+                        let paymentStatus = 'unpaid';
+                        
+                        if (newPaidAmount >= Number(order.total)) {
+                            paymentStatus = 'paid';
+                        } else if (newPaidAmount > 0) {
+                            paymentStatus = 'partial';
                         }
-                    );
-                }
-            } else if (payment.referenceType === 'purchase' && payment.referenceId) {
-                const purchase = await Services.purchaseBill.getPurchaseBill({ id: payment.referenceId });
-                if (purchase) {
-                    const newPaidAmount = (purchase.paidAmount || 0) - payment.amount;
-                    const newDueAmount = purchase.total - newPaidAmount;
-                    let paymentStatus = 'unpaid';
-                    
-                    if (newPaidAmount >= purchase.total) {
-                        paymentStatus = 'paid';
-                    } else if (newPaidAmount > 0) {
-                        paymentStatus = 'partial';
-                    }
 
-                    await Services.purchaseBill.updatePurchaseBill(
-                        { id: payment.referenceId },
-                        { 
-                            paidAmount: newPaidAmount, 
-                            dueAmount: newDueAmount,
-                            paymentStatus: paymentStatus
-                        }
-                    );
-
-                    // Update supplier balance
-                    const supplier = await Services.supplier.getSupplier({ id: purchase.supplierId });
-                    if (supplier) {
-                        const newBalance = (supplier.currentBalance || 0) + payment.amount;
-                        await Services.supplier.updateSupplier(
-                            { id: purchase.supplierId },
-                            { currentBalance: newBalance }
+                        await db.order.update(
+                            { 
+                                paidAmount: newPaidAmount, 
+                                dueAmount: newDueAmount,
+                                paymentStatus: paymentStatus
+                            },
+                            { where: { id: payment.referenceId }, transaction }
                         );
                     }
-                    
-                    // Reverse ledger entries for payment
-                    await db.ledgerEntry.destroy({
-                        where: {
-                            referenceType: 'payment',
-                            referenceId: payment.id
-                        },
-                        transaction
-                    });
-                }
-            }
+                } else if (payment.referenceType === 'purchase' && payment.referenceId) {
+                    const purchase = await Services.purchaseBill.getPurchaseBill({ id: payment.referenceId });
+                    if (purchase) {
+                        const newPaidAmount = Math.max(0, (Number(purchase.paidAmount) || 0) - Number(payment.amount));
+                        const newDueAmount = Number(purchase.total) - newPaidAmount;
+                        let paymentStatus = 'unpaid';
+                        
+                        if (newPaidAmount >= Number(purchase.total)) {
+                            paymentStatus = 'paid';
+                        } else if (newPaidAmount > 0) {
+                            paymentStatus = 'partial';
+                        }
 
-            const response = await Services.payment.deletePayment({ id: req.params.paymentId });
-            
-            if (response) {
-                return res.status(200).send({
-                    status: 200,
-                    message: 'payment deleted successfully',
-                    data: response
+                        await db.purchaseBill.update(
+                            { 
+                                paidAmount: newPaidAmount, 
+                                dueAmount: newDueAmount,
+                                paymentStatus: paymentStatus
+                            },
+                            { where: { id: payment.referenceId }, transaction }
+                        );
+
+                        // Update supplier balance (add back the payment amount)
+                        if (purchase.supplierId) {
+                            const supplier = await db.supplier.findByPk(purchase.supplierId);
+                            if (supplier) {
+                                await supplier.update({
+                                    currentBalance: (Number(supplier.currentBalance) || 0) + Number(payment.amount)
+                                }, { transaction });
+                            }
+                        }
+                    }
+                }
+                
+                // Reverse customer balance if this was a customer payment
+                if (payment.partyType === 'customer' && payment.partyId) {
+                    const customer = await db.customer.findByPk(payment.partyId);
+                    if (customer) {
+                        await customer.update({
+                            currentBalance: (Number(customer.currentBalance) || 0) + Number(payment.amount)
+                        }, { transaction });
+                    }
+                }
+                
+                // Reverse ledger entries for payment
+                await db.ledgerEntry.destroy({
+                    where: {
+                        referenceType: 'payment',
+                        referenceId: payment.id
+                    },
+                    transaction
                 });
-            }
+                
+                // Delete the payment record
+                await db.payment.destroy({
+                    where: { id: req.params.paymentId },
+                    transaction
+                });
+            });
+
+            return res.status(200).send({
+                status: 200,
+                message: 'payment deleted successfully',
+                data: { id: req.params.paymentId }
+            });
             
         } catch (error) {
             console.log(error);
