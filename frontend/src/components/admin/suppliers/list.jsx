@@ -41,6 +41,9 @@ export const ListSuppliers = () => {
     const [purchaseBillDate, setPurchaseBillDate] = useState(moment().format('YYYY-MM-DD'));
     const [purchaseSubmitting, setPurchaseSubmitting] = useState(false);
     
+    // Expanded rows for viewing purchase items
+    const [expandedPurchase, setExpandedPurchase] = useState(null);
+    
     const [formData, setFormData] = useState({
         name: '',
         mobile: '',
