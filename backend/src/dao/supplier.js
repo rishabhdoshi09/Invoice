@@ -69,6 +69,7 @@ module.exports = {
     },
 
     // Get supplier with debit/credit details
+    // IMPORTANT: Only match by supplierId/partyId to prevent name collision
     getSupplierWithTransactions: async (supplierId) => {
         try {
             const supplier = await db.supplier.findByPk(supplierId);
@@ -82,17 +83,12 @@ module.exports = {
                 order: [['createdAt', 'DESC']]
             });
 
-            // Get all payments to this supplier - check both partyId and partyName for backwards compatibility
+            // Get all payments to this supplier by ID only
             // Sort by createdAt DESC (most recent first - date added)
             const payments = await db.payment.findAll({
                 where: { 
-                    [db.Sequelize.Op.or]: [
-                        { partyId: supplierId },
-                        { 
-                            partyName: supplier.name,
-                            partyType: 'supplier'
-                        }
-                    ]
+                    partyId: supplierId,
+                    partyType: 'supplier'
                 },
                 attributes: ['id', 'paymentNumber', 'paymentDate', 'amount', 'referenceType', 'notes', 'createdAt'],
                 order: [['createdAt', 'DESC']]
