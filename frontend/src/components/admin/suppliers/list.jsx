@@ -4,11 +4,12 @@ import {
     TableHead, TableRow, TextField, Dialog, DialogTitle, DialogContent, DialogActions, 
     Typography, IconButton, Chip, Tooltip, Grid, Paper, Tabs, Tab, Alert,
     FormControl, InputLabel, Select, MenuItem, CircularProgress, Autocomplete,
-    InputAdornment, Divider, TablePagination, ButtonGroup
+    InputAdornment, Divider, TablePagination, ButtonGroup, Collapse
 } from '@mui/material';
 import { 
     Delete, Edit, Visibility, Refresh, Add, Payment, Receipt, LocalShipping, Close,
-    Search, Download, TrendingDown, AccountBalance, AttachMoney, ShoppingBag
+    Search, Download, TrendingDown, AccountBalance, AttachMoney, ShoppingBag,
+    KeyboardArrowDown, KeyboardArrowUp
 } from '@mui/icons-material';
 import { listSuppliers, createSupplier, updateSupplier, deleteSupplier } from '../../../services/supplier';
 import axios from 'axios';
