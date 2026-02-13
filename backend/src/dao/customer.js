@@ -117,67 +117,55 @@ module.exports = {
         }
     },
 
-    // List customers with debit/credit summary
-    listCustomersWithBalance: async (filterObj) => {
+    // List customers with calculated balance (NOT stored balance)
+    // This ensures balance is always accurate from actual transactions
+    listCustomersWithBalance: async (params = {}) => {
         try {
-            const customers = await db.customer.findAll({
-                ...( filterObj.q && filterObj.q !== "" ? {
-                    where: {
-                        [db.Sequelize.Op.or]: [
-                            { name: { [db.Sequelize.Op.iLike]: `%${filterObj.q}%` } },
-                            { mobile: { [db.Sequelize.Op.iLike]: `%${filterObj.q}%` } }
-                        ]
-                    }}
-                : {}),
-                order: [['name', 'ASC']]
-            });
-
-            const customersWithBalance = await Promise.all(customers.map(async (customer) => {
-                // Get all orders - check both customerId and customerName
-                const orderByIdTotal = await db.order.sum('total', {
-                    where: { 
-                        customerId: customer.id,
-                        isDeleted: false
-                    }
-                }) || 0;
-                
-                const orderByNameTotal = await db.order.sum('total', {
-                    where: { 
-                        customerName: customer.name,
-                        customerId: null,
-                        isDeleted: false
-                    }
-                }) || 0;
-
-                // Get payments by ID
-                const paymentByIdTotal = await db.payment.sum('amount', {
-                    where: { partyId: customer.id }
-                }) || 0;
-                
-                // Get payments by name (for backwards compatibility)
-                const paymentByNameTotal = await db.payment.sum('amount', {
-                    where: { 
-                        partyName: customer.name,
-                        partyType: 'customer',
-                        partyId: null
-                    }
-                }) || 0;
-
-                const totalDebit = orderByIdTotal + orderByNameTotal + (customer.openingBalance || 0);
-                const totalCredit = paymentByIdTotal + paymentByNameTotal;
-                const balance = totalDebit - totalCredit;
-
-                return {
-                    ...customer.toJSON(),
-                    totalDebit,
-                    totalCredit,
-                    balance
-                };
-            }));
+            // Get all customers with dynamically calculated balance
+            const customers = await db.sequelize.query(`
+                SELECT 
+                    c.id,
+                    c.name,
+                    c.mobile,
+                    c.email,
+                    c.address,
+                    c.gstin,
+                    c."openingBalance",
+                    c."createdAt",
+                    c."updatedAt",
+                    COALESCE(c."openingBalance", 0) + 
+                    COALESCE((
+                        SELECT SUM("dueAmount") 
+                        FROM orders 
+                        WHERE ("customerId" = c.id OR "customerName" = c.name) 
+                        AND "isDeleted" = false 
+                        AND "paymentStatus" != 'paid'
+                    ), 0) -
+                    COALESCE((
+                        SELECT SUM(amount) 
+                        FROM payments 
+                        WHERE ("partyId" = c.id OR "partyName" = c.name) 
+                        AND "partyType" = 'customer'
+                    ), 0) as balance,
+                    COALESCE((
+                        SELECT SUM(total) 
+                        FROM orders 
+                        WHERE ("customerId" = c.id OR "customerName" = c.name) 
+                        AND "isDeleted" = false
+                    ), 0) as "totalDebit",
+                    COALESCE((
+                        SELECT SUM(amount) 
+                        FROM payments 
+                        WHERE ("partyId" = c.id OR "partyName" = c.name) 
+                        AND "partyType" = 'customer'
+                    ), 0) as "totalCredit"
+                FROM customers c
+                ORDER BY c.name ASC
+            `, { type: db.Sequelize.QueryTypes.SELECT });
 
             return {
-                count: customersWithBalance.length,
-                rows: customersWithBalance
+                count: customers.length,
+                rows: customers
             };
         } catch (error) {
             console.log(error);
