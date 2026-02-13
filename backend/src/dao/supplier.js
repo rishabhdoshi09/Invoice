@@ -75,11 +75,16 @@ module.exports = {
             const supplier = await db.supplier.findByPk(supplierId);
             if (!supplier) return null;
 
-            // Get all purchases (increases balance - what we owe)
+            // Get all purchases with items (increases balance - what we owe)
             // Sort by createdAt DESC (most recent first - date added)
             const purchases = await db.purchaseBill.findAll({
                 where: { supplierId },
                 attributes: ['id', 'billNumber', 'billDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus', 'createdAt'],
+                include: [{
+                    model: db.purchaseItem,
+                    as: 'purchaseItems',
+                    attributes: ['id', 'name', 'quantity', 'price', 'totalPrice']
+                }],
                 order: [['createdAt', 'DESC']]
             });
 
