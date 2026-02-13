@@ -804,12 +804,13 @@ export const ListSuppliers = () => {
                                                     <TableCell align="right"><strong>Paid</strong></TableCell>
                                                     <TableCell align="right"><strong>Due</strong></TableCell>
                                                     <TableCell><strong>Status</strong></TableCell>
+                                                    <TableCell align="center"><strong>Action</strong></TableCell>
                                                 </TableRow>
                                             </TableHead>
                                             <TableBody>
                                                 {detailsDialog.supplier.purchases.map((purchase) => (
                                                     <TableRow key={purchase.id} hover>
-                                                        <TableCell sx={{ fontWeight: 500 }}>{purchase.billNumber}</TableCell>
+                                                        <TableCell sx={{ fontWeight: 500 }}>{purchase.billNumber || '-'}</TableCell>
                                                         <TableCell>
                                                             {purchase.billDate ? 
                                                                 moment(purchase.billDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('DD/MM/YYYY') 
@@ -823,13 +824,26 @@ export const ListSuppliers = () => {
                                                         <TableCell>
                                                             <Chip label={purchase.paymentStatus} size="small" color={purchase.paymentStatus === 'paid' ? 'success' : 'warning'} />
                                                         </TableCell>
+                                                        <TableCell align="center">
+                                                            <Tooltip title="Delete Purchase Bill">
+                                                                <IconButton 
+                                                                    size="small" 
+                                                                    color="error"
+                                                                    onClick={() => handleDeletePurchaseBill(purchase.id)}
+                                                                >
+                                                                    <Delete fontSize="small" />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        </TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
                                         </Table>
                                     </TableContainer>
                                 ) : (
-                                    <Alert severity="info">No purchase bills found</Alert>
+                                    <Alert severity="info" sx={{ mt: 2 }}>
+                                        No purchase bills found. Click "Add Purchase" button above to create one.
+                                    </Alert>
                                 )
                             )}
 
