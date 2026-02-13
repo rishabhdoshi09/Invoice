@@ -285,13 +285,15 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 ---
 
 ## Upcoming Tasks
-- **P1:** Add "Paid/Not Paid" toggle when creating purchase bills
+- **P1:** Fix invoice search functionality
+- **P1:** Full user testing of overhauled Customers and Suppliers pages
 
 ## Future/Backlog
 - **P2:** Complete RTK Query migration
 - **P2:** Refactor orders/create.jsx (1900+ lines)
 - **P2:** PDF export for adjusted invoices (GST Export Tool)
 - **P2:** Fix price input race condition on /orders/create
+- **P2:** Enhance Stock Management module with transaction tracking
 
 ---
 
