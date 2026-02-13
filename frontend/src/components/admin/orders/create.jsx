@@ -1846,6 +1846,17 @@ export const CreateOrder = () => {
                   )}
                   noOptionsText="No customers found. Enter name manually above."
                 />
+                
+                {/* Show customer due amount alert when customer is selected */}
+                {orderProps.customer && (orderProps.customer.balance || 0) > 0 && (
+                  <Alert 
+                    severity="warning" 
+                    sx={{ mt: 1 }}
+                    icon={<Info />}
+                  >
+                    <strong>{orderProps.customer.name}</strong> has outstanding due: <strong style={{ color: '#d32f2f' }}>₹{(orderProps.customer.balance || 0).toLocaleString('en-IN')}</strong>
+                  </Alert>
+                )}
               </Grid>
 
               <Grid item xs={12} md={6} mt={2}>
