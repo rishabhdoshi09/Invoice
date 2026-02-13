@@ -593,42 +593,45 @@ module.exports = {
 
             const oldStatus = order.paymentStatus;
             
-            // Update order payment status and customer info
-            const updateData = {
-                paymentStatus: newStatus,
-                paidAmount: newStatus === 'paid' ? order.total : 0,
-                dueAmount: newStatus === 'paid' ? 0 : order.total,
-                modifiedBy: req.user?.id,
-                modifiedByName: req.user?.name || req.user?.username
-            };
-            
-            let customerIdToUpdate = customerId || order.customerId;
-            
-            // Add customer info if toggling to unpaid
-            if (newStatus === 'unpaid') {
-                updateData.customerName = customerName.trim();
-                if (customerMobile && customerMobile.trim()) {
-                    updateData.customerMobile = customerMobile.trim();
-                }
+            // Use transaction for all updates to ensure data integrity
+            const result = await db.sequelize.transaction(async (transaction) => {
+                // Update order payment status and customer info
+                const updateData = {
+                    paymentStatus: newStatus,
+                    paidAmount: newStatus === 'paid' ? order.total : 0,
+                    dueAmount: newStatus === 'paid' ? 0 : order.total,
+                    modifiedBy: req.user?.id,
+                    modifiedByName: req.user?.name || req.user?.username
+                };
                 
-                // If customerId provided, link to existing customer
-                if (customerId) {
-                    updateData.customerId = customerId;
-                    customerIdToUpdate = customerId;
-                } 
-                // If no customerId but customerName provided, create new customer or find by name
-                else if (!customerIdToUpdate) {
-                    try {
+                let customerIdToUpdate = customerId || order.customerId;
+                
+                // Add customer info if toggling to unpaid
+                if (newStatus === 'unpaid') {
+                    updateData.customerName = customerName.trim();
+                    if (customerMobile && customerMobile.trim()) {
+                        updateData.customerMobile = customerMobile.trim();
+                    }
+                    
+                    // If customerId provided, link to existing customer
+                    if (customerId) {
+                        updateData.customerId = customerId;
+                        customerIdToUpdate = customerId;
+                    } 
+                    // If no customerId but customerName provided, create new customer or find by name
+                    else if (!customerIdToUpdate) {
                         // Try to find existing customer by mobile or name
                         let existingCustomer = null;
                         if (customerMobile && customerMobile.trim()) {
                             existingCustomer = await db.customer.findOne({
-                                where: { mobile: customerMobile.trim() }
+                                where: { mobile: customerMobile.trim() },
+                                transaction
                             });
                         }
                         if (!existingCustomer) {
                             existingCustomer = await db.customer.findOne({
-                                where: { name: customerName.trim() }
+                                where: { name: customerName.trim() },
+                                transaction
                             });
                         }
                         
@@ -638,38 +641,31 @@ module.exports = {
                             customerIdToUpdate = existingCustomer.id;
                         } else {
                             // Create new customer
-                            const uuidv4 = require('uuid/v4');
                             const newCustomer = await db.customer.create({
                                 id: uuidv4(),
                                 name: customerName.trim(),
                                 mobile: customerMobile?.trim() || null,
                                 openingBalance: 0,
                                 currentBalance: 0
-                            });
+                            }, { transaction });
                             updateData.customerId = newCustomer.id;
                             customerIdToUpdate = newCustomer.id;
                         }
-                    } catch (custCreateError) {
-                        console.error('Error creating/finding customer:', custCreateError);
-                        // Continue without creating customer - order will still have customerName
                     }
                 }
-            }
 
-            await Services.order.updateOrder({ id: orderId }, updateData);
+                // Update the order
+                await db.order.update(updateData, { 
+                    where: { id: orderId }, 
+                    transaction 
+                });
 
-            // Update daily summary when payment status changes
-            try {
-                await Services.dailySummary.recordPaymentStatusChange(order, oldStatus, newStatus);
-            } catch (summaryError) {
-                console.error('Failed to update daily summary for payment status change:', summaryError);
-                // Continue even if summary update fails
-            }
+                // Update daily summary when payment status changes
+                await Services.dailySummary.recordPaymentStatusChange(order, oldStatus, newStatus, transaction);
 
-            // Update customer balance if customer exists
-            if (customerIdToUpdate) {
-                try {
-                    const customer = await db.customer.findByPk(customerIdToUpdate);
+                // Update customer balance if customer exists
+                if (customerIdToUpdate) {
+                    const customer = await db.customer.findByPk(customerIdToUpdate, { transaction });
                     if (customer) {
                         // If marking as paid, reduce customer balance
                         // If marking as unpaid, increase customer balance
@@ -679,15 +675,14 @@ module.exports = {
                         
                         await customer.update({
                             currentBalance: Math.max(0, (Number(customer.currentBalance) || 0) + balanceChange)
-                        });
+                        }, { transaction });
                     }
-                } catch (custError) {
-                    console.error('Error updating customer balance:', custError);
-                    // Continue even if customer update fails
                 }
-            }
+                
+                return customerIdToUpdate;
+            });
 
-            // Create audit log
+            // Create audit log (outside transaction - non-critical)
             await createAuditLog({
                 userId: req.user?.id,
                 userName: req.user?.name || req.user?.username,
@@ -697,7 +692,7 @@ module.exports = {
                 entityId: orderId,
                 entityName: order.orderNumber,
                 oldValues: { paymentStatus: oldStatus, paidAmount: order.paidAmount },
-                newValues: { paymentStatus: newStatus, paidAmount: updateData.paidAmount },
+                newValues: { paymentStatus: newStatus, paidAmount: newStatus === 'paid' ? order.total : 0 },
                 description: `Changed payment status from ${oldStatus} to ${newStatus} for order ${order.orderNumber}`,
                 ipAddress: getClientIP(req),
                 userAgent: req.headers['user-agent']
