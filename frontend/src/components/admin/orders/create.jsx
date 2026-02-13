@@ -1824,8 +1824,18 @@ export const CreateOrder = () => {
                   }}
                   renderOption={(props, option) => (
                     <li {...props} key={option.id || option._id || option.label}>
-                      <Box>
-                        <Typography variant="body2" fontWeight="bold">{option.name}</Typography>
+                      <Box sx={{ width: '100%' }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Typography variant="body2" fontWeight="bold">{option.name}</Typography>
+                          {(option.balance || 0) > 0 && (
+                            <Chip 
+                              label={`Due: ₹${option.balance.toLocaleString('en-IN')}`} 
+                              size="small" 
+                              color="error" 
+                              sx={{ fontWeight: 'bold' }}
+                            />
+                          )}
+                        </Box>
                         {option.mobile && (
                           <Typography variant="caption" color="text.secondary">
                             📱 {option.mobile}
