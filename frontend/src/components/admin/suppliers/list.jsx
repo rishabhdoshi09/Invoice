@@ -124,6 +124,7 @@ export const ListSuppliers = () => {
             const { data } = await axios.get(`/api/suppliers/${supplierId}/transactions`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
+            setExpandedPurchase(null); // Reset expanded state when opening new dialog
             setDetailsDialog({ open: true, supplier: data.data, tab: 0 });
         } catch (error) {
             console.error('Error fetching supplier details:', error);
