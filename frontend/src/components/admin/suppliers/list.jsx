@@ -127,6 +127,30 @@ export const ListSuppliers = () => {
         }
     };
 
+    // Delete purchase bill
+    const handleDeletePurchaseBill = async (purchaseId) => {
+        if (!window.confirm('Are you sure you want to delete this purchase bill? This action cannot be undone.')) {
+            return;
+        }
+        
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`/api/purchases/${purchaseId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            alert('Purchase bill deleted successfully!');
+            
+            // Refresh supplier details
+            if (detailsDialog.supplier?.id) {
+                fetchSupplierDetails(detailsDialog.supplier.id);
+            }
+            fetchSuppliers();
+        } catch (error) {
+            console.error('Error deleting purchase bill:', error);
+            alert('Error deleting purchase bill: ' + (error.response?.data?.message || error.message));
+        }
+    };
+
     // Export to CSV
     const handleExportCSV = () => {
         const headers = ['Name', 'Mobile', 'GSTIN', 'Opening Balance', 'Total Purchases', 'Total Paid', 'Balance'];
