@@ -434,12 +434,10 @@ export const CreateOrder = () => {
   }), []);
   
   const [orderProps, setOrderProps] = useState(initialOrderProps);
-  const [manualDateSet, setManualDateSet] = useState(false); // Track if user manually set date
   
-  // Only auto-update date to today if user hasn't manually set a different date
+  // Update orderDate to today whenever the component becomes visible/focused
   useEffect(() => {
     const updateDateIfNeeded = () => {
-      if (manualDateSet) return; // Don't auto-update if user set a manual date
       const today = moment().format("DD-MM-YYYY");
       setOrderProps(prev => {
         if (prev.orderDate !== today) {
@@ -452,23 +450,18 @@ export const CreateOrder = () => {
     // Update on mount
     updateDateIfNeeded();
     
-    // Update when window gains focus (user comes back to tab) - only if not manually set
-    const handleFocus = () => {
-      if (!manualDateSet) updateDateIfNeeded();
-    };
-    window.addEventListener('focus', handleFocus);
+    // Update when window gains focus (user comes back to tab)
+    window.addEventListener('focus', updateDateIfNeeded);
     
-    // Update at midnight - only if not manually set
+    // Update at midnight
     const msToMidnight = msToNextMidnight();
-    const midnightTimer = setTimeout(() => {
-      if (!manualDateSet) updateDateIfNeeded();
-    }, msToMidnight + 1000);
+    const midnightTimer = setTimeout(updateDateIfNeeded, msToMidnight + 1000);
     
     return () => {
-      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('focus', updateDateIfNeeded);
       clearTimeout(midnightTimer);
     };
-  }, [manualDateSet]);
+  }, []);
   
   const orderItemsRef = useRef(orderProps.orderItems || []);
   useEffect(() => { orderItemsRef.current = orderProps.orderItems || []; }, [orderProps.orderItems]);
