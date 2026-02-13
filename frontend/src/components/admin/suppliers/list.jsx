@@ -798,10 +798,11 @@ export const ListSuppliers = () => {
 
                             {detailsDialog.tab === 0 && (
                                 detailsDialog.supplier.purchases?.length > 0 ? (
-                                    <TableContainer sx={{ maxHeight: 350 }}>
+                                    <TableContainer sx={{ maxHeight: 400 }}>
                                         <Table size="small" stickyHeader>
                                             <TableHead>
                                                 <TableRow sx={{ bgcolor: '#ffebee' }}>
+                                                    <TableCell sx={{ width: 40 }}></TableCell>
                                                     <TableCell><strong>Bill No</strong></TableCell>
                                                     <TableCell><strong>Date</strong></TableCell>
                                                     <TableCell align="right"><strong>Total</strong></TableCell>
@@ -813,33 +814,87 @@ export const ListSuppliers = () => {
                                             </TableHead>
                                             <TableBody>
                                                 {detailsDialog.supplier.purchases.map((purchase) => (
-                                                    <TableRow key={purchase.id} hover>
-                                                        <TableCell sx={{ fontWeight: 500 }}>{purchase.billNumber || '-'}</TableCell>
-                                                        <TableCell>
-                                                            {purchase.billDate ? 
-                                                                moment(purchase.billDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('DD/MM/YYYY') 
-                                                                : '-'}
-                                                        </TableCell>
-                                                        <TableCell align="right" sx={{ color: 'error.main', fontWeight: 500 }}>
-                                                            ₹{(purchase.total || 0).toLocaleString('en-IN')}
-                                                        </TableCell>
-                                                        <TableCell align="right">₹{(purchase.paidAmount || 0).toLocaleString('en-IN')}</TableCell>
-                                                        <TableCell align="right">₹{(purchase.dueAmount || 0).toLocaleString('en-IN')}</TableCell>
-                                                        <TableCell>
-                                                            <Chip label={purchase.paymentStatus} size="small" color={purchase.paymentStatus === 'paid' ? 'success' : 'warning'} />
-                                                        </TableCell>
-                                                        <TableCell align="center">
-                                                            <Tooltip title="Delete Purchase Bill">
-                                                                <IconButton 
-                                                                    size="small" 
-                                                                    color="error"
-                                                                    onClick={() => handleDeletePurchaseBill(purchase.id)}
-                                                                >
-                                                                    <Delete fontSize="small" />
+                                                    <>
+                                                        <TableRow 
+                                                            key={purchase.id} 
+                                                            hover 
+                                                            sx={{ 
+                                                                cursor: 'pointer',
+                                                                '& > *': { borderBottom: expandedPurchase === purchase.id ? 'none' : undefined }
+                                                            }}
+                                                            onClick={() => setExpandedPurchase(expandedPurchase === purchase.id ? null : purchase.id)}
+                                                        >
+                                                            <TableCell>
+                                                                <IconButton size="small">
+                                                                    {expandedPurchase === purchase.id ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
                                                                 </IconButton>
-                                                            </Tooltip>
-                                                        </TableCell>
-                                                    </TableRow>
+                                                            </TableCell>
+                                                            <TableCell sx={{ fontWeight: 500 }}>{purchase.billNumber || '-'}</TableCell>
+                                                            <TableCell>
+                                                                {purchase.billDate ? 
+                                                                    moment(purchase.billDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('DD/MM/YYYY') 
+                                                                    : '-'}
+                                                            </TableCell>
+                                                            <TableCell align="right" sx={{ color: 'error.main', fontWeight: 500 }}>
+                                                                ₹{(purchase.total || 0).toLocaleString('en-IN')}
+                                                            </TableCell>
+                                                            <TableCell align="right">₹{(purchase.paidAmount || 0).toLocaleString('en-IN')}</TableCell>
+                                                            <TableCell align="right">₹{(purchase.dueAmount || 0).toLocaleString('en-IN')}</TableCell>
+                                                            <TableCell>
+                                                                <Chip label={purchase.paymentStatus} size="small" color={purchase.paymentStatus === 'paid' ? 'success' : 'warning'} />
+                                                            </TableCell>
+                                                            <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                                                                <Tooltip title="Delete Purchase Bill">
+                                                                    <IconButton 
+                                                                        size="small" 
+                                                                        color="error"
+                                                                        onClick={() => handleDeletePurchaseBill(purchase.id)}
+                                                                    >
+                                                                        <Delete fontSize="small" />
+                                                                    </IconButton>
+                                                                </Tooltip>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                        <TableRow key={`${purchase.id}-items`}>
+                                                            <TableCell colSpan={8} sx={{ py: 0, bgcolor: '#fafafa' }}>
+                                                                <Collapse in={expandedPurchase === purchase.id} timeout="auto" unmountOnExit>
+                                                                    <Box sx={{ py: 2, px: 3 }}>
+                                                                        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600, color: '#1976d2' }}>
+                                                                            Items in this Purchase Bill ({purchase.purchaseItems?.length || 0})
+                                                                        </Typography>
+                                                                        {purchase.purchaseItems && purchase.purchaseItems.length > 0 ? (
+                                                                            <Table size="small" sx={{ bgcolor: 'white', borderRadius: 1 }}>
+                                                                                <TableHead>
+                                                                                    <TableRow sx={{ bgcolor: '#e3f2fd' }}>
+                                                                                        <TableCell><strong>Item Name</strong></TableCell>
+                                                                                        <TableCell align="right"><strong>Qty</strong></TableCell>
+                                                                                        <TableCell align="right"><strong>Price</strong></TableCell>
+                                                                                        <TableCell align="right"><strong>Total</strong></TableCell>
+                                                                                    </TableRow>
+                                                                                </TableHead>
+                                                                                <TableBody>
+                                                                                    {purchase.purchaseItems.map((item, idx) => (
+                                                                                        <TableRow key={item.id || idx}>
+                                                                                            <TableCell>{item.name}</TableCell>
+                                                                                            <TableCell align="right">{item.quantity}</TableCell>
+                                                                                            <TableCell align="right">₹{(item.price || 0).toLocaleString('en-IN')}</TableCell>
+                                                                                            <TableCell align="right" sx={{ fontWeight: 500 }}>
+                                                                                                ₹{(item.totalPrice || 0).toLocaleString('en-IN')}
+                                                                                            </TableCell>
+                                                                                        </TableRow>
+                                                                                    ))}
+                                                                                </TableBody>
+                                                                            </Table>
+                                                                        ) : (
+                                                                            <Typography variant="body2" color="text.secondary">
+                                                                                No items found for this purchase bill
+                                                                            </Typography>
+                                                                        )}
+                                                                    </Box>
+                                                                </Collapse>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    </>
                                                 ))}
                                             </TableBody>
                                         </Table>
