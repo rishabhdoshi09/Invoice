@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { 
     Box, Button, Card, CardContent, Table, TableBody, TableCell, TableContainer, 
     TableHead, TableRow, Dialog, DialogTitle, DialogContent, DialogActions, 
     Typography, TextField, Select, MenuItem, FormControl, InputLabel, Chip, 
     IconButton, Collapse, Paper, Grid, Divider, TablePagination, Alert,
-    FormControlLabel, Switch
+    FormControlLabel, Switch, Autocomplete, CircularProgress
 } from '@mui/material';
-import { Delete, ExpandMore, ExpandLess, Download, Visibility, Receipt } from '@mui/icons-material';
+import { Delete, ExpandMore, ExpandLess, Download, Visibility, Receipt, Add, Save, Refresh, CheckCircle, KeyboardArrowDown, KeyboardArrowUp } from '@mui/icons-material';
 import { listPurchases, createPurchase, deletePurchase } from '../../../services/tally';
 import { listSuppliers } from '../../../services/supplier';
 import moment from 'moment';
@@ -19,29 +19,22 @@ export const ListPurchases = () => {
     const [totalCount, setTotalCount] = useState(0);
     const [suppliers, setSuppliers] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [openDialog, setOpenDialog] = useState(false);
-    const [viewDialog, setViewDialog] = useState(null);
     const [expandedRows, setExpandedRows] = useState({});
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(50);
     const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
-    const [isPaid, setIsPaid] = useState(true);  // Toggle for Paid/Unpaid
-    const [formData, setFormData] = useState({
-        billDate: moment().format('YYYY-MM-DD'),
-        supplierId: '',
-        subTotal: 0,
-        tax: 0,
-        taxPercent: 18,
-        total: 0,
-        paidAmount: 0,
-        purchaseItems: []
-    });
-    const [currentItem, setCurrentItem] = useState({
-        name: '',
-        quantity: 1,
-        price: 0,
-        totalPrice: 0
-    });
+    
+    // Quick Entry State
+    const [selectedSupplier, setSelectedSupplier] = useState(null);
+    const [billNumber, setBillNumber] = useState('');
+    const [billDate, setBillDate] = useState(moment().format('YYYY-MM-DD'));
+    const [isPaid, setIsPaid] = useState(false);
+    const [items, setItems] = useState([{ name: '', quantity: '', price: '', totalPrice: 0 }]);
+    const [saving, setSaving] = useState(false);
+    const [successMessage, setSuccessMessage] = useState('');
+    
+    // Refs
+    const supplierRef = useRef(null);
 
     // Convert YYYY-MM-DD to DD-MM-YYYY for backend
     const formatDateForApi = (dateStr) => {
@@ -76,7 +69,7 @@ export const ListPurchases = () => {
     const fetchSuppliers = async () => {
         try {
             const { rows } = await listSuppliers({});
-            setSuppliers(rows);
+            setSuppliers(rows || []);
         } catch (error) {
             console.error('Error fetching suppliers:', error);
         }
@@ -100,634 +93,501 @@ export const ListPurchases = () => {
     const handleRefresh = () => {
         setPage(0);
         fetchPurchases();
+        fetchSuppliers();
     };
 
     const toggleRow = (id) => {
         setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
-    const handleOpenDialog = () => {
-        setFormData({
-            billDate: moment().format('YYYY-MM-DD'),
-            supplierId: '',
-            subTotal: 0,
-            tax: 0,
-            taxPercent: 18,
-            total: 0,
-            paidAmount: 0,
-            purchaseItems: []
-        });
-        setIsPaid(true);  // Default to paid
-        setOpenDialog(true);
+    // Quick Entry Functions
+    const updateItemTotal = (index, field, value) => {
+        const newItems = [...items];
+        newItems[index][field] = value;
+        
+        const qty = parseFloat(newItems[index].quantity) || 0;
+        const price = parseFloat(newItems[index].price) || 0;
+        newItems[index].totalPrice = qty * price;
+        
+        setItems(newItems);
     };
 
-    const handleCloseDialog = () => {
-        setOpenDialog(false);
+    const addItemRow = () => {
+        setItems([...items, { name: '', quantity: '', price: '', totalPrice: 0 }]);
     };
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData({
-            ...formData,
-            [name]: value
-        });
-
-        if (name === 'taxPercent' || name === 'subTotal') {
-            const subtotal = name === 'subTotal' ? parseFloat(value) || 0 : formData.subTotal;
-            const taxPct = name === 'taxPercent' ? parseFloat(value) || 0 : formData.taxPercent;
-            const taxAmt = (subtotal * taxPct) / 100;
-            const total = subtotal + taxAmt;
-            
-            setFormData(prev => ({
-                ...prev,
-                [name]: value,
-                tax: taxAmt,
-                total: total
-            }));
+    const removeItemRow = (index) => {
+        if (items.length > 1) {
+            setItems(items.filter((_, i) => i !== index));
         }
     };
 
-    const handleItemChange = (e) => {
-        const { name, value } = e.target;
-        const newItem = { ...currentItem, [name]: value };
-        
-        if (name === 'quantity' || name === 'price') {
-            newItem.totalPrice = (parseFloat(newItem.quantity) || 0) * (parseFloat(newItem.price) || 0);
+    const subTotal = items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
+    const grandTotal = subTotal;
+
+    const handleKeyDown = (e, index) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (index === items.length - 1 && items[index].name && items[index].quantity && items[index].price) {
+                addItemRow();
+                setTimeout(() => {
+                    const newRowInputs = document.querySelectorAll(`[data-row-index="${items.length}"] input`);
+                    if (newRowInputs[0]) newRowInputs[0].focus();
+                }, 100);
+            }
         }
-        
-        setCurrentItem(newItem);
     };
 
-    const handleAddItem = () => {
-        if (!currentItem.name || currentItem.quantity <= 0 || currentItem.price <= 0) {
-            alert('Please fill all item fields');
+    const resetForm = () => {
+        setSelectedSupplier(null);
+        setBillNumber('');
+        setBillDate(moment().format('YYYY-MM-DD'));
+        setIsPaid(false);
+        setItems([{ name: '', quantity: '', price: '', totalPrice: 0 }]);
+    };
+
+    const handleQuickSave = async () => {
+        if (!selectedSupplier) {
+            alert('Please select a supplier');
+            return;
+        }
+        
+        const validItems = items.filter(item => item.name && item.quantity && item.price);
+        if (validItems.length === 0) {
+            alert('Please add at least one item with name, quantity and price');
             return;
         }
 
-        const items = [...formData.purchaseItems, currentItem];
-        const subTotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
-        const tax = (subTotal * formData.taxPercent) / 100;
-        const total = subTotal + tax;
-
-        setFormData({
-            ...formData,
-            purchaseItems: items,
-            subTotal,
-            tax,
-            total
-        });
-
-        setCurrentItem({
-            name: '',
-            quantity: 1,
-            price: 0,
-            totalPrice: 0
-        });
-    };
-
-    const handleRemoveItem = (index) => {
-        const items = formData.purchaseItems.filter((_, i) => i !== index);
-        const subTotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
-        const tax = (subTotal * formData.taxPercent) / 100;
-        const total = subTotal + tax;
-
-        setFormData({
-            ...formData,
-            purchaseItems: items,
-            subTotal,
-            tax,
-            total
-        });
-    };
-
-    const handleSubmit = async () => {
-        if (!formData.supplierId || formData.purchaseItems.length === 0) {
-            alert('Please select supplier and add items');
-            return;
-        }
-
+        setSaving(true);
         try {
-            const submitData = {
-                ...formData,
-                paidAmount: isPaid ? formData.total : 0,
-                paymentStatus: isPaid ? 'paid' : 'unpaid'
+            const token = localStorage.getItem('token');
+            const purchaseData = {
+                supplierId: selectedSupplier.id,
+                billNumber: billNumber,
+                billDate: formatDateForApi(billDate),
+                paymentStatus: isPaid ? 'paid' : 'unpaid',
+                paidAmount: isPaid ? grandTotal : 0,
+                subTotal: subTotal,
+                tax: 0,
+                taxPercent: 0,
+                total: grandTotal,
+                purchaseItems: validItems.map(item => ({
+                    name: item.name,
+                    quantity: parseFloat(item.quantity),
+                    price: parseFloat(item.price),
+                    totalPrice: item.totalPrice
+                }))
             };
-            await createPurchase(submitData);
-            handleCloseDialog();
+
+            await axios.post('/api/purchases', purchaseData, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            setSuccessMessage(`✓ Saved: ${selectedSupplier.name} - ₹${grandTotal.toLocaleString('en-IN')}`);
+            setTimeout(() => setSuccessMessage(''), 4000);
+            
+            resetForm();
             fetchPurchases();
+            fetchSuppliers();
+            
+            if (supplierRef.current) {
+                supplierRef.current.focus();
+            }
         } catch (error) {
-            console.error('Error creating purchase:', error);
-            alert('Error creating purchase');
+            console.error('Error saving purchase:', error);
+            alert('Error: ' + (error.response?.data?.message || error.message));
+        } finally {
+            setSaving(false);
         }
     };
 
     const handleDelete = async (purchaseId) => {
-        if (window.confirm('Are you sure you want to delete this purchase?')) {
+        if (window.confirm('Delete this purchase bill?')) {
             try {
                 await deletePurchase(purchaseId);
                 fetchPurchases();
+                fetchSuppliers();
             } catch (error) {
                 console.error('Error deleting purchase:', error);
+                alert('Error deleting: ' + (error.response?.data?.message || error.message));
             }
         }
     };
 
-    // Format date for export - handles both DD-MM-YYYY string and ISO date formats
     const formatDateForExport = (dateStr) => {
         if (!dateStr) return '-';
-        // If already in DD-MM-YYYY format, return as-is
         if (dateStr.match && dateStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
             return dateStr;
         }
-        // Otherwise try to parse and format
         const parsed = moment(dateStr);
         return parsed.isValid() ? parsed.format('DD-MM-YYYY') : dateStr;
     };
 
-    // Export purchases for CA
     const handleExportForCA = async () => {
         try {
-            // Build CSV
-            const headers = [
-                'Bill Number', 'Bill Date', 'Supplier Name', 'Supplier GSTIN',
-                'Item Name', 'Quantity', 'Unit Price', 'Taxable Value',
-                'CGST Rate', 'CGST Amount', 'SGST Rate', 'SGST Amount',
-                'Total Tax', 'Line Total', 'Bill Total', 'Payment Status'
-            ];
-
-            const rows = [];
-            for (const purchase of purchases) {
-                const items = purchase.purchaseItems || [];
-                const taxRate = (purchase.taxPercent || 18) / 2; // Split CGST/SGST
-                
-                if (items.length === 0) {
-                    // No items, just add summary row
-                    rows.push([
-                        purchase.billNumber,
-                        formatDateForExport(purchase.billDate),
-                        purchase.supplier?.name || '',
-                        purchase.supplier?.gstin || 'N/A',
-                        'N/A', 0, 0, purchase.subTotal,
-                        taxRate, purchase.tax / 2, taxRate, purchase.tax / 2,
-                        purchase.tax, purchase.total, purchase.total,
-                        purchase.paymentStatus
-                    ]);
-                } else {
-                    for (const item of items) {
-                        const itemTax = (item.totalPrice * (purchase.taxPercent || 18)) / 100;
-                        rows.push([
-                            purchase.billNumber,
-                            formatDateForExport(purchase.billDate),
-                            purchase.supplier?.name || '',
-                            purchase.supplier?.gstin || 'N/A',
-                            item.name,
-                            item.quantity,
-                            item.price,
-                            item.totalPrice,
-                            taxRate, itemTax / 2, taxRate, itemTax / 2,
-                            itemTax, item.totalPrice + itemTax, purchase.total,
-                            purchase.paymentStatus
-                        ]);
-                    }
-                }
+            const params = {};
+            if (dateRange.startDate && dateRange.endDate) {
+                params.startDate = formatDateForApi(dateRange.startDate);
+                params.endDate = formatDateForApi(dateRange.endDate);
             }
-
-            const csvContent = [
-                headers.join(','),
-                ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-            ].join('\n');
-
-            const blob = new Blob([csvContent], { type: 'text/csv' });
+            
+            const { rows } = await listPurchases({ ...params, limit: 10000, offset: 0 });
+            
+            const headers = ['Bill Date', 'Bill Number', 'Supplier', 'GSTIN', 'Sub Total', 'Tax', 'Total', 'Payment Status', 'Items'];
+            const csvRows = [headers.join(',')];
+            
+            rows.forEach(p => {
+                const itemsList = (p.purchaseItems || []).map(item => 
+                    `${item.name}(${item.quantity}x${item.price})`
+                ).join('; ');
+                
+                const row = [
+                    formatDateForExport(p.billDate),
+                    p.billNumber || '',
+                    `"${(p.supplier?.name || '').replace(/"/g, '""')}"`,
+                    p.supplier?.gstin || '',
+                    p.subTotal || 0,
+                    p.tax || 0,
+                    p.total || 0,
+                    p.paymentStatus || '',
+                    `"${itemsList.replace(/"/g, '""')}"`
+                ];
+                csvRows.push(row.join(','));
+            });
+            
+            const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
             const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `Purchase_Bills_${moment().format('YYYY-MM-DD')}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `purchases_${moment().format('YYYY-MM-DD')}.csv`;
+            a.click();
         } catch (error) {
             console.error('Export error:', error);
-            alert('Export failed');
+            alert('Error exporting data');
         }
-    };
-
-    const getStatusColor = (status) => {
-        switch(status) {
-            case 'paid': return 'success';
-            case 'partial': return 'warning';
-            case 'unpaid': return 'error';
-            default: return 'default';
-        }
-    };
-
-    // Calculate GST breakdown for display
-    const calculateGST = (amount, taxPercent = 18) => {
-        const cgstRate = taxPercent / 2;
-        const sgstRate = taxPercent / 2;
-        const taxable = amount / (1 + taxPercent / 100);
-        const cgst = taxable * (cgstRate / 100);
-        const sgst = taxable * (sgstRate / 100);
-        return { taxable: taxable.toFixed(2), cgst: cgst.toFixed(2), sgst: sgst.toFixed(2), cgstRate, sgstRate };
     };
 
     return (
-        <Box sx={{ p: 3 }}>
+        <Box sx={{ p: 2, bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+            {/* Header */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Box>
-                    <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Receipt /> Purchase Bills
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        Manage purchase bills and export for CA
-                    </Typography>
-                </Box>
+                <Typography variant="h5" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Receipt color="primary" /> Purchase Bills
+                </Typography>
                 <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button variant="outlined" startIcon={<Download />} onClick={handleExportForCA} disabled={purchases.length === 0}>
-                        Export for CA
-                    </Button>
-                    <Button variant="contained" onClick={handleOpenDialog}>
-                        Create Purchase Bill
-                    </Button>
+                    <Button size="small" startIcon={<Refresh />} onClick={handleRefresh}>Refresh</Button>
+                    <Button size="small" variant="outlined" startIcon={<Download />} onClick={handleExportForCA}>Export CSV</Button>
                 </Box>
             </Box>
 
-            {/* Filters */}
-            <Card sx={{ mb: 2 }}>
-                <CardContent sx={{ py: 1.5 }}>
-                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                        <TextField
-                            label="Start Date"
-                            type="date"
+            {/* Success Message */}
+            {successMessage && (
+                <Alert severity="success" icon={<CheckCircle />} sx={{ mb: 2, py: 0.5 }}>
+                    {successMessage}
+                </Alert>
+            )}
+
+            {/* Quick Entry Form - Always Visible */}
+            <Paper sx={{ p: 2, mb: 2, borderLeft: '4px solid #1976d2' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                    <Typography variant="subtitle1" sx={{ color: '#1976d2', fontWeight: 600 }}>
+                        ⚡ Quick Entry
+                    </Typography>
+                    <FormControlLabel
+                        control={<Switch checked={isPaid} onChange={(e) => setIsPaid(e.target.checked)} size="small" />}
+                        label={isPaid ? "Paid" : "Credit (Unpaid)"}
+                        sx={{ mr: 0 }}
+                    />
+                </Box>
+                
+                {/* Header Fields */}
+                <Grid container spacing={1.5} sx={{ mb: 1.5 }}>
+                    <Grid item xs={12} sm={4}>
+                        <Autocomplete
                             size="small"
-                            value={dateRange.startDate}
-                            onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-                            InputLabelProps={{ shrink: true }}
-                        />
-                        <TextField
-                            label="End Date"
-                            type="date"
-                            size="small"
-                            value={dateRange.endDate}
-                            onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-                            InputLabelProps={{ shrink: true }}
-                        />
-                        <Button variant="outlined" onClick={handleRefresh}>
-                            Filter
-                        </Button>
-                    </Box>
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardContent>
-                    {purchases.length === 0 && !loading ? (
-                        <Alert severity="info">No purchase bills found</Alert>
-                    ) : (
-                        <Paper variant="outlined">
-                            <TableContainer sx={{ maxHeight: 500 }}>
-                                <Table size="small" stickyHeader>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell width={40}></TableCell>
-                                            <TableCell>Bill Number</TableCell>
-                                            <TableCell>Date</TableCell>
-                                            <TableCell>Supplier</TableCell>
-                                            <TableCell align="right">Subtotal</TableCell>
-                                            <TableCell align="right">Tax</TableCell>
-                                            <TableCell align="right">Total</TableCell>
-                                            <TableCell align="right">Paid</TableCell>
-                                            <TableCell>Status</TableCell>
-                                            <TableCell align="center">Actions</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {loading ? (
-                                            <TableRow>
-                                                <TableCell colSpan={10} align="center">Loading...</TableCell>
-                                            </TableRow>
-                                        ) : (
-                                            purchases.map((purchase) => (
-                                                <>
-                                                    <TableRow key={purchase.id} hover>
-                                                        <TableCell>
-                                                            <IconButton size="small" onClick={() => toggleRow(purchase.id)}>
-                                                                {expandedRows[purchase.id] ? <ExpandLess /> : <ExpandMore />}
-                                                            </IconButton>
-                                                        </TableCell>
-                                                        <TableCell><strong>{purchase.billNumber}</strong></TableCell>
-                                                        <TableCell>{purchase.billDate ? (purchase.billDate.includes('-') && purchase.billDate.split('-')[0].length === 2 ? purchase.billDate : moment(purchase.billDate).format('DD-MM-YYYY')) : '-'}</TableCell>
-                                                        <TableCell>{purchase.supplier?.name}</TableCell>
-                                                        <TableCell align="right">₹{Number(purchase.subTotal).toLocaleString()}</TableCell>
-                                                        <TableCell align="right">₹{Number(purchase.tax).toLocaleString()}</TableCell>
-                                                        <TableCell align="right"><strong>₹{Number(purchase.total).toLocaleString()}</strong></TableCell>
-                                                        <TableCell align="right">₹{Number(purchase.paidAmount).toLocaleString()}</TableCell>
-                                                        <TableCell>
-                                                            <Chip 
-                                                                label={purchase.paymentStatus} 
-                                                                color={getStatusColor(purchase.paymentStatus)} 
-                                                                size="small" 
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell align="center">
-                                                            <IconButton size="small" onClick={() => setViewDialog(purchase)} title="View Details">
-                                                                <Visibility fontSize="small" />
-                                                            </IconButton>
-                                                            <IconButton size="small" onClick={() => handleDelete(purchase.id)} title="Delete">
-                                                                <Delete fontSize="small" />
-                                                            </IconButton>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                    
-                                                    {/* Expanded Row - Line Items with GST */}
-                                                    <TableRow>
-                                                        <TableCell colSpan={10} sx={{ py: 0, border: 0 }}>
-                                                            <Collapse in={expandedRows[purchase.id]} timeout="auto" unmountOnExit>
-                                                                <Box sx={{ py: 2, px: 4, bgcolor: 'grey.50' }}>
-                                                                    <Typography variant="subtitle2" sx={{ mb: 1 }}>Line Items (GST @ {purchase.taxPercent || 18}%):</Typography>
-                                                                    <Table size="small">
-                                                                        <TableHead>
-                                                                            <TableRow>
-                                                                                <TableCell>Item Name</TableCell>
-                                                                                <TableCell align="right">Qty</TableCell>
-                                                                                <TableCell align="right">Unit Price</TableCell>
-                                                                                <TableCell align="right">Taxable Value</TableCell>
-                                                                                <TableCell align="right">CGST {(purchase.taxPercent || 18) / 2}%</TableCell>
-                                                                                <TableCell align="right">SGST {(purchase.taxPercent || 18) / 2}%</TableCell>
-                                                                                <TableCell align="right">Amount</TableCell>
-                                                                            </TableRow>
-                                                                        </TableHead>
-                                                                        <TableBody>
-                                                                            {(purchase.purchaseItems || []).map((item, idx) => {
-                                                                                const taxPercent = purchase.taxPercent || 18;
-                                                                                const taxable = item.totalPrice;
-                                                                                const cgst = (taxable * (taxPercent / 2)) / 100;
-                                                                                const sgst = (taxable * (taxPercent / 2)) / 100;
-                                                                                const total = taxable + cgst + sgst;
-                                                                                return (
-                                                                                    <TableRow key={idx}>
-                                                                                        <TableCell>{item.name}</TableCell>
-                                                                                        <TableCell align="right">{item.quantity}</TableCell>
-                                                                                        <TableCell align="right">₹{Number(item.price).toFixed(2)}</TableCell>
-                                                                                        <TableCell align="right">₹{taxable.toFixed(2)}</TableCell>
-                                                                                        <TableCell align="right">₹{cgst.toFixed(2)}</TableCell>
-                                                                                        <TableCell align="right">₹{sgst.toFixed(2)}</TableCell>
-                                                                                        <TableCell align="right">₹{total.toFixed(2)}</TableCell>
-                                                                                    </TableRow>
-                                                                                );
-                                                                            })}
-                                                                        </TableBody>
-                                                                    </Table>
-                                                                </Box>
-                                                            </Collapse>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                </>
-                                            ))
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalCount}
-                                page={page}
-                                onPageChange={handlePageChange}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleRowsPerPageChange}
-                                rowsPerPageOptions={PAGE_SIZE_OPTIONS}
-                                showFirstButton
-                                showLastButton
-                            />
-                        </Paper>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* View Details Dialog */}
-            <Dialog open={!!viewDialog} onClose={() => setViewDialog(null)} maxWidth="md" fullWidth>
-                <DialogTitle>Purchase Bill Details</DialogTitle>
-                <DialogContent>
-                    {viewDialog && (
-                        <Box>
-                            <Grid container spacing={2} sx={{ mb: 2 }}>
-                                <Grid item xs={6}>
-                                    <Typography variant="body2"><strong>Bill Number:</strong> {viewDialog.billNumber}</Typography>
-                                    <Typography variant="body2"><strong>Date:</strong> {viewDialog.billDate ? (viewDialog.billDate.includes('-') && viewDialog.billDate.split('-')[0].length === 2 ? viewDialog.billDate : moment(viewDialog.billDate).format('DD-MM-YYYY')) : '-'}</Typography>
-                                </Grid>
-                                <Grid item xs={6}>
-                                    <Typography variant="body2"><strong>Supplier:</strong> {viewDialog.supplier?.name}</Typography>
-                                    <Typography variant="body2"><strong>GSTIN:</strong> {viewDialog.supplier?.gstin || 'N/A'}</Typography>
-                                </Grid>
-                            </Grid>
-                            <Divider sx={{ my: 2 }} />
-                            <Typography variant="subtitle2" sx={{ mb: 1 }}>Items:</Typography>
-                            <Table size="small">
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell>Item</TableCell>
-                                        <TableCell align="right">Qty</TableCell>
-                                        <TableCell align="right">Price</TableCell>
-                                        <TableCell align="right">Taxable</TableCell>
-                                        <TableCell align="right">CGST</TableCell>
-                                        <TableCell align="right">SGST</TableCell>
-                                        <TableCell align="right">Total</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {(viewDialog.purchaseItems || []).map((item, idx) => {
-                                        const taxPercent = viewDialog.taxPercent || 18;
-                                        const taxable = item.totalPrice;
-                                        const cgst = (taxable * (taxPercent / 2)) / 100;
-                                        const sgst = (taxable * (taxPercent / 2)) / 100;
-                                        return (
-                                            <TableRow key={idx}>
-                                                <TableCell>{item.name}</TableCell>
-                                                <TableCell align="right">{item.quantity}</TableCell>
-                                                <TableCell align="right">₹{item.price}</TableCell>
-                                                <TableCell align="right">₹{taxable.toFixed(2)}</TableCell>
-                                                <TableCell align="right">₹{cgst.toFixed(2)}</TableCell>
-                                                <TableCell align="right">₹{sgst.toFixed(2)}</TableCell>
-                                                <TableCell align="right">₹{(taxable + cgst + sgst).toFixed(2)}</TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                </TableBody>
-                            </Table>
-                            <Divider sx={{ my: 2 }} />
-                            <Box sx={{ textAlign: 'right' }}>
-                                <Typography variant="body2">Subtotal: ₹{viewDialog.subTotal}</Typography>
-                                <Typography variant="body2">Tax ({viewDialog.taxPercent || 18}%): ₹{viewDialog.tax}</Typography>
-                                <Typography variant="h6">Total: ₹{viewDialog.total}</Typography>
-                                <Chip label={viewDialog.paymentStatus} color={getStatusColor(viewDialog.paymentStatus)} sx={{ mt: 1 }} />
-                            </Box>
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setViewDialog(null)}>Close</Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Create Purchase Dialog */}
-            <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
-                <DialogTitle>Create Purchase Bill</DialogTitle>
-                <DialogContent>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-                        <Box sx={{ display: 'flex', gap: 2 }}>
-                            <TextField
-                                label="Bill Date"
-                                name="billDate"
-                                type="date"
-                                value={formData.billDate}
-                                onChange={handleChange}
-                                fullWidth
-                                InputLabelProps={{ shrink: true }}
-                            />
-                            <FormControl fullWidth>
-                                <InputLabel>Supplier *</InputLabel>
-                                <Select
-                                    name="supplierId"
-                                    value={formData.supplierId}
-                                    onChange={handleChange}
-                                    label="Supplier *"
-                                >
-                                    {suppliers.map((supplier) => (
-                                        <MenuItem key={supplier.id} value={supplier.id}>
-                                            {supplier.name}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Box>
-
-                        <Typography variant="h6" sx={{ mt: 2 }}>Add Items</Typography>
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                            <TextField
-                                label="Item Name"
-                                name="name"
-                                value={currentItem.name}
-                                onChange={handleItemChange}
-                                size="small"
-                                sx={{ flex: 2 }}
-                            />
-                            <TextField
-                                label="Qty"
-                                name="quantity"
-                                type="number"
-                                value={currentItem.quantity}
-                                onChange={handleItemChange}
-                                size="small"
-                                sx={{ flex: 1 }}
-                            />
-                            <TextField
-                                label="Price"
-                                name="price"
-                                type="number"
-                                value={currentItem.price}
-                                onChange={handleItemChange}
-                                size="small"
-                                sx={{ flex: 1 }}
-                            />
-                            <TextField
-                                label="Total"
-                                value={currentItem.totalPrice}
-                                size="small"
-                                disabled
-                                sx={{ flex: 1 }}
-                            />
-                            <Button variant="contained" onClick={handleAddItem} size="small">
-                                Add
-                            </Button>
-                        </Box>
-
-                        {formData.purchaseItems.length > 0 && (
-                            <Box sx={{ mt: 2 }}>
-                                <Typography variant="subtitle2">Items:</Typography>
-                                <Table size="small">
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>Name</TableCell>
-                                            <TableCell align="right">Qty</TableCell>
-                                            <TableCell align="right">Price</TableCell>
-                                            <TableCell align="right">Total</TableCell>
-                                            <TableCell></TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {formData.purchaseItems.map((item, index) => (
-                                            <TableRow key={index}>
-                                                <TableCell>{item.name}</TableCell>
-                                                <TableCell align="right">{item.quantity}</TableCell>
-                                                <TableCell align="right">₹{item.price}</TableCell>
-                                                <TableCell align="right">₹{item.totalPrice}</TableCell>
-                                                <TableCell>
-                                                    <IconButton size="small" onClick={() => handleRemoveItem(index)}>
-                                                        <Delete fontSize="small" />
-                                                    </IconButton>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </Box>
-                        )}
-
-                        <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-                            <TextField
-                                label="Tax %"
-                                name="taxPercent"
-                                type="number"
-                                value={formData.taxPercent}
-                                onChange={handleChange}
-                                fullWidth
-                            />
-                            <TextField
-                                label="SubTotal"
-                                value={formData.subTotal}
-                                disabled
-                                fullWidth
-                            />
-                            <TextField
-                                label="Tax Amount"
-                                value={formData.tax}
-                                disabled
-                                fullWidth
-                            />
-                            <TextField
-                                label="Total"
-                                value={formData.total}
-                                disabled
-                                fullWidth
-                            />
-                        </Box>
-
-                        {/* Paid/Unpaid Toggle */}
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2, p: 2, bgcolor: isPaid ? 'success.50' : 'warning.50', borderRadius: 1 }}>
-                            <FormControlLabel
-                                control={
-                                    <Switch
-                                        checked={isPaid}
-                                        onChange={(e) => setIsPaid(e.target.checked)}
-                                        color={isPaid ? 'success' : 'warning'}
-                                    />
-                                }
-                                label={isPaid ? 'PAID' : 'UNPAID (Credit)'}
-                            />
-                            {!isPaid && (
-                                <Typography variant="body2" color="warning.main">
-                                    ⚠️ This bill will be marked as payable (accounts payable)
-                                </Typography>
+                            options={suppliers}
+                            getOptionLabel={(opt) => opt.name || ''}
+                            value={selectedSupplier}
+                            onChange={(e, val) => setSelectedSupplier(val)}
+                            renderInput={(params) => (
+                                <TextField {...params} label="Supplier *" placeholder="Search..." inputRef={supplierRef} />
                             )}
+                            renderOption={(props, option) => (
+                                <li {...props}>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                                        <span>{option.name}</span>
+                                        {option.balance > 0 && (
+                                            <Chip label={`Due: ₹${option.balance?.toLocaleString('en-IN')}`} size="small" color="error" sx={{ ml: 1, height: 20, fontSize: '0.7rem' }} />
+                                        )}
+                                    </Box>
+                                </li>
+                            )}
+                        />
+                    </Grid>
+                    <Grid item xs={6} sm={2.5}>
+                        <TextField
+                            fullWidth
+                            size="small"
+                            label="Bill No"
+                            value={billNumber}
+                            onChange={(e) => setBillNumber(e.target.value)}
+                            placeholder="Auto"
+                        />
+                    </Grid>
+                    <Grid item xs={6} sm={2.5}>
+                        <TextField
+                            fullWidth
+                            size="small"
+                            type="date"
+                            label="Date"
+                            value={billDate}
+                            onChange={(e) => setBillDate(e.target.value)}
+                            InputLabelProps={{ shrink: true }}
+                        />
+                    </Grid>
+                    <Grid item xs={6} sm={1.5}>
+                        <Box sx={{ bgcolor: isPaid ? '#e8f5e9' : '#fff3e0', p: 1, borderRadius: 1, textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>Total</Typography>
+                            <Typography variant="body1" sx={{ fontWeight: 700, color: isPaid ? 'success.main' : 'warning.dark' }}>
+                                ₹{grandTotal.toLocaleString('en-IN')}
+                            </Typography>
                         </Box>
-                    </Box>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseDialog}>Cancel</Button>
-                    <Button onClick={handleSubmit} variant="contained" color={isPaid ? 'primary' : 'warning'}>
-                        {isPaid ? 'Create Purchase Bill' : 'Create as Credit Purchase'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                    </Grid>
+                    <Grid item xs={6} sm={1.5}>
+                        <Button 
+                            fullWidth
+                            variant="contained" 
+                            color="primary" 
+                            startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <Save />}
+                            onClick={handleQuickSave}
+                            disabled={saving || !selectedSupplier}
+                            sx={{ height: '100%' }}
+                        >
+                            {saving ? '...' : 'Save'}
+                        </Button>
+                    </Grid>
+                </Grid>
+
+                {/* Items Table */}
+                <TableContainer sx={{ bgcolor: 'white', borderRadius: 1, maxHeight: 200 }}>
+                    <Table size="small" stickyHeader>
+                        <TableHead>
+                            <TableRow sx={{ '& th': { bgcolor: '#e8e8e8', py: 0.5 } }}>
+                                <TableCell sx={{ width: 30 }}>#</TableCell>
+                                <TableCell><strong>Item Name</strong></TableCell>
+                                <TableCell sx={{ width: 80 }} align="right"><strong>Qty</strong></TableCell>
+                                <TableCell sx={{ width: 100 }} align="right"><strong>Price</strong></TableCell>
+                                <TableCell sx={{ width: 100 }} align="right"><strong>Total</strong></TableCell>
+                                <TableCell sx={{ width: 40 }}></TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {items.map((item, index) => (
+                                <TableRow key={index} data-row-index={index} sx={{ '& td': { py: 0.3 } }}>
+                                    <TableCell sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>{index + 1}</TableCell>
+                                    <TableCell sx={{ p: 0.5 }}>
+                                        <TextField
+                                            fullWidth
+                                            size="small"
+                                            variant="standard"
+                                            placeholder="Item name"
+                                            value={item.name}
+                                            onChange={(e) => updateItemTotal(index, 'name', e.target.value)}
+                                            InputProps={{ disableUnderline: false, sx: { fontSize: '0.875rem' } }}
+                                        />
+                                    </TableCell>
+                                    <TableCell sx={{ p: 0.5 }}>
+                                        <TextField
+                                            fullWidth
+                                            size="small"
+                                            variant="standard"
+                                            type="number"
+                                            placeholder="0"
+                                            value={item.quantity}
+                                            onChange={(e) => updateItemTotal(index, 'quantity', e.target.value)}
+                                            inputProps={{ style: { textAlign: 'right', fontSize: '0.875rem' } }}
+                                        />
+                                    </TableCell>
+                                    <TableCell sx={{ p: 0.5 }}>
+                                        <TextField
+                                            fullWidth
+                                            size="small"
+                                            variant="standard"
+                                            type="number"
+                                            placeholder="0"
+                                            value={item.price}
+                                            onChange={(e) => updateItemTotal(index, 'price', e.target.value)}
+                                            onKeyDown={(e) => handleKeyDown(e, index)}
+                                            inputProps={{ style: { textAlign: 'right', fontSize: '0.875rem' } }}
+                                        />
+                                    </TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: 500, fontSize: '0.875rem' }}>
+                                        ₹{(item.totalPrice || 0).toLocaleString('en-IN')}
+                                    </TableCell>
+                                    <TableCell sx={{ p: 0 }}>
+                                        {items.length > 1 && (
+                                            <IconButton size="small" onClick={() => removeItemRow(index)} sx={{ p: 0.25 }}>
+                                                <Delete fontSize="small" color="error" />
+                                            </IconButton>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
+                    <Button size="small" startIcon={<Add />} onClick={addItemRow}>Add Row</Button>
+                    <Typography variant="caption" color="text.secondary">
+                        Press Enter on price to add new row • Bill No auto-generates if empty
+                    </Typography>
+                </Box>
+            </Paper>
+
+            {/* Date Filter */}
+            <Paper sx={{ p: 1.5, mb: 2, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>Filter:</Typography>
+                <TextField
+                    size="small"
+                    type="date"
+                    label="From"
+                    value={dateRange.startDate}
+                    onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                    InputLabelProps={{ shrink: true }}
+                    sx={{ width: 150 }}
+                />
+                <TextField
+                    size="small"
+                    type="date"
+                    label="To"
+                    value={dateRange.endDate}
+                    onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                    InputLabelProps={{ shrink: true }}
+                    sx={{ width: 150 }}
+                />
+                <Button size="small" variant="contained" onClick={fetchPurchases}>Apply</Button>
+                <Button size="small" onClick={() => { setDateRange({ startDate: '', endDate: '' }); fetchPurchases(); }}>Clear</Button>
+            </Paper>
+
+            {/* Purchase Bills List */}
+            <Paper>
+                <TableContainer sx={{ maxHeight: 400 }}>
+                    <Table size="small" stickyHeader>
+                        <TableHead>
+                            <TableRow sx={{ '& th': { bgcolor: '#f5f5f5' } }}>
+                                <TableCell sx={{ width: 40 }}></TableCell>
+                                <TableCell><strong>Bill No</strong></TableCell>
+                                <TableCell><strong>Supplier</strong></TableCell>
+                                <TableCell><strong>Date</strong></TableCell>
+                                <TableCell align="right"><strong>Total</strong></TableCell>
+                                <TableCell><strong>Status</strong></TableCell>
+                                <TableCell align="center"><strong>Action</strong></TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {loading ? (
+                                <TableRow>
+                                    <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                                        <CircularProgress size={24} />
+                                    </TableCell>
+                                </TableRow>
+                            ) : purchases.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                                        <Typography color="text.secondary">No purchase bills found</Typography>
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                purchases.map((purchase) => (
+                                    <>
+                                        <TableRow 
+                                            key={purchase.id} 
+                                            hover 
+                                            sx={{ cursor: 'pointer' }}
+                                            onClick={() => toggleRow(purchase.id)}
+                                        >
+                                            <TableCell>
+                                                <IconButton size="small">
+                                                    {expandedRows[purchase.id] ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
+                                                </IconButton>
+                                            </TableCell>
+                                            <TableCell sx={{ fontWeight: 500 }}>{purchase.billNumber || '-'}</TableCell>
+                                            <TableCell>{purchase.supplier?.name || '-'}</TableCell>
+                                            <TableCell>{formatDateForExport(purchase.billDate)}</TableCell>
+                                            <TableCell align="right" sx={{ fontWeight: 600, color: 'error.main' }}>
+                                                ₹{(purchase.total || 0).toLocaleString('en-IN')}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Chip 
+                                                    label={purchase.paymentStatus} 
+                                                    size="small" 
+                                                    color={purchase.paymentStatus === 'paid' ? 'success' : 'warning'}
+                                                    sx={{ height: 20, fontSize: '0.7rem' }}
+                                                />
+                                            </TableCell>
+                                            <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                                                <IconButton size="small" color="error" onClick={() => handleDelete(purchase.id)}>
+                                                    <Delete fontSize="small" />
+                                                </IconButton>
+                                            </TableCell>
+                                        </TableRow>
+                                        <TableRow key={`${purchase.id}-expand`}>
+                                            <TableCell colSpan={7} sx={{ py: 0, bgcolor: '#fafafa' }}>
+                                                <Collapse in={expandedRows[purchase.id]} timeout="auto" unmountOnExit>
+                                                    <Box sx={{ py: 1.5, px: 2 }}>
+                                                        <Typography variant="caption" sx={{ fontWeight: 600, color: '#1976d2' }}>
+                                                            Items ({purchase.purchaseItems?.length || 0})
+                                                        </Typography>
+                                                        {purchase.purchaseItems && purchase.purchaseItems.length > 0 ? (
+                                                            <Table size="small" sx={{ mt: 0.5, bgcolor: 'white' }}>
+                                                                <TableHead>
+                                                                    <TableRow sx={{ '& th': { py: 0.5, bgcolor: '#e3f2fd', fontSize: '0.75rem' } }}>
+                                                                        <TableCell>Item</TableCell>
+                                                                        <TableCell align="right">Qty</TableCell>
+                                                                        <TableCell align="right">Price</TableCell>
+                                                                        <TableCell align="right">Total</TableCell>
+                                                                    </TableRow>
+                                                                </TableHead>
+                                                                <TableBody>
+                                                                    {purchase.purchaseItems.map((item, idx) => (
+                                                                        <TableRow key={idx} sx={{ '& td': { py: 0.3, fontSize: '0.8rem' } }}>
+                                                                            <TableCell>{item.name}</TableCell>
+                                                                            <TableCell align="right">{item.quantity}</TableCell>
+                                                                            <TableCell align="right">₹{item.price}</TableCell>
+                                                                            <TableCell align="right">₹{item.totalPrice}</TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                </TableBody>
+                                                            </Table>
+                                                        ) : (
+                                                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                                                No items recorded
+                                                            </Typography>
+                                                        )}
+                                                    </Box>
+                                                </Collapse>
+                                            </TableCell>
+                                        </TableRow>
+                                    </>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+                
+                <TablePagination
+                    component="div"
+                    count={totalCount}
+                    page={page}
+                    onPageChange={handlePageChange}
+                    rowsPerPage={rowsPerPage}
+                    onRowsPerPageChange={handleRowsPerPageChange}
+                    rowsPerPageOptions={PAGE_SIZE_OPTIONS}
+                />
+            </Paper>
         </Box>
     );
 };
+
+export default ListPurchases;
