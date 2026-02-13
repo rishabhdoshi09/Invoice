@@ -5,6 +5,27 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 
 ---
 
+## Critical Updates (February 13, 2026)
+
+### P0 RESOLVED: Bill Number Made Optional
+**Issue:** Bill Number field was mandatory when creating a purchase bill, but users wanted flexibility to leave it empty.
+
+**Solution Implemented:**
+1. ✅ Updated backend validation in `/app/backend/src/validations/purchaseBill.js` to allow empty billNumber
+2. ✅ Updated backend controller to auto-generate billNumber if not provided (format: PUR-XXXXXXXX)
+3. ✅ Removed asterisk (*) from Bill Number label in frontend UI
+4. ✅ Removed frontend validation requiring billNumber
+5. ✅ "CREATE PURCHASE BILL" button now enabled without billNumber
+
+**Files Modified:**
+- `/app/backend/src/validations/purchaseBill.js` - Changed `billNumber: Joi.string().trim().required()` to `billNumber: Joi.string().trim().allow('').optional()`
+- `/app/backend/src/controller/purchaseBill.js` - Added conditional auto-generation of billNumber
+- `/app/frontend/src/components/admin/suppliers/list.jsx` - Removed required indicator and validation from UI
+
+**Test Results:** Backend validation tested - PASSED (empty bill numbers accepted)
+
+---
+
 ## Critical Updates (February 10, 2026)
 
 ### P0 RESOLVED: Sales Total Discrepancy Fix
