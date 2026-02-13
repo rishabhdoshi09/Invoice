@@ -43,33 +43,42 @@ module.exports = {
                 // Update supplier balance
                 const supplier = await Services.supplier.getSupplier({ id: purchaseObj.supplierId });
 
-                // Create ledger entries for purchase
-                // Dynamically get the Purchase Ledger ID
-                const purchaseLedger = await Services.ledger.getLedgerByName('Purchase Account');
+                // Create ledger entries for purchase (only if ledger system is set up)
+                // Dynamically get or create the Purchase Ledger
+                let purchaseLedger = await Services.ledger.getLedgerByName('Purchase Account');
                 if (!purchaseLedger) {
-                    throw new Error('Purchase Ledger not found. Please create a ledger named "Purchase Account".');
+                    // Auto-create the Purchase Account ledger
+                    purchaseLedger = await db.ledger.create({
+                        ledgerName: 'Purchase Account',
+                        ledgerType: 'expense',
+                        openingBalance: 0,
+                        currentBalance: 0
+                    }, { transaction });
                 }
                 const PURCHASE_LEDGER_ID = purchaseLedger.id;
                 
-                const ledgerEntries = [
-                    {
-                        ledgerId: supplier.ledgerId, 
-                        entryDate: purchaseObj.billDate,
-                        debit: 0,
-                        credit: purchaseObj.total, // Supplier is credited (liability increases)
-                        referenceType: 'purchase',
-                        referenceId: purchaseBillId
-                    },
-                    {
-                        ledgerId: PURCHASE_LEDGER_ID, 
-                        entryDate: purchaseObj.billDate,
-                        debit: purchaseObj.total, // Purchase is debited (expense/asset increases)
-                        credit: 0,
-                        referenceType: 'purchase',
-                        referenceId: purchaseBillId
-                    }
-                ];
-                await db.ledgerEntry.bulkCreate(ledgerEntries, { transaction });
+                // Only create ledger entries if supplier has a ledgerId
+                if (supplier && supplier.ledgerId) {
+                    const ledgerEntries = [
+                        {
+                            ledgerId: supplier.ledgerId, 
+                            entryDate: purchaseObj.billDate,
+                            debit: 0,
+                            credit: purchaseObj.total, // Supplier is credited (liability increases)
+                            referenceType: 'purchase',
+                            referenceId: purchaseBillId
+                        },
+                        {
+                            ledgerId: PURCHASE_LEDGER_ID, 
+                            entryDate: purchaseObj.billDate,
+                            debit: purchaseObj.total, // Purchase is debited (expense/asset increases)
+                            credit: 0,
+                            referenceType: 'purchase',
+                            referenceId: purchaseBillId
+                        }
+                    ];
+                    await db.ledgerEntry.bulkCreate(ledgerEntries, { transaction });
+                }
 
                 // Update supplier balance
                 if (supplier) {
