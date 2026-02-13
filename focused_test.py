@@ -12,7 +12,7 @@ import sys
 from datetime import datetime
 
 # Backend URL from frontend .env - use production URL
-BASE_URL = "https://bugfree-billing.preview.emergentagent.com/api"
+BASE_URL = "https://accounts-vault.preview.emergentagent.com/api"
 
 class FocusedTester:
     def __init__(self):

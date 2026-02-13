@@ -7,7 +7,7 @@ import requests
 import os
 import json
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://bugfree-billing.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://accounts-vault.preview.emergentagent.com')
 if BASE_URL.endswith('/api'):
     BASE_URL = BASE_URL[:-4]  # Remove /api suffix if present
 
