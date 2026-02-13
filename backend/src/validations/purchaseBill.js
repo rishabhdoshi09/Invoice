@@ -13,7 +13,7 @@ module.exports = {
         });
         
         const schema = Joi.object().keys({
-            billNumber: Joi.string().trim().required(),
+            billNumber: Joi.string().trim().allow('').optional(),
             billDate: Joi.string().trim().required(),
             supplierId: Joi.string().trim().required(),
             subTotal: Joi.number().greater(0).required(),

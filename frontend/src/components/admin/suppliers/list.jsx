@@ -866,9 +866,10 @@ export const ListSuppliers = () => {
                             <TextField
                                 fullWidth
                                 size="small"
-                                label="Bill Number *"
+                                label="Bill Number"
                                 value={purchaseBillNumber}
                                 onChange={(e) => setPurchaseBillNumber(e.target.value)}
+                                placeholder="Optional"
                             />
                         </Grid>
                         <Grid item xs={12} sm={6}>
@@ -957,7 +958,7 @@ export const ListSuppliers = () => {
                 </DialogContent>
                 <DialogActions sx={{ p: 2 }}>
                     <Button onClick={() => setPurchaseDialog({ open: false, supplier: null })} disabled={purchaseSubmitting}>Cancel</Button>
-                    <Button variant="contained" color="primary" onClick={handleSubmitPurchase} disabled={purchaseItems.length === 0 || !purchaseBillNumber || purchaseSubmitting} startIcon={purchaseSubmitting ? <CircularProgress size={20} /> : <Receipt />}>
+                    <Button variant="contained" color="primary" onClick={handleSubmitPurchase} disabled={purchaseItems.length === 0 || purchaseSubmitting} startIcon={purchaseSubmitting ? <CircularProgress size={20} /> : <Receipt />}>
                         {purchaseSubmitting ? 'Creating...' : 'Create Purchase Bill'}
                     </Button>
                 </DialogActions>
