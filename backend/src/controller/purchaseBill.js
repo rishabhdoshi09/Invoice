@@ -6,7 +6,11 @@ const db = require('../models');
 module.exports = {
     createPurchaseBill: async (req, res) => {
         try {
-            const { error, value } = Validations.purchaseBill.validateCreatePurchaseBillObj({ ...req.body, billNumber: `PUR-${uuidv4().split('-')[0].toUpperCase()}` });
+            // Use provided billNumber or generate one if empty/missing
+            const billNumber = req.body.billNumber && req.body.billNumber.trim() 
+                ? req.body.billNumber.trim() 
+                : `PUR-${uuidv4().split('-')[0].toUpperCase()}`;
+            const { error, value } = Validations.purchaseBill.validateCreatePurchaseBillObj({ ...req.body, billNumber });
             if (error) {
                 return res.status(400).send({
                     status: 400,
