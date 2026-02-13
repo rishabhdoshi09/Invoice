@@ -119,6 +119,7 @@ module.exports = {
 
     // List customers with calculated balance (NOT stored balance)
     // This ensures balance is always accurate from actual transactions
+    // IMPORTANT: Only match by customerId to prevent name collision issues
     listCustomersWithBalance: async (params = {}) => {
         try {
             // Get all customers with dynamically calculated balance
@@ -137,26 +138,26 @@ module.exports = {
                     COALESCE((
                         SELECT SUM("dueAmount") 
                         FROM orders 
-                        WHERE ("customerId" = c.id OR "customerName" = c.name) 
+                        WHERE "customerId" = c.id
                         AND "isDeleted" = false 
                         AND "paymentStatus" != 'paid'
                     ), 0) -
                     COALESCE((
                         SELECT SUM(amount) 
                         FROM payments 
-                        WHERE ("partyId" = c.id OR "partyName" = c.name) 
+                        WHERE "partyId" = c.id
                         AND "partyType" = 'customer'
                     ), 0) as balance,
                     COALESCE((
                         SELECT SUM(total) 
                         FROM orders 
-                        WHERE ("customerId" = c.id OR "customerName" = c.name) 
+                        WHERE "customerId" = c.id
                         AND "isDeleted" = false
                     ), 0) as "totalDebit",
                     COALESCE((
                         SELECT SUM(amount) 
                         FROM payments 
-                        WHERE ("partyId" = c.id OR "partyName" = c.name) 
+                        WHERE "partyId" = c.id
                         AND "partyType" = 'customer'
                     ), 0) as "totalCredit"
                 FROM customers c
