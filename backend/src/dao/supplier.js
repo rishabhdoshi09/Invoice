@@ -117,56 +117,53 @@ module.exports = {
         }
     },
 
-    // List suppliers with debit/credit summary
-    listSuppliersWithBalance: async (filterObj) => {
+    // List suppliers with calculated balance (NOT stored balance)
+    // This ensures balance is always accurate from actual transactions
+    listSuppliersWithBalance: async (params = {}) => {
         try {
-            const suppliers = await db.supplier.findAll({
-                ...( filterObj.q && filterObj.q !== "" ? {
-                    where: {
-                        [db.Sequelize.Op.or]: [
-                            { name: { [db.Sequelize.Op.iLike]: `%${filterObj.q}%` } },
-                            { mobile: { [db.Sequelize.Op.iLike]: `%${filterObj.q}%` } }
-                        ]
-                    }}
-                : {}),
-                order: [['name', 'ASC']]
-            });
-
-            // For each supplier, calculate debit/credit
-            const suppliersWithBalance = await Promise.all(suppliers.map(async (supplier) => {
-                // Get all purchases (debit - what we owe)
-                const purchaseTotal = await db.purchaseBill.sum('total', {
-                    where: { supplierId: supplier.id }
-                }) || 0;
-
-                // Get all payments to this supplier - check both partyId and partyName
-                const paymentByIdTotal = await db.payment.sum('amount', {
-                    where: { partyId: supplier.id }
-                }) || 0;
-                
-                const paymentByNameTotal = await db.payment.sum('amount', {
-                    where: { 
-                        partyName: supplier.name,
-                        partyType: 'supplier',
-                        partyId: null  // Only count name-based if no ID linked
-                    }
-                }) || 0;
-
-                const totalDebit = purchaseTotal + (supplier.openingBalance || 0);
-                const totalCredit = paymentByIdTotal + paymentByNameTotal;
-                const balance = totalDebit - totalCredit;
-
-                return {
-                    ...supplier.toJSON(),
-                    totalDebit,
-                    totalCredit,
-                    balance
-                };
-            }));
+            // Get all suppliers with dynamically calculated balance
+            const suppliers = await db.sequelize.query(`
+                SELECT 
+                    s.id,
+                    s.name,
+                    s.mobile,
+                    s.email,
+                    s.address,
+                    s.gstin,
+                    s."openingBalance",
+                    s."createdAt",
+                    s."updatedAt",
+                    COALESCE(s."openingBalance", 0) + 
+                    COALESCE((
+                        SELECT SUM("dueAmount") 
+                        FROM "purchaseBills" 
+                        WHERE "supplierId" = s.id 
+                        AND "paymentStatus" != 'paid'
+                    ), 0) -
+                    COALESCE((
+                        SELECT SUM(amount) 
+                        FROM payments 
+                        WHERE ("partyId" = s.id OR "partyName" = s.name) 
+                        AND "partyType" = 'supplier'
+                    ), 0) as balance,
+                    COALESCE((
+                        SELECT SUM(total) 
+                        FROM "purchaseBills" 
+                        WHERE "supplierId" = s.id
+                    ), 0) as "totalDebit",
+                    COALESCE((
+                        SELECT SUM(amount) 
+                        FROM payments 
+                        WHERE ("partyId" = s.id OR "partyName" = s.name) 
+                        AND "partyType" = 'supplier'
+                    ), 0) as "totalCredit"
+                FROM suppliers s
+                ORDER BY s.name ASC
+            `, { type: db.Sequelize.QueryTypes.SELECT });
 
             return {
-                count: suppliersWithBalance.length,
-                rows: suppliersWithBalance
+                count: suppliers.length,
+                rows: suppliers
             };
         } catch (error) {
             console.log(error);
