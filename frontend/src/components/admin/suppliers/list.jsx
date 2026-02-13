@@ -500,7 +500,7 @@ export const ListSuppliers = () => {
                                 <TableCell align="right"><strong>Purchases</strong></TableCell>
                                 <TableCell align="right"><strong>Paid</strong></TableCell>
                                 <TableCell align="right"><strong>Balance</strong></TableCell>
-                                <TableCell align="center" sx={{ width: 200 }}><strong>Actions</strong></TableCell>
+                                <TableCell align="center" sx={{ width: 280 }}><strong>Actions</strong></TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
