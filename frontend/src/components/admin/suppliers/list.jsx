@@ -203,10 +203,6 @@ export const ListSuppliers = () => {
             alert('Please add at least one item to the purchase');
             return;
         }
-        if (!purchaseBillNumber) {
-            alert('Please enter a bill number');
-            return;
-        }
         
         setPurchaseSubmitting(true);
         
