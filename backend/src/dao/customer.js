@@ -61,20 +61,26 @@ module.exports = {
     },
 
     // Get customer with debit/credit details
-    // IMPORTANT: Only match by customerId/partyId to prevent name collision
+    // Match by customerId primarily, but also include legacy orders matched by customerName
     getCustomerWithTransactions: async (customerId) => {
         try {
             const customer = await db.customer.findByPk(customerId);
             if (!customer) return null;
 
-            // Get all orders for this customer by ID only
-            // Sort by createdAt DESC (most recent first - date added)
+            // Get all orders for this customer
+            // Match by customerId OR customerName (for legacy data without customerId)
             const orders = await db.order.findAll({
                 where: { 
-                    customerId: customerId,
+                    [db.Sequelize.Op.or]: [
+                        { customerId: customerId },
+                        { 
+                            customerName: customer.name,
+                            customerId: null  // Only match by name if customerId is not set
+                        }
+                    ],
                     isDeleted: false
                 },
-                attributes: ['id', 'orderNumber', 'orderDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus', 'createdAt'],
+                attributes: ['id', 'orderNumber', 'orderDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus', 'createdAt', 'customerId'],
                 order: [['createdAt', 'DESC']]
             });
 
