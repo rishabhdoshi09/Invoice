@@ -70,13 +70,33 @@ module.exports = {
                     }
                 } else if (value.partyType === 'supplier') {
                     // Supplier payment made: Supplier (Debit) to Cash/Bank (Credit)
-                    // Only lookup supplier if partyId is provided
+                    // Look up supplier by partyId first, then by name
                     let supplier = null;
                     if (value.partyId) {
                         supplier = await Services.supplier.getSupplier({ id: value.partyId });
-                    } else if (value.partyName) {
-                        // Try to find supplier by name
-                        supplier = await db.supplier.findOne({ where: { name: value.partyName } });
+                    }
+                    
+                    // If not found by ID, try to find or create by name
+                    if (!supplier && value.partyName && value.partyName.trim()) {
+                        supplier = await db.supplier.findOne({ 
+                            where: { name: value.partyName.trim() },
+                            transaction
+                        });
+                        
+                        // If supplier doesn't exist, CREATE it
+                        if (!supplier) {
+                            const uuidv4 = require('uuid/v4');
+                            supplier = await db.supplier.create({
+                                id: uuidv4(),
+                                name: value.partyName.trim(),
+                                openingBalance: 0,
+                                currentBalance: 0
+                            }, { transaction });
+                            console.log(`Created new supplier from payment: ${supplier.name} (ID: ${supplier.id})`);
+                        }
+                        
+                        // Update payment with the correct partyId
+                        await response.update({ partyId: supplier.id }, { transaction });
                     }
                     
                     // Always record the cash payment
