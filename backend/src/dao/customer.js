@@ -118,10 +118,11 @@ module.exports = {
 
     // List customers with calculated balance (NOT stored balance)
     // This ensures balance is always accurate from actual transactions
-    // IMPORTANT: Only match by customerId to prevent name collision issues
+    // Match by customerId primarily, but also include legacy orders by customerName
     listCustomersWithBalance: async (params = {}) => {
         try {
             // Get all customers with dynamically calculated balance
+            // Include orders matched by customerId OR customerName (for legacy data)
             const customers = await db.sequelize.query(`
                 SELECT 
                     c.id,
@@ -137,7 +138,7 @@ module.exports = {
                     COALESCE((
                         SELECT SUM("dueAmount") 
                         FROM orders 
-                        WHERE "customerId" = c.id
+                        WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
                         AND "isDeleted" = false 
                         AND "paymentStatus" != 'paid'
                     ), 0) -
@@ -150,7 +151,7 @@ module.exports = {
                     COALESCE((
                         SELECT SUM(total) 
                         FROM orders 
-                        WHERE "customerId" = c.id
+                        WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
                         AND "isDeleted" = false
                     ), 0) as "totalDebit",
                     COALESCE((
