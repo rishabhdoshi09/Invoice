@@ -5,6 +5,68 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 
 ---
 
+## Critical Updates (February 16, 2026)
+
+### RESOLVED: Customer/Supplier Mapping Issues
+
+**Issues Fixed:**
+1. ✅ Credit sales not linking to customers - `customerId` was being set AFTER order creation
+2. ✅ Supplier payments not creating suppliers - payments were orphaned with just `partyName`
+3. ✅ Orders missing from customer details - legacy orders only had `customerName`, no `customerId`
+
+**Backend Fixes:**
+1. **Order Controller** (`/app/backend/src/controller/order.js`):
+   - Moved customer creation/lookup BEFORE order creation
+   - `customerId` now properly saved with the order
+   - Added console logging for debugging
+
+2. **Payment Controller** (`/app/backend/src/controller/payment.js`):
+   - Auto-creates supplier if paying to new supplier name
+   - Links payment to supplier via `partyId`
+   - Updates supplier balance on payment
+
+3. **Customer DAO** (`/app/backend/src/dao/customer.js`):
+   - Now matches orders by `customerId` OR `customerName` (for legacy data)
+   - Properly calculates balance from linked orders
+
+**SQL Migrations Created:**
+- `/app/backend/migrations/fix_order_customer_linking.sql` - Links orders to customers by name
+- `/app/backend/migrations/fix_supplier_payments_linking.sql` - Creates suppliers from orphaned payments
+
+### NEW: Advanced Supplier Ledger UI
+
+**Smart Features Added to `/suppliers` page:**
+
+1. **Quick Entry Tabs (No Dialogs):**
+   - Tab 1: Add Supplier - Name, Mobile, GSTIN, Opening Balance
+   - Tab 2: Quick Payment - With "Create New Supplier" toggle
+   - Tab 3: Quick Purchase - With "Create New Supplier" toggle
+   - Tab 4: Recent Activity - Shows last 5 payments
+
+2. **Duplicate Detection:**
+   - Warns when adding supplier with existing name
+   - Shows existing supplier's balance
+
+3. **Smart Payment Features:**
+   - Auto-fills amount with due balance when supplier selected
+   - "Pay Full" button for quick full payment
+   - Shows advance/overpaid status
+
+4. **Quick Actions from Table:**
+   - Click PAY icon → Opens payment tab with supplier pre-selected
+   - Click PURCHASE icon → Opens purchase tab with supplier pre-selected
+
+5. **Clickable Summary Cards:**
+   - Click "Total Payable" → Filters to suppliers with due
+   - Click "Advance Given" → Filters to suppliers with advance
+   - Click "Total Suppliers" → Shows all
+
+6. **Inline Supplier Creation:**
+   - Toggle to create new supplier while making payment/purchase
+   - No need to add supplier first
+
+---
+
 ## Critical Updates (February 13, 2026)
 
 ### P0 RESOLVED: Bill Number Made Optional
