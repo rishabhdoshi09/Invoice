@@ -287,6 +287,21 @@ export const Layout = () =>  {
                     
                     {/* User info and logout */}
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {/* Keyboard Shortcuts Help */}
+                        <Tooltip title="Keyboard Shortcuts (?)">
+                            <IconButton 
+                                color="inherit" 
+                                onClick={() => setShortcutsOpen(true)}
+                                sx={{ opacity: 0.8, '&:hover': { opacity: 1 } }}
+                                data-testid="keyboard-shortcuts-btn"
+                            >
+                                <Keyboard />
+                            </IconButton>
+                        </Tooltip>
+                        
+                        {/* Notification Bell */}
+                        <NotificationBell />
+                        
                         <Chip 
                             label={user?.role === 'admin' ? '👑 Admin' : '👤 Staff'} 
                             size="small"
