@@ -241,9 +241,44 @@ export const Layout = () =>  {
                     >
                         <MenuIcon />
                     </IconButton>
-                    <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
+                    <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 0, mr: 2 }}>
                         { "Customer Invoicing".toUpperCase() }
                     </Typography>
+                    
+                    {/* Global Search */}
+                    <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', maxWidth: 600, mx: 'auto' }}>
+                        {showSearch ? (
+                            <GlobalSearch onClose={() => setShowSearch(false)} />
+                        ) : (
+                            <Tooltip title="Search (Ctrl+K)">
+                                <Button
+                                    onClick={() => setShowSearch(true)}
+                                    sx={{
+                                        color: 'rgba(255,255,255,0.7)',
+                                        bgcolor: 'rgba(255,255,255,0.1)',
+                                        borderRadius: 2,
+                                        px: 2,
+                                        textTransform: 'none',
+                                        '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' }
+                                    }}
+                                    startIcon={<Search />}
+                                    data-testid="open-search-btn"
+                                >
+                                    Search orders, customers... &nbsp;
+                                    <Chip 
+                                        label="Ctrl+K" 
+                                        size="small" 
+                                        sx={{ 
+                                            height: 20, 
+                                            fontSize: '0.65rem', 
+                                            bgcolor: 'rgba(255,255,255,0.2)',
+                                            color: 'white'
+                                        }} 
+                                    />
+                                </Button>
+                            </Tooltip>
+                        )}
+                    </Box>
                     
                     {/* User info and logout */}
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
