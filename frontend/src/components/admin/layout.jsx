@@ -385,6 +385,9 @@ export const Layout = () =>  {
                 <Outlet />
             </Box>
         </Box>
+        
+        {/* Keyboard Shortcuts Help Dialog */}
+        <KeyboardShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
         </>
     );
 }
