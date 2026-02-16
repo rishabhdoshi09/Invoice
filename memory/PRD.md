@@ -375,7 +375,6 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 ---
 
 ## Upcoming Tasks
-- **P1:** Fix invoice search functionality
 - **P1:** Full user testing of overhauled Customers and Suppliers pages
 
 ## Future/Backlog
