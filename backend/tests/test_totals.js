@@ -4,7 +4,7 @@
 
 const axios = require('axios');
 
-const API_URL = process.env.API_URL || 'https://accounts-vault.preview.emergentagent.com/api';
+const API_URL = process.env.API_URL || 'https://invoice-mapper-10.preview.emergentagent.com/api';
 const USERNAME = 'admin';
 const PASSWORD = 'admin123';
 
