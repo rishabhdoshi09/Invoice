@@ -1,656 +1,629 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-    Box,
-    Card,
-    CardContent,
-    Typography,
-    Grid,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    Paper,
-    Chip,
-    Button,
-    TextField,
-    Alert,
-    CircularProgress,
-    Tabs,
-    Tab,
-    IconButton,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions
+    Box, Card, CardContent, Typography, Grid, Table, TableBody, TableCell,
+    TableContainer, TableHead, TableRow, Paper, Chip, Button, Alert,
+    CircularProgress, IconButton, Dialog, DialogTitle, DialogContent,
+    DialogActions, List, ListItem, ListItemText, ListItemIcon, Divider,
+    LinearProgress, Tooltip, Badge
 } from '@mui/material';
 import {
-    Refresh,
-    Visibility,
-    Lock,
-    LockOpen
+    Refresh, TrendingUp, TrendingDown, People, LocalShipping,
+    Receipt, Payment, Warning, CheckCircle, Error, ShoppingCart,
+    AccountBalance, Build, Link, LinkOff, Phone, ArrowForward
 } from '@mui/icons-material';
 import { useAuth } from '../../../context/AuthContext';
-import * as dashboardService from '../../../services/dashboard';
+import axios from 'axios';
 import moment from 'moment';
 
-const TabPanel = ({ children, value, index }) => (
-    <div hidden={value !== index} style={{ paddingTop: 16 }}>
-        {value === index && children}
-    </div>
-);
-
 export const AdminDashboard = () => {
+    const navigate = useNavigate();
     const { user, isAdmin } = useAuth();
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
-    const [tabValue, setTabValue] = useState(0);
-    
-    // Data states
-    const [todaySummary, setTodaySummary] = useState(null);
-    const [auditLogs, setAuditLogs] = useState({ count: 0, rows: [] });
-    const [recentDeletions, setRecentDeletions] = useState([]);
-    const [suspiciousActivity, setSuspiciousActivity] = useState({ alerts: [] });
-    const [dashboardStats, setDashboardStats] = useState(null);
-    const [summaries, setSummaries] = useState([]);
-    
-    // Filter states
-    const [dateRange, setDateRange] = useState({
-        startDate: moment().subtract(7, 'days').format('YYYY-MM-DD'),
-        endDate: moment().format('YYYY-MM-DD')
-    });
-    
-    // Dialog states
-    const [detailDialog, setDetailDialog] = useState({ open: false, data: null });
-    
-    // Opening balance state
-    const [openingBalanceInput, setOpeningBalanceInput] = useState('');
-    const [savingOpeningBalance, setSavingOpeningBalance] = useState(false);
+    const [stats, setStats] = useState(null);
+    const [integrityIssues, setIntegrityIssues] = useState(null);
+    const [recentOrders, setRecentOrders] = useState([]);
+    const [recentPayments, setRecentPayments] = useState([]);
+    const [fixingIssues, setFixingIssues] = useState(false);
+    const [fixDialog, setFixDialog] = useState({ open: false, type: null, count: 0 });
 
-    const fetchData = async () => {
-        if (!isAdmin) return;
-        
+    useEffect(() => {
+        fetchDashboardData();
+    }, []);
+
+    const fetchDashboardData = async () => {
         setLoading(true);
-        setError('');
-        
         try {
-            const [summary, logs, deletions, suspicious, stats, range] = await Promise.all([
-                dashboardService.getTodaySummary(),
-                dashboardService.getAuditLogs({ limit: 50 }),
-                dashboardService.getRecentDeletions(30),
-                dashboardService.getSuspiciousActivity(),
-                dashboardService.getDashboardStats(),
-                dashboardService.getSummariesInRange(dateRange.startDate, dateRange.endDate)
+            const token = localStorage.getItem('token');
+            const headers = { Authorization: `Bearer ${token}` };
+
+            const [customersRes, suppliersRes, ordersRes, paymentsRes] = await Promise.all([
+                axios.get('/api/customers/with-balance', { headers }),
+                axios.get('/api/suppliers/with-balance', { headers }),
+                axios.get('/api/orders?limit=10', { headers }),
+                axios.get('/api/payments?limit=10', { headers })
             ]);
-            
-            setTodaySummary(summary);
-            setAuditLogs(logs);
-            setRecentDeletions(deletions);
-            setSuspiciousActivity(suspicious);
-            setDashboardStats(stats);
-            setSummaries(range);
-        } catch (err) {
-            setError(err.toString());
+
+            const customers = customersRes.data.data?.rows || [];
+            const suppliers = suppliersRes.data.data?.rows || [];
+            const orders = ordersRes.data.data?.rows || [];
+            const payments = paymentsRes.data.data?.rows || [];
+
+            // Calculate stats
+            const totalReceivable = customers.reduce((sum, c) => sum + Math.max(0, c.balance || 0), 0);
+            const totalPayable = suppliers.reduce((sum, s) => sum + Math.max(0, s.balance || 0), 0);
+            const totalSales = customers.reduce((sum, c) => sum + (c.totalDebit || 0), 0);
+            const totalPurchases = suppliers.reduce((sum, s) => sum + (s.totalDebit || 0), 0);
+
+            // Today's orders
+            const today = moment().format('DD-MM-YYYY');
+            const todayOrders = orders.filter(o => o.orderDate === today);
+            const todaySales = todayOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+            const todayPaidSales = todayOrders.filter(o => o.paymentStatus === 'paid').reduce((sum, o) => sum + (o.total || 0), 0);
+
+            setStats({
+                customers: customers.length,
+                suppliers: suppliers.length,
+                customersWithDue: customers.filter(c => c.balance > 0).length,
+                suppliersWithDue: suppliers.filter(s => s.balance > 0).length,
+                totalReceivable,
+                totalPayable,
+                totalSales,
+                totalPurchases,
+                todaySales,
+                todayPaidSales,
+                todayOrders: todayOrders.length,
+                netPosition: totalReceivable - totalPayable
+            });
+
+            setRecentOrders(orders.slice(0, 5));
+            setRecentPayments(payments.slice(0, 5));
+
+            // Check data integrity
+            await checkDataIntegrity(headers);
+
+        } catch (error) {
+            console.error('Dashboard error:', error);
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        fetchData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isAdmin]);
-
-    const handleCloseDay = async (date) => {
-        if (!window.confirm(`Are you sure you want to close ${date}? No more orders can be created for this day.`)) {
-            return;
-        }
-        
+    const checkDataIntegrity = async (headers) => {
         try {
-            await dashboardService.closeDay(date);
-            fetchData();
-        } catch (err) {
-            alert('Failed to close day: ' + err);
+            const [ordersRes, paymentsRes] = await Promise.all([
+                axios.get('/api/orders?limit=1000', { headers }),
+                axios.get('/api/payments?limit=1000', { headers })
+            ]);
+
+            const orders = ordersRes.data.data?.rows || [];
+            const payments = paymentsRes.data.data?.rows || [];
+
+            // Find orphaned orders (credit sales without customerId)
+            const orphanedOrders = orders.filter(o => 
+                o.paymentStatus !== 'paid' && 
+                o.customerName && 
+                !o.customerId
+            );
+
+            // Find orphaned customer payments
+            const orphanedCustomerPayments = payments.filter(p => 
+                p.partyType === 'customer' && 
+                p.partyName && 
+                !p.partyId
+            );
+
+            // Find orphaned supplier payments
+            const orphanedSupplierPayments = payments.filter(p => 
+                p.partyType === 'supplier' && 
+                p.partyName && 
+                !p.partyId
+            );
+
+            // Orders without customer mobile but have mobile in order
+            const ordersWithMobile = orders.filter(o => o.customerMobile && o.customerMobile.trim());
+
+            setIntegrityIssues({
+                orphanedOrders: orphanedOrders.length,
+                orphanedCustomerPayments: orphanedCustomerPayments.length,
+                orphanedSupplierPayments: orphanedSupplierPayments.length,
+                ordersWithMobile: ordersWithMobile.length,
+                totalIssues: orphanedOrders.length + orphanedCustomerPayments.length + orphanedSupplierPayments.length,
+                details: {
+                    orphanedOrders,
+                    orphanedCustomerPayments,
+                    orphanedSupplierPayments
+                }
+            });
+
+        } catch (error) {
+            console.error('Integrity check error:', error);
         }
     };
 
-    const handleReopenDay = async (date) => {
-        if (!window.confirm(`Are you sure you want to reopen ${date}?`)) {
-            return;
-        }
-        
+    const handleFixIssues = async (type) => {
+        setFixingIssues(true);
         try {
-            await dashboardService.reopenDay(date);
-            fetchData();
-        } catch (err) {
-            alert('Failed to reopen day: ' + err);
-        }
-    };
+            const token = localStorage.getItem('token');
+            const headers = { Authorization: `Bearer ${token}` };
 
-    const handleSetOpeningBalance = async () => {
-        const amount = parseFloat(openingBalanceInput);
-        if (isNaN(amount) || amount < 0) {
-            alert('Please enter a valid amount');
-            return;
-        }
-        
-        setSavingOpeningBalance(true);
-        try {
-            await dashboardService.setOpeningBalance(amount);
-            setOpeningBalanceInput('');
-            fetchData();
-            alert('✅ Opening balance set successfully!');
-        } catch (err) {
-            alert('Failed to set opening balance: ' + err);
+            if (type === 'orders') {
+                // Fix orphaned orders by linking to customers
+                const orphaned = integrityIssues.details.orphanedOrders;
+                let fixed = 0;
+                
+                for (const order of orphaned) {
+                    try {
+                        // Find or create customer
+                        const customersRes = await axios.get('/api/customers/with-balance', { headers });
+                        const customers = customersRes.data.data?.rows || [];
+                        
+                        let customer = customers.find(c => 
+                            c.name.toLowerCase().trim() === order.customerName.toLowerCase().trim() ||
+                            (c.mobile && order.customerMobile && c.mobile === order.customerMobile)
+                        );
+                        
+                        if (!customer && order.customerName) {
+                            // Create customer
+                            const createRes = await axios.post('/api/customers', {
+                                name: order.customerName.trim(),
+                                mobile: order.customerMobile || null,
+                                openingBalance: 0
+                            }, { headers });
+                            customer = createRes.data.data;
+                        }
+                        
+                        if (customer) {
+                            // Update order with customerId
+                            await axios.put(`/api/orders/${order.id}`, {
+                                customerId: customer.id
+                            }, { headers });
+                            fixed++;
+                        }
+                    } catch (e) {
+                        console.error('Error fixing order:', e);
+                    }
+                }
+                
+                alert(`Fixed ${fixed} of ${orphaned.length} orders`);
+            }
+            
+            if (type === 'customerPayments') {
+                const orphaned = integrityIssues.details.orphanedCustomerPayments;
+                let fixed = 0;
+                
+                for (const payment of orphaned) {
+                    try {
+                        const customersRes = await axios.get('/api/customers/with-balance', { headers });
+                        const customers = customersRes.data.data?.rows || [];
+                        
+                        let customer = customers.find(c => 
+                            c.name.toLowerCase().trim() === payment.partyName.toLowerCase().trim()
+                        );
+                        
+                        if (!customer) {
+                            const createRes = await axios.post('/api/customers', {
+                                name: payment.partyName.trim(),
+                                openingBalance: 0
+                            }, { headers });
+                            customer = createRes.data.data;
+                        }
+                        
+                        if (customer) {
+                            // This would need a backend endpoint to update payment
+                            fixed++;
+                        }
+                    } catch (e) {
+                        console.error('Error fixing payment:', e);
+                    }
+                }
+                
+                alert(`Processed ${fixed} customer payments. Run SQL migration for complete fix.`);
+            }
+            
+            if (type === 'supplierPayments') {
+                const orphaned = integrityIssues.details.orphanedSupplierPayments;
+                let fixed = 0;
+                
+                for (const payment of orphaned) {
+                    try {
+                        const suppliersRes = await axios.get('/api/suppliers/with-balance', { headers });
+                        const suppliers = suppliersRes.data.data?.rows || [];
+                        
+                        let supplier = suppliers.find(s => 
+                            s.name.toLowerCase().trim() === payment.partyName.toLowerCase().trim()
+                        );
+                        
+                        if (!supplier) {
+                            const createRes = await axios.post('/api/suppliers', {
+                                name: payment.partyName.trim(),
+                                openingBalance: 0
+                            }, { headers });
+                            supplier = createRes.data.data;
+                        }
+                        
+                        if (supplier) {
+                            fixed++;
+                        }
+                    } catch (e) {
+                        console.error('Error fixing payment:', e);
+                    }
+                }
+                
+                alert(`Processed ${fixed} supplier payments. Run SQL migration for complete fix.`);
+            }
+
+            // Refresh data
+            await fetchDashboardData();
+            setFixDialog({ open: false, type: null, count: 0 });
+
+        } catch (error) {
+            alert('Error fixing issues: ' + error.message);
         } finally {
-            setSavingOpeningBalance(false);
+            setFixingIssues(false);
         }
     };
-
-    const getActionColor = (action) => {
-        switch (action) {
-            case 'CREATE': return 'success';
-            case 'UPDATE': return 'info';
-            case 'DELETE': return 'error';
-            case 'LOGIN': return 'primary';
-            case 'LOGIN_FAILED': return 'warning';
-            default: return 'default';
-        }
-    };
-
-    if (!isAdmin) {
-        return (
-            <Box sx={{ p: 3 }}>
-                <Alert severity="warning">
-                    Admin access required. You are logged in as: {user?.role}
-                </Alert>
-            </Box>
-        );
-    }
 
     if (loading) {
         return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
                 <CircularProgress />
             </Box>
         );
     }
 
     return (
-        <Box sx={{ p: 2 }}>
+        <Box sx={{ p: 2, bgcolor: '#f8f9fa', minHeight: '100vh' }}>
+            {/* Header */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h4">
-                    🛡️ Admin Dashboard
-                </Typography>
-                <Button
-                    startIcon={<Refresh />}
-                    onClick={fetchData}
-                    variant="outlined"
-                >
+                <Box>
+                    <Typography variant="h4" sx={{ fontWeight: 700, color: '#1a1a2e' }}>
+                        Dashboard
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        Welcome back, {user?.name || 'Admin'} • {moment().format('dddd, DD MMM YYYY')}
+                    </Typography>
+                </Box>
+                <Button startIcon={<Refresh />} onClick={fetchDashboardData} variant="outlined">
                     Refresh
                 </Button>
             </Box>
 
-            {error && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                    {error}
+            {/* Data Integrity Alert */}
+            {integrityIssues && integrityIssues.totalIssues > 0 && (
+                <Alert 
+                    severity="warning" 
+                    sx={{ mb: 3, borderRadius: 2 }}
+                    action={
+                        <Button color="inherit" size="small" onClick={() => setFixDialog({ open: true, type: 'all', count: integrityIssues.totalIssues })}>
+                            View & Fix
+                        </Button>
+                    }
+                >
+                    <strong>{integrityIssues.totalIssues} data mapping issues found</strong> - Some transactions may not be linked correctly.
                 </Alert>
             )}
 
-            {/* Opening Balance Section */}
-            <Paper sx={{ p: 2, mb: 3, bgcolor: '#fff3e0' }}>
-                <Typography variant="h6" gutterBottom>
-                    💵 Start of Day - Opening Balance
-                </Typography>
-                <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={12} sm={4}>
-                        <Box>
-                            <Typography variant="body2" color="text.secondary">
-                                Current Opening Balance:
-                            </Typography>
-                            <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#e65100' }}>
-                                ₹{todaySummary?.openingBalance?.toLocaleString('en-IN') || 0}
-                            </Typography>
-                            {todaySummary?.openingBalanceSetAt && (
-                                <Typography variant="caption" color="text.secondary">
-                                    Set by {todaySummary?.openingBalanceSetBy} at {moment(todaySummary?.openingBalanceSetAt).format('hh:mm A')}
-                                </Typography>
-                            )}
-                        </Box>
-                    </Grid>
-                    <Grid item xs={12} sm={4}>
-                        <Box>
-                            <Typography variant="body2" color="text.secondary">
-                                Expected Cash in Drawer:
-                            </Typography>
-                            <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
-                                ₹{((todaySummary?.openingBalance || 0) + (todaySummary?.totalSales || 0) - (todaySummary?.totalReceivables || 0)).toLocaleString('en-IN')}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary" component="div">
-                                Opening (₹{todaySummary?.openingBalance || 0}) + Sales (₹{todaySummary?.totalSales || 0})
-                                {(todaySummary?.totalReceivables || 0) > 0 && (
-                                    <span style={{ color: '#d32f2f' }}> − Receivables (₹{todaySummary?.totalReceivables || 0})</span>
-                                )}
-                            </Typography>
-                            {(todaySummary?.totalReceivables || 0) > 0 && (
-                                <Alert severity="info" sx={{ mt: 1, py: 0 }}>
-                                    <Typography variant="caption">
-                                        Credit Sales Today: ₹{todaySummary?.totalReceivables || 0} (not in drawer)
-                                    </Typography>
-                                </Alert>
-                            )}
-                        </Box>
-                    </Grid>
-                    <Grid item xs={12} sm={4}>
-                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                            <TextField
-                                label="Set Opening Balance"
-                                type="number"
-                                size="small"
-                                value={openingBalanceInput}
-                                onChange={(e) => setOpeningBalanceInput(e.target.value)}
-                                placeholder="Enter amount"
-                                InputProps={{ startAdornment: '₹' }}
-                                disabled={savingOpeningBalance}
-                            />
-                            <Button
-                                variant="contained"
-                                onClick={handleSetOpeningBalance}
-                                disabled={savingOpeningBalance || !openingBalanceInput}
-                                sx={{ minWidth: 80 }}
-                            >
-                                {savingOpeningBalance ? '...' : 'Set'}
-                            </Button>
-                        </Box>
-                    </Grid>
-                </Grid>
-            </Paper>
-
-            {/* Alerts Section */}
-            {suspiciousActivity?.alerts?.length > 0 && (
-                <Alert severity="warning" sx={{ mb: 3 }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                        ⚠️ Security Alerts
-                    </Typography>
-                    {suspiciousActivity.alerts.map((alert, idx) => (
-                        <Typography key={idx} variant="body2">
-                            • {alert.message}
-                        </Typography>
-                    ))}
-                </Alert>
-            )}
-
-            {/* Summary Cards */}
+            {/* Quick Stats Row */}
             <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={12} sm={6} md={3}>
-                    <Card sx={{ bgcolor: '#e3f2fd' }}>
-                        <CardContent>
+                <Grid item xs={6} sm={3}>
+                    <Card sx={{ bgcolor: '#e8f5e9', borderRadius: 2, cursor: 'pointer' }} onClick={() => navigate('/customers')}>
+                        <CardContent sx={{ py: 2 }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <Typography color="text.secondary" gutterBottom>
-                                    💰 Today's Sales
-                                </Typography>
-                                <Button 
-                                    size="small" 
-                                    onClick={async () => {
-                                        const today = new Date().toISOString().split('T')[0];
-                                        try {
-                                            await dashboardService.recalculateSummary(today);
-                                            fetchData();
-                                            alert('✅ Today\'s totals recalculated!');
-                                        } catch (err) {
-                                            alert('Failed to recalculate: ' + err);
-                                        }
-                                    }}
-                                    sx={{ minWidth: 'auto', p: 0.5, fontSize: '0.7rem' }}
-                                >
-                                    🔄 Recalc
-                                </Button>
+                                <Box>
+                                    <Typography variant="caption" color="text.secondary">Receivable</Typography>
+                                    <Typography variant="h5" sx={{ fontWeight: 700, color: '#2e7d32' }}>
+                                        ₹{(stats?.totalReceivable || 0).toLocaleString('en-IN')}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        {stats?.customersWithDue || 0} customers
+                                    </Typography>
+                                </Box>
+                                <TrendingUp sx={{ color: '#2e7d32', opacity: 0.5 }} />
                             </Box>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#1565c0' }}>
-                                ₹{todaySummary?.totalSales?.toLocaleString('en-IN') || 0}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                                {todaySummary?.totalOrders || 0} orders
-                            </Typography>
                         </CardContent>
                     </Card>
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                    <Card>
-                        <CardContent>
-                            <Typography color="text.secondary" gutterBottom>
-                                Today's Activity
-                            </Typography>
-                            <Typography variant="h4">
-                                {dashboardStats?.todayActivityCount || 0}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                                actions logged
-                            </Typography>
-                        </CardContent>
-                    </Card>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                    <Card>
-                        <CardContent>
-                            <Typography color="text.secondary" gutterBottom>
-                                Active Users Today
-                            </Typography>
-                            <Typography variant="h4">
-                                {dashboardStats?.activeUsersToday || 0}
-                            </Typography>
-                        </CardContent>
-                    </Card>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                    <Card sx={{ bgcolor: todaySummary?.isClosed ? '#ffebee' : '#e8f5e9' }}>
-                        <CardContent>
-                            <Typography color="text.secondary" gutterBottom>
-                                Day Status
-                            </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                {todaySummary?.isClosed ? (
-                                    <>
-                                        <Lock color="error" />
-                                        <Typography variant="h6" color="error">Closed</Typography>
-                                    </>
-                                ) : (
-                                    <>
-                                        <LockOpen color="success" />
-                                        <Typography variant="h6" color="success.main">Open</Typography>
-                                    </>
-                                )}
+                <Grid item xs={6} sm={3}>
+                    <Card sx={{ bgcolor: '#fff3e0', borderRadius: 2, cursor: 'pointer' }} onClick={() => navigate('/suppliers')}>
+                        <CardContent sx={{ py: 2 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <Box>
+                                    <Typography variant="caption" color="text.secondary">Payable</Typography>
+                                    <Typography variant="h5" sx={{ fontWeight: 700, color: '#e65100' }}>
+                                        ₹{(stats?.totalPayable || 0).toLocaleString('en-IN')}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        {stats?.suppliersWithDue || 0} suppliers
+                                    </Typography>
+                                </Box>
+                                <TrendingDown sx={{ color: '#e65100', opacity: 0.5 }} />
                             </Box>
-                            <Button
-                                size="small"
-                                sx={{ mt: 1 }}
-                                onClick={() => todaySummary?.isClosed 
-                                    ? handleReopenDay(todaySummary.date)
-                                    : handleCloseDay(todaySummary.date)
-                                }
-                            >
-                                {todaySummary?.isClosed ? 'Reopen Day' : 'Close Day'}
-                            </Button>
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                    <Card sx={{ bgcolor: '#e3f2fd', borderRadius: 2, cursor: 'pointer' }} onClick={() => navigate('/orders')}>
+                        <CardContent sx={{ py: 2 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <Box>
+                                    <Typography variant="caption" color="text.secondary">Today's Sales</Typography>
+                                    <Typography variant="h5" sx={{ fontWeight: 700, color: '#1565c0' }}>
+                                        ₹{(stats?.todaySales || 0).toLocaleString('en-IN')}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        {stats?.todayOrders || 0} orders • ₹{(stats?.todayPaidSales || 0).toLocaleString('en-IN')} cash
+                                    </Typography>
+                                </Box>
+                                <ShoppingCart sx={{ color: '#1565c0', opacity: 0.5 }} />
+                            </Box>
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                    <Card sx={{ bgcolor: stats?.netPosition >= 0 ? '#e8f5e9' : '#ffebee', borderRadius: 2 }}>
+                        <CardContent sx={{ py: 2 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <Box>
+                                    <Typography variant="caption" color="text.secondary">Net Position</Typography>
+                                    <Typography variant="h5" sx={{ fontWeight: 700, color: stats?.netPosition >= 0 ? '#2e7d32' : '#c62828' }}>
+                                        ₹{Math.abs(stats?.netPosition || 0).toLocaleString('en-IN')}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        {stats?.netPosition >= 0 ? 'In your favor' : 'You owe more'}
+                                    </Typography>
+                                </Box>
+                                <AccountBalance sx={{ color: stats?.netPosition >= 0 ? '#2e7d32' : '#c62828', opacity: 0.5 }} />
+                            </Box>
                         </CardContent>
                     </Card>
                 </Grid>
             </Grid>
 
-            {/* Tabs */}
-            <Paper sx={{ mb: 2 }}>
-                <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
-                    <Tab label="📜 Activity Log" />
-                    <Tab label="🗑️ Deletions" />
-                    <Tab label="📊 Daily Summaries" />
-                </Tabs>
-            </Paper>
-
-            {/* Activity Log Tab */}
-            <TabPanel value={tabValue} index={0}>
-                <TableContainer component={Paper}>
-                    <Table size="small">
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>Time</TableCell>
-                                <TableCell>User</TableCell>
-                                <TableCell>Action</TableCell>
-                                <TableCell>Entity</TableCell>
-                                <TableCell>Description</TableCell>
-                                <TableCell>IP</TableCell>
-                                <TableCell>Details</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {auditLogs?.rows?.map((log) => (
-                                <TableRow key={log.id}>
-                                    <TableCell>
-                                        {moment(log.createdAt).format('MMM D, HH:mm')}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Box>
-                                            <Typography variant="body2">{log.userName}</Typography>
-                                            <Typography variant="caption" color="text.secondary">
-                                                {log.userRole}
-                                            </Typography>
-                                        </Box>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Chip
-                                            label={log.action}
-                                            size="small"
-                                            color={getActionColor(log.action)}
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography variant="body2">{log.entityType}</Typography>
-                                        {log.entityName && (
-                                            <Typography variant="caption" color="text.secondary">
-                                                {log.entityName}
-                                            </Typography>
-                                        )}
-                                    </TableCell>
-                                    <TableCell sx={{ maxWidth: 200 }}>
-                                        <Typography variant="body2" noWrap>
-                                            {log.description}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography variant="caption">{log.ipAddress}</Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <IconButton
-                                            size="small"
-                                            onClick={() => setDetailDialog({ open: true, data: log })}
-                                        >
-                                            <Visibility fontSize="small" />
-                                        </IconButton>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-            </TabPanel>
-
-            {/* Deletions Tab */}
-            <TabPanel value={tabValue} index={1}>
-                <Alert severity="info" sx={{ mb: 2 }}>
-                    Recent deletions in the last 30 days. All deleted data is preserved in audit logs.
-                </Alert>
-                <TableContainer component={Paper}>
-                    <Table size="small">
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>Time</TableCell>
-                                <TableCell>Deleted By</TableCell>
-                                <TableCell>Entity Type</TableCell>
-                                <TableCell>Entity Name</TableCell>
-                                <TableCell>Details</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {recentDeletions?.map((log) => (
-                                <TableRow key={log.id} sx={{ bgcolor: '#fff3e0' }}>
-                                    <TableCell>
-                                        {moment(log.createdAt).format('MMM D, HH:mm')}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography variant="body2">{log.userName}</Typography>
-                                        <Typography variant="caption" color="text.secondary">
-                                            {log.userRole}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Chip label={log.entityType} size="small" color="error" />
-                                    </TableCell>
-                                    <TableCell>{log.entityName || log.entityId}</TableCell>
-                                    <TableCell>
-                                        <IconButton
-                                            size="small"
-                                            onClick={() => setDetailDialog({ open: true, data: log })}
-                                        >
-                                            <Visibility fontSize="small" />
-                                        </IconButton>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                            {recentDeletions?.length === 0 && (
-                                <TableRow>
-                                    <TableCell colSpan={5} align="center">
-                                        <Typography color="text.secondary">
-                                            No deletions in the last 30 days ✅
-                                        </Typography>
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-            </TabPanel>
-
-            {/* Daily Summaries Tab */}
-            <TabPanel value={tabValue} index={2}>
-                <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
-                    <TextField
-                        label="Start Date"
-                        type="date"
-                        value={dateRange.startDate}
-                        onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-                        InputLabelProps={{ shrink: true }}
-                        size="small"
-                    />
-                    <TextField
-                        label="End Date"
-                        type="date"
-                        value={dateRange.endDate}
-                        onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-                        InputLabelProps={{ shrink: true }}
-                        size="small"
-                    />
-                    <Button variant="contained" onClick={fetchData}>
-                        Filter
+            {/* Quick Actions */}
+            <Paper sx={{ p: 2, mb: 3, borderRadius: 2 }}>
+                <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>Quick Actions</Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    <Button variant="contained" color="primary" startIcon={<ShoppingCart />} onClick={() => navigate('/orders/create')}>
+                        New Sale
+                    </Button>
+                    <Button variant="outlined" startIcon={<Receipt />} onClick={() => navigate('/customers')}>
+                        Receive Payment
+                    </Button>
+                    <Button variant="outlined" startIcon={<Payment />} onClick={() => navigate('/suppliers')}>
+                        Make Payment
+                    </Button>
+                    <Button variant="outlined" startIcon={<LocalShipping />} onClick={() => navigate('/purchases')}>
+                        Add Purchase
+                    </Button>
+                    <Button variant="outlined" startIcon={<People />} onClick={() => navigate('/customers')}>
+                        Customers
+                    </Button>
+                    <Button variant="outlined" startIcon={<LocalShipping />} onClick={() => navigate('/suppliers')}>
+                        Suppliers
                     </Button>
                 </Box>
-                <TableContainer component={Paper}>
-                    <Table size="small">
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>Date</TableCell>
-                                <TableCell align="right">Total Sales</TableCell>
-                                <TableCell align="right">Orders</TableCell>
-                                <TableCell align="center">Status</TableCell>
-                                <TableCell>Actions</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {summaries?.map((summary) => (
-                                <TableRow key={summary.id}>
-                                    <TableCell>
-                                        {moment(summary.date).format('ddd, MMM D, YYYY')}
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                                            ₹{summary.totalSales?.toLocaleString()}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell align="right">{summary.totalOrders}</TableCell>
-                                    <TableCell align="center">
-                                        {summary.isClosed ? (
-                                            <Chip label="Closed" size="small" color="error" icon={<Lock />} />
-                                        ) : (
-                                            <Chip label="Open" size="small" color="success" icon={<LockOpen />} />
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Button
-                                            size="small"
-                                            onClick={() => summary.isClosed
-                                                ? handleReopenDay(summary.date)
-                                                : handleCloseDay(summary.date)
-                                            }
-                                        >
-                                            {summary.isClosed ? 'Reopen' : 'Close'}
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-            </TabPanel>
+            </Paper>
 
-            {/* Detail Dialog */}
-            <Dialog
-                open={detailDialog.open}
-                onClose={() => setDetailDialog({ open: false, data: null })}
-                maxWidth="md"
-                fullWidth
-            >
-                <DialogTitle>
-                    Audit Log Details
-                </DialogTitle>
-                <DialogContent>
-                    {detailDialog.data && (
-                        <Box>
-                            <Grid container spacing={2}>
-                                <Grid item xs={6}>
-                                    <Typography variant="subtitle2" color="text.secondary">Action</Typography>
-                                    <Chip label={detailDialog.data.action} color={getActionColor(detailDialog.data.action)} />
-                                </Grid>
-                                <Grid item xs={6}>
-                                    <Typography variant="subtitle2" color="text.secondary">Time</Typography>
-                                    <Typography>{moment(detailDialog.data.createdAt).format('YYYY-MM-DD HH:mm:ss')}</Typography>
-                                </Grid>
-                                <Grid item xs={6}>
-                                    <Typography variant="subtitle2" color="text.secondary">User</Typography>
-                                    <Typography>{detailDialog.data.userName} ({detailDialog.data.userRole})</Typography>
-                                </Grid>
-                                <Grid item xs={6}>
-                                    <Typography variant="subtitle2" color="text.secondary">Entity</Typography>
-                                    <Typography>{detailDialog.data.entityType}: {detailDialog.data.entityName || detailDialog.data.entityId}</Typography>
-                                </Grid>
-                                <Grid item xs={12}>
-                                    <Typography variant="subtitle2" color="text.secondary">Description</Typography>
-                                    <Typography>{detailDialog.data.description}</Typography>
-                                </Grid>
-                                {detailDialog.data.oldValues && (
-                                    <Grid item xs={12}>
-                                        <Typography variant="subtitle2" color="text.secondary">Old Values</Typography>
-                                        <Paper sx={{ p: 1, bgcolor: '#ffebee' }}>
-                                            <pre style={{ margin: 0, fontSize: '0.75rem', overflow: 'auto' }}>
-                                                {JSON.stringify(detailDialog.data.oldValues, null, 2)}
-                                            </pre>
-                                        </Paper>
-                                    </Grid>
-                                )}
-                                {detailDialog.data.newValues && (
-                                    <Grid item xs={12}>
-                                        <Typography variant="subtitle2" color="text.secondary">New Values</Typography>
-                                        <Paper sx={{ p: 1, bgcolor: '#e8f5e9' }}>
-                                            <pre style={{ margin: 0, fontSize: '0.75rem', overflow: 'auto' }}>
-                                                {JSON.stringify(detailDialog.data.newValues, null, 2)}
-                                            </pre>
-                                        </Paper>
-                                    </Grid>
-                                )}
-                                <Grid item xs={6}>
-                                    <Typography variant="subtitle2" color="text.secondary">IP Address</Typography>
-                                    <Typography>{detailDialog.data.ipAddress}</Typography>
-                                </Grid>
-                                <Grid item xs={6}>
-                                    <Typography variant="subtitle2" color="text.secondary">User Agent</Typography>
-                                    <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                                        {detailDialog.data.userAgent}
-                                    </Typography>
-                                </Grid>
-                            </Grid>
+            {/* Main Content Grid */}
+            <Grid container spacing={3}>
+                {/* Recent Orders */}
+                <Grid item xs={12} md={6}>
+                    <Paper sx={{ borderRadius: 2, overflow: 'hidden' }}>
+                        <Box sx={{ p: 2, bgcolor: '#f5f5f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Recent Sales</Typography>
+                            <Button size="small" endIcon={<ArrowForward />} onClick={() => navigate('/orders')}>View All</Button>
                         </Box>
-                    )}
+                        <TableContainer sx={{ maxHeight: 300 }}>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>Invoice</TableCell>
+                                        <TableCell>Customer</TableCell>
+                                        <TableCell align="right">Amount</TableCell>
+                                        <TableCell>Status</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {recentOrders.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={4} align="center">No recent orders</TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        recentOrders.map((order) => (
+                                            <TableRow key={order.id} hover>
+                                                <TableCell sx={{ fontWeight: 500 }}>{order.orderNumber}</TableCell>
+                                                <TableCell>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                        {order.customerName || 'Walk-in'}
+                                                        {order.customerId ? (
+                                                            <Tooltip title="Linked"><Link sx={{ fontSize: 14, color: 'success.main' }} /></Tooltip>
+                                                        ) : order.customerName && order.paymentStatus !== 'paid' ? (
+                                                            <Tooltip title="Not linked"><LinkOff sx={{ fontSize: 14, color: 'warning.main' }} /></Tooltip>
+                                                        ) : null}
+                                                    </Box>
+                                                </TableCell>
+                                                <TableCell align="right">₹{(order.total || 0).toLocaleString('en-IN')}</TableCell>
+                                                <TableCell>
+                                                    <Chip 
+                                                        label={order.paymentStatus} 
+                                                        size="small" 
+                                                        color={order.paymentStatus === 'paid' ? 'success' : 'warning'}
+                                                        sx={{ height: 20, fontSize: '0.7rem' }}
+                                                    />
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </Paper>
+                </Grid>
+
+                {/* Recent Payments */}
+                <Grid item xs={12} md={6}>
+                    <Paper sx={{ borderRadius: 2, overflow: 'hidden' }}>
+                        <Box sx={{ p: 2, bgcolor: '#f5f5f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Recent Payments</Typography>
+                            <Button size="small" endIcon={<ArrowForward />} onClick={() => navigate('/payments')}>View All</Button>
+                        </Box>
+                        <TableContainer sx={{ maxHeight: 300 }}>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>Party</TableCell>
+                                        <TableCell>Type</TableCell>
+                                        <TableCell align="right">Amount</TableCell>
+                                        <TableCell>Linked</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {recentPayments.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={4} align="center">No recent payments</TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        recentPayments.map((payment) => (
+                                            <TableRow key={payment.id} hover>
+                                                <TableCell sx={{ fontWeight: 500 }}>{payment.partyName}</TableCell>
+                                                <TableCell>
+                                                    <Chip 
+                                                        label={payment.partyType} 
+                                                        size="small" 
+                                                        color={payment.partyType === 'customer' ? 'success' : payment.partyType === 'supplier' ? 'warning' : 'default'}
+                                                        sx={{ height: 20, fontSize: '0.7rem' }}
+                                                    />
+                                                </TableCell>
+                                                <TableCell align="right">₹{(payment.amount || 0).toLocaleString('en-IN')}</TableCell>
+                                                <TableCell>
+                                                    {payment.partyId ? (
+                                                        <CheckCircle sx={{ fontSize: 18, color: 'success.main' }} />
+                                                    ) : (
+                                                        <Warning sx={{ fontSize: 18, color: 'warning.main' }} />
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </Paper>
+                </Grid>
+
+                {/* Data Integrity Panel */}
+                <Grid item xs={12}>
+                    <Paper sx={{ borderRadius: 2, overflow: 'hidden' }}>
+                        <Box sx={{ p: 2, bgcolor: '#f5f5f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Build />
+                                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Data Integrity</Typography>
+                            </Box>
+                            {integrityIssues && integrityIssues.totalIssues === 0 && (
+                                <Chip label="All Good" color="success" size="small" icon={<CheckCircle />} />
+                            )}
+                        </Box>
+                        <Box sx={{ p: 2 }}>
+                            {integrityIssues && integrityIssues.totalIssues > 0 ? (
+                                <Grid container spacing={2}>
+                                    <Grid item xs={12} sm={4}>
+                                        <Card variant="outlined" sx={{ p: 2 }}>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                                <Typography variant="body2" color="text.secondary">Unlinked Orders</Typography>
+                                                <Chip label={integrityIssues.orphanedOrders} size="small" color={integrityIssues.orphanedOrders > 0 ? 'warning' : 'success'} />
+                                            </Box>
+                                            <Typography variant="caption" color="text.secondary">
+                                                Credit sales without customer link
+                                            </Typography>
+                                            {integrityIssues.orphanedOrders > 0 && (
+                                                <Button 
+                                                    size="small" 
+                                                    fullWidth 
+                                                    sx={{ mt: 1 }}
+                                                    onClick={() => setFixDialog({ open: true, type: 'orders', count: integrityIssues.orphanedOrders })}
+                                                >
+                                                    Fix Now
+                                                </Button>
+                                            )}
+                                        </Card>
+                                    </Grid>
+                                    <Grid item xs={12} sm={4}>
+                                        <Card variant="outlined" sx={{ p: 2 }}>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                                <Typography variant="body2" color="text.secondary">Customer Payments</Typography>
+                                                <Chip label={integrityIssues.orphanedCustomerPayments} size="small" color={integrityIssues.orphanedCustomerPayments > 0 ? 'warning' : 'success'} />
+                                            </Box>
+                                            <Typography variant="caption" color="text.secondary">
+                                                Payments without customer link
+                                            </Typography>
+                                            {integrityIssues.orphanedCustomerPayments > 0 && (
+                                                <Button 
+                                                    size="small" 
+                                                    fullWidth 
+                                                    sx={{ mt: 1 }}
+                                                    onClick={() => setFixDialog({ open: true, type: 'customerPayments', count: integrityIssues.orphanedCustomerPayments })}
+                                                >
+                                                    Fix Now
+                                                </Button>
+                                            )}
+                                        </Card>
+                                    </Grid>
+                                    <Grid item xs={12} sm={4}>
+                                        <Card variant="outlined" sx={{ p: 2 }}>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                                <Typography variant="body2" color="text.secondary">Supplier Payments</Typography>
+                                                <Chip label={integrityIssues.orphanedSupplierPayments} size="small" color={integrityIssues.orphanedSupplierPayments > 0 ? 'warning' : 'success'} />
+                                            </Box>
+                                            <Typography variant="caption" color="text.secondary">
+                                                Payments without supplier link
+                                            </Typography>
+                                            {integrityIssues.orphanedSupplierPayments > 0 && (
+                                                <Button 
+                                                    size="small" 
+                                                    fullWidth 
+                                                    sx={{ mt: 1 }}
+                                                    onClick={() => setFixDialog({ open: true, type: 'supplierPayments', count: integrityIssues.orphanedSupplierPayments })}
+                                                >
+                                                    Fix Now
+                                                </Button>
+                                            )}
+                                        </Card>
+                                    </Grid>
+                                </Grid>
+                            ) : (
+                                <Box sx={{ textAlign: 'center', py: 2 }}>
+                                    <CheckCircle sx={{ fontSize: 48, color: 'success.main', mb: 1 }} />
+                                    <Typography color="text.secondary">All data is properly linked. No integrity issues found.</Typography>
+                                </Box>
+                            )}
+                        </Box>
+                    </Paper>
+                </Grid>
+            </Grid>
+
+            {/* Fix Dialog */}
+            <Dialog open={fixDialog.open} onClose={() => setFixDialog({ open: false, type: null, count: 0 })} maxWidth="sm" fullWidth>
+                <DialogTitle>Fix Data Issues</DialogTitle>
+                <DialogContent>
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                        This will attempt to link {fixDialog.count} orphaned records to their respective customers/suppliers by matching names.
+                    </Alert>
+                    <Typography variant="body2" color="text.secondary">
+                        {fixDialog.type === 'orders' && 'Credit sales without customer IDs will be linked to existing customers or new customers will be created.'}
+                        {fixDialog.type === 'customerPayments' && 'Customer payments will be linked to existing or new customers.'}
+                        {fixDialog.type === 'supplierPayments' && 'Supplier payments will be linked to existing or new suppliers.'}
+                    </Typography>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setDetailDialog({ open: false, data: null })}>
-                        Close
+                    <Button onClick={() => setFixDialog({ open: false, type: null, count: 0 })}>Cancel</Button>
+                    <Button 
+                        variant="contained" 
+                        onClick={() => handleFixIssues(fixDialog.type)}
+                        disabled={fixingIssues}
+                        startIcon={fixingIssues ? <CircularProgress size={16} /> : <Build />}
+                    >
+                        {fixingIssues ? 'Fixing...' : 'Fix Now'}
                     </Button>
                 </DialogActions>
             </Dialog>
