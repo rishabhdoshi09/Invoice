@@ -577,7 +577,15 @@ module.exports = {
     togglePaymentStatus: async (req, res) => {
         try {
             const { orderId } = req.params;
-            const { newStatus, customerName, customerMobile, customerId } = req.body;
+            const { newStatus, customerName, customerMobile, customerId, changedBy } = req.body;
+
+            // Validate changedBy name (mandatory for audit)
+            if (!changedBy || !changedBy.trim()) {
+                return res.status(400).send({
+                    status: 400,
+                    message: 'Your name is required to record this change.'
+                });
+            }
 
             // Validate new status
             if (!['paid', 'unpaid'].includes(newStatus)) {
@@ -605,6 +613,7 @@ module.exports = {
             }
 
             const oldStatus = order.paymentStatus;
+            const changedByTrimmed = changedBy.trim();
             
             // Use transaction for all updates to ensure data integrity
             const result = await db.sequelize.transaction(async (transaction) => {
@@ -614,7 +623,7 @@ module.exports = {
                     paidAmount: newStatus === 'paid' ? order.total : 0,
                     dueAmount: newStatus === 'paid' ? 0 : order.total,
                     modifiedBy: req.user?.id,
-                    modifiedByName: req.user?.name || req.user?.username
+                    modifiedByName: changedByTrimmed // Use the provided name for audit
                 };
                 
                 let customerIdToUpdate = customerId || order.customerId;
