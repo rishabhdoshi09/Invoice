@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     Box,
     Card,
@@ -12,6 +13,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 
 export const Login = () => {
+    const navigate = useNavigate();
     const { login, setupRequired, setupAdmin } = useAuth();
     const [isSetup, setIsSetup] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -40,6 +42,8 @@ export const Login = () => {
 
         try {
             await login(formData.username, formData.password);
+            // Navigate to orders page after successful login
+            navigate('/orders', { replace: true });
         } catch (err) {
             setError(err.toString());
         } finally {
