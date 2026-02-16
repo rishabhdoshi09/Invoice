@@ -7,6 +7,27 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 
 ## Critical Updates (February 16, 2026 - Latest)
 
+### ✅ Billing Staff Payment Status Toggle with Mandatory Naming
+
+**User Request:** "Allow billing staff to toggle between paid and unpaid with mandatory naming"
+
+**Implementation:**
+1. **Billing Staff Access**: Both admin AND billing_staff can now toggle payment status (previously admin-only)
+2. **Mandatory Name Field**: A "Your Name (Required for Audit)" field is now required before toggling
+3. **Pre-filled Name**: The field is pre-filled with the logged-in user's name
+4. **Audit Trail**: The `changedBy` name is recorded in:
+   - Order's `modifiedByName` field
+   - Audit log with description including who made the change
+
+**Files Modified:**
+- `/app/frontend/src/components/admin/orders/list.jsx` - Added `changedByName` state, updated UI with mandatory name field
+- `/app/backend/src/routes/order.js` - Removed `canModify` (admin-only) restriction
+- `/app/backend/src/controller/order.js` - Added `changedBy` validation and audit logging
+
+**Test Status:** Verified - Toggle works with mandatory naming, receivables updated correctly
+
+---
+
 ### ✅ Smart Application Enhancement Complete
 
 **User Request:** "Enhance this whole application to have some smart (advance) features keeping in mind of all the mappings. I don't want unnecessary duplicates - just simple yet powerful, aesthetic and powerful that does all the job for us."
