@@ -128,9 +128,11 @@ function App() {
     <Provider store={store}>
       <ThemeProvider theme={theme}>
         <AuthProvider>
-          <BrowserRouter>
-            <AppContent />
-          </BrowserRouter>
+          <NotificationProvider>
+            <BrowserRouter>
+              <AppContent />
+            </BrowserRouter>
+          </NotificationProvider>
         </AuthProvider>
       </ThemeProvider>
     </Provider>
