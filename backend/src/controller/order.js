@@ -75,10 +75,19 @@ module.exports = {
                         }
 
                         if (existingCustomer) {
-                            // Update existing customer's balance
-                            await existingCustomer.update({
+                            // Update existing customer's balance and mobile if missing
+                            const updateData = {
                                 currentBalance: (Number(existingCustomer.currentBalance) || 0) + orderObj.dueAmount
-                            }, { transaction });
+                            };
+                            // Update mobile if customer doesn't have one but order does
+                            if (!existingCustomer.mobile && orderObj.customerMobile) {
+                                updateData.mobile = orderObj.customerMobile;
+                            }
+                            // Update address if customer doesn't have one but order does
+                            if (!existingCustomer.address && orderObj.customerAddress) {
+                                updateData.address = orderObj.customerAddress;
+                            }
+                            await existingCustomer.update(updateData, { transaction });
                             orderObj.customerId = existingCustomer.id;
                             console.log(`Credit sale: Linked to existing customer ${existingCustomer.name} (ID: ${existingCustomer.id})`);
                         } else {
