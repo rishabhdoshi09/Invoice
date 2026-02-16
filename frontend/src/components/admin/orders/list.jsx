@@ -461,7 +461,7 @@ export const ListOrders = () => {
                                                 </Typography>
                                             </TableCell>
                                             <TableCell align="center" onClick={(e) => e.stopPropagation()}>
-                                                {isAdmin ? (
+                                                {canToggleStatus ? (
                                                     <Tooltip title="Click to toggle payment status">
                                                         <Chip 
                                                             label={row.paymentStatus === 'paid' ? 'Paid' : row.paymentStatus === 'partial' ? 'Partial' : 'Unpaid'} 
