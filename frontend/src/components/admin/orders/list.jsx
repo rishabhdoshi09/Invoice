@@ -113,6 +113,8 @@ export const ListOrders = () => {
             customerName: order.customerName || '',
             customerMobile: order.customerMobile || ''
         });
+        // Pre-fill changedByName with current user's name if available
+        setChangedByName(user?.name || '');
         // Reset selection states
         setSelectedCustomer(null);
         setIsNewCustomer(false);
