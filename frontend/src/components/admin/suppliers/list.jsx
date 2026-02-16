@@ -168,7 +168,7 @@ export const ListSuppliers = () => {
         setSaving(true);
         try {
             const token = localStorage.getItem('token');
-            const { data } = await axios.post('/api/suppliers', {
+            await axios.post('/api/suppliers', {
                 name: newSupplier.name.trim(),
                 mobile: newSupplier.mobile || null,
                 gstin: newSupplier.gstin || null,
