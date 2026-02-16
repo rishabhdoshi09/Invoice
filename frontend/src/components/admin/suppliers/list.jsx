@@ -1,15 +1,15 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { 
     Box, Button, Card, CardContent, Table, TableBody, TableCell, TableContainer, 
     TableHead, TableRow, TextField, Dialog, DialogTitle, DialogContent, DialogActions, 
     Typography, IconButton, Chip, Tooltip, Grid, Paper, Tabs, Tab, Alert,
     FormControl, InputLabel, Select, MenuItem, CircularProgress, Autocomplete,
-    InputAdornment, Divider, TablePagination, ButtonGroup, Collapse
+    InputAdornment, Divider, TablePagination, Collapse
 } from '@mui/material';
 import { 
-    Delete, Edit, Visibility, Refresh, Add, Payment, Receipt, LocalShipping, Close,
-    Search, Download, TrendingDown, AccountBalance, AttachMoney, ShoppingBag,
-    KeyboardArrowDown, KeyboardArrowUp
+    Delete, Edit, Visibility, Refresh, Add, Payment, Receipt, Close,
+    Search, Download, AccountBalance, ShoppingBag, CheckCircle,
+    KeyboardArrowDown, KeyboardArrowUp, Save, PersonAdd
 } from '@mui/icons-material';
 import { listSuppliers, createSupplier, updateSupplier, deleteSupplier } from '../../../services/supplier';
 import axios from 'axios';
@@ -18,101 +18,52 @@ import moment from 'moment';
 export const ListSuppliers = () => {
     const [suppliers, setSuppliers] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [openDialog, setOpenDialog] = useState(false);
-    const [editingSupplier, setEditingSupplier] = useState(null);
     const [detailsDialog, setDetailsDialog] = useState({ open: false, supplier: null, tab: 0 });
-    const [paymentDialog, setPaymentDialog] = useState({ open: false, supplier: null });
-    const [submitting, setSubmitting] = useState(false);
     
-    // Search and Filter states
+    // Search and Filter
     const [searchTerm, setSearchTerm] = useState('');
     const [balanceFilter, setBalanceFilter] = useState('all');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     
-    // Add Purchase Dialog state
-    const [purchaseDialog, setPurchaseDialog] = useState({ open: false, supplier: null });
-    const [purchaseItems, setPurchaseItems] = useState([]);
-    const [itemName, setItemName] = useState('');
-    const [itemQuantity, setItemQuantity] = useState('');
-    const [itemPrice, setItemPrice] = useState('');
-    const [purchaseTaxPercent, setPurchaseTaxPercent] = useState(0);
-    const [purchaseBillNumber, setPurchaseBillNumber] = useState('');
-    const [purchaseBillDate, setPurchaseBillDate] = useState(moment().format('YYYY-MM-DD'));
-    const [purchaseSubmitting, setPurchaseSubmitting] = useState(false);
+    // Quick Entry Mode
+    const [activeTab, setActiveTab] = useState(0); // 0: Supplier, 1: Payment, 2: Purchase
+    const [successMessage, setSuccessMessage] = useState('');
+    const [saving, setSaving] = useState(false);
     
-    // Expanded rows for viewing purchase items
+    // Quick Add Supplier
+    const [newSupplier, setNewSupplier] = useState({ name: '', mobile: '', openingBalance: 0 });
+    const supplierNameRef = useRef(null);
+    
+    // Quick Payment
+    const [selectedSupplier, setSelectedSupplier] = useState(null);
+    const [paymentAmount, setPaymentAmount] = useState('');
+    const [paymentDate, setPaymentDate] = useState(moment().format('YYYY-MM-DD'));
+    const [paymentNotes, setPaymentNotes] = useState('');
+    
+    // Quick Purchase
+    const [purchaseSupplier, setPurchaseSupplier] = useState(null);
+    const [purchaseBillNo, setPurchaseBillNo] = useState('');
+    const [purchaseDate, setPurchaseDate] = useState(moment().format('YYYY-MM-DD'));
+    const [purchaseItems, setPurchaseItems] = useState([{ name: '', qty: '', price: '', total: 0 }]);
+    
+    // Expanded rows
     const [expandedPurchase, setExpandedPurchase] = useState(null);
-    
-    const [formData, setFormData] = useState({
-        name: '',
-        mobile: '',
-        email: '',
-        address: '',
-        gstin: '',
-        openingBalance: 0
-    });
 
-    const [paymentForm, setPaymentForm] = useState({
-        amount: '',
-        referenceType: 'advance',
-        notes: '',
-        paymentDate: moment().format('YYYY-MM-DD')
-    });
-
-    // Filtered suppliers based on search and filter
-    const filteredSuppliers = useMemo(() => {
-        let result = suppliers;
-        
-        if (searchTerm) {
-            const search = searchTerm.toLowerCase();
-            result = result.filter(s => 
-                s.name?.toLowerCase().includes(search) ||
-                s.mobile?.toLowerCase().includes(search) ||
-                s.gstin?.toLowerCase().includes(search)
-            );
-        }
-        
-        if (balanceFilter === 'with-balance') {
-            result = result.filter(s => (s.balance || 0) > 0);
-        } else if (balanceFilter === 'no-balance') {
-            result = result.filter(s => (s.balance || 0) <= 0);
-        }
-        
-        return result;
-    }, [suppliers, searchTerm, balanceFilter]);
-
-    // Paginated suppliers
-    const paginatedSuppliers = useMemo(() => {
-        const start = page * rowsPerPage;
-        return filteredSuppliers.slice(start, start + rowsPerPage);
-    }, [filteredSuppliers, page, rowsPerPage]);
-
-    // Summary calculations
-    const summary = useMemo(() => ({
-        totalSuppliers: suppliers.length,
-        withBalance: suppliers.filter(s => (s.balance || 0) > 0).length,
-        totalPayable: suppliers.reduce((sum, s) => sum + (s.balance || 0), 0),
-        totalPurchases: suppliers.reduce((sum, s) => sum + (s.totalDebit || 0), 0),
-        totalPaid: suppliers.reduce((sum, s) => sum + (s.totalCredit || 0), 0)
-    }), [suppliers]);
+    useEffect(() => {
+        fetchSuppliers();
+    }, []);
 
     const fetchSuppliers = async () => {
+        setLoading(true);
         try {
-            setLoading(true);
             const token = localStorage.getItem('token');
             const { data } = await axios.get('/api/suppliers/with-balance', {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setSuppliers(data.data?.rows || []);
         } catch (error) {
-            console.error('Error fetching suppliers:', error);
-            try {
-                const { rows } = await listSuppliers({});
-                setSuppliers(rows);
-            } catch (fallbackError) {
-                console.error('Fallback error:', fallbackError);
-            }
+            console.error('Error:', error);
         } finally {
             setLoading(false);
         }
@@ -124,473 +75,585 @@ export const ListSuppliers = () => {
             const { data } = await axios.get(`/api/suppliers/${supplierId}/transactions`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setExpandedPurchase(null); // Reset expanded state when opening new dialog
+            setExpandedPurchase(null);
             setDetailsDialog({ open: true, supplier: data.data, tab: 0 });
         } catch (error) {
-            console.error('Error fetching supplier details:', error);
-            alert('Error fetching supplier details');
+            alert('Error fetching details');
         }
     };
 
-    // Delete purchase bill
-    const handleDeletePurchaseBill = async (purchaseId) => {
-        if (!window.confirm('Are you sure you want to delete this purchase bill? This action cannot be undone.')) {
+    // Filtered suppliers
+    const filteredSuppliers = useMemo(() => {
+        return suppliers.filter(s => {
+            const matchesSearch = !searchTerm || 
+                s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                s.mobile?.includes(searchTerm);
+            const matchesBalance = balanceFilter === 'all' || 
+                (balanceFilter === 'due' && s.balance > 0) ||
+                (balanceFilter === 'clear' && s.balance <= 0);
+            return matchesSearch && matchesBalance;
+        });
+    }, [suppliers, searchTerm, balanceFilter]);
+
+    const paginatedSuppliers = filteredSuppliers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
+    // Summary stats
+    const totalDue = suppliers.reduce((sum, s) => sum + Math.max(0, s.balance || 0), 0);
+    const totalAdvance = suppliers.reduce((sum, s) => sum + Math.abs(Math.min(0, s.balance || 0)), 0);
+
+    const showSuccess = (msg) => {
+        setSuccessMessage(msg);
+        setTimeout(() => setSuccessMessage(''), 3000);
+    };
+
+    // ========== QUICK ADD SUPPLIER ==========
+    const handleAddSupplier = async () => {
+        if (!newSupplier.name.trim()) {
+            alert('Supplier name is required');
             return;
         }
-        
+        setSaving(true);
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post('/api/suppliers', newSupplier, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            showSuccess(`✓ Added: ${newSupplier.name}`);
+            setNewSupplier({ name: '', mobile: '', openingBalance: 0 });
+            fetchSuppliers();
+            supplierNameRef.current?.focus();
+        } catch (error) {
+            alert('Error: ' + (error.response?.data?.message || error.message));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // ========== QUICK PAYMENT ==========
+    const handleQuickPayment = async () => {
+        if (!selectedSupplier) {
+            alert('Select a supplier');
+            return;
+        }
+        if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
+            alert('Enter valid amount');
+            return;
+        }
+        setSaving(true);
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post('/api/payments', {
+                partyType: 'supplier',
+                partyId: selectedSupplier.id,
+                partyName: selectedSupplier.name,
+                amount: parseFloat(paymentAmount),
+                paymentDate: moment(paymentDate).format('DD-MM-YYYY'),
+                referenceType: 'advance',
+                notes: paymentNotes
+            }, { headers: { Authorization: `Bearer ${token}` } });
+            
+            showSuccess(`✓ Paid ₹${parseFloat(paymentAmount).toLocaleString('en-IN')} to ${selectedSupplier.name}`);
+            setSelectedSupplier(null);
+            setPaymentAmount('');
+            setPaymentNotes('');
+            fetchSuppliers();
+        } catch (error) {
+            alert('Error: ' + (error.response?.data?.message || error.message));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // ========== QUICK PURCHASE ==========
+    const updatePurchaseItem = (index, field, value) => {
+        const items = [...purchaseItems];
+        items[index][field] = value;
+        items[index].total = (parseFloat(items[index].qty) || 0) * (parseFloat(items[index].price) || 0);
+        setPurchaseItems(items);
+    };
+
+    const addPurchaseRow = () => {
+        setPurchaseItems([...purchaseItems, { name: '', qty: '', price: '', total: 0 }]);
+    };
+
+    const removePurchaseRow = (index) => {
+        if (purchaseItems.length > 1) {
+            setPurchaseItems(purchaseItems.filter((_, i) => i !== index));
+        }
+    };
+
+    const purchaseTotal = purchaseItems.reduce((sum, item) => sum + (item.total || 0), 0);
+
+    const handleQuickPurchase = async () => {
+        if (!purchaseSupplier) {
+            alert('Select a supplier');
+            return;
+        }
+        const validItems = purchaseItems.filter(i => i.name && i.qty && i.price);
+        if (validItems.length === 0) {
+            alert('Add at least one item');
+            return;
+        }
+        setSaving(true);
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post('/api/purchases', {
+                supplierId: purchaseSupplier.id,
+                billNumber: purchaseBillNo,
+                billDate: moment(purchaseDate).format('DD-MM-YYYY'),
+                paymentStatus: 'unpaid',
+                paidAmount: 0,
+                subTotal: purchaseTotal,
+                tax: 0,
+                taxPercent: 0,
+                total: purchaseTotal,
+                purchaseItems: validItems.map(i => ({
+                    name: i.name,
+                    quantity: parseFloat(i.qty),
+                    price: parseFloat(i.price),
+                    totalPrice: i.total
+                }))
+            }, { headers: { Authorization: `Bearer ${token}` } });
+            
+            showSuccess(`✓ Purchase ₹${purchaseTotal.toLocaleString('en-IN')} from ${purchaseSupplier.name}`);
+            setPurchaseSupplier(null);
+            setPurchaseBillNo('');
+            setPurchaseItems([{ name: '', qty: '', price: '', total: 0 }]);
+            fetchSuppliers();
+        } catch (error) {
+            alert('Error: ' + (error.response?.data?.message || error.message));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // Delete
+    const handleDelete = async (id) => {
+        if (!window.confirm('Delete this supplier?')) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`/api/suppliers/${id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            fetchSuppliers();
+        } catch (error) {
+            alert('Error: ' + (error.response?.data?.message || error.message));
+        }
+    };
+
+    const handleDeletePurchase = async (purchaseId) => {
+        if (!window.confirm('Delete this purchase bill?')) return;
         try {
             const token = localStorage.getItem('token');
             await axios.delete(`/api/purchases/${purchaseId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            alert('Purchase bill deleted successfully!');
-            
-            // Refresh supplier details
             if (detailsDialog.supplier?.id) {
                 fetchSupplierDetails(detailsDialog.supplier.id);
             }
             fetchSuppliers();
         } catch (error) {
-            console.error('Error deleting purchase bill:', error);
-            alert('Error deleting purchase bill: ' + (error.response?.data?.message || error.message));
-        }
-    };
-
-    // Export to CSV
-    const handleExportCSV = () => {
-        const headers = ['Name', 'Mobile', 'GSTIN', 'Opening Balance', 'Total Purchases', 'Total Paid', 'Balance'];
-        const rows = filteredSuppliers.map(s => [
-            s.name || '',
-            s.mobile || '',
-            s.gstin || '',
-            (s.openingBalance || 0).toFixed(2),
-            (s.totalDebit || 0).toFixed(2),
-            (s.totalCredit || 0).toFixed(2),
-            (s.balance || 0).toFixed(2)
-        ]);
-        
-        const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `suppliers_${moment().format('YYYY-MM-DD')}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
-    };
-
-    // Open Add Purchase dialog
-    const handleOpenPurchaseDialog = (supplier) => {
-        setPurchaseDialog({ open: true, supplier });
-        setPurchaseItems([]);
-        setItemName('');
-        setItemQuantity('');
-        setItemPrice('');
-        setPurchaseTaxPercent(0);
-        setPurchaseBillNumber('');
-        setPurchaseBillDate(moment().format('YYYY-MM-DD'));
-    };
-
-    // Add item to purchase
-    const handleAddPurchaseItem = () => {
-        if (!itemName || !itemQuantity || !itemPrice) {
-            alert('Please enter item name, quantity and price');
-            return;
-        }
-        
-        const qty = parseFloat(itemQuantity) || 0;
-        const price = parseFloat(itemPrice) || 0;
-        const totalPrice = qty * price;
-        
-        const newItem = {
-            id: Date.now(),
-            name: itemName,
-            quantity: qty,
-            price: price,
-            totalPrice: totalPrice
-        };
-        
-        setPurchaseItems([...purchaseItems, newItem]);
-        setItemName('');
-        setItemQuantity('');
-        setItemPrice('');
-    };
-
-    // Remove item from purchase
-    const handleRemovePurchaseItem = (itemId) => {
-        setPurchaseItems(purchaseItems.filter(item => item.id !== itemId));
-    };
-
-    // Calculate purchase totals
-    const purchaseSubTotal = purchaseItems.reduce((sum, item) => sum + item.totalPrice, 0);
-    const purchaseTax = Math.round(purchaseSubTotal * (purchaseTaxPercent / 100));
-    const purchaseTotal = purchaseSubTotal + purchaseTax;
-
-    // Submit purchase bill
-    const handleSubmitPurchase = async () => {
-        if (purchaseItems.length === 0) {
-            alert('Please add at least one item to the purchase');
-            return;
-        }
-        
-        setPurchaseSubmitting(true);
-        
-        try {
-            const token = localStorage.getItem('token');
-            
-            const purchaseData = {
-                supplierId: purchaseDialog.supplier?.id,
-                billNumber: purchaseBillNumber,
-                billDate: moment(purchaseBillDate).format('DD-MM-YYYY'),
-                paymentStatus: 'unpaid',
-                paidAmount: 0,
-                subTotal: purchaseSubTotal,
-                tax: purchaseTax,
-                taxPercent: purchaseTaxPercent,
-                total: purchaseTotal,
-                purchaseItems: purchaseItems.map(item => ({
-                    name: item.name,
-                    quantity: item.quantity,
-                    price: item.price,
-                    totalPrice: item.totalPrice
-                }))
-            };
-            
-            const { data } = await axios.post('/api/purchases', purchaseData, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            
-            alert(`Purchase bill created successfully! Bill: ${purchaseBillNumber || 'Auto-generated'}`);
-            setPurchaseDialog({ open: false, supplier: null });
-            setPurchaseItems([]);
-            fetchSuppliers();
-            
-        } catch (error) {
-            console.error('Error creating purchase:', error);
-            alert('Error creating purchase: ' + (error.response?.data?.message || error.message));
-        } finally {
-            setPurchaseSubmitting(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchSuppliers();
-    }, []);
-
-    const handleOpenDialog = (supplier = null) => {
-        if (supplier) {
-            setEditingSupplier(supplier);
-            setFormData({
-                name: supplier.name,
-                mobile: supplier.mobile || '',
-                email: supplier.email || '',
-                address: supplier.address || '',
-                gstin: supplier.gstin || '',
-                openingBalance: supplier.openingBalance || 0
-            });
-        } else {
-            setEditingSupplier(null);
-            setFormData({ name: '', mobile: '', email: '', address: '', gstin: '', openingBalance: 0 });
-        }
-        setOpenDialog(true);
-    };
-
-    const handleCloseDialog = () => {
-        setOpenDialog(false);
-        setEditingSupplier(null);
-    };
-
-    const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-    };
-
-    const handleSubmit = async () => {
-        try {
-            if (editingSupplier) {
-                await updateSupplier(editingSupplier.id, formData);
-            } else {
-                await createSupplier(formData);
-            }
-            handleCloseDialog();
-            fetchSuppliers();
-        } catch (error) {
-            console.error('Error saving supplier:', error);
-            alert('Error saving supplier');
-        }
-    };
-
-    const handleDelete = async (supplierId) => {
-        if (window.confirm('Are you sure you want to delete this supplier?')) {
-            try {
-                await deleteSupplier(supplierId);
-                fetchSuppliers();
-            } catch (error) {
-                const errorMessage = error.response?.data?.message || 'Error deleting supplier.';
-                alert(errorMessage);
-            }
-        }
-    };
-
-    const openPaymentDialog = (supplier) => {
-        setPaymentForm({
-            amount: '',
-            referenceType: 'advance',
-            notes: '',
-            paymentDate: moment().format('YYYY-MM-DD')
-        });
-        setPaymentDialog({ open: true, supplier });
-    };
-
-    const handlePaymentSubmit = async () => {
-        if (!paymentForm.amount || parseFloat(paymentForm.amount) <= 0) {
-            alert('Please enter a valid amount');
-            return;
-        }
-
-        setSubmitting(true);
-        try {
-            const token = localStorage.getItem('token');
-            const payload = {
-                paymentDate: paymentForm.paymentDate,
-                partyType: 'supplier',
-                partyName: paymentDialog.supplier.name,
-                partyId: paymentDialog.supplier.id,
-                amount: parseFloat(paymentForm.amount),
-                referenceType: paymentForm.referenceType,
-                notes: paymentForm.notes
-            };
-
-            await axios.post('/api/payments', payload, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            alert(`Payment of ₹${parseFloat(paymentForm.amount).toLocaleString('en-IN')} to ${paymentDialog.supplier.name} recorded!`);
-            setPaymentDialog({ open: false, supplier: null });
-            fetchSuppliers();
-            
-            if (detailsDialog.open && detailsDialog.supplier?.id === paymentDialog.supplier.id) {
-                fetchSupplierDetails(paymentDialog.supplier.id);
-            }
-        } catch (error) {
-            console.error('Error recording payment:', error);
-            alert('Error recording payment. Please try again.');
-        } finally {
-            setSubmitting(false);
+            alert('Error: ' + (error.response?.data?.message || error.message));
         }
     };
 
     return (
-        <Box sx={{ p: 3 }}>
+        <Box sx={{ p: 2, bgcolor: '#f5f5f5', minHeight: '100vh' }}>
             {/* Header */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h4" sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 600 }}>
-                    <LocalShipping color="primary" /> Supplier Ledger
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h5" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <AccountBalance color="primary" /> Supplier Ledger
                 </Typography>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button variant="outlined" startIcon={<Download />} onClick={handleExportCSV} size="small">
-                        Export
-                    </Button>
-                    <IconButton onClick={fetchSuppliers} disabled={loading}>
-                        <Refresh />
-                    </IconButton>
-                    <Button variant="contained" onClick={() => handleOpenDialog()} startIcon={<Add />}>
-                        Add Supplier
-                    </Button>
-                </Box>
+                <Button size="small" startIcon={<Refresh />} onClick={fetchSuppliers}>Refresh</Button>
             </Box>
 
             {/* Summary Cards */}
-            <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={6} sm={2.4}>
-                    <Paper sx={{ p: 2, bgcolor: '#e3f2fd', borderLeft: '4px solid #1976d2' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                            <LocalShipping fontSize="small" color="primary" />
-                            <Typography variant="caption" color="text.secondary">Total Suppliers</Typography>
-                        </Box>
-                        <Typography variant="h4" color="primary" fontWeight="bold">{summary.totalSuppliers}</Typography>
-                    </Paper>
-                </Grid>
-                <Grid item xs={6} sm={2.4}>
-                    <Paper sx={{ p: 2, bgcolor: '#fff3e0', borderLeft: '4px solid #ff9800' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                            <AccountBalance fontSize="small" sx={{ color: '#ff9800' }} />
-                            <Typography variant="caption" color="text.secondary">With Balance</Typography>
-                        </Box>
-                        <Typography variant="h4" sx={{ color: '#ff9800', fontWeight: 'bold' }}>{summary.withBalance}</Typography>
-                    </Paper>
-                </Grid>
-                <Grid item xs={6} sm={2.4}>
-                    <Paper sx={{ p: 2, bgcolor: '#ffebee', borderLeft: '4px solid #f44336' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                            <TrendingDown fontSize="small" color="error" />
-                            <Typography variant="caption" color="text.secondary">Total Purchases</Typography>
-                        </Box>
-                        <Typography variant="h5" color="error" fontWeight="bold">
-                            ₹{summary.totalPurchases.toLocaleString('en-IN')}
-                        </Typography>
-                    </Paper>
-                </Grid>
-                <Grid item xs={6} sm={2.4}>
-                    <Paper sx={{ p: 2, bgcolor: '#e8f5e9', borderLeft: '4px solid #4caf50' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                            <AttachMoney fontSize="small" color="success" />
-                            <Typography variant="caption" color="text.secondary">Total Paid</Typography>
-                        </Box>
-                        <Typography variant="h5" color="success.main" fontWeight="bold">
-                            ₹{summary.totalPaid.toLocaleString('en-IN')}
-                        </Typography>
-                    </Paper>
-                </Grid>
-                <Grid item xs={12} sm={2.4}>
-                    <Paper sx={{ p: 2, bgcolor: '#fce4ec', borderLeft: '4px solid #e91e63' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                            <Receipt fontSize="small" sx={{ color: '#e91e63' }} />
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid item xs={6} sm={3}>
+                    <Card sx={{ bgcolor: '#fff3e0' }}>
+                        <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
                             <Typography variant="caption" color="text.secondary">Total Payable</Typography>
-                        </Box>
-                        <Typography variant="h5" sx={{ color: '#e91e63', fontWeight: 'bold' }}>
-                            ₹{summary.totalPayable.toLocaleString('en-IN')}
-                        </Typography>
-                    </Paper>
+                            <Typography variant="h6" sx={{ fontWeight: 700, color: 'warning.dark' }}>
+                                ₹{totalDue.toLocaleString('en-IN')}
+                            </Typography>
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                    <Card sx={{ bgcolor: '#e8f5e9' }}>
+                        <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                            <Typography variant="caption" color="text.secondary">Advance Given</Typography>
+                            <Typography variant="h6" sx={{ fontWeight: 700, color: 'success.dark' }}>
+                                ₹{totalAdvance.toLocaleString('en-IN')}
+                            </Typography>
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                    <Card>
+                        <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                            <Typography variant="caption" color="text.secondary">Total Suppliers</Typography>
+                            <Typography variant="h6" sx={{ fontWeight: 700 }}>{suppliers.length}</Typography>
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                    <Card>
+                        <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                            <Typography variant="caption" color="text.secondary">With Due</Typography>
+                            <Typography variant="h6" sx={{ fontWeight: 700, color: 'error.main' }}>
+                                {suppliers.filter(s => s.balance > 0).length}
+                            </Typography>
+                        </CardContent>
+                    </Card>
                 </Grid>
             </Grid>
 
-            {/* Search and Filter */}
-            <Card sx={{ mb: 2 }}>
-                <CardContent sx={{ py: 2 }}>
-                    <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} sm={6}>
-                            <TextField
-                                fullWidth
-                                size="small"
-                                placeholder="Search by name, mobile or GSTIN..."
-                                value={searchTerm}
-                                onChange={(e) => { setSearchTerm(e.target.value); setPage(0); }}
-                                InputProps={{
-                                    startAdornment: <InputAdornment position="start"><Search /></InputAdornment>
-                                }}
-                            />
-                        </Grid>
-                        <Grid item xs={6} sm={3}>
-                            <FormControl fullWidth size="small">
-                                <InputLabel>Balance Filter</InputLabel>
-                                <Select
-                                    value={balanceFilter}
-                                    label="Balance Filter"
-                                    onChange={(e) => { setBalanceFilter(e.target.value); setPage(0); }}
-                                >
-                                    <MenuItem value="all">All Suppliers</MenuItem>
-                                    <MenuItem value="with-balance">With Outstanding</MenuItem>
-                                    <MenuItem value="no-balance">No Outstanding</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={6} sm={3}>
-                            <Typography variant="body2" color="text.secondary">
-                                Showing {filteredSuppliers.length} of {suppliers.length} suppliers
-                            </Typography>
-                        </Grid>
-                    </Grid>
-                </CardContent>
-            </Card>
+            {/* Success Message */}
+            {successMessage && (
+                <Alert severity="success" icon={<CheckCircle />} sx={{ mb: 2, py: 0.5 }}>
+                    {successMessage}
+                </Alert>
+            )}
 
-            {/* Table */}
-            <Card>
-                <TableContainer>
-                    <Table size="small">
+            {/* Quick Entry Tabs */}
+            <Paper sx={{ mb: 2 }}>
+                <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                    <Tab icon={<PersonAdd />} label="Add Supplier" iconPosition="start" sx={{ minHeight: 48 }} />
+                    <Tab icon={<Payment />} label="Quick Payment" iconPosition="start" sx={{ minHeight: 48 }} />
+                    <Tab icon={<ShoppingBag />} label="Quick Purchase" iconPosition="start" sx={{ minHeight: 48 }} />
+                </Tabs>
+
+                <Box sx={{ p: 2 }}>
+                    {/* Tab 0: Add Supplier */}
+                    {activeTab === 0 && (
+                        <Grid container spacing={2} alignItems="center">
+                            <Grid item xs={12} sm={4}>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    label="Supplier Name *"
+                                    value={newSupplier.name}
+                                    onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value })}
+                                    inputRef={supplierNameRef}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAddSupplier()}
+                                />
+                            </Grid>
+                            <Grid item xs={6} sm={3}>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    label="Mobile"
+                                    value={newSupplier.mobile}
+                                    onChange={(e) => setNewSupplier({ ...newSupplier, mobile: e.target.value })}
+                                />
+                            </Grid>
+                            <Grid item xs={6} sm={3}>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    label="Opening Balance"
+                                    type="number"
+                                    value={newSupplier.openingBalance}
+                                    onChange={(e) => setNewSupplier({ ...newSupplier, openingBalance: parseFloat(e.target.value) || 0 })}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={2}>
+                                <Button
+                                    fullWidth
+                                    variant="contained"
+                                    onClick={handleAddSupplier}
+                                    disabled={saving}
+                                    startIcon={saving ? <CircularProgress size={16} /> : <Add />}
+                                >
+                                    Add
+                                </Button>
+                            </Grid>
+                        </Grid>
+                    )}
+
+                    {/* Tab 1: Quick Payment */}
+                    {activeTab === 1 && (
+                        <Grid container spacing={2} alignItems="center">
+                            <Grid item xs={12} sm={4}>
+                                <Autocomplete
+                                    size="small"
+                                    options={suppliers}
+                                    getOptionLabel={(o) => o.name || ''}
+                                    value={selectedSupplier}
+                                    onChange={(e, v) => setSelectedSupplier(v)}
+                                    renderInput={(params) => <TextField {...params} label="Supplier *" />}
+                                    renderOption={(props, option) => (
+                                        <li {...props}>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                                                <span>{option.name}</span>
+                                                {option.balance > 0 && (
+                                                    <Chip label={`₹${option.balance?.toLocaleString('en-IN')}`} size="small" color="error" sx={{ height: 20 }} />
+                                                )}
+                                            </Box>
+                                        </li>
+                                    )}
+                                />
+                            </Grid>
+                            <Grid item xs={6} sm={2}>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    label="Amount *"
+                                    type="number"
+                                    value={paymentAmount}
+                                    onChange={(e) => setPaymentAmount(e.target.value)}
+                                    InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
+                                />
+                            </Grid>
+                            <Grid item xs={6} sm={2}>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    type="date"
+                                    label="Date"
+                                    value={paymentDate}
+                                    onChange={(e) => setPaymentDate(e.target.value)}
+                                    InputLabelProps={{ shrink: true }}
+                                />
+                            </Grid>
+                            <Grid item xs={8} sm={2}>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    label="Notes"
+                                    value={paymentNotes}
+                                    onChange={(e) => setPaymentNotes(e.target.value)}
+                                />
+                            </Grid>
+                            <Grid item xs={4} sm={2}>
+                                <Button
+                                    fullWidth
+                                    variant="contained"
+                                    color="success"
+                                    onClick={handleQuickPayment}
+                                    disabled={saving}
+                                    startIcon={saving ? <CircularProgress size={16} /> : <Payment />}
+                                >
+                                    Pay
+                                </Button>
+                            </Grid>
+                            {selectedSupplier && selectedSupplier.balance > 0 && (
+                                <Grid item xs={12}>
+                                    <Alert severity="warning" sx={{ py: 0 }}>
+                                        Due: ₹{selectedSupplier.balance?.toLocaleString('en-IN')}
+                                        <Button size="small" sx={{ ml: 2 }} onClick={() => setPaymentAmount(selectedSupplier.balance)}>
+                                            Pay Full
+                                        </Button>
+                                    </Alert>
+                                </Grid>
+                            )}
+                        </Grid>
+                    )}
+
+                    {/* Tab 2: Quick Purchase */}
+                    {activeTab === 2 && (
+                        <Box>
+                            <Grid container spacing={2} sx={{ mb: 1 }}>
+                                <Grid item xs={12} sm={4}>
+                                    <Autocomplete
+                                        size="small"
+                                        options={suppliers}
+                                        getOptionLabel={(o) => o.name || ''}
+                                        value={purchaseSupplier}
+                                        onChange={(e, v) => setPurchaseSupplier(v)}
+                                        renderInput={(params) => <TextField {...params} label="Supplier *" />}
+                                    />
+                                </Grid>
+                                <Grid item xs={6} sm={2}>
+                                    <TextField
+                                        fullWidth
+                                        size="small"
+                                        label="Bill No"
+                                        value={purchaseBillNo}
+                                        onChange={(e) => setPurchaseBillNo(e.target.value)}
+                                        placeholder="Auto"
+                                    />
+                                </Grid>
+                                <Grid item xs={6} sm={2}>
+                                    <TextField
+                                        fullWidth
+                                        size="small"
+                                        type="date"
+                                        label="Date"
+                                        value={purchaseDate}
+                                        onChange={(e) => setPurchaseDate(e.target.value)}
+                                        InputLabelProps={{ shrink: true }}
+                                    />
+                                </Grid>
+                                <Grid item xs={6} sm={2}>
+                                    <Box sx={{ bgcolor: '#e3f2fd', p: 1, borderRadius: 1, textAlign: 'center' }}>
+                                        <Typography variant="caption">Total</Typography>
+                                        <Typography variant="body1" sx={{ fontWeight: 700 }}>₹{purchaseTotal.toLocaleString('en-IN')}</Typography>
+                                    </Box>
+                                </Grid>
+                                <Grid item xs={6} sm={2}>
+                                    <Button
+                                        fullWidth
+                                        variant="contained"
+                                        onClick={handleQuickPurchase}
+                                        disabled={saving}
+                                        startIcon={saving ? <CircularProgress size={16} /> : <Save />}
+                                        sx={{ height: '100%' }}
+                                    >
+                                        Save
+                                    </Button>
+                                </Grid>
+                            </Grid>
+                            
+                            <TableContainer sx={{ bgcolor: 'white', borderRadius: 1, maxHeight: 180 }}>
+                                <Table size="small">
+                                    <TableHead>
+                                        <TableRow sx={{ '& th': { bgcolor: '#f5f5f5', py: 0.5 } }}>
+                                            <TableCell>#</TableCell>
+                                            <TableCell>Item Name</TableCell>
+                                            <TableCell sx={{ width: 80 }}>Qty</TableCell>
+                                            <TableCell sx={{ width: 100 }}>Price</TableCell>
+                                            <TableCell sx={{ width: 100 }}>Total</TableCell>
+                                            <TableCell sx={{ width: 40 }}></TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {purchaseItems.map((item, idx) => (
+                                            <TableRow key={idx}>
+                                                <TableCell sx={{ py: 0.3 }}>{idx + 1}</TableCell>
+                                                <TableCell sx={{ py: 0.3 }}>
+                                                    <TextField
+                                                        fullWidth
+                                                        size="small"
+                                                        variant="standard"
+                                                        placeholder="Item"
+                                                        value={item.name}
+                                                        onChange={(e) => updatePurchaseItem(idx, 'name', e.target.value)}
+                                                    />
+                                                </TableCell>
+                                                <TableCell sx={{ py: 0.3 }}>
+                                                    <TextField
+                                                        fullWidth
+                                                        size="small"
+                                                        variant="standard"
+                                                        type="number"
+                                                        value={item.qty}
+                                                        onChange={(e) => updatePurchaseItem(idx, 'qty', e.target.value)}
+                                                    />
+                                                </TableCell>
+                                                <TableCell sx={{ py: 0.3 }}>
+                                                    <TextField
+                                                        fullWidth
+                                                        size="small"
+                                                        variant="standard"
+                                                        type="number"
+                                                        value={item.price}
+                                                        onChange={(e) => updatePurchaseItem(idx, 'price', e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' && idx === purchaseItems.length - 1) {
+                                                                addPurchaseRow();
+                                                            }
+                                                        }}
+                                                    />
+                                                </TableCell>
+                                                <TableCell sx={{ py: 0.3, fontWeight: 500 }}>₹{item.total.toLocaleString('en-IN')}</TableCell>
+                                                <TableCell sx={{ py: 0.3 }}>
+                                                    {purchaseItems.length > 1 && (
+                                                        <IconButton size="small" onClick={() => removePurchaseRow(idx)}>
+                                                            <Delete fontSize="small" color="error" />
+                                                        </IconButton>
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                            <Button size="small" startIcon={<Add />} onClick={addPurchaseRow} sx={{ mt: 1 }}>Add Row</Button>
+                        </Box>
+                    )}
+                </Box>
+            </Paper>
+
+            {/* Search and Filter */}
+            <Paper sx={{ p: 1.5, mb: 2, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                <TextField
+                    size="small"
+                    placeholder="Search supplier..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    InputProps={{ startAdornment: <InputAdornment position="start"><Search /></InputAdornment> }}
+                    sx={{ width: 250 }}
+                />
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                    <InputLabel>Balance</InputLabel>
+                    <Select value={balanceFilter} label="Balance" onChange={(e) => setBalanceFilter(e.target.value)}>
+                        <MenuItem value="all">All</MenuItem>
+                        <MenuItem value="due">With Due</MenuItem>
+                        <MenuItem value="clear">Clear/Advance</MenuItem>
+                    </Select>
+                </FormControl>
+            </Paper>
+
+            {/* Suppliers Table */}
+            <Paper>
+                <TableContainer sx={{ maxHeight: 400 }}>
+                    <Table size="small" stickyHeader>
                         <TableHead>
-                            <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                            <TableRow sx={{ '& th': { bgcolor: '#f5f5f5' } }}>
                                 <TableCell><strong>Supplier</strong></TableCell>
-                                <TableCell><strong>Contact</strong></TableCell>
-                                <TableCell align="right"><strong>Opening</strong></TableCell>
+                                <TableCell><strong>Mobile</strong></TableCell>
                                 <TableCell align="right"><strong>Purchases</strong></TableCell>
                                 <TableCell align="right"><strong>Paid</strong></TableCell>
                                 <TableCell align="right"><strong>Balance</strong></TableCell>
-                                <TableCell align="center" sx={{ width: 280 }}><strong>Actions</strong></TableCell>
+                                <TableCell align="center"><strong>Actions</strong></TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {loading ? (
                                 <TableRow>
-                                    <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                                        <CircularProgress size={32} />
+                                    <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                                        <CircularProgress size={24} />
                                     </TableCell>
                                 </TableRow>
                             ) : paginatedSuppliers.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                                        <Typography color="text.secondary">
-                                            {searchTerm || balanceFilter !== 'all' ? 'No suppliers match your filter' : 'No suppliers found'}
-                                        </Typography>
+                                    <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                                        <Typography color="text.secondary">No suppliers found</Typography>
                                     </TableCell>
                                 </TableRow>
                             ) : (
                                 paginatedSuppliers.map((supplier) => (
-                                    <TableRow key={supplier.id} hover sx={{ '&:hover': { bgcolor: '#f8f9fa' } }}>
-                                        <TableCell>
-                                            <Typography fontWeight="600">{supplier.name}</Typography>
-                                            {supplier.gstin && (
-                                                <Typography variant="caption" color="text.secondary">
-                                                    GSTIN: {supplier.gstin}
-                                                </Typography>
-                                            )}
-                                        </TableCell>
+                                    <TableRow key={supplier.id} hover>
+                                        <TableCell sx={{ fontWeight: 500 }}>{supplier.name}</TableCell>
                                         <TableCell>{supplier.mobile || '-'}</TableCell>
-                                        <TableCell align="right">
-                                            ₹{(supplier.openingBalance || 0).toLocaleString('en-IN')}
-                                        </TableCell>
-                                        <TableCell align="right" sx={{ color: 'error.main', fontWeight: 500 }}>
+                                        <TableCell align="right" sx={{ color: 'error.main' }}>
                                             ₹{(supplier.totalDebit || 0).toLocaleString('en-IN')}
                                         </TableCell>
-                                        <TableCell align="right" sx={{ color: 'success.main', fontWeight: 500 }}>
+                                        <TableCell align="right" sx={{ color: 'success.main' }}>
                                             ₹{(supplier.totalCredit || 0).toLocaleString('en-IN')}
                                         </TableCell>
                                         <TableCell align="right">
-                                            <Chip 
-                                                label={`₹${(supplier.balance || 0).toLocaleString('en-IN')}`}
-                                                color={(supplier.balance || 0) > 0 ? 'error' : 'success'}
+                                            <Chip
+                                                label={`₹${Math.abs(supplier.balance || 0).toLocaleString('en-IN')}`}
+                                                color={supplier.balance > 0 ? 'error' : supplier.balance < 0 ? 'success' : 'default'}
                                                 size="small"
-                                                sx={{ fontWeight: 'bold', minWidth: 80 }}
+                                                sx={{ fontWeight: 600 }}
                                             />
                                         </TableCell>
                                         <TableCell align="center">
-                                            <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center', flexWrap: 'wrap' }}>
-                                                <Button 
-                                                    size="small" 
-                                                    variant="outlined" 
-                                                    color="primary" 
-                                                    startIcon={<ShoppingBag />}
-                                                    onClick={() => handleOpenPurchaseDialog(supplier)}
-                                                    sx={{ fontSize: '0.7rem', py: 0.3, minWidth: 'auto' }}
-                                                >
-                                                    Bill
-                                                </Button>
-                                                <Button 
-                                                    size="small" 
-                                                    variant="outlined" 
-                                                    color="success" 
-                                                    startIcon={<Payment />}
-                                                    onClick={() => openPaymentDialog(supplier)}
-                                                    sx={{ fontSize: '0.7rem', py: 0.3, minWidth: 'auto' }}
-                                                >
-                                                    Pay
-                                                </Button>
-                                                <Button 
-                                                    size="small" 
-                                                    variant="contained" 
-                                                    color="info" 
-                                                    startIcon={<Visibility />}
-                                                    onClick={() => fetchSupplierDetails(supplier.id)}
-                                                    sx={{ fontSize: '0.7rem', py: 0.3, minWidth: 'auto' }}
-                                                >
-                                                    View
-                                                </Button>
-                                                <IconButton size="small" onClick={() => handleOpenDialog(supplier)}>
-                                                    <Edit fontSize="small" />
-                                                </IconButton>
-                                                <IconButton size="small" onClick={() => handleDelete(supplier.id)}>
-                                                    <Delete fontSize="small" color="error" />
-                                                </IconButton>
-                                            </Box>
+                                            <Button
+                                                size="small"
+                                                variant="outlined"
+                                                onClick={() => fetchSupplierDetails(supplier.id)}
+                                                sx={{ mr: 0.5, minWidth: 60 }}
+                                            >
+                                                View
+                                            </Button>
+                                            <IconButton size="small" onClick={() => handleDelete(supplier.id)}>
+                                                <Delete fontSize="small" color="error" />
+                                            </IconButton>
                                         </TableCell>
                                     </TableRow>
                                 ))
@@ -602,473 +665,158 @@ export const ListSuppliers = () => {
                     component="div"
                     count={filteredSuppliers.length}
                     page={page}
-                    onPageChange={(e, newPage) => setPage(newPage)}
+                    onPageChange={(e, p) => setPage(p)}
                     rowsPerPage={rowsPerPage}
-                    onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
-                    rowsPerPageOptions={[5, 10, 25, 50]}
+                    onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value)); setPage(0); }}
+                    rowsPerPageOptions={[10, 25, 50]}
                 />
-            </Card>
+            </Paper>
 
-            {/* Add/Edit Supplier Dialog */}
-            <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-                <DialogTitle sx={{ bgcolor: '#f5f5f5' }}>
-                    {editingSupplier ? 'Edit Supplier' : 'Add New Supplier'}
-                </DialogTitle>
-                <DialogContent>
-                    <TextField label="Name *" name="name" value={formData.name} onChange={handleChange} fullWidth margin="normal" autoFocus />
-                    <Grid container spacing={2}>
-                        <Grid item xs={6}>
-                            <TextField label="Mobile" name="mobile" value={formData.mobile} onChange={handleChange} fullWidth margin="normal" />
-                        </Grid>
-                        <Grid item xs={6}>
-                            <TextField label="Email" name="email" value={formData.email} onChange={handleChange} fullWidth margin="normal" />
-                        </Grid>
-                    </Grid>
-                    <TextField label="Address" name="address" value={formData.address} onChange={handleChange} fullWidth margin="normal" multiline rows={2} />
-                    <Grid container spacing={2}>
-                        <Grid item xs={6}>
-                            <TextField label="GSTIN" name="gstin" value={formData.gstin} onChange={handleChange} fullWidth margin="normal" />
-                        </Grid>
-                        <Grid item xs={6}>
-                            <TextField label="Opening Balance" name="openingBalance" type="number" value={formData.openingBalance} onChange={handleChange} fullWidth margin="normal" />
-                        </Grid>
-                    </Grid>
-                </DialogContent>
-                <DialogActions sx={{ p: 2 }}>
-                    <Button onClick={handleCloseDialog}>Cancel</Button>
-                    <Button onClick={handleSubmit} variant="contained" disabled={!formData.name}>
-                        {editingSupplier ? 'Update' : 'Create'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Payment Dialog */}
-            <Dialog open={paymentDialog.open} onClose={() => setPaymentDialog({ open: false, supplier: null })} maxWidth="sm" fullWidth>
-                <DialogTitle sx={{ bgcolor: '#e8f5e9' }}>
-                    Make Payment to {paymentDialog.supplier?.name}
-                </DialogTitle>
-                <DialogContent>
-                    <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-                        Current Balance: <strong>₹{(paymentDialog.supplier?.balance || 0).toLocaleString('en-IN')}</strong>
-                    </Alert>
-                    
-                    <TextField
-                        label="Payment Date"
-                        type="date"
-                        value={paymentForm.paymentDate}
-                        onChange={(e) => setPaymentForm({ ...paymentForm, paymentDate: e.target.value })}
-                        fullWidth
-                        margin="normal"
-                        InputLabelProps={{ shrink: true }}
-                    />
-                    
-                    <TextField
-                        label="Amount *"
-                        type="number"
-                        value={paymentForm.amount}
-                        onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                        fullWidth
-                        margin="normal"
-                        autoFocus
-                        InputProps={{
-                            startAdornment: <InputAdornment position="start">₹</InputAdornment>,
-                            inputProps: { min: 0, step: 0.01 }
-                        }}
-                    />
-                    
-                    <FormControl fullWidth margin="normal">
-                        <InputLabel>Payment Type</InputLabel>
-                        <Select
-                            value={paymentForm.referenceType}
-                            label="Payment Type"
-                            onChange={(e) => setPaymentForm({ ...paymentForm, referenceType: e.target.value })}
-                        >
-                            <MenuItem value="advance">Advance Payment</MenuItem>
-                            <MenuItem value="purchase">Against Purchase Bill</MenuItem>
-                            <MenuItem value="adjustment">Adjustment</MenuItem>
-                        </Select>
-                    </FormControl>
-                    
-                    <TextField
-                        label="Notes"
-                        value={paymentForm.notes}
-                        onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
-                        fullWidth
-                        margin="normal"
-                        multiline
-                        rows={2}
-                        placeholder="Optional notes"
-                    />
-                </DialogContent>
-                <DialogActions sx={{ p: 2 }}>
-                    <Button onClick={() => setPaymentDialog({ open: false, supplier: null })} disabled={submitting}>
-                        Cancel
-                    </Button>
-                    <Button 
-                        onClick={handlePaymentSubmit} 
-                        variant="contained" 
-                        color="success"
-                        disabled={submitting || !paymentForm.amount}
-                        startIcon={submitting ? <CircularProgress size={20} /> : <Payment />}
-                    >
-                        {submitting ? 'Recording...' : 'Record Payment'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Supplier Ledger Details Dialog */}
-            <Dialog 
-                open={detailsDialog.open} 
-                onClose={() => setDetailsDialog({ open: false, supplier: null, tab: 0 })}
-                maxWidth="lg"
-                fullWidth
-            >
-                <DialogTitle sx={{ bgcolor: '#fff3e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Receipt sx={{ color: '#ff9800' }} /> 
-                        <Box>
-                            <Typography variant="h6">{detailsDialog.supplier?.name}</Typography>
-                            <Typography variant="caption" color="text.secondary">
-                                {detailsDialog.supplier?.mobile}
-                            </Typography>
-                        </Box>
-                    </Box>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Button 
-                            variant="outlined" 
-                            size="small"
-                            startIcon={<ShoppingBag />}
-                            onClick={() => {
-                                setDetailsDialog({ ...detailsDialog, open: false });
-                                handleOpenPurchaseDialog(detailsDialog.supplier);
-                            }}
-                        >
-                            Add Purchase
-                        </Button>
-                        <Button 
-                            variant="contained" 
-                            color="success" 
-                            size="small"
-                            startIcon={<Payment />}
-                            onClick={() => {
-                                setDetailsDialog({ ...detailsDialog, open: false });
-                                openPaymentDialog(detailsDialog.supplier);
-                            }}
-                        >
-                            Make Payment
-                        </Button>
-                    </Box>
-                </DialogTitle>
-                <DialogContent>
-                    {detailsDialog.supplier && (
-                        <Box sx={{ mt: 2 }}>
-                            {/* Summary Cards */}
-                            <Grid container spacing={2} sx={{ mb: 3 }}>
-                                <Grid item xs={6} sm={3}>
-                                    <Paper sx={{ p: 2, bgcolor: '#f5f5f5', textAlign: 'center' }}>
-                                        <Typography variant="caption" color="text.secondary">Opening Balance</Typography>
+            {/* Details Dialog */}
+            <Dialog open={detailsDialog.open} onClose={() => setDetailsDialog({ open: false, supplier: null, tab: 0 })} maxWidth="md" fullWidth>
+                {detailsDialog.supplier && (
+                    <>
+                        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Typography variant="h6">{detailsDialog.supplier.name}</Typography>
+                            <IconButton onClick={() => setDetailsDialog({ open: false, supplier: null, tab: 0 })}>
+                                <Close />
+                            </IconButton>
+                        </DialogTitle>
+                        <DialogContent>
+                            <Grid container spacing={2} sx={{ mb: 2 }}>
+                                <Grid item xs={3}>
+                                    <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: '#e3f2fd' }}>
+                                        <Typography variant="caption">Opening</Typography>
                                         <Typography variant="h6">₹{(detailsDialog.supplier.openingBalance || 0).toLocaleString('en-IN')}</Typography>
                                     </Paper>
                                 </Grid>
-                                <Grid item xs={6} sm={3}>
-                                    <Paper sx={{ p: 2, bgcolor: '#ffebee', textAlign: 'center' }}>
-                                        <Typography variant="caption" color="text.secondary">Total Purchases</Typography>
-                                        <Typography variant="h6" color="error">₹{(detailsDialog.supplier.totalDebit || 0).toLocaleString('en-IN')}</Typography>
+                                <Grid item xs={3}>
+                                    <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: '#ffebee' }}>
+                                        <Typography variant="caption">Purchases</Typography>
+                                        <Typography variant="h6">₹{(detailsDialog.supplier.totalDebit || 0).toLocaleString('en-IN')}</Typography>
                                     </Paper>
                                 </Grid>
-                                <Grid item xs={6} sm={3}>
-                                    <Paper sx={{ p: 2, bgcolor: '#e8f5e9', textAlign: 'center' }}>
-                                        <Typography variant="caption" color="text.secondary">Total Paid</Typography>
-                                        <Typography variant="h6" color="success.main">₹{(detailsDialog.supplier.totalCredit || 0).toLocaleString('en-IN')}</Typography>
+                                <Grid item xs={3}>
+                                    <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: '#e8f5e9' }}>
+                                        <Typography variant="caption">Paid</Typography>
+                                        <Typography variant="h6">₹{(detailsDialog.supplier.totalCredit || 0).toLocaleString('en-IN')}</Typography>
                                     </Paper>
                                 </Grid>
-                                <Grid item xs={6} sm={3}>
-                                    <Paper sx={{ p: 2, bgcolor: (detailsDialog.supplier.balance || 0) > 0 ? '#ffebee' : '#e8f5e9', textAlign: 'center' }}>
-                                        <Typography variant="caption" color="text.secondary">Balance Due</Typography>
-                                        <Typography variant="h6" fontWeight="bold" color={(detailsDialog.supplier.balance || 0) > 0 ? 'error' : 'success.main'}>
-                                            ₹{(detailsDialog.supplier.balance || 0).toLocaleString('en-IN')}
+                                <Grid item xs={3}>
+                                    <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: detailsDialog.supplier.balance > 0 ? '#fff3e0' : '#e8f5e9' }}>
+                                        <Typography variant="caption">Balance</Typography>
+                                        <Typography variant="h6" sx={{ color: detailsDialog.supplier.balance > 0 ? 'warning.dark' : 'success.dark' }}>
+                                            ₹{Math.abs(detailsDialog.supplier.balance || 0).toLocaleString('en-IN')}
                                         </Typography>
                                     </Paper>
                                 </Grid>
                             </Grid>
 
-                            <Tabs value={detailsDialog.tab} onChange={(e, v) => setDetailsDialog({ ...detailsDialog, tab: v })} sx={{ mb: 2 }}>
-                                <Tab label={`Purchase Bills (${detailsDialog.supplier.purchases?.length || 0})`} />
+                            <Tabs value={detailsDialog.tab} onChange={(e, v) => setDetailsDialog({ ...detailsDialog, tab: v })}>
+                                <Tab label={`Purchases (${detailsDialog.supplier.purchases?.length || 0})`} />
                                 <Tab label={`Payments (${detailsDialog.supplier.payments?.length || 0})`} />
                             </Tabs>
 
                             {detailsDialog.tab === 0 && (
-                                detailsDialog.supplier.purchases?.length > 0 ? (
-                                    <TableContainer sx={{ maxHeight: 400 }}>
-                                        <Table size="small" stickyHeader>
-                                            <TableHead>
-                                                <TableRow sx={{ bgcolor: '#ffebee' }}>
-                                                    <TableCell sx={{ width: 40 }}></TableCell>
-                                                    <TableCell><strong>Bill No</strong></TableCell>
-                                                    <TableCell><strong>Date</strong></TableCell>
-                                                    <TableCell align="right"><strong>Total</strong></TableCell>
-                                                    <TableCell align="right"><strong>Paid</strong></TableCell>
-                                                    <TableCell align="right"><strong>Due</strong></TableCell>
-                                                    <TableCell><strong>Status</strong></TableCell>
-                                                    <TableCell align="center"><strong>Action</strong></TableCell>
+                                <TableContainer sx={{ maxHeight: 300, mt: 1 }}>
+                                    <Table size="small">
+                                        <TableHead>
+                                            <TableRow sx={{ '& th': { bgcolor: '#ffebee' } }}>
+                                                <TableCell width={40}></TableCell>
+                                                <TableCell>Bill No</TableCell>
+                                                <TableCell>Date</TableCell>
+                                                <TableCell align="right">Total</TableCell>
+                                                <TableCell>Status</TableCell>
+                                                <TableCell align="center">Action</TableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {detailsDialog.supplier.purchases?.length === 0 ? (
+                                                <TableRow>
+                                                    <TableCell colSpan={6} align="center">No purchases</TableCell>
                                                 </TableRow>
-                                            </TableHead>
-                                            <TableBody>
-                                                {detailsDialog.supplier.purchases.map((purchase) => (
+                                            ) : (
+                                                detailsDialog.supplier.purchases?.map((p) => (
                                                     <>
-                                                        <TableRow 
-                                                            key={purchase.id} 
-                                                            hover 
-                                                            sx={{ 
-                                                                cursor: 'pointer',
-                                                                '& > *': { borderBottom: expandedPurchase === purchase.id ? 'none' : undefined }
-                                                            }}
-                                                            onClick={() => setExpandedPurchase(expandedPurchase === purchase.id ? null : purchase.id)}
-                                                        >
+                                                        <TableRow key={p.id} hover sx={{ cursor: 'pointer' }} onClick={() => setExpandedPurchase(expandedPurchase === p.id ? null : p.id)}>
                                                             <TableCell>
                                                                 <IconButton size="small">
-                                                                    {expandedPurchase === purchase.id ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
+                                                                    {expandedPurchase === p.id ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
                                                                 </IconButton>
                                                             </TableCell>
-                                                            <TableCell sx={{ fontWeight: 500 }}>{purchase.billNumber || '-'}</TableCell>
-                                                            <TableCell>
-                                                                {purchase.billDate ? 
-                                                                    moment(purchase.billDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('DD/MM/YYYY') 
-                                                                    : '-'}
-                                                            </TableCell>
-                                                            <TableCell align="right" sx={{ color: 'error.main', fontWeight: 500 }}>
-                                                                ₹{(purchase.total || 0).toLocaleString('en-IN')}
-                                                            </TableCell>
-                                                            <TableCell align="right">₹{(purchase.paidAmount || 0).toLocaleString('en-IN')}</TableCell>
-                                                            <TableCell align="right">₹{(purchase.dueAmount || 0).toLocaleString('en-IN')}</TableCell>
-                                                            <TableCell>
-                                                                <Chip label={purchase.paymentStatus} size="small" color={purchase.paymentStatus === 'paid' ? 'success' : 'warning'} />
-                                                            </TableCell>
+                                                            <TableCell>{p.billNumber || '-'}</TableCell>
+                                                            <TableCell>{p.billDate ? moment(p.billDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('DD/MM/YY') : '-'}</TableCell>
+                                                            <TableCell align="right" sx={{ fontWeight: 600, color: 'error.main' }}>₹{(p.total || 0).toLocaleString('en-IN')}</TableCell>
+                                                            <TableCell><Chip label={p.paymentStatus} size="small" color={p.paymentStatus === 'paid' ? 'success' : 'warning'} /></TableCell>
                                                             <TableCell align="center" onClick={(e) => e.stopPropagation()}>
-                                                                <Tooltip title="Delete Purchase Bill">
-                                                                    <IconButton 
-                                                                        size="small" 
-                                                                        color="error"
-                                                                        onClick={() => handleDeletePurchaseBill(purchase.id)}
-                                                                    >
-                                                                        <Delete fontSize="small" />
-                                                                    </IconButton>
-                                                                </Tooltip>
+                                                                <IconButton size="small" color="error" onClick={() => handleDeletePurchase(p.id)}>
+                                                                    <Delete fontSize="small" />
+                                                                </IconButton>
                                                             </TableCell>
                                                         </TableRow>
-                                                        <TableRow key={`${purchase.id}-items`}>
-                                                            <TableCell colSpan={8} sx={{ py: 0, bgcolor: '#fafafa' }}>
-                                                                <Collapse in={expandedPurchase === purchase.id} timeout="auto" unmountOnExit>
-                                                                    <Box sx={{ py: 2, px: 3 }}>
-                                                                        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600, color: '#1976d2' }}>
-                                                                            Items in this Purchase Bill ({purchase.purchaseItems?.length || 0})
-                                                                        </Typography>
-                                                                        {purchase.purchaseItems && purchase.purchaseItems.length > 0 ? (
-                                                                            <Table size="small" sx={{ bgcolor: 'white', borderRadius: 1 }}>
-                                                                                <TableHead>
-                                                                                    <TableRow sx={{ bgcolor: '#e3f2fd' }}>
-                                                                                        <TableCell><strong>Item Name</strong></TableCell>
-                                                                                        <TableCell align="right"><strong>Qty</strong></TableCell>
-                                                                                        <TableCell align="right"><strong>Price</strong></TableCell>
-                                                                                        <TableCell align="right"><strong>Total</strong></TableCell>
-                                                                                    </TableRow>
-                                                                                </TableHead>
-                                                                                <TableBody>
-                                                                                    {purchase.purchaseItems.map((item, idx) => (
-                                                                                        <TableRow key={item.id || idx}>
-                                                                                            <TableCell>{item.name}</TableCell>
-                                                                                            <TableCell align="right">{item.quantity}</TableCell>
-                                                                                            <TableCell align="right">₹{(item.price || 0).toLocaleString('en-IN')}</TableCell>
-                                                                                            <TableCell align="right" sx={{ fontWeight: 500 }}>
-                                                                                                ₹{(item.totalPrice || 0).toLocaleString('en-IN')}
-                                                                                            </TableCell>
-                                                                                        </TableRow>
-                                                                                    ))}
-                                                                                </TableBody>
-                                                                            </Table>
-                                                                        ) : (
-                                                                            <Typography variant="body2" color="text.secondary">
-                                                                                No items found for this purchase bill
-                                                                            </Typography>
-                                                                        )}
-                                                                    </Box>
-                                                                </Collapse>
-                                                            </TableCell>
-                                                        </TableRow>
+                                                        {expandedPurchase === p.id && (
+                                                            <TableRow>
+                                                                <TableCell colSpan={6} sx={{ bgcolor: '#fafafa', py: 0 }}>
+                                                                    <Collapse in={true}>
+                                                                        <Box sx={{ p: 1.5 }}>
+                                                                            <Typography variant="caption" sx={{ fontWeight: 600, color: '#1976d2' }}>Items:</Typography>
+                                                                            {p.purchaseItems?.map((item, idx) => (
+                                                                                <Typography key={idx} variant="body2">
+                                                                                    {item.name} - {item.quantity} x ₹{item.price} = ₹{item.totalPrice}
+                                                                                </Typography>
+                                                                            ))}
+                                                                            {(!p.purchaseItems || p.purchaseItems.length === 0) && (
+                                                                                <Typography variant="body2" color="text.secondary">No items</Typography>
+                                                                            )}
+                                                                        </Box>
+                                                                    </Collapse>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        )}
                                                     </>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </TableContainer>
-                                ) : (
-                                    <Alert severity="info" sx={{ mt: 2 }}>
-                                        No purchase bills found. Click "Add Purchase" button above to create one.
-                                    </Alert>
-                                )
+                                                ))
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
                             )}
 
                             {detailsDialog.tab === 1 && (
-                                detailsDialog.supplier.payments?.length > 0 ? (
-                                    <TableContainer sx={{ maxHeight: 350 }}>
-                                        <Table size="small" stickyHeader>
-                                            <TableHead>
-                                                <TableRow sx={{ bgcolor: '#e8f5e9' }}>
-                                                    <TableCell><strong>Payment #</strong></TableCell>
-                                                    <TableCell><strong>Date</strong></TableCell>
-                                                    <TableCell align="right"><strong>Amount</strong></TableCell>
-                                                    <TableCell><strong>Type</strong></TableCell>
-                                                    <TableCell><strong>Notes</strong></TableCell>
+                                <TableContainer sx={{ maxHeight: 300, mt: 1 }}>
+                                    <Table size="small">
+                                        <TableHead>
+                                            <TableRow sx={{ '& th': { bgcolor: '#e8f5e9' } }}>
+                                                <TableCell>Payment #</TableCell>
+                                                <TableCell>Date</TableCell>
+                                                <TableCell align="right">Amount</TableCell>
+                                                <TableCell>Notes</TableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {detailsDialog.supplier.payments?.length === 0 ? (
+                                                <TableRow>
+                                                    <TableCell colSpan={4} align="center">No payments</TableCell>
                                                 </TableRow>
-                                            </TableHead>
-                                            <TableBody>
-                                                {detailsDialog.supplier.payments.map((payment) => (
-                                                    <TableRow key={payment.id} hover>
-                                                        <TableCell>{payment.paymentNumber}</TableCell>
-                                                        <TableCell>
-                                                            {payment.paymentDate ? 
-                                                                moment(payment.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('DD/MM/YYYY') 
-                                                                : '-'}
-                                                        </TableCell>
-                                                        <TableCell align="right" sx={{ color: 'success.main', fontWeight: 'bold' }}>
-                                                            ₹{(payment.amount || 0).toLocaleString('en-IN')}
-                                                        </TableCell>
-                                                        <TableCell><Chip label={payment.referenceType} size="small" variant="outlined" /></TableCell>
-                                                        <TableCell>{payment.notes || '-'}</TableCell>
+                                            ) : (
+                                                detailsDialog.supplier.payments?.map((p) => (
+                                                    <TableRow key={p.id} hover>
+                                                        <TableCell>{p.paymentNumber}</TableCell>
+                                                        <TableCell>{p.paymentDate ? moment(p.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('DD/MM/YY') : '-'}</TableCell>
+                                                        <TableCell align="right" sx={{ fontWeight: 600, color: 'success.main' }}>₹{(p.amount || 0).toLocaleString('en-IN')}</TableCell>
+                                                        <TableCell>{p.notes || '-'}</TableCell>
                                                     </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </TableContainer>
-                                ) : (
-                                    <Alert severity="info">No payments found. Click "Make Payment" to add one.</Alert>
-                                )
+                                                ))
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
                             )}
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDetailsDialog({ open: false, supplier: null, tab: 0 })}>Close</Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Add Purchase Dialog */}
-            <Dialog open={purchaseDialog.open} onClose={() => !purchaseSubmitting && setPurchaseDialog({ open: false, supplier: null })} maxWidth="md" fullWidth>
-                <DialogTitle sx={{ bgcolor: '#fff3e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Box>
-                        <Typography variant="h6">
-                            <ShoppingBag sx={{ mr: 1, verticalAlign: 'middle' }} />
-                            Purchase Bill - {purchaseDialog.supplier?.name}
-                        </Typography>
-                        {purchaseDialog.supplier?.mobile && (
-                            <Typography variant="caption" color="text.secondary">{purchaseDialog.supplier.mobile}</Typography>
-                        )}
-                    </Box>
-                    <IconButton onClick={() => !purchaseSubmitting && setPurchaseDialog({ open: false, supplier: null })}><Close /></IconButton>
-                </DialogTitle>
-                <DialogContent dividers>
-                    {/* Bill Info */}
-                    <Grid container spacing={2} sx={{ mb: 3 }}>
-                        <Grid item xs={12} sm={6}>
-                            <TextField
-                                fullWidth
-                                size="small"
-                                label="Bill Number"
-                                value={purchaseBillNumber}
-                                onChange={(e) => setPurchaseBillNumber(e.target.value)}
-                                placeholder="Optional"
-                            />
-                        </Grid>
-                        <Grid item xs={12} sm={6}>
-                            <TextField
-                                fullWidth
-                                size="small"
-                                label="Bill Date"
-                                type="date"
-                                value={purchaseBillDate}
-                                onChange={(e) => setPurchaseBillDate(e.target.value)}
-                                InputLabelProps={{ shrink: true }}
-                            />
-                        </Grid>
-                    </Grid>
-
-                    <Divider sx={{ mb: 2 }} />
-
-                    {/* Add Items */}
-                    <Grid container spacing={2} sx={{ mb: 2 }}>
-                        <Grid item xs={12} md={4}>
-                            <TextField size="small" fullWidth label="Item Name *" value={itemName} onChange={(e) => setItemName(e.target.value)} />
-                        </Grid>
-                        <Grid item xs={6} md={2}>
-                            <TextField size="small" fullWidth label="Qty *" type="number" value={itemQuantity} onChange={(e) => setItemQuantity(e.target.value)} inputProps={{ step: '0.01', min: '0' }} />
-                        </Grid>
-                        <Grid item xs={6} md={2}>
-                            <TextField size="small" fullWidth label="Price *" type="number" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} inputProps={{ step: '0.01', min: '0' }} />
-                        </Grid>
-                        <Grid item xs={6} md={2}>
-                            <Typography variant="body2" color="text.secondary">Total</Typography>
-                            <Typography variant="h6" color="primary">₹{((parseFloat(itemQuantity) || 0) * (parseFloat(itemPrice) || 0)).toLocaleString('en-IN')}</Typography>
-                        </Grid>
-                        <Grid item xs={6} md={2}>
-                            <Button variant="contained" onClick={handleAddPurchaseItem} disabled={!itemName || !itemQuantity || !itemPrice} fullWidth sx={{ height: '100%' }} startIcon={<Add />}>Add</Button>
-                        </Grid>
-                    </Grid>
-
-                    {purchaseItems.length > 0 ? (
-                        <TableContainer component={Paper} sx={{ mb: 2 }}>
-                            <Table size="small">
-                                <TableHead>
-                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                                        <TableCell><strong>Item</strong></TableCell>
-                                        <TableCell align="right"><strong>Qty</strong></TableCell>
-                                        <TableCell align="right"><strong>Price</strong></TableCell>
-                                        <TableCell align="right"><strong>Total</strong></TableCell>
-                                        <TableCell align="center"></TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {purchaseItems.map((item) => (
-                                        <TableRow key={item.id}>
-                                            <TableCell>{item.name}</TableCell>
-                                            <TableCell align="right">{item.quantity}</TableCell>
-                                            <TableCell align="right">₹{item.price.toLocaleString('en-IN')}</TableCell>
-                                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>₹{item.totalPrice.toLocaleString('en-IN')}</TableCell>
-                                            <TableCell align="center">
-                                                <IconButton size="small" color="error" onClick={() => handleRemovePurchaseItem(item.id)}><Delete fontSize="small" /></IconButton>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    ) : (
-                        <Alert severity="info" sx={{ mb: 2 }}>Enter item details and click Add to add items</Alert>
-                    )}
-
-                    <Grid container justifyContent="flex-end">
-                        <Grid item xs={12} md={4}>
-                            <Paper sx={{ p: 2, bgcolor: '#f9f9f9' }}>
-                                <Grid container spacing={1}>
-                                    <Grid item xs={6}><Typography>Sub Total:</Typography></Grid>
-                                    <Grid item xs={6}><Typography align="right">₹{purchaseSubTotal.toLocaleString('en-IN')}</Typography></Grid>
-                                    <Grid item xs={6}>
-                                        <TextField size="small" label="Tax %" type="number" value={purchaseTaxPercent} onChange={(e) => setPurchaseTaxPercent(parseFloat(e.target.value) || 0)} sx={{ width: 80 }} />
-                                    </Grid>
-                                    <Grid item xs={6}><Typography align="right">₹{purchaseTax.toLocaleString('en-IN')}</Typography></Grid>
-                                    <Grid item xs={12}><Divider sx={{ my: 1 }} /></Grid>
-                                    <Grid item xs={6}><Typography variant="h6" fontWeight="bold">Total:</Typography></Grid>
-                                    <Grid item xs={6}><Typography variant="h6" fontWeight="bold" align="right" color="error">₹{purchaseTotal.toLocaleString('en-IN')}</Typography></Grid>
-                                </Grid>
-                            </Paper>
-                        </Grid>
-                    </Grid>
-                </DialogContent>
-                <DialogActions sx={{ p: 2 }}>
-                    <Button onClick={() => setPurchaseDialog({ open: false, supplier: null })} disabled={purchaseSubmitting}>Cancel</Button>
-                    <Button variant="contained" color="primary" onClick={handleSubmitPurchase} disabled={purchaseItems.length === 0 || purchaseSubmitting} startIcon={purchaseSubmitting ? <CircularProgress size={20} /> : <Receipt />}>
-                        {purchaseSubmitting ? 'Creating...' : 'Create Purchase Bill'}
-                    </Button>
-                </DialogActions>
+                        </DialogContent>
+                    </>
+                )}
             </Dialog>
         </Box>
     );
 };
+
+export default ListSuppliers;
