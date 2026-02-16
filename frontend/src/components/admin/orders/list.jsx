@@ -559,6 +559,26 @@ export const ListOrders = () => {
                     <DialogContentText>
                         Are you sure you want to change the payment status of order <strong>{orderToToggle?.orderNumber}</strong>?
                     </DialogContentText>
+                    
+                    {/* Mandatory Name Field for Audit */}
+                    <Box sx={{ mt: 2, p: 2, bgcolor: 'primary.50', borderRadius: 1, border: '1px solid', borderColor: 'primary.200' }}>
+                        <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Person fontSize="small" color="primary" /> Your Name (Required for Audit)
+                        </Typography>
+                        <TextField
+                            value={changedByName}
+                            onChange={(e) => setChangedByName(e.target.value)}
+                            fullWidth
+                            size="small"
+                            placeholder="Enter your name"
+                            required
+                            error={!changedByName?.trim()}
+                            helperText={!changedByName?.trim() ? 'Your name is required to record this change' : ''}
+                            data-testid="changed-by-name-input"
+                            autoFocus
+                        />
+                    </Box>
+                    
                     <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
                         <Typography variant="body2">
                             <strong>Customer:</strong> {orderToToggle?.customerName || 'Walk-in'}
