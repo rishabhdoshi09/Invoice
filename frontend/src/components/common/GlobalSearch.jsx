@@ -113,7 +113,7 @@ export const GlobalSearch = ({ onClose }) => {
         <ClickAwayListener onClickAway={() => onClose?.()}>
             <Box sx={{ position: 'relative', width: '100%', maxWidth: 600 }}>
                 <TextField
-                    ref={inputRef}
+                    inputRef={inputRef}
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={handleKeyDown}
