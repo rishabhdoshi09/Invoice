@@ -135,6 +135,12 @@ export const ListOrders = () => {
         
         const newStatus = orderToToggle.paymentStatus === 'paid' ? 'unpaid' : 'paid';
         
+        // Validate changedByName is required for audit trail
+        if (!changedByName?.trim()) {
+            alert('Your name is required to record this change');
+            return;
+        }
+        
         // Validate customer name is required when toggling to unpaid
         if (newStatus === 'unpaid' && !customerInfo.customerName?.trim()) {
             alert('Customer name is required when marking as Unpaid');
@@ -146,7 +152,10 @@ export const ListOrders = () => {
             const token = localStorage.getItem('token');
             
             // Include customer info when toggling to unpaid
-            const payload = { newStatus };
+            const payload = { 
+                newStatus,
+                changedBy: changedByName.trim() // Mandatory audit field
+            };
             if (newStatus === 'unpaid') {
                 payload.customerName = customerInfo.customerName.trim();
                 payload.customerMobile = customerInfo.customerMobile?.trim() || '';
@@ -173,6 +182,7 @@ export const ListOrders = () => {
             setCustomerInfo({ customerName: '', customerMobile: '' });
             setSelectedCustomer(null);
             setIsNewCustomer(false);
+            setChangedByName('');
         }
     };
 
