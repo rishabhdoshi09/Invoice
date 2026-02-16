@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
     Dialog, DialogTitle, DialogContent, Box, Typography, Grid,
-    List, ListItem, ListItemText, Divider, IconButton, Chip, Paper
+    List, ListItem, IconButton, Chip, Paper
 } from '@mui/material';
 import { Close, Keyboard } from '@mui/icons-material';
 
