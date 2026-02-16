@@ -436,7 +436,7 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 ---
 
 ## Last Updated
-February 10, 2026
+February 16, 2026
 
 ---
 
