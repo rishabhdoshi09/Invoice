@@ -193,6 +193,7 @@ export const ListOrders = () => {
         setCustomerInfo({ customerName: '', customerMobile: '' });
         setSelectedCustomer(null);
         setIsNewCustomer(false);
+        setChangedByName('');
     };
 
     // Fetch orders function
