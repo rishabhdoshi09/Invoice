@@ -15,9 +15,12 @@ const SCROLL_FILTERS_KEY = 'orders_filters';
 export const ListOrders = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch();
-    const { isAdmin } = useAuth();
+    const { isAdmin, isBillingStaff, user } = useAuth();
     const scrollRestoredRef = useRef(false);
     const isInitialLoadRef = useRef(true);
+    
+    // Both admin and billing staff can toggle payment status
+    const canToggleStatus = isAdmin || isBillingStaff;
 
     // Get orders from Redux store
     const { orders } = useSelector((state) => state.orderState);
