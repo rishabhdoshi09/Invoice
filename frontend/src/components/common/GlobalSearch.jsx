@@ -22,7 +22,11 @@ export const GlobalSearch = ({ onClose }) => {
 
     // Focus input on mount
     useEffect(() => {
-        inputRef.current?.focus();
+        // Use setTimeout to ensure the DOM is ready
+        const timer = setTimeout(() => {
+            inputRef.current?.focus();
+        }, 100);
+        return () => clearTimeout(timer);
     }, []);
 
     // Flatten results for keyboard navigation
