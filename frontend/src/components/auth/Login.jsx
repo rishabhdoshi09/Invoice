@@ -75,6 +75,8 @@ export const Login = () => {
                 name: formData.name,
                 email: formData.email || undefined
             });
+            // Navigate to orders page after successful setup
+            navigate('/orders', { replace: true });
         } catch (err) {
             setError(err.toString());
         } finally {
