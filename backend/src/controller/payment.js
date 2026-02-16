@@ -29,13 +29,34 @@ module.exports = {
 
                 if (value.partyType === 'customer') {
                     // Customer payment received: Cash/Bank (Debit) to Customer (Credit)
-                    // Only lookup customer if partyId is provided
+                    // Look up customer by partyId first, then by name
                     let customer = null;
                     if (value.partyId) {
                         customer = await Services.customer.getCustomer({ id: value.partyId });
-                    } else if (value.partyName) {
-                        // Try to find customer by name
-                        customer = await db.customer.findOne({ where: { name: value.partyName } });
+                    }
+                    
+                    // If not found by ID, try to find or create by name
+                    if (!customer && value.partyName && value.partyName.trim()) {
+                        customer = await db.customer.findOne({ 
+                            where: { name: value.partyName.trim() },
+                            transaction
+                        });
+                        
+                        // If customer doesn't exist, CREATE it
+                        if (!customer) {
+                            const uuidv4 = require('uuid/v4');
+                            customer = await db.customer.create({
+                                id: uuidv4(),
+                                name: value.partyName.trim(),
+                                mobile: value.partyMobile || null,
+                                openingBalance: 0,
+                                currentBalance: 0
+                            }, { transaction });
+                            console.log(`Created new customer from payment: ${customer.name} (ID: ${customer.id})`);
+                        }
+                        
+                        // Update payment with the correct partyId
+                        await response.update({ partyId: customer.id }, { transaction });
                     }
                     
                     // Always record the cash receipt
@@ -66,7 +87,7 @@ module.exports = {
                     if (customer) {
                         await customer.update({
                             currentBalance: Math.max(0, (customer.currentBalance || 0) - value.amount)
-                        });
+                        }, { transaction });
                     }
                 } else if (value.partyType === 'supplier') {
                     // Supplier payment made: Supplier (Debit) to Cash/Bank (Credit)
