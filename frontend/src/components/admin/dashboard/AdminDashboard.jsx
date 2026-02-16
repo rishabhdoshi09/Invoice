@@ -1,16 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Box, Card, CardContent, Typography, Grid, Table, TableBody, TableCell,
     TableContainer, TableHead, TableRow, Paper, Chip, Button, Alert,
-    CircularProgress, IconButton, Dialog, DialogTitle, DialogContent,
-    DialogActions, List, ListItem, ListItemText, ListItemIcon, Divider,
-    LinearProgress, Tooltip, Badge
+    CircularProgress, Dialog, DialogTitle, DialogContent,
+    DialogActions, Tooltip
 } from '@mui/material';
 import {
     Refresh, TrendingUp, TrendingDown, People, LocalShipping,
-    Receipt, Payment, Warning, CheckCircle, Error, ShoppingCart,
-    AccountBalance, Build, Link, LinkOff, Phone, ArrowForward
+    Receipt, Payment, Warning, CheckCircle, ShoppingCart,
+    AccountBalance, Build, Link, LinkOff, ArrowForward
 } from '@mui/icons-material';
 import { useAuth } from '../../../context/AuthContext';
 import axios from 'axios';
@@ -18,7 +17,7 @@ import moment from 'moment';
 
 export const AdminDashboard = () => {
     const navigate = useNavigate();
-    const { user, isAdmin } = useAuth();
+    const { user } = useAuth();
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState(null);
     const [integrityIssues, setIntegrityIssues] = useState(null);
