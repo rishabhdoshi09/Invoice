@@ -57,6 +57,7 @@ export const ListOrders = () => {
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [isNewCustomer, setIsNewCustomer] = useState(false);
     const [loadingCustomers, setLoadingCustomers] = useState(false);
+    const [changedByName, setChangedByName] = useState(''); // Mandatory name for audit
 
     // Fetch customers for autocomplete
     const fetchCustomers = async () => {
