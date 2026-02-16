@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { Snackbar, Alert, Box, Typography, IconButton, Slide, Badge } from '@mui/material';
+import { createContext, useContext, useState, useCallback } from 'react';
+import { Alert, Box, Typography, IconButton, Slide, Badge } from '@mui/material';
 import { 
     CheckCircle, Warning, Error, Info, Close, 
     TrendingUp, TrendingDown, Receipt, Payment,
