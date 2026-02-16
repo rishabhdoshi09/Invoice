@@ -89,6 +89,7 @@ export const Layout = () =>  {
 
     const [open, setOpen] = useState(false);
     const [anchorEl, setAnchorEl] = useState(null);
+    const [showSearch, setShowSearch] = useState(false);
 
     const handleDrawerOpen = () => {
         setOpen(true);
@@ -111,6 +112,19 @@ export const Layout = () =>  {
         await logout();
         navigate('/login');
     };
+
+    // Global keyboard shortcut for search (Ctrl+K)
+    const handleKeyDown = useCallback((e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            setShowSearch(true);
+        }
+    }, []);
+
+    useEffect(() => {
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [handleKeyDown]);
 
     const pages = [
         {
