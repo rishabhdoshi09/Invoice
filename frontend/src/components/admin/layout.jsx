@@ -115,6 +115,9 @@ export const Layout = () =>  {
         navigate('/login');
     };
 
+    // Keyboard shortcuts help dialog
+    const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
     // Global keyboard shortcut for search (Ctrl+K)
     const handleKeyDown = useCallback((e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
