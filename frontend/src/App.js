@@ -24,6 +24,9 @@ import { DayStart } from "./components/admin/dayStart/DayStart";
 import { GstExportTool } from "./components/admin/gstExport/GstExportTool";
 import { StockManagement } from "./components/admin/stock/StockManagement";
 import { CircularProgress, Box } from "@mui/material";
+import { NotificationProvider } from "./components/common/SmartNotifications";
+import { FloatingStatsWidget } from "./components/common/FloatingStats";
+import { KeyboardShortcutsHelp, useKeyboardShortcutsHelp } from "./components/common/KeyboardShortcuts";
 
 const theme = createTheme();
 
