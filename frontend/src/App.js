@@ -56,6 +56,7 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
 // App content with auth
 const AppContent = () => {
   const { loading, isAuthenticated, setupRequired } = useAuth();
+  const { helpOpen, closeHelp } = useKeyboardShortcutsHelp();
 
   if (loading) {
     return (
@@ -70,47 +71,55 @@ const AppContent = () => {
   }
 
   return (
-    <Routes>
-      <Route path="" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-        <Route index element={<Navigate to="/products" replace />} />
-        <Route path="products" element={<ListProjects />} />
-        <Route path="orders">
-          <Route index path="" element={<ListOrders />} />
-          <Route path="create" element={<CreateOrder />} />
-          <Route path="edit/:orderId" element={<EditOrder />} />
+    <>
+      <Routes>
+        <Route path="" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route index element={<Navigate to="/products" replace />} />
+          <Route path="products" element={<ListProjects />} />
+          <Route path="orders">
+            <Route index path="" element={<ListOrders />} />
+            <Route path="create" element={<CreateOrder />} />
+            <Route path="edit/:orderId" element={<EditOrder />} />
+          </Route>
+          <Route path="suppliers" element={<ListSuppliers />} />
+          <Route path="customers" element={<ListCustomers />} />
+          <Route path="purchases" element={<ListPurchases />} />
+          <Route path="payments" element={<ListPayments />} />
+          <Route path="daily-payments" element={<DailyPayments />} />
+          <Route path="stock" element={<StockManagement />} />
+          <Route path="reports">
+            <Route index element={<OutstandingReports />} />
+            <Route path="outstanding" element={<OutstandingReports />} />
+          </Route>
+          <Route path="tally-export" element={<TallyExport />} />
+          <Route path="gst-export" element={<ProtectedRoute adminOnly><GstExportTool /></ProtectedRoute>} />
+          <Route path="day-start" element={<DayStart />} />
+          <Route 
+            path="admin-dashboard" 
+            element={
+              <ProtectedRoute adminOnly>
+                <AdminDashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="users" 
+            element={
+              <ProtectedRoute adminOnly>
+                <UserManagement />
+              </ProtectedRoute>
+            } 
+          />
         </Route>
-        <Route path="suppliers" element={<ListSuppliers />} />
-        <Route path="customers" element={<ListCustomers />} />
-        <Route path="purchases" element={<ListPurchases />} />
-        <Route path="payments" element={<ListPayments />} />
-        <Route path="daily-payments" element={<DailyPayments />} />
-        <Route path="stock" element={<StockManagement />} />
-        <Route path="reports">
-          <Route index element={<OutstandingReports />} />
-          <Route path="outstanding" element={<OutstandingReports />} />
-        </Route>
-        <Route path="tally-export" element={<TallyExport />} />
-        <Route path="gst-export" element={<ProtectedRoute adminOnly><GstExportTool /></ProtectedRoute>} />
-        <Route path="day-start" element={<DayStart />} />
-        <Route 
-          path="admin-dashboard" 
-          element={
-            <ProtectedRoute adminOnly>
-              <AdminDashboard />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="users" 
-          element={
-            <ProtectedRoute adminOnly>
-              <UserManagement />
-            </ProtectedRoute>
-          } 
-        />
-      </Route>
-      <Route path="login" element={<Login />} />
-    </Routes>
+        <Route path="login" element={<Login />} />
+      </Routes>
+      
+      {/* Floating Stats Widget */}
+      <FloatingStatsWidget />
+      
+      {/* Keyboard Shortcuts Help Dialog */}
+      <KeyboardShortcutsHelp open={helpOpen} onClose={closeHelp} />
+    </>
   );
 };
 
