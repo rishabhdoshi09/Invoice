@@ -2,8 +2,10 @@ import { useEffect, useState, useCallback } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { styled, useTheme } from '@mui/material/styles';
 import { Box, CssBaseline, Divider, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, AppBar as MuiAppBar, Drawer as MuiDrawer, Toolbar, Typography, Button, Chip, Menu, MenuItem, Tooltip } from '@mui/material';
-import { ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, Folder as FolderIcon, Menu as MenuIcon, Shop, People, ShoppingCart, Payment, Assessment, CloudDownload, Dashboard, Logout, AccountCircle, Group, Today, AccountBalance, Calculate, Inventory, Search } from '@mui/icons-material';
+import { ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, Folder as FolderIcon, Menu as MenuIcon, Shop, People, ShoppingCart, Payment, Assessment, CloudDownload, Dashboard, Logout, AccountCircle, Group, Today, AccountBalance, Calculate, Inventory, Search, Keyboard, HelpOutline } from '@mui/icons-material';
 import { GlobalSearch } from '../common/GlobalSearch';
+import { NotificationBell } from '../common/SmartNotifications';
+import { KeyboardShortcutsHelp } from '../common/KeyboardShortcuts';
 import { useSelector, useDispatch } from 'react-redux';
 
 import { Loader } from '../common/loader';
