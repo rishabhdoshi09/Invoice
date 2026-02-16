@@ -707,15 +707,15 @@ module.exports = {
             // Create audit log (outside transaction - non-critical)
             await createAuditLog({
                 userId: req.user?.id,
-                userName: req.user?.name || req.user?.username,
+                userName: changedByTrimmed, // Use the provided name
                 userRole: req.user?.role || 'unknown',
                 action: 'UPDATE',
                 entityType: 'ORDER_PAYMENT_STATUS',
                 entityId: orderId,
                 entityName: order.orderNumber,
                 oldValues: { paymentStatus: oldStatus, paidAmount: order.paidAmount },
-                newValues: { paymentStatus: newStatus, paidAmount: newStatus === 'paid' ? order.total : 0 },
-                description: `Changed payment status from ${oldStatus} to ${newStatus} for order ${order.orderNumber}`,
+                newValues: { paymentStatus: newStatus, paidAmount: newStatus === 'paid' ? order.total : 0, changedBy: changedByTrimmed },
+                description: `${changedByTrimmed} changed payment status from ${oldStatus} to ${newStatus} for order ${order.orderNumber}`,
                 ipAddress: getClientIP(req),
                 userAgent: req.headers['user-agent']
             });
