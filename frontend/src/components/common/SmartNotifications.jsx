@@ -21,10 +21,6 @@ const NOTIFICATION_CONFIG = {
     trend_down: { icon: TrendingDown, color: 'warning', bgcolor: '#fff3e0' },
 };
 
-function SlideTransition(props) {
-    return <Slide {...props} direction="left" />;
-}
-
 export const NotificationProvider = ({ children }) => {
     const [notifications, setNotifications] = useState([]);
     const [history, setHistory] = useState([]);
