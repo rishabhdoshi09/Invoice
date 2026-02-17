@@ -119,12 +119,12 @@ module.exports = {
     },
 
     // List suppliers with calculated balance (NOT stored balance)
-    // This ensures balance is always accurate from actual transactions
-    // Balance = Opening + Total Purchases - Total Payments Made
-    // This matches the logic in getSupplierWithTransactions
+    // Balance = Opening + Sum of dueAmount from all purchase bills (actual unpaid amounts)
     listSuppliersWithBalance: async (params = {}) => {
         try {
             // Get all suppliers with dynamically calculated balance
+            // Balance is calculated as: openingBalance + sum of dueAmount from all purchase bills
+            // This represents the actual amount still owed to each supplier
             const suppliers = await db.sequelize.query(`
                 SELECT 
                     s.id,
@@ -138,27 +138,26 @@ module.exports = {
                     s."updatedAt",
                     COALESCE(s."openingBalance", 0) + 
                     COALESCE((
-                        SELECT SUM(total) 
+                        SELECT SUM("dueAmount") 
                         FROM "purchaseBills" 
                         WHERE "supplierId" = s.id
-                    ), 0) -
-                    COALESCE((
-                        SELECT SUM(amount) 
-                        FROM payments 
-                        WHERE "partyId" = s.id
-                        AND "partyType" = 'supplier'
                     ), 0) as balance,
                     COALESCE((
                         SELECT SUM(total) 
                         FROM "purchaseBills" 
                         WHERE "supplierId" = s.id
-                    ), 0) as "totalDebit",
+                    ), 0) as "totalPurchases",
+                    COALESCE((
+                        SELECT SUM("paidAmount") 
+                        FROM "purchaseBills" 
+                        WHERE "supplierId" = s.id
+                    ), 0) as "totalPaid",
                     COALESCE((
                         SELECT SUM(amount) 
                         FROM payments 
                         WHERE "partyId" = s.id
                         AND "partyType" = 'supplier'
-                    ), 0) as "totalCredit"
+                    ), 0) as "totalPayments"
                 FROM suppliers s
                 ORDER BY s.name ASC
             `, { type: db.Sequelize.QueryTypes.SELECT });
