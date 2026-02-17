@@ -96,16 +96,25 @@ module.exports = {
             });
 
             // Calculate totals
-            // Debit = Opening + Sales (what they owe us)
-            const totalDebit = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0) + (Number(customer.openingBalance) || 0);
-            // Credit = Payments received
-            const totalCredit = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-            const balance = totalDebit - totalCredit; // Positive = they owe us
+            // Total Sales = sum of all order totals
+            const totalSales = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+            // Total Received = sum of paidAmount from orders (NOT from payments table, as payments may be separate)
+            const totalPaidOnInvoices = orders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
+            // Additional receipts from payments table
+            const totalReceipts = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            
+            // Balance = Opening + Sum of all due amounts from orders
+            // This is the actual amount still owed
+            const totalDueFromOrders = orders.reduce((sum, o) => sum + (Number(o.dueAmount) || 0), 0);
+            const balance = (Number(customer.openingBalance) || 0) + totalDueFromOrders;
 
             return {
                 ...customer.toJSON(),
-                totalDebit,
-                totalCredit,
+                totalDebit: totalSales + (Number(customer.openingBalance) || 0),
+                totalCredit: totalReceipts,
+                totalSales,
+                totalPaidOnInvoices,
+                totalReceipts,
                 balance,
                 orders,
                 payments
