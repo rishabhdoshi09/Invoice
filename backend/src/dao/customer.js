@@ -122,7 +122,8 @@ module.exports = {
     listCustomersWithBalance: async (params = {}) => {
         try {
             // Get all customers with dynamically calculated balance
-            // Include orders matched by customerId OR customerName (for legacy data)
+            // Balance = Opening + Total Sales - Total Payments Received
+            // This matches the logic in getCustomerWithTransactions
             const customers = await db.sequelize.query(`
                 SELECT 
                     c.id,
@@ -136,11 +137,10 @@ module.exports = {
                     c."updatedAt",
                     COALESCE(c."openingBalance", 0) + 
                     COALESCE((
-                        SELECT SUM("dueAmount") 
+                        SELECT SUM(total) 
                         FROM orders 
                         WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
-                        AND "isDeleted" = false 
-                        AND "paymentStatus" != 'paid'
+                        AND "isDeleted" = false
                     ), 0) -
                     COALESCE((
                         SELECT SUM(amount) 
