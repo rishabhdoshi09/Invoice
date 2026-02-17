@@ -120,7 +120,8 @@ module.exports = {
 
     // List suppliers with calculated balance (NOT stored balance)
     // This ensures balance is always accurate from actual transactions
-    // IMPORTANT: Only match payments by partyId to prevent name collision issues
+    // Balance = Opening + Total Purchases - Total Payments Made
+    // This matches the logic in getSupplierWithTransactions
     listSuppliersWithBalance: async (params = {}) => {
         try {
             // Get all suppliers with dynamically calculated balance
@@ -137,10 +138,9 @@ module.exports = {
                     s."updatedAt",
                     COALESCE(s."openingBalance", 0) + 
                     COALESCE((
-                        SELECT SUM("dueAmount") 
+                        SELECT SUM(total) 
                         FROM "purchaseBills" 
-                        WHERE "supplierId" = s.id 
-                        AND "paymentStatus" != 'paid'
+                        WHERE "supplierId" = s.id
                     ), 0) -
                     COALESCE((
                         SELECT SUM(amount) 
