@@ -210,6 +210,13 @@ export const api = createApi({
             providesTags: (result, error, date) => [{ type: 'Dashboard', id: date }],
         }),
         
+        // Get real-time summary (calculated directly from orders - bypasses cache)
+        getRealTimeSummary: builder.query({
+            query: (date) => `/dashboard/summary/realtime/${date}`,
+            transformResponse: (response) => response.data,
+            providesTags: (result, error, date) => [{ type: 'Dashboard', id: `realtime-${date}` }],
+        }),
+        
         setOpeningBalance: builder.mutation({
             query: (amount) => ({
                 url: '/dashboard/summary/opening-balance',
