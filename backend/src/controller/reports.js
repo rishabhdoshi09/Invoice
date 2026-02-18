@@ -3,106 +3,74 @@ const db = require('../models');
 const { Op } = require('sequelize');
 
 module.exports = {
+    // Get outstanding receivables - calculated from orders (single source of truth)
     getOutstandingReceivables: async (req, res) => {
         try {
-            // Customer map to track all receivables
-            const customerMap = {};
+            // Use the same calculation as listCustomersWithBalance for consistency
+            // This calculates balance as: openingBalance + SUM(dueAmount from orders)
+            const customersWithBalance = await db.sequelize.query(`
+                SELECT 
+                    c.id as "customerId",
+                    c.name as "customerName",
+                    c.mobile as "customerMobile",
+                    COALESCE(c."openingBalance", 0) as "openingBalance",
+                    COALESCE(c."openingBalance", 0) + COALESCE((
+                        SELECT SUM("dueAmount") 
+                        FROM orders 
+                        WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
+                        AND "isDeleted" = false
+                    ), 0) as "totalOutstanding",
+                    COALESCE((
+                        SELECT COUNT(*) 
+                        FROM orders 
+                        WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
+                        AND "isDeleted" = false
+                        AND "dueAmount" > 0
+                    ), 0) as "orderCount"
+                FROM customers c
+                WHERE COALESCE(c."openingBalance", 0) + COALESCE((
+                    SELECT SUM("dueAmount") 
+                    FROM orders 
+                    WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
+                    AND "isDeleted" = false
+                ), 0) > 0
+                ORDER BY "totalOutstanding" DESC
+            `, { type: db.Sequelize.QueryTypes.SELECT });
 
-            // 1. Get customers with opening balance (currentBalance > 0)
-            const customersWithBalance = await db.customer.findAll({
-                where: {
-                    currentBalance: { [Op.gt]: 0 }
-                },
-                attributes: ['id', 'name', 'mobile', 'currentBalance', 'openingBalance']
-            });
+            // Get order details for each customer
+            const receivables = await Promise.all(customersWithBalance.map(async (customer) => {
+                const orders = await db.order.findAll({
+                    where: {
+                        [Op.or]: [
+                            { customerId: customer.customerId },
+                            { customerName: customer.customerName, customerId: null }
+                        ],
+                        isDeleted: false,
+                        dueAmount: { [Op.gt]: 0 }
+                    },
+                    attributes: ['id', 'orderNumber', 'orderDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus'],
+                    order: [['orderDate', 'DESC']]
+                });
 
-            // Add customers with balance to the map
-            customersWithBalance.forEach(customer => {
-                const name = (customer.name || '').trim();
-                if (name && customer.currentBalance > 0) {
-                    customerMap[name] = {
-                        customerId: customer.id,
-                        customerName: name,
-                        name: name,
-                        customerMobile: customer.mobile || '',
-                        totalOutstanding: customer.currentBalance,
-                        outstanding: customer.currentBalance,
-                        openingBalance: customer.openingBalance || 0,
-                        orderCount: 0,
-                        count: 0,
-                        orders: [],
-                        hasOpeningBalance: true
-                    };
-                }
-            });
-
-            // 2. Get outstanding receivables from orders (credit sales)
-            const unpaidOrders = await db.order.findAll({
-                where: {
-                    isDeleted: false,
-                    [Op.or]: [
-                        { paymentStatus: { [Op.in]: ['unpaid', 'partial'] } },
-                        { dueAmount: { [Op.gt]: 0 } },
-                        db.Sequelize.literal('"paidAmount" < "total"')
-                    ]
-                },
-                attributes: ['id', 'orderNumber', 'orderDate', 'customerName', 'customerMobile', 'customerId', 'total', 'paidAmount', 'dueAmount', 'paymentStatus'],
-                order: [['customerName', 'ASC'], ['orderDate', 'DESC']]
-            });
-
-            // Add/merge orders into customer map
-            unpaidOrders.forEach(order => {
-                const name = (order.customerName || '').trim() || 'Walk-in Customer';
-                
-                // Calculate due amount
-                let due = 0;
-                if (order.dueAmount != null && order.dueAmount > 0) {
-                    due = order.dueAmount;
-                } else {
-                    due = (order.total || 0) - (order.paidAmount || 0);
-                }
-                
-                if (due > 0) {
-                    if (!customerMap[name]) {
-                        // New customer from orders
-                        customerMap[name] = {
-                            customerId: order.customerId,
-                            customerName: name,
-                            name: name,
-                            customerMobile: order.customerMobile || '',
-                            totalOutstanding: 0,
-                            outstanding: 0,
-                            openingBalance: 0,
-                            orderCount: 0,
-                            count: 0,
-                            orders: [],
-                            hasOpeningBalance: false
-                        };
-                    }
-                    
-                    // Don't double count - if customer has opening balance, 
-                    // orders are already included in currentBalance
-                    if (!customerMap[name].hasOpeningBalance) {
-                        customerMap[name].totalOutstanding += due;
-                        customerMap[name].outstanding = customerMap[name].totalOutstanding;
-                    }
-                    
-                    customerMap[name].orderCount += 1;
-                    customerMap[name].count = customerMap[name].orderCount;
-                    customerMap[name].orders.push({
-                        id: order.id,
-                        orderNumber: order.orderNumber,
-                        orderDate: order.orderDate,
-                        total: order.total,
-                        paidAmount: order.paidAmount || 0,
-                        dueAmount: due,
-                        paymentStatus: order.paymentStatus || 'unpaid'
-                    });
-                }
-            });
-
-            const receivables = Object.values(customerMap).filter(c => c.totalOutstanding > 0);
-            receivables.sort((a, b) => b.totalOutstanding - a.totalOutstanding);
+                return {
+                    ...customer,
+                    name: customer.customerName,
+                    outstanding: Number(customer.totalOutstanding),
+                    totalOutstanding: Number(customer.totalOutstanding),
+                    count: Number(customer.orderCount),
+                    orderCount: Number(customer.orderCount),
+                    openingBalance: Number(customer.openingBalance),
+                    orders: orders.map(o => ({
+                        id: o.id,
+                        orderNumber: o.orderNumber,
+                        orderDate: o.orderDate,
+                        total: Number(o.total),
+                        paidAmount: Number(o.paidAmount) || 0,
+                        dueAmount: Number(o.dueAmount),
+                        paymentStatus: o.paymentStatus || 'unpaid'
+                    }))
+                };
+            }));
 
             const totalReceivable = receivables.reduce((sum, c) => sum + c.totalOutstanding, 0);
 
@@ -122,22 +90,84 @@ module.exports = {
         }
     },
 
+    // Get outstanding payables - calculated from purchase bills (single source of truth)
     getOutstandingPayables: async (req, res) => {
         try {
-            // Supplier map to track all payables
-            const supplierMap = {};
+            // Use the same calculation as listSuppliersWithBalance for consistency
+            const suppliersWithBalance = await db.sequelize.query(`
+                SELECT 
+                    s.id as "supplierId",
+                    s.name as "supplierName",
+                    s.mobile as "supplierMobile",
+                    COALESCE(s."openingBalance", 0) as "openingBalance",
+                    COALESCE(s."openingBalance", 0) + COALESCE((
+                        SELECT SUM("dueAmount") 
+                        FROM "purchaseBills" 
+                        WHERE "supplierId" = s.id
+                    ), 0) as "totalOutstanding",
+                    COALESCE((
+                        SELECT COUNT(*) 
+                        FROM "purchaseBills" 
+                        WHERE "supplierId" = s.id
+                        AND "dueAmount" > 0
+                    ), 0) as "billCount"
+                FROM suppliers s
+                WHERE COALESCE(s."openingBalance", 0) + COALESCE((
+                    SELECT SUM("dueAmount") 
+                    FROM "purchaseBills" 
+                    WHERE "supplierId" = s.id
+                ), 0) > 0
+                ORDER BY "totalOutstanding" DESC
+            `, { type: db.Sequelize.QueryTypes.SELECT });
 
-            // 1. Get suppliers with opening balance (currentBalance > 0)
-            const suppliersWithBalance = await db.supplier.findAll({
-                where: {
-                    currentBalance: { [Op.gt]: 0 }
-                },
-                attributes: ['id', 'name', 'mobile', 'currentBalance', 'openingBalance']
+            // Get purchase details for each supplier
+            const payables = await Promise.all(suppliersWithBalance.map(async (supplier) => {
+                const purchases = await db.purchaseBill.findAll({
+                    where: {
+                        supplierId: supplier.supplierId,
+                        dueAmount: { [Op.gt]: 0 }
+                    },
+                    attributes: ['id', 'billNumber', 'billDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus'],
+                    order: [['billDate', 'DESC']]
+                });
+
+                return {
+                    ...supplier,
+                    name: supplier.supplierName,
+                    outstanding: Number(supplier.totalOutstanding),
+                    totalOutstanding: Number(supplier.totalOutstanding),
+                    count: Number(supplier.billCount),
+                    billCount: Number(supplier.billCount),
+                    openingBalance: Number(supplier.openingBalance),
+                    purchases: purchases.map(p => ({
+                        id: p.id,
+                        billNumber: p.billNumber,
+                        billDate: p.billDate,
+                        total: Number(p.total),
+                        paidAmount: Number(p.paidAmount) || 0,
+                        dueAmount: Number(p.dueAmount),
+                        paymentStatus: p.paymentStatus || 'unpaid'
+                    }))
+                };
+            }));
+
+            const totalPayable = payables.reduce((sum, s) => sum + s.totalOutstanding, 0);
+
+            return res.status(200).send({
+                status: 200,
+                message: 'outstanding payables fetched successfully',
+                data: payables,
+                totalPayable: totalPayable
             });
 
-            // Add suppliers with balance to the map
-            suppliersWithBalance.forEach(supplier => {
-                if (supplier.currentBalance > 0) {
+        } catch (error) {
+            console.log(error);
+            return res.status(500).send({
+                status: 500,
+                message: error.message
+            });
+        }
+    },
                     supplierMap[supplier.id] = {
                         supplierId: supplier.id,
                         supplierName: supplier.name,
