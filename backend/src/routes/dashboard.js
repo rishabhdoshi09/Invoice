@@ -19,6 +19,9 @@ module.exports = (router) => {
     router.get('/dashboard/summary/date/:date', authenticate, Controller.getSummaryByDate);
     router.get('/dashboard/summary/range', authenticate, Controller.getSummariesInRange);
     
+    // Real-time summary - calculated directly from orders (bypasses cache)
+    router.get('/dashboard/summary/realtime/:date', authenticate, Controller.getRealTimeSummary);
+    
     // Admin only - day management
     router.post('/dashboard/summary/close/:date', authenticate, authorize('admin'), Controller.closeDay);
     router.post('/dashboard/summary/reopen/:date', authenticate, authorize('admin'), Controller.reopenDay);
