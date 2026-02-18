@@ -5,7 +5,49 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 
 ---
 
-## Critical Updates (February 16, 2026 - Latest)
+## Critical Updates (February 18, 2026 - Latest)
+
+### ✅ DayStart Page Data Integrity Fix
+
+**User Issue:** DayStart page showed incorrect Cash Sales compared to database queries. The dailySummary cache was out of sync.
+
+**Root Cause:**
+- The `dailySummary` table stored cached values that could get out of sync with actual orders
+- The frontend was using stale cached data instead of real-time calculations
+
+**Solution Implemented:**
+1. **Real-time Summary Endpoint**: Created `GET /api/dashboard/summary/realtime/:date` that calculates directly from orders table
+2. **Frontend Update**: DayStart.jsx now uses `useGetRealTimeSummaryQuery` hook for accurate data
+3. **Added Missing Imports**: Added Recharts imports (ResponsiveContainer, BarChart, PieChart, etc.)
+4. **Fixed Undefined Variables**: Added `totalSales` and `totalReceivables` derived variables
+
+**Files Modified:**
+- `backend/src/services/dailySummary.js` - Added `getRealTimeSummary` function
+- `backend/src/controller/dashboard.js` - Added real-time endpoint at line 317-334
+- `frontend/src/components/admin/dayStart/DayStart.jsx` - Fixed imports and variables, uses real-time data
+
+**Verification:**
+- Cash Sales: ₹1,000 (correct - only PAID orders)
+- Credit Sales: ₹2,500 (correct - UNPAID orders, marked as "not in drawer")
+- Database query matches UI exactly
+
+**Test Report:** `/app/test_reports/iteration_11.json` - 100% pass rate
+
+---
+
+### ✅ Customer Receipts Display Verified
+
+**User Issue:** Customer receipts were not showing after a UI update.
+
+**Investigation Result:** The backend API `GET /api/customers/:id/transactions` correctly returns the `payments` array with all receipt details. The Receipts tab in the customer details dialog renders this data correctly.
+
+**Test Data Created:**
+- Test Customer 2: 1 payment receipt of ₹500 (PAY-1018E311)
+- Verified: Receipts tab shows payment history with receipt number, date, amount, notes
+
+---
+
+## Critical Updates (February 16, 2026)
 
 ### ✅ Major Smart Application Enhancement - Phase 2
 
