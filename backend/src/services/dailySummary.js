@@ -388,11 +388,27 @@ module.exports = {
         // Total business done (all orders regardless of payment status)
         const totalBusinessDone = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
         
-        // Get payments for this date
+        // Get payments for this date - try multiple date formats
+        const dateYYYYMMDD = moment(date).format('YYYY-MM-DD');
+        const dateDDMMYYYY_dash = moment(date).format('DD-MM-YYYY');
+        const dateDDMMYYYY_slash = moment(date).format('DD/MM/YYYY');
+        
         const payments = await db.payment.findAll({
             where: {
-                paymentDate: dateDDMMYYYY
+                [db.Sequelize.Op.or]: [
+                    { paymentDate: dateDDMMYYYY },
+                    { paymentDate: dateDDMMYYYY_dash },
+                    { paymentDate: dateDDMMYYYY_slash },
+                    { paymentDate: dateYYYYMMDD }
+                ]
             }
+        });
+        
+        console.log(`[getRealTimeSummary] Date: ${dateDDMMYYYY}, Payments found: ${payments.length}`);
+        console.log(`[getRealTimeSummary] Payments breakdown:`, {
+            customer: payments.filter(p => p.partyType === 'customer').length,
+            supplier: payments.filter(p => p.partyType === 'supplier').length,
+            expense: payments.filter(p => p.partyType === 'expense').length
         });
         
         // Get IDs of TODAY's orders
