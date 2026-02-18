@@ -196,6 +196,11 @@ module.exports = {
                 if (value.referenceType === 'order' && value.referenceId) {
                     const order = await Services.order.getOrder({ id: value.referenceId });
                     if (order) {
+                        // Check if order is already paid - prevent double payment
+                        if (order.paymentStatus === 'paid') {
+                            throw new Error(`Order ${order.orderNumber} is already marked as paid. Cannot accept additional payment.`);
+                        }
+                        
                         const newPaidAmount = (order.paidAmount || 0) + value.amount;
                         const newDueAmount = order.total - newPaidAmount;
                         let paymentStatus = 'unpaid';
