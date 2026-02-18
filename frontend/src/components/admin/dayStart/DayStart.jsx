@@ -31,21 +31,10 @@ import {
     useGetTodaySummaryQuery, 
     useGetDailySummaryQuery,
     useGetSummaryByDateQuery,
+    useGetRealTimeSummaryQuery,
     useSetOpeningBalanceMutation 
 } from '../../../store/api';
 import moment from 'moment';
-import {
-    PieChart,
-    Pie,
-    Cell,
-    BarChart,
-    Bar,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    ResponsiveContainer
-} from 'recharts';
 
 export const DayStart = () => {
     const { user } = useAuth();
