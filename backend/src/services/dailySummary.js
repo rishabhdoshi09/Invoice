@@ -349,16 +349,19 @@ module.exports = {
     },
 
     // Get real-time summary calculated directly from orders (bypasses cache)
-    // This is the source of truth - use when cache seems incorrect
+    // This is the source of truth for cash drawer calculation
     // 
-    // CRITICAL: Cash in drawer calculation:
-    // Cash Sales = Sum of paidAmount from ALL orders created today (not just fully paid)
-    // This represents actual cash received at time of sale
-    // 
-    // Customer Receipts = Sum of payments received today (from payments table)
-    // These are ADDITIONAL payments received for past dues, NOT the same as order payments
+    // CRITICAL PRINCIPLE:
+    // Cash in drawer from sales = Sum of paidAmount from ALL orders created today
+    // This automatically includes:
+    //   - Full amount from PAID orders
+    //   - Partial amount from PARTIAL orders  
+    //   - Zero from UNPAID orders
     //
-    // Credit Outstanding = Sum of dueAmount from unpaid/partial orders today
+    // Customer Receipts = Payments received today for PAST orders (different dates)
+    // These add to cash drawer but are NOT from today's sales
+    //
+    // Credit Outstanding = Sum of dueAmount from today's orders (NOT in drawer)
     getRealTimeSummary: async (date) => {
         const dateDDMMYYYY = moment(date).format('DD-MM-YYYY');
         
@@ -370,22 +373,14 @@ module.exports = {
             }
         });
         
-        // Calculate totals based on ACTUAL cash received
+        // Calculate totals based on ACTUAL cash received from today's orders
         const paidOrders = orders.filter(o => o.paymentStatus === 'paid');
         const unpaidOrders = orders.filter(o => o.paymentStatus === 'unpaid');
         const partialOrders = orders.filter(o => o.paymentStatus === 'partial');
         
-        // Cash from PAID orders = full total (they paid everything)
-        const cashFromPaidOrders = paidOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
-        
-        // Cash from PARTIAL orders = only the paidAmount (not the full total!)
-        const cashFromPartialOrders = partialOrders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
-        
-        // Cash from UNPAID orders = 0 (no cash received)
-        const cashFromUnpaidOrders = 0;
-        
-        // TOTAL CASH RECEIVED FROM TODAY'S ORDERS
-        const cashSalesFromOrders = cashFromPaidOrders + cashFromPartialOrders + cashFromUnpaidOrders;
+        // Cash from today's orders = sum of paidAmount from ALL orders
+        // This is the definitive amount that went into the cash drawer from sales
+        const cashFromTodaysOrders = orders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
         
         // Credit outstanding from today's orders (what customers still owe)
         const creditOutstanding = orders.reduce((sum, o) => sum + (Number(o.dueAmount) || 0), 0);
@@ -393,32 +388,53 @@ module.exports = {
         // Total business done (all orders regardless of payment status)
         const totalBusinessDone = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
         
-        // Get payments for this date - these are SEPARATE from order creation
-        // These are receipts for PAST dues, not current day sales
+        // Get payments for this date
         const payments = await db.payment.findAll({
             where: {
                 paymentDate: dateDDMMYYYY
             }
         });
         
-        // Filter out payments that are linked to orders created TODAY
-        // to avoid double-counting (order paidAmount already counted above)
-        const orderIdsToday = orders.map(o => o.id);
+        // Get IDs of TODAY's orders
+        const todaysOrderIds = orders.map(o => o.id);
         
-        const customerReceiptsForPastDues = payments
-            .filter(p => p.partyType === 'customer')
-            .filter(p => !orderIdsToday.includes(p.referenceId)) // Exclude payments for today's orders
+        // Customer receipts for PAST orders (orders from different dates)
+        // These are payments where referenceType is 'order' and referenceId is NOT in today's orders
+        // OR where there's no referenceId but the payment was auto-applied to old orders
+        // SIMPLIFIED: We count customer payments that are NOT linked to today's orders
+        const customerPaymentsAll = payments.filter(p => p.partyType === 'customer');
+        
+        // Payments linked to specific orders
+        const paymentsForTodaysOrders = customerPaymentsAll.filter(p => 
+            p.referenceType === 'order' && todaysOrderIds.includes(p.referenceId)
+        );
+        
+        // Payments for past dues = customer payments MINUS payments for today's orders
+        // Note: When a payment auto-applies to orders, the order's paidAmount is updated
+        // So we should NOT double count by adding payments that updated today's orders
+        const customerReceiptsForPastDues = customerPaymentsAll
+            .filter(p => {
+                // Exclude payments explicitly linked to today's orders
+                if (p.referenceType === 'order' && todaysOrderIds.includes(p.referenceId)) {
+                    return false;
+                }
+                // For auto-applied payments (no referenceId), we can't easily tell
+                // which orders they affected. For safety, include them as past dues.
+                // This might cause some inaccuracy if auto-applied to today's orders.
+                return true;
+            })
             .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         
-        const customerReceiptsCountForPastDues = payments
-            .filter(p => p.partyType === 'customer')
-            .filter(p => !orderIdsToday.includes(p.referenceId))
+        const customerReceiptsCountForPastDues = customerPaymentsAll
+            .filter(p => !(p.referenceType === 'order' && todaysOrderIds.includes(p.referenceId)))
             .length;
         
+        // Supplier payments (cash going out)
         const supplierPaymentsAmount = payments
             .filter(p => p.partyType === 'supplier')
             .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         
+        // Expense payments (cash going out)  
         const expensePayments = payments
             .filter(p => p.partyType === 'expense')
             .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
@@ -430,13 +446,13 @@ module.exports = {
             paidOrdersCount: paidOrders.length,
             unpaidOrdersCount: unpaidOrders.length,
             partialOrdersCount: partialOrders.length,
-            // Cash received from today's orders (goes into drawer)
-            cashSales: cashSalesFromOrders,
-            // Credit outstanding from today (does NOT go into drawer)
+            // Cash from today's sales (paidAmount from all today's orders)
+            cashSales: cashFromTodaysOrders,
+            // Credit outstanding (dueAmount from today's orders - NOT in drawer)
             creditSales: creditOutstanding,
             // Total business done today
             totalBusinessDone: totalBusinessDone,
-            // Customer payments for PAST dues (additional cash received)
+            // Customer payments for PAST dues (additional cash in drawer)
             customerReceiptsCount: customerReceiptsCountForPastDues,
             customerReceipts: customerReceiptsForPastDues,
             // Supplier payments (cash going out)
