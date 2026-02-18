@@ -420,10 +420,21 @@ module.exports = {
         // SIMPLIFIED: We count customer payments that are NOT linked to today's orders
         const customerPaymentsAll = payments.filter(p => p.partyType === 'customer');
         
-        // Payments linked to specific orders
+        // DEBUG: Log payments that are linked to today's orders
         const paymentsForTodaysOrders = customerPaymentsAll.filter(p => 
             p.referenceType === 'order' && todaysOrderIds.includes(p.referenceId)
         );
+        
+        console.log(`[getRealTimeSummary] Customer payments for TODAY's orders (excluded from receipts):`, {
+            count: paymentsForTodaysOrders.length,
+            totalAmount: paymentsForTodaysOrders.reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
+            payments: paymentsForTodaysOrders.map(p => ({
+                id: p.id,
+                amount: p.amount,
+                referenceId: p.referenceId,
+                referenceType: p.referenceType
+            }))
+        });
         
         // Payments for past dues = customer payments MINUS payments for today's orders
         // Note: When a payment auto-applies to orders, the order's paidAmount is updated
@@ -440,6 +451,10 @@ module.exports = {
                 return true;
             })
             .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        
+        console.log(`[getRealTimeSummary] Customer receipts for PAST orders (included):`, {
+            amount: customerReceiptsForPastDues
+        });
         
         const customerReceiptsCountForPastDues = customerPaymentsAll
             .filter(p => !(p.referenceType === 'order' && todaysOrderIds.includes(p.referenceId)))
