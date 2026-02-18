@@ -63,7 +63,7 @@ export const DayStart = () => {
     // SINGLE SOURCE OF TRUTH: Real-time summary - calculated directly from orders
     // This is the only data source we need for accurate cash drawer calculations
     const {
-        data: realTimeSummaryData,
+        data: realTimeSummary,  // Already transformed by RTK Query (response.data)
         isLoading: loadingRealTime,
         isFetching: fetchingRealTime,
         refetch: refetchRealTime
@@ -72,11 +72,9 @@ export const DayStart = () => {
         refetchOnReconnect: true,
     });
     
-    const realTimeSummary = realTimeSummaryData?.data;
-    
     // Summary for opening balance (only need this for reading/setting opening balance)
     const { 
-        data: cachedSummary,
+        data: cachedSummaryData,  // Already transformed by RTK Query
         refetch: refetchCachedSummary
     } = useGetSummaryByDateQuery(selectedDate, {
         refetchOnFocus: true,
@@ -114,9 +112,10 @@ export const DayStart = () => {
     // Calculate cash flow values - use realTimeSummary for accurate numbers
     // Real-time summary calculates directly from orders table
     // Opening balance from cached summary (this is stored in dailySummary table)
-    const openingBalance = Number(cachedSummary?.data?.openingBalance) || 0;
+    const openingBalance = Number(cachedSummaryData?.openingBalance) || 0;
     
     // Use realTimeSummary for accurate sales breakdown
+    // RTK Query already transformed response, so access fields directly
     const cashSales = Number(realTimeSummary?.cashSales) || 0;  // Only PAID orders
     const creditSales = Number(realTimeSummary?.creditSales) || 0;  // Unpaid + partial orders
     const totalBusinessDone = Number(realTimeSummary?.totalBusinessDone) || 0;
