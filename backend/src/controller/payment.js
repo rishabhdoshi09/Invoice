@@ -233,6 +233,8 @@ module.exports = {
                     });
 
                     let remainingAmount = value.amount;
+                    let firstOrderId = null; // Track the first order this payment was applied to
+                    
                     for (const order of unpaidOrders) {
                         if (remainingAmount <= 0) break;
                         
@@ -255,7 +257,22 @@ module.exports = {
                             paymentStatus: paymentStatus
                         }, { transaction });
 
+                        // Track the first order for reference
+                        if (!firstOrderId) {
+                            firstOrderId = order.id;
+                        }
+
                         remainingAmount -= paymentForThisOrder;
+                    }
+                    
+                    // CRITICAL: Update the payment record to link to the first order
+                    // This prevents double-counting in cash drawer calculations
+                    if (firstOrderId) {
+                        await response.update({ 
+                            referenceType: 'order',
+                            referenceId: firstOrderId,
+                            referenceNumber: unpaidOrders[0]?.orderNumber
+                        }, { transaction });
                     }
                 } else if (value.referenceType === 'purchase' && value.referenceId) {
                     const purchase = await Services.purchaseBill.getPurchaseBill({ id: value.referenceId });
