@@ -48,8 +48,15 @@ module.exports = {
             }
 
             // Date filtering - for daily payments
+            // Handle both YYYY-MM-DD and DD-MM-YYYY formats
             if (filterObj.date) {
-                whereClause.paymentDate = filterObj.date;
+                // If date is in YYYY-MM-DD format, convert to DD-MM-YYYY
+                let dateStr = filterObj.date;
+                if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    const [year, month, day] = dateStr.split('-');
+                    dateStr = `${day}-${month}-${year}`;
+                }
+                whereClause.paymentDate = dateStr;
             } else if (filterObj.startDate && filterObj.endDate) {
                 whereClause.paymentDate = {
                     [db.Sequelize.Op.between]: [filterObj.startDate, filterObj.endDate]
