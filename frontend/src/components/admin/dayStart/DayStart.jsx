@@ -113,7 +113,8 @@ export const DayStart = () => {
 
     // Calculate cash flow values - use realTimeSummary for accurate numbers
     // Real-time summary calculates directly from orders table
-    const openingBalance = Number(summaryData?.openingBalance) || 0;
+    // Opening balance from cached summary (this is stored in dailySummary table)
+    const openingBalance = Number(cachedSummary?.data?.openingBalance) || 0;
     
     // Use realTimeSummary for accurate sales breakdown
     const cashSales = Number(realTimeSummary?.cashSales) || 0;  // Only PAID orders
