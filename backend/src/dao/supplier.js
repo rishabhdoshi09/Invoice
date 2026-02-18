@@ -154,18 +154,13 @@ module.exports = {
                         SELECT SUM(total) 
                         FROM "purchaseBills" 
                         WHERE "supplierId" = s.id
-                    ), 0) as "totalPurchases",
-                    COALESCE((
-                        SELECT SUM("paidAmount") 
-                        FROM "purchaseBills" 
-                        WHERE "supplierId" = s.id
-                    ), 0) as "totalPaid",
+                    ), 0) as "totalDebit",
                     COALESCE((
                         SELECT SUM(amount) 
                         FROM payments 
                         WHERE "partyId" = s.id
                         AND "partyType" = 'supplier'
-                    ), 0) as "totalPayments"
+                    ), 0) as "totalCredit"
                 FROM suppliers s
                 ORDER BY s.name ASC
             `, { type: db.Sequelize.QueryTypes.SELECT });
