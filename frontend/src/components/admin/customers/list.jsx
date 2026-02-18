@@ -387,6 +387,7 @@ export const ListCustomers = () => {
                 <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
                     <Tab icon={<PersonAdd />} label="Add Customer" iconPosition="start" sx={{ minHeight: 48 }} />
                     <Tab icon={<Badge badgeContent={customersWithDue} color="success"><Receipt /></Badge>} label="Receive Payment" iconPosition="start" sx={{ minHeight: 48 }} />
+                    <Tab icon={<Badge badgeContent={customers.filter(c => c.balance < 0).length} color="warning"><AccountBalance /></Badge>} label="Advances" iconPosition="start" sx={{ minHeight: 48 }} />
                     <Tab icon={<History />} label="Recent" iconPosition="start" sx={{ minHeight: 48 }} />
                 </Tabs>
 
