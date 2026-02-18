@@ -58,15 +58,24 @@ module.exports = {
             }
 
             // Date filtering - for daily payments
-            // Handle both YYYY-MM-DD and DD-MM-YYYY formats
+            // Handle multiple date formats consistently
             if (filterObj.date) {
-                // If date is in YYYY-MM-DD format, convert to DD-MM-YYYY
-                let dateStr = filterObj.date;
-                if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                    const [year, month, day] = dateStr.split('-');
-                    dateStr = `${day}-${month}-${year}`;
+                const moment = require('moment-timezone');
+                // Parse the input date with multiple formats
+                const parsedDate = moment(filterObj.date, ['YYYY-MM-DD', 'DD-MM-YYYY', 'DD/MM/YYYY'], true);
+                if (parsedDate.isValid()) {
+                    // Query with multiple possible stored formats
+                    const ddmmyyyy = parsedDate.format('DD-MM-YYYY');
+                    const yyyymmdd = parsedDate.format('YYYY-MM-DD');
+                    const ddmmyyyySlash = parsedDate.format('DD/MM/YYYY');
+                    
+                    whereClause.paymentDate = {
+                        [db.Sequelize.Op.or]: [ddmmyyyy, yyyymmdd, ddmmyyyySlash]
+                    };
+                } else {
+                    // Fallback to exact match
+                    whereClause.paymentDate = filterObj.date;
                 }
-                whereClause.paymentDate = dateStr;
             } else if (filterObj.startDate && filterObj.endDate) {
                 whereClause.paymentDate = {
                     [db.Sequelize.Op.between]: [filterObj.startDate, filterObj.endDate]
