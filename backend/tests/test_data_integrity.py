@@ -102,10 +102,10 @@ class TestDataIntegrity:
         
         for customer in customers[:5]:  # Show first 5
             name = customer.get('name', 'Unknown')
-            total_debit = float(customer.get('totalDebit', 0))
-            total_credit = float(customer.get('totalCredit', 0))
-            balance = float(customer.get('balance', 0))
-            opening = float(customer.get('openingBalance', 0))
+            total_debit = float(customer.get('totalDebit') or 0)
+            total_credit = float(customer.get('totalCredit') or 0)
+            balance = float(customer.get('balance') or 0)
+            opening = float(customer.get('openingBalance') or 0)
             
             print(f"  - {name}: Sales=₹{total_debit}, Received=₹{total_credit}, Balance=₹{balance}")
             
