@@ -294,26 +294,28 @@ module.exports = {
 
     // Recalculate summary from actual orders (admin utility)
     // IMPORTANT: totalSales only includes PAID orders
+    // Uses orderDate field (stored as DD-MM-YYYY string) for accurate date matching
     recalculateSummary: async (date) => {
         const dateStr = moment(date).format('YYYY-MM-DD');
-        const startOfDay = moment(dateStr).startOf('day').toDate();
-        const endOfDay = moment(dateStr).endOf('day').toDate();
+        const dateDDMMYYYY = moment(date).format('DD-MM-YYYY');
         
-        // Get all orders for this date
+        // Get all orders for this date by orderDate field (not createdAt)
         const orders = await db.order.findAll({
             where: {
-                createdAt: {
-                    [Op.between]: [startOfDay, endOfDay]
-                }
+                orderDate: dateDDMMYYYY,
+                isDeleted: false
             }
         });
         
-        // Only sum PAID orders for totalSales
-        const totalSales = orders
-            .filter(o => o.paymentStatus === 'paid')
-            .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+        // Only sum PAID orders for totalSales (cash received)
+        const paidOrders = orders.filter(o => o.paymentStatus === 'paid');
+        const totalSales = paidOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
         const totalOrders = orders.length;
         const orderIds = orders.map(o => o.id);
+        
+        // Calculate credit sales (unpaid/partial orders)
+        const creditOrders = orders.filter(o => o.paymentStatus !== 'paid');
+        const totalCreditSales = creditOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
         
         let summary = await db.dailySummary.findOne({
             where: { date: dateStr }
@@ -336,6 +338,69 @@ module.exports = {
             });
         }
         
-        return summary;
+        // Return with extra calculated fields
+        return {
+            ...summary.toJSON(),
+            paidOrdersCount: paidOrders.length,
+            creditOrdersCount: creditOrders.length,
+            totalCreditSales,
+            totalBusinessDone: totalSales + totalCreditSales
+        };
+    },
+
+    // Get real-time summary calculated directly from orders (bypasses cache)
+    // This is the source of truth - use when cache seems incorrect
+    getRealTimeSummary: async (date) => {
+        const dateDDMMYYYY = moment(date).format('DD-MM-YYYY');
+        
+        // Get all orders for this date
+        const orders = await db.order.findAll({
+            where: {
+                orderDate: dateDDMMYYYY,
+                isDeleted: false
+            }
+        });
+        
+        // Calculate totals
+        const paidOrders = orders.filter(o => o.paymentStatus === 'paid');
+        const unpaidOrders = orders.filter(o => o.paymentStatus === 'unpaid');
+        const partialOrders = orders.filter(o => o.paymentStatus === 'partial');
+        
+        const totalPaidAmount = paidOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+        const totalUnpaidAmount = unpaidOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+        const totalPartialAmount = partialOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+        
+        // Get payments for this date
+        const payments = await db.payment.findAll({
+            where: {
+                paymentDate: dateDDMMYYYY
+            }
+        });
+        
+        const customerReceipts = payments
+            .filter(p => p.partyType === 'customer')
+            .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        
+        const supplierPayments = payments
+            .filter(p => p.partyType === 'supplier')
+            .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        
+        return {
+            date: dateDDMMYYYY,
+            // Orders breakdown
+            totalOrders: orders.length,
+            paidOrdersCount: paidOrders.length,
+            unpaidOrdersCount: unpaidOrders.length,
+            partialOrdersCount: partialOrders.length,
+            // Sales amounts
+            cashSales: totalPaidAmount,           // Only paid orders
+            creditSales: totalUnpaidAmount + totalPartialAmount,  // Unpaid + partial
+            totalBusinessDone: totalPaidAmount + totalUnpaidAmount + totalPartialAmount,
+            // Payments
+            customerReceiptsCount: payments.filter(p => p.partyType === 'customer').length,
+            customerReceipts,
+            supplierPaymentsCount: payments.filter(p => p.partyType === 'supplier').length,
+            supplierPayments
+        };
     }
 };
