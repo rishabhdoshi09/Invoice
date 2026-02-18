@@ -276,6 +276,7 @@ export const {
     // Dashboard
     useGetTodaySummaryQuery,
     useGetSummaryByDateQuery,
+    useGetRealTimeSummaryQuery,
     useSetOpeningBalanceMutation,
     
     // Customers & Suppliers
