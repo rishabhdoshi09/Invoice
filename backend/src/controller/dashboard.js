@@ -331,5 +331,60 @@ module.exports = {
                 message: error.message
             });
         }
+    },
+
+    // Debug endpoint to check payment date formats in database
+    debugPaymentDates: async (req, res) => {
+        try {
+            const db = require('../models');
+            const moment = require('moment-timezone');
+            
+            const { date } = req.params;
+            const dateDDMMYYYY = moment(date).format('DD-MM-YYYY');
+            
+            // Get all unique payment dates for today to diagnose format issues
+            const allPayments = await db.payment.findAll({
+                attributes: ['id', 'paymentDate', 'partyType', 'partyName', 'amount'],
+                order: [['createdAt', 'DESC']],
+                limit: 50
+            });
+            
+            // Check what formats exist
+            const dateFormats = allPayments.reduce((acc, p) => {
+                const dateStr = p.paymentDate;
+                if (!acc[dateStr]) {
+                    acc[dateStr] = { count: 0, types: {} };
+                }
+                acc[dateStr].count++;
+                acc[dateStr].types[p.partyType] = (acc[dateStr].types[p.partyType] || 0) + 1;
+                return acc;
+            }, {});
+            
+            // Find expenses specifically
+            const expenses = allPayments.filter(p => p.partyType === 'expense');
+            
+            return res.status(200).json({
+                status: 200,
+                data: {
+                    requestedDate: date,
+                    formattedDate: dateDDMMYYYY,
+                    totalPaymentsFound: allPayments.length,
+                    expensesFound: expenses.length,
+                    expensesList: expenses.map(e => ({
+                        date: e.paymentDate,
+                        name: e.partyName,
+                        amount: e.amount
+                    })),
+                    uniqueDatesInDB: dateFormats,
+                    hint: 'Check if expense paymentDate matches the formattedDate format'
+                }
+            });
+        } catch (error) {
+            console.error('Debug payment dates error:', error);
+            return res.status(500).json({
+                status: 500,
+                message: error.message
+            });
+        }
     }
 };
