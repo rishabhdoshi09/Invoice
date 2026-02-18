@@ -74,7 +74,18 @@ export const DayStart = () => {
         refetchOnReconnect: true,
     });
     
-    // Use the appropriate data based on selected date
+    // Real-time summary - calculated directly from orders (bypasses cache)
+    const {
+        data: realTimeSummary,
+        isLoading: loadingRealTime,
+        refetch: refetchRealTime
+    } = useGetRealTimeSummaryQuery(selectedDate, {
+        refetchOnFocus: true,
+        refetchOnReconnect: true,
+    });
+    
+    // Use real-time summary for accurate cash sales calculation
+    // Fall back to cached summary for other data
     const summaryData = isToday ? todaySummaryData : historicalSummary;
     const loadingSummary = isToday ? loadingTodaySummary : loadingHistoricalSummary;
     const fetchingSummary = isToday ? fetchingTodaySummary : fetchingHistoricalSummary;
@@ -91,7 +102,7 @@ export const DayStart = () => {
     
     const [setOpeningBalance, { isLoading: savingOpeningBalance }] = useSetOpeningBalanceMutation();
 
-    const loading = loadingSummary || loadingPayments;
+    const loading = loadingSummary || loadingPayments || loadingRealTime;
 
     const handleRefreshAll = () => {
         if (isToday) {
@@ -99,6 +110,7 @@ export const DayStart = () => {
         } else {
             refetchHistoricalSummary();
         }
+        refetchRealTime();
         refetchPayments();
     };
 
