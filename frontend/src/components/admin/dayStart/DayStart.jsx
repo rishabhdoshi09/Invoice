@@ -162,16 +162,19 @@ export const DayStart = () => {
     // Receivables = Credit Sales (unpaid amounts)
     const totalReceivables = creditSales;
     
-    // Payment data from paymentSummary
-    const customerPayments = Number(paymentSummary?.summary?.customers?.amount) || 0;
-    const customerReceiptsCount = Number(paymentSummary?.summary?.customers?.count) || 0;
-    const supplierPayments = Number(paymentSummary?.summary?.suppliers?.amount) || 0;
-    const supplierPaymentsCount = Number(paymentSummary?.summary?.suppliers?.count) || 0;
-    const expenses = Number(paymentSummary?.summary?.expenses?.amount) || 0;
+    // Use real-time data for all payment info to ensure consistency
+    // These receipts are ONLY for past dues (not today's order payments)
+    const customerPayments = Number(realTimeSummary?.customerReceipts) || 0;
+    const customerReceiptsCount = Number(realTimeSummary?.customerReceiptsCount) || 0;
+    const supplierPayments = Number(realTimeSummary?.supplierPayments) || 0;
+    const supplierPaymentsCount = Number(realTimeSummary?.supplierPaymentsCount) || 0;
+    const expenses = Number(realTimeSummary?.expenses) || 0;
     
-    // Expected cash = Opening + Cash Sales + Customer Receipts - Supplier Payments - Expenses
+    // Expected cash = Opening + Cash Sales (from today's orders) + Customer Receipts (for past dues) - Supplier Payments - Expenses
+    // NOTE: Cash Sales already includes partial payments from today's orders
+    // Customer Receipts are ADDITIONAL payments for PAST dues (not double counted)
     const expectedCash = openingBalance + cashSales + customerPayments - supplierPayments - expenses;
-    const netCashFlow = customerPayments - supplierPayments - expenses;
+    const netCashFlow = cashSales + customerPayments - supplierPayments - expenses;
 
     // Prepare chart data
     const cashInflowData = [
