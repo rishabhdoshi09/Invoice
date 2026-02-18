@@ -157,6 +157,11 @@ export const DayStart = () => {
     const paidOrdersCount = Number(realTimeSummary?.paidOrdersCount) || 0;
     const totalOrdersCount = Number(realTimeSummary?.totalOrders) || 0;
     
+    // Total sales = Cash Sales + Credit Sales (all orders)
+    const totalSales = totalBusinessDone;
+    // Receivables = Credit Sales (unpaid amounts)
+    const totalReceivables = creditSales;
+    
     // Payment data from paymentSummary
     const customerPayments = Number(paymentSummary?.summary?.customers?.amount) || 0;
     const customerReceiptsCount = Number(paymentSummary?.summary?.customers?.count) || 0;
