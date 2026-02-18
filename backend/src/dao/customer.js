@@ -156,19 +156,13 @@ module.exports = {
                         FROM orders 
                         WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
                         AND "isDeleted" = false
-                    ), 0) as "totalSales",
-                    COALESCE((
-                        SELECT SUM("paidAmount") 
-                        FROM orders 
-                        WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
-                        AND "isDeleted" = false
-                    ), 0) as "totalPaid",
+                    ), 0) as "totalDebit",
                     COALESCE((
                         SELECT SUM(amount) 
                         FROM payments 
                         WHERE "partyId" = c.id
                         AND "partyType" = 'customer'
-                    ), 0) as "totalReceipts"
+                    ), 0) as "totalCredit"
                 FROM customers c
                 ORDER BY c.name ASC
             `, { type: db.Sequelize.QueryTypes.SELECT });
