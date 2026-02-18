@@ -292,11 +292,11 @@ export const DayStart = () => {
                                 ₹{cashSales.toLocaleString('en-IN')}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                                Total: ₹{totalSales.toLocaleString('en-IN')} ({summaryData?.totalOrders || 0} orders)
+                                {paidOrdersCount} paid orders
                             </Typography>
-                            {totalReceivables > 0 && (
+                            {creditSales > 0 && (
                                 <Typography variant="caption" sx={{ display: 'block', color: '#ff5722', fontWeight: 'bold' }}>
-                                    Credit: ₹{totalReceivables.toLocaleString('en-IN')} (not in drawer)
+                                    Credit: ₹{creditSales.toLocaleString('en-IN')} (not in drawer)
                                 </Typography>
                             )}
                         </Box>
@@ -316,7 +316,7 @@ export const DayStart = () => {
                                 +₹{customerPayments.toLocaleString('en-IN')}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                                {paymentSummary?.summary?.customers?.count || 0} receipts
+                                {customerReceiptsCount} receipts
                             </Typography>
                         </Box>
                     </Grid>
@@ -335,7 +335,7 @@ export const DayStart = () => {
                                 −₹{supplierPayments.toLocaleString('en-IN')}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                                {paymentSummary?.summary?.suppliers?.count || 0} payments
+                                {supplierPaymentsCount} payments
                             </Typography>
                         </Box>
                     </Grid>
