@@ -40,8 +40,6 @@ import {
 } from 'recharts';
 import { useAuth } from '../../../context/AuthContext';
 import { 
-    useGetTodaySummaryQuery, 
-    useGetDailySummaryQuery,
     useGetSummaryByDateQuery,
     useGetRealTimeSummaryQuery,
     useSetOpeningBalanceMutation 
