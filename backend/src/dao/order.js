@@ -56,9 +56,21 @@ module.exports = {
                 ];
             }
             
-            // Add date filter if provided
+            // Add date filter if provided - handle multiple formats
             if (filterObj.date) {
-                whereClause.orderDate = filterObj.date;
+                const moment = require('moment-timezone');
+                const parsedDate = moment(filterObj.date, ['YYYY-MM-DD', 'DD-MM-YYYY', 'DD/MM/YYYY'], true);
+                if (parsedDate.isValid()) {
+                    // Query with multiple possible stored formats
+                    const ddmmyyyy = parsedDate.format('DD-MM-YYYY');
+                    const yyyymmdd = parsedDate.format('YYYY-MM-DD');
+                    
+                    whereClause.orderDate = {
+                        [db.Sequelize.Op.or]: [ddmmyyyy, yyyymmdd]
+                    };
+                } else {
+                    whereClause.orderDate = filterObj.date;
+                }
             }
             
             // Add date range filter if provided
