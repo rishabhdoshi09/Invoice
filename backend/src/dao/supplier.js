@@ -100,9 +100,8 @@ module.exports = {
             });
 
             // Calculate totals
-            const totalPurchases = purchases.reduce((sum, p) => sum + (Number(p.total) || 0), 0);
-            const totalPaidOnBills = purchases.reduce((sum, p) => sum + (Number(p.paidAmount) || 0), 0);
-            const totalPayments = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            const totalDebit = purchases.reduce((sum, p) => sum + (Number(p.total) || 0), 0) + (Number(supplier.openingBalance) || 0);
+            const totalCredit = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
             
             // Balance = Opening + Sum of all due amounts from purchase bills
             // This is the actual amount still owed to the supplier
@@ -111,11 +110,8 @@ module.exports = {
 
             return {
                 ...supplier.toJSON(),
-                totalDebit: totalPurchases + (Number(supplier.openingBalance) || 0),
-                totalCredit: totalPayments,
-                totalPurchases,
-                totalPaidOnBills,
-                totalPayments,
+                totalDebit,
+                totalCredit,
                 balance,
                 purchases,
                 payments
