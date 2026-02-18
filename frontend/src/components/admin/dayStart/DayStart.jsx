@@ -505,7 +505,7 @@ export const DayStart = () => {
                             <Grid container spacing={2}>
                                 <Grid item xs={6}>
                                     <Typography variant="body2" color="text.secondary">Orders Created</Typography>
-                                    <Typography variant="h5">{summaryData?.totalOrders || 0}</Typography>
+                                    <Typography variant="h5">{totalOrdersCount}</Typography>
                                 </Grid>
                                 <Grid item xs={6}>
                                     <Typography variant="body2" color="text.secondary">Total Sales</Typography>
@@ -539,7 +539,7 @@ export const DayStart = () => {
                             <Grid container spacing={2}>
                                 <Grid item xs={6} md={3}>
                                     <Typography variant="body2" color="text.secondary">Orders Created</Typography>
-                                    <Typography variant="h5">{summaryData?.totalOrders || 0}</Typography>
+                                    <Typography variant="h5">{totalOrdersCount}</Typography>
                                 </Grid>
                                 <Grid item xs={6} md={3}>
                                     <Typography variant="body2" color="text.secondary">Total Sales</Typography>
