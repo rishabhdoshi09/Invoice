@@ -62,68 +62,35 @@ export const DayStart = () => {
     const [openingBalanceInput, setOpeningBalanceInput] = useState('');
 
     // RTK Query hooks - automatic caching and refetch!
-    // For today, use the dedicated today endpoint
-    const { 
-        data: todaySummaryData, 
-        isLoading: loadingTodaySummary,
-        isFetching: fetchingTodaySummary,
-        refetch: refetchTodaySummary 
-    } = useGetTodaySummaryQuery(undefined, {
-        skip: !isToday, // Only fetch if viewing today
-        refetchOnFocus: true,
-        refetchOnReconnect: true,
-    });
-    
-    // For historical dates, use the date-specific endpoint
-    const { 
-        data: historicalSummary, 
-        isLoading: loadingHistoricalSummary,
-        isFetching: fetchingHistoricalSummary,
-        refetch: refetchHistoricalSummary 
-    } = useGetSummaryByDateQuery(selectedDate, {
-        skip: isToday, // Only fetch if viewing a past date
-        refetchOnFocus: true,
-        refetchOnReconnect: true,
-    });
-    
-    // Real-time summary - calculated directly from orders (bypasses cache)
+    // SINGLE SOURCE OF TRUTH: Real-time summary - calculated directly from orders
+    // This is the only data source we need for accurate cash drawer calculations
     const {
-        data: realTimeSummary,
+        data: realTimeSummaryData,
         isLoading: loadingRealTime,
+        isFetching: fetchingRealTime,
         refetch: refetchRealTime
     } = useGetRealTimeSummaryQuery(selectedDate, {
         refetchOnFocus: true,
         refetchOnReconnect: true,
     });
     
-    // Use real-time summary for accurate cash sales calculation
-    // Fall back to cached summary for other data
-    const summaryData = isToday ? todaySummaryData : historicalSummary;
-    const loadingSummary = isToday ? loadingTodaySummary : loadingHistoricalSummary;
-    const fetchingSummary = isToday ? fetchingTodaySummary : fetchingHistoricalSummary;
+    const realTimeSummary = realTimeSummaryData?.data;
     
-    // Payment summary for selected date
+    // Summary for opening balance (only need this for reading/setting opening balance)
     const { 
-        data: paymentSummary,
-        isLoading: loadingPayments,
-        refetch: refetchPayments
-    } = useGetDailySummaryQuery(selectedDate, {
+        data: cachedSummary,
+        refetch: refetchCachedSummary
+    } = useGetSummaryByDateQuery(selectedDate, {
         refetchOnFocus: true,
-        refetchOnReconnect: true,
     });
     
     const [setOpeningBalance, { isLoading: savingOpeningBalance }] = useSetOpeningBalanceMutation();
 
-    const loading = loadingSummary || loadingPayments || loadingRealTime;
+    const loading = loadingRealTime;
 
     const handleRefreshAll = () => {
-        if (isToday) {
-            refetchTodaySummary();
-        } else {
-            refetchHistoricalSummary();
-        }
         refetchRealTime();
-        refetchPayments();
+        refetchCachedSummary();
     };
 
     const handleSetOpeningBalance = async () => {
