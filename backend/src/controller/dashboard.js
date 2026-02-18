@@ -386,5 +386,85 @@ module.exports = {
                 message: error.message
             });
         }
+    },
+
+    // Debug endpoint to verify cash sales calculation - CRITICAL FOR DATA INTEGRITY
+    debugCashSales: async (req, res) => {
+        try {
+            const db = require('../models');
+            const moment = require('moment-timezone');
+            
+            const { date } = req.params;
+            const dateDDMMYYYY = moment(date).format('DD-MM-YYYY');
+            
+            // Get all orders for this date
+            const orders = await db.order.findAll({
+                where: {
+                    orderDate: dateDDMMYYYY,
+                    isDeleted: false
+                },
+                attributes: ['id', 'orderNumber', 'customerName', 'total', 'paidAmount', 'dueAmount', 'paymentStatus'],
+                order: [['createdAt', 'ASC']]
+            });
+            
+            // Calculate sums
+            const sumPaidAmount = orders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
+            const sumTotal = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+            const sumDueAmount = orders.reduce((sum, o) => sum + (Number(o.dueAmount) || 0), 0);
+            
+            // Breakdown by status
+            const paidOrders = orders.filter(o => o.paymentStatus === 'paid');
+            const unpaidOrders = orders.filter(o => o.paymentStatus === 'unpaid');
+            const partialOrders = orders.filter(o => o.paymentStatus === 'partial');
+            
+            const paidOrdersSum = paidOrders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
+            const partialOrdersSum = partialOrders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
+            
+            return res.status(200).json({
+                status: 200,
+                data: {
+                    date: dateDDMMYYYY,
+                    totalOrders: orders.length,
+                    // This is what Cash Sales SHOULD be
+                    cashSalesCalculation: {
+                        formula: 'SUM(paidAmount) from all orders',
+                        result: sumPaidAmount,
+                        breakdown: {
+                            fromPaidOrders: paidOrdersSum,
+                            fromPartialOrders: partialOrdersSum,
+                            fromUnpaidOrders: 0
+                        }
+                    },
+                    // Cross-check values
+                    crossCheck: {
+                        sumOfTotal: sumTotal,
+                        sumOfDueAmount: sumDueAmount,
+                        sumOfPaidAmount: sumPaidAmount,
+                        verification: sumTotal === (sumPaidAmount + sumDueAmount) ? 'VALID' : 'MISMATCH'
+                    },
+                    // Order counts
+                    orderCounts: {
+                        paid: paidOrders.length,
+                        partial: partialOrders.length,
+                        unpaid: unpaidOrders.length
+                    },
+                    // List of all orders for manual verification
+                    ordersList: orders.map(o => ({
+                        orderNumber: o.orderNumber,
+                        customer: o.customerName,
+                        total: Number(o.total),
+                        paidAmount: Number(o.paidAmount),
+                        dueAmount: Number(o.dueAmount),
+                        status: o.paymentStatus
+                    }))
+                }
+            });
+        } catch (error) {
+            console.error('Debug cash sales error:', error);
+            return res.status(500).json({
+                status: 500,
+                message: error.message
+            });
+        }
     }
 };
