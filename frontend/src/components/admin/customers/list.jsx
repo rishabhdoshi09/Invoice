@@ -609,7 +609,7 @@ export const ListCustomers = () => {
                     )}
 
                     {/* Tab 2: Recent Activity */}
-                    {activeTab === 2 && (
+                    {activeTab === 3 && (
                         <Box>
                             <Typography variant="subtitle2" sx={{ mb: 1 }}>Recent Customer Receipts</Typography>
                             {recentReceipts.length === 0 ? (
@@ -629,6 +629,68 @@ export const ListCustomers = () => {
                                     ))}
                                 </List>
                             )}
+                        </Box>
+                    )}
+
+                    {/* Tab 2: Advances */}
+                    {activeTab === 2 && (
+                        <Box>
+                            <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <AccountBalance color="warning" fontSize="small" />
+                                Customers with Advance Balance
+                            </Typography>
+                            {customers.filter(c => c.balance < 0).length === 0 ? (
+                                <Alert severity="info" sx={{ mt: 1 }}>
+                                    No customers have advance payments. When a customer pays more than their due amount, it shows here as advance.
+                                </Alert>
+                            ) : (
+                                <TableContainer sx={{ maxHeight: 300 }}>
+                                    <Table size="small">
+                                        <TableHead>
+                                            <TableRow sx={{ '& th': { bgcolor: '#fff3e0', fontWeight: 600 } }}>
+                                                <TableCell>Customer</TableCell>
+                                                <TableCell>Mobile</TableCell>
+                                                <TableCell align="right">Advance Amount</TableCell>
+                                                <TableCell align="center">Action</TableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {customers.filter(c => c.balance < 0).map((customer) => (
+                                                <TableRow key={customer.id} hover>
+                                                    <TableCell>
+                                                        <Typography variant="body2" fontWeight={500}>{customer.name}</Typography>
+                                                    </TableCell>
+                                                    <TableCell>{customer.mobile || '-'}</TableCell>
+                                                    <TableCell align="right">
+                                                        <Chip 
+                                                            label={`₹${Math.abs(customer.balance).toLocaleString('en-IN')}`} 
+                                                            color="warning" 
+                                                            size="small"
+                                                            sx={{ fontWeight: 600 }}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell align="center">
+                                                        <Tooltip title="Create Sale (use advance)">
+                                                            <Button 
+                                                                size="small" 
+                                                                variant="outlined" 
+                                                                color="success"
+                                                                onClick={() => handleCreateSale(customer)}
+                                                                startIcon={<ShoppingCart />}
+                                                            >
+                                                                Use Advance
+                                                            </Button>
+                                                        </Tooltip>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
+                            )}
+                            <Alert severity="info" sx={{ mt: 2 }} icon={<TipsAndUpdates />}>
+                                <strong>Tip:</strong> Advance amounts are automatically adjusted when you create a new sale for the customer.
+                            </Alert>
                         </Box>
                     )}
                 </Box>
