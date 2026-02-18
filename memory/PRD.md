@@ -7,57 +7,62 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 
 ## Critical Updates (February 18, 2026 - Latest)
 
-### ✅ DayStart Page Data Integrity Fix
+### ✅ COMPREHENSIVE DATA INTEGRITY AUDIT & FIX
 
-**User Issue:** DayStart page showed incorrect Cash Sales compared to database queries. The dailySummary cache was out of sync.
+**User Issue:** "Check all of the application and thoroughly do the audit for each and everything and strictly fix integrity issues - it is literally a headache to try to check the sales and cash expected in the drawer"
 
-**Root Cause:**
-- The `dailySummary` table stored cached values that could get out of sync with actual orders
-- The frontend was using stale cached data instead of real-time calculations
+**Critical Bugs Found & Fixed:**
 
-**Solution Implemented:**
-1. **Real-time Summary Endpoint**: Created `GET /api/dashboard/summary/realtime/:date` that calculates directly from orders table
-2. **Frontend Update**: DayStart.jsx now uses `useGetRealTimeSummaryQuery` hook for accurate data
-3. **Added Missing Imports**: Added Recharts imports (ResponsiveContainer, BarChart, PieChart, etc.)
-4. **Fixed Undefined Variables**: Added `totalSales` and `totalReceivables` derived variables
+#### 1. Double-Counting Bug in Cash Drawer Calculation
+**Problem:** When a customer payment was received:
+- The order's `paidAmount` was updated (correctly adding to cashSales)
+- BUT the payment was ALSO counted in `customerReceipts`
+- This caused double-counting and inflated expected cash
+
+**Root Cause:** The `getRealTimeSummary` function was including ALL customer payments in `customerReceipts`, even those that had already updated today's orders' `paidAmount`.
+
+**Solution:** 
+- `customerReceipts` now ONLY includes payments for PAST orders (orders from different dates)
+- Payments linked to today's orders are excluded to prevent double-counting
+- Updated payment controller to set `referenceId` when auto-applying payments to orders
+
+#### 2. Partial Payment Handling Error
+**Problem:** For partially paid orders, cashSales was only counting FULLY PAID orders, missing the actual cash received from partial payments.
+
+**Solution:** 
+- `cashSales = SUM(paidAmount)` from ALL orders (paid, partial, unpaid)
+- This correctly captures:
+  - ₹1000 from a PAID order (full total)
+  - ₹500 from a PARTIAL order (only what was paid)
+  - ₹0 from an UNPAID order
+
+#### 3. Removed Quick Stats Widget
+Per user request - removed the floating stats widget that was showing ₹0.
 
 **Files Modified:**
-- `backend/src/services/dailySummary.js` - Added `getRealTimeSummary` function
-- `backend/src/controller/dashboard.js` - Added real-time endpoint at line 317-334
-- `frontend/src/components/admin/dayStart/DayStart.jsx` - Fixed imports and variables, uses real-time data
+- `backend/src/services/dailySummary.js` - Complete rewrite of `getRealTimeSummary` (lines 351-450)
+- `backend/src/controller/payment.js` - Fixed auto-apply payment to set referenceId (lines 223-270)
+- `frontend/src/components/admin/dayStart/DayStart.jsx` - Updated to use consistent real-time data
+- `frontend/src/App.js` - Removed FloatingStatsWidget
 
-**Verification:**
-- Cash Sales: ₹1,000 (correct - only PAID orders)
-- Credit Sales: ₹2,500 (correct - UNPAID orders, marked as "not in drawer")
-- Database query matches UI exactly
+**Correct Cash Drawer Formula:**
+```
+Expected Cash = Opening Balance 
+              + Cash Sales (SUM of paidAmount from today's orders)
+              + Customer Receipts (payments for PAST orders only)
+              - Supplier Payments
+              - Expenses
+```
 
-**Test Report:** `/app/test_reports/iteration_11.json` - 100% pass rate
-
----
-
-### ✅ Customer Receipts Display Verified
-
-**User Issue:** Customer receipts were not showing after a UI update.
-
-**Investigation Result:** The backend API `GET /api/customers/:id/transactions` correctly returns the `payments` array with all receipt details. The Receipts tab in the customer details dialog renders this data correctly.
-
-**Test Data Created:**
-- Test Customer 2: 1 payment receipt of ₹500 (PAY-1018E311)
-- Verified: Receipts tab shows payment history with receipt number, date, amount, notes
+**Test Results:** `/app/test_reports/iteration_12.json` - 100% pass rate (16/16 tests)
+- Cash Sales = SUM(paidAmount) ✓
+- Credit Sales = SUM(dueAmount) ✓
+- No double-counting ✓
+- Partial payments handled correctly ✓
 
 ---
 
 ## Critical Updates (February 16, 2026)
-
-### ✅ Major Smart Application Enhancement - Phase 2
-
-**User Request:** "Go a step more smart (advance) and improve literally everything!"
-
-**New Features Implemented:**
-
-1. **Floating Quick Stats Widget** (Bottom-right corner)
-   - Collapsible widget showing real-time business metrics
-   - Today's Sales with trend indicator (vs yesterday)
    - Receivable/Payable at a glance
    - Net Position with positive/negative indication
    - Auto-refreshes every 2 minutes
