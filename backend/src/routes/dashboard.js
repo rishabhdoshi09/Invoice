@@ -25,6 +25,9 @@ module.exports = (router) => {
     // Debug endpoint - check payment date formats (admin only)
     router.get('/dashboard/debug/payment-dates/:date', authenticate, authorize('admin'), Controller.debugPaymentDates);
     
+    // Debug endpoint - verify cash sales calculation (admin only)
+    router.get('/dashboard/debug/cash-sales/:date', authenticate, authorize('admin'), Controller.debugCashSales);
+    
     // Admin only - day management
     router.post('/dashboard/summary/close/:date', authenticate, authorize('admin'), Controller.closeDay);
     router.post('/dashboard/summary/reopen/:date', authenticate, authorize('admin'), Controller.reopenDay);
