@@ -411,8 +411,8 @@ module.exports = {
             expense: payments.filter(p => p.partyType === 'expense').length
         });
         
-        // Get IDs of TODAY's orders
-        const todaysOrderIds = orders.map(o => o.id);
+        // Get IDs of TODAY's orders (convert to strings for safe comparison)
+        const todaysOrderIds = orders.map(o => String(o.id));
         
         // Customer receipts for PAST orders (orders from different dates)
         // These are payments where referenceType is 'order' and referenceId is NOT in today's orders
@@ -422,7 +422,7 @@ module.exports = {
         
         // DEBUG: Log payments that are linked to today's orders
         const paymentsForTodaysOrders = customerPaymentsAll.filter(p => 
-            p.referenceType === 'order' && todaysOrderIds.includes(p.referenceId)
+            p.referenceType === 'order' && todaysOrderIds.includes(String(p.referenceId))
         );
         
         console.log(`[getRealTimeSummary] Customer payments for TODAY's orders (excluded from receipts):`, {
@@ -442,7 +442,7 @@ module.exports = {
         const customerReceiptsForPastDues = customerPaymentsAll
             .filter(p => {
                 // Exclude payments explicitly linked to today's orders
-                if (p.referenceType === 'order' && todaysOrderIds.includes(p.referenceId)) {
+                if (p.referenceType === 'order' && todaysOrderIds.includes(String(p.referenceId))) {
                     return false;
                 }
                 // For auto-applied payments (no referenceId), we can't easily tell
@@ -457,7 +457,7 @@ module.exports = {
         });
         
         const customerReceiptsCountForPastDues = customerPaymentsAll
-            .filter(p => !(p.referenceType === 'order' && todaysOrderIds.includes(p.referenceId)))
+            .filter(p => !(p.referenceType === 'order' && todaysOrderIds.includes(String(p.referenceId))))
             .length;
         
         // Supplier payments (cash going out)
