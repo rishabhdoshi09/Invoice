@@ -22,6 +22,9 @@ module.exports = (router) => {
     // Real-time summary - calculated directly from orders (bypasses cache)
     router.get('/dashboard/summary/realtime/:date', authenticate, Controller.getRealTimeSummary);
     
+    // Debug endpoint - check payment date formats (admin only)
+    router.get('/dashboard/debug/payment-dates/:date', authenticate, authorize('admin'), Controller.debugPaymentDates);
+    
     // Admin only - day management
     router.post('/dashboard/summary/close/:date', authenticate, authorize('admin'), Controller.closeDay);
     router.post('/dashboard/summary/reopen/:date', authenticate, authorize('admin'), Controller.reopenDay);
