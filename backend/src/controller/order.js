@@ -682,6 +682,39 @@ module.exports = {
                     transaction 
                 });
 
+                // When marking as PAID, create a corresponding payment entry
+                // This ensures single source of truth - all payments are tracked in payments table
+                if (newStatus === 'paid' && oldStatus !== 'paid') {
+                    const paymentAmount = Number(order.total) - Number(order.paidAmount || 0);
+                    if (paymentAmount > 0) {
+                        await db.payment.create({
+                            id: uuidv4(),
+                            paymentNumber: `PAY-${uuidv4().split('-')[0].toUpperCase()}`,
+                            paymentDate: order.orderDate,
+                            partyId: customerIdToUpdate || order.customerId,
+                            partyName: order.customerName || 'Walk-in Customer',
+                            partyType: 'customer',
+                            amount: paymentAmount,
+                            referenceType: 'order',
+                            referenceId: orderId,
+                            referenceNumber: order.orderNumber,
+                            notes: `Payment marked via status toggle by ${changedByTrimmed}`
+                        }, { transaction });
+                    }
+                }
+                
+                // When marking as UNPAID (reversing a payment), we should delete/reverse the payment entry
+                if (newStatus === 'unpaid' && oldStatus === 'paid') {
+                    // Find and delete any payment entries linked to this order
+                    await db.payment.destroy({
+                        where: {
+                            referenceId: orderId,
+                            referenceType: 'order'
+                        },
+                        transaction
+                    });
+                }
+
                 // Update daily summary when payment status changes
                 await Services.dailySummary.recordPaymentStatusChange(order, oldStatus, newStatus, transaction);
 
