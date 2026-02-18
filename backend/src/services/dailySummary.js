@@ -360,6 +360,7 @@ module.exports = {
     //
     // Customer Receipts = Payments received today for PAST orders (different dates)
     // These add to cash drawer but are NOT from today's sales
+    // IMPORTANT: Exclude payments linked to today's orders to avoid double-counting
     //
     // Credit Outstanding = Sum of dueAmount from today's orders (NOT in drawer)
     getRealTimeSummary: async (date) => {
@@ -414,51 +415,44 @@ module.exports = {
         // Get IDs of TODAY's orders (convert to strings for safe comparison)
         const todaysOrderIds = orders.map(o => String(o.id));
         
-        // Customer receipts for PAST orders (orders from different dates)
-        // These are payments where referenceType is 'order' and referenceId is NOT in today's orders
-        // OR where there's no referenceId but the payment was auto-applied to old orders
-        // SIMPLIFIED: We count customer payments that are NOT linked to today's orders
+        // CRITICAL: Customer receipts should ONLY count payments for PAST orders
+        // Any payment linked to a today's order is already counted in cashSales via paidAmount
         const customerPaymentsAll = payments.filter(p => p.partyType === 'customer');
         
-        // DEBUG: Log payments that are linked to today's orders
-        const paymentsForTodaysOrders = customerPaymentsAll.filter(p => 
-            p.referenceType === 'order' && todaysOrderIds.includes(String(p.referenceId))
-        );
-        
-        console.log(`[getRealTimeSummary] Customer payments for TODAY's orders (excluded from receipts):`, {
-            count: paymentsForTodaysOrders.length,
-            totalAmount: paymentsForTodaysOrders.reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
-            payments: paymentsForTodaysOrders.map(p => ({
-                id: p.id,
-                amount: p.amount,
-                referenceId: p.referenceId,
-                referenceType: p.referenceType
-            }))
+        // Separate payments into those for today's orders vs past orders
+        const paymentsForTodaysOrders = customerPaymentsAll.filter(p => {
+            // Check if this payment is linked to any of today's orders
+            if (p.referenceType === 'order' && p.referenceId) {
+                return todaysOrderIds.includes(String(p.referenceId));
+            }
+            return false;
         });
         
-        // Payments for past dues = customer payments MINUS payments for today's orders
-        // Note: When a payment auto-applies to orders, the order's paidAmount is updated
-        // So we should NOT double count by adding payments that updated today's orders
-        const customerReceiptsForPastDues = customerPaymentsAll
-            .filter(p => {
-                // Exclude payments explicitly linked to today's orders
-                if (p.referenceType === 'order' && todaysOrderIds.includes(String(p.referenceId))) {
-                    return false;
-                }
-                // For auto-applied payments (no referenceId), we can't easily tell
-                // which orders they affected. For safety, include them as past dues.
-                // This might cause some inaccuracy if auto-applied to today's orders.
+        const paymentsForPastOrders = customerPaymentsAll.filter(p => {
+            // If no reference, it's an advance payment - count it
+            if (!p.referenceId) {
                 return true;
-            })
-            .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            }
+            // If linked to an order, check if it's NOT today's order
+            if (p.referenceType === 'order') {
+                return !todaysOrderIds.includes(String(p.referenceId));
+            }
+            // Other reference types (purchase, etc.) - count them
+            return true;
+        });
         
-        console.log(`[getRealTimeSummary] Customer receipts for PAST orders (included):`, {
+        const customerReceiptsForPastDues = paymentsForPastOrders.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        const customerReceiptsCountForPastDues = paymentsForPastOrders.length;
+        
+        // Log for debugging
+        console.log(`[getRealTimeSummary] Payments for TODAY's orders (EXCLUDED - already in cashSales):`, {
+            count: paymentsForTodaysOrders.length,
+            amount: paymentsForTodaysOrders.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+        });
+        console.log(`[getRealTimeSummary] Payments for PAST orders (INCLUDED in customerReceipts):`, {
+            count: paymentsForPastOrders.length,
             amount: customerReceiptsForPastDues
         });
-        
-        const customerReceiptsCountForPastDues = customerPaymentsAll
-            .filter(p => !(p.referenceType === 'order' && todaysOrderIds.includes(String(p.referenceId))))
-            .length;
         
         // Supplier payments (cash going out)
         const supplierPaymentsAmount = payments
