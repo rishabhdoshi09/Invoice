@@ -175,12 +175,12 @@ export const DayStart = () => {
                     Day Start - Cash Management
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {fetchingSummary && <CircularProgress size={20} />}
+                    {fetchingRealTime && <CircularProgress size={20} />}
                     <Button
                         startIcon={<Refresh />}
                         onClick={handleRefreshAll}
                         variant="outlined"
-                        disabled={fetchingSummary}
+                        disabled={fetchingRealTime}
                     >
                         Refresh
                     </Button>
