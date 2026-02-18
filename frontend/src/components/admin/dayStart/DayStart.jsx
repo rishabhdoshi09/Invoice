@@ -26,6 +26,18 @@ import {
     Today,
     History
 } from '@mui/icons-material';
+import { 
+    ResponsiveContainer, 
+    BarChart, 
+    Bar, 
+    XAxis, 
+    YAxis, 
+    CartesianGrid, 
+    Tooltip, 
+    Cell,
+    PieChart,
+    Pie
+} from 'recharts';
 import { useAuth } from '../../../context/AuthContext';
 import { 
     useGetTodaySummaryQuery, 
