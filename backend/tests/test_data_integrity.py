@@ -225,7 +225,13 @@ class TestDataIntegrity:
         print(f"  Summary: {paid_count} paid, {unpaid_count} unpaid, {partial_count} partial")
         
     def test_08_verify_cash_vs_credit_sales_calculation(self):
-        """Verify DayStart calculation: Cash Sales = PAID orders only, Credit Sales = UNPAID + PARTIAL"""
+        """
+        Verify DayStart calculation:
+        - Cash Sales = SUM(paidAmount) from ALL orders (includes partial payments)
+        - Credit Sales = SUM(dueAmount) from ALL orders (outstanding amounts)
+        
+        This is the CORRECT calculation per the data integrity fix.
+        """
         today = datetime.now().strftime('%Y-%m-%d')
         
         # Get real-time summary
@@ -239,23 +245,27 @@ class TestDataIntegrity:
         assert response.status_code == 200
         all_orders = response.json().get('data', {}).get('rows', [])
         
-        # Filter today's orders
-        today_orders = [o for o in all_orders if o.get('orderDate') == today_ddmmyyyy]
+        # Filter today's orders (exclude deleted)
+        today_orders = [o for o in all_orders if o.get('orderDate') == today_ddmmyyyy and not o.get('isDeleted')]
         
-        # Calculate expected values
+        # CORRECT CALCULATION:
+        # Cash Sales = SUM(paidAmount) from ALL orders
+        # Credit Sales = SUM(dueAmount) from ALL orders
+        expected_cash_sales = sum(float(o.get('paidAmount', 0)) for o in today_orders)
+        expected_credit_sales = sum(float(o.get('dueAmount', 0)) for o in today_orders)
+        
+        # Count by status for reporting
         paid_orders = [o for o in today_orders if o.get('paymentStatus') == 'paid']
         unpaid_orders = [o for o in today_orders if o.get('paymentStatus') == 'unpaid']
         partial_orders = [o for o in today_orders if o.get('paymentStatus') == 'partial']
         
-        expected_cash_sales = sum(float(o.get('total', 0)) for o in paid_orders)
-        expected_credit_sales = sum(float(o.get('total', 0)) for o in unpaid_orders + partial_orders)
-        
         print(f"✓ Cash vs Credit Sales Verification for {today_ddmmyyyy}:")
         print(f"  - Today's Orders: {len(today_orders)}")
-        print(f"  - Paid Orders: {len(paid_orders)} = ₹{expected_cash_sales}")
+        print(f"  - Paid Orders: {len(paid_orders)}")
         print(f"  - Unpaid Orders: {len(unpaid_orders)}")
         print(f"  - Partial Orders: {len(partial_orders)}")
-        print(f"  - Expected Credit Sales: ₹{expected_credit_sales}")
+        print(f"  - Expected Cash Sales (SUM paidAmount): ₹{expected_cash_sales}")
+        print(f"  - Expected Credit Sales (SUM dueAmount): ₹{expected_credit_sales}")
         print(f"  - API Cash Sales: ₹{summary.get('cashSales', 0)}")
         print(f"  - API Credit Sales: ₹{summary.get('creditSales', 0)}")
         
