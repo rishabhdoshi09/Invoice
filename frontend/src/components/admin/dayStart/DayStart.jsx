@@ -457,9 +457,9 @@ export const DayStart = () => {
                                 Enter the cash amount in the drawer at the start of the day.
                             </Typography>
                             
-                            {cachedSummary?.data?.openingBalanceSetAt && (
+                            {cachedSummaryData?.openingBalanceSetAt && (
                                 <Alert severity="info" sx={{ mb: 2 }}>
-                                    Current: ₹{openingBalance.toLocaleString('en-IN')} - Set by <strong>{cachedSummary?.data?.openingBalanceSetBy}</strong> at {moment(cachedSummary?.data?.openingBalanceSetAt).format('hh:mm A')}
+                                    Current: ₹{openingBalance.toLocaleString('en-IN')} - Set by <strong>{cachedSummaryData?.openingBalanceSetBy}</strong> at {moment(cachedSummaryData?.openingBalanceSetAt).format('hh:mm A')}
                                 </Alert>
                             )}
                             
