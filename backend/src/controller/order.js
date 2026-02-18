@@ -682,28 +682,13 @@ module.exports = {
                     transaction 
                 });
 
-                // When marking as PAID, create a corresponding payment entry
-                // This ensures single source of truth - all payments are tracked in payments table
-                if (newStatus === 'paid' && oldStatus !== 'paid') {
-                    const paymentAmount = Number(order.total) - Number(order.paidAmount || 0);
-                    if (paymentAmount > 0) {
-                        await db.payment.create({
-                            id: uuidv4(),
-                            paymentNumber: `PAY-${uuidv4().split('-')[0].toUpperCase()}`,
-                            paymentDate: order.orderDate,
-                            partyId: customerIdToUpdate || order.customerId,
-                            partyName: order.customerName || 'Walk-in Customer',
-                            partyType: 'customer',
-                            amount: paymentAmount,
-                            referenceType: 'order',
-                            referenceId: orderId,
-                            referenceNumber: order.orderNumber,
-                            notes: `Payment marked via status toggle by ${changedByTrimmed}`
-                        }, { transaction });
-                    }
-                }
+                // NOTE: We do NOT create a payment record when toggling to "paid"
+                // The order's paidAmount already tracks the cash received
+                // Creating a payment would cause DOUBLE COUNTING in daily summaries
+                // (cashSales counts paidAmount, customerReceipts would count payment)
                 
-                // When marking as UNPAID (reversing a payment), we should delete/reverse the payment entry
+                // When marking as UNPAID (reversing a payment), delete any payment entries
+                // that might have been created by old code or "Receive Payment" flow
                 if (newStatus === 'unpaid' && oldStatus === 'paid') {
                     // Find and delete any payment entries linked to this order
                     await db.payment.destroy({
