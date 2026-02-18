@@ -114,9 +114,6 @@ const AppContent = () => {
         <Route path="login" element={<Login />} />
       </Routes>
       
-      {/* Floating Stats Widget */}
-      <FloatingStatsWidget />
-      
       {/* Keyboard Shortcuts Help Dialog */}
       <KeyboardShortcutsHelp open={helpOpen} onClose={closeHelp} />
     </>
