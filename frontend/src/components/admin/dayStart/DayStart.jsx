@@ -134,18 +134,25 @@ export const DayStart = () => {
         }
     };
 
-    // Calculate cash flow values - using summaryData which switches between today and historical
-    // Convert string values from API to numbers (PostgreSQL DECIMAL returns as strings)
+    // Calculate cash flow values - use realTimeSummary for accurate numbers
+    // Real-time summary calculates directly from orders table
     const openingBalance = Number(summaryData?.openingBalance) || 0;
-    const totalSales = Number(summaryData?.totalSales) || 0;
-    const totalReceivables = Number(summaryData?.totalReceivables) || 0; // Credit sales - not in drawer
-    // After bug fix: totalSales now only includes PAID orders, so cashSales = totalSales
-    const cashSales = totalSales; // totalSales already represents cash sales (PAID orders only)
+    
+    // Use realTimeSummary for accurate sales breakdown
+    const cashSales = Number(realTimeSummary?.cashSales) || 0;  // Only PAID orders
+    const creditSales = Number(realTimeSummary?.creditSales) || 0;  // Unpaid + partial orders
+    const totalBusinessDone = Number(realTimeSummary?.totalBusinessDone) || 0;
+    const paidOrdersCount = Number(realTimeSummary?.paidOrdersCount) || 0;
+    const totalOrdersCount = Number(realTimeSummary?.totalOrders) || 0;
+    
+    // Payment data from paymentSummary
     const customerPayments = Number(paymentSummary?.summary?.customers?.amount) || 0;
+    const customerReceiptsCount = Number(paymentSummary?.summary?.customers?.count) || 0;
     const supplierPayments = Number(paymentSummary?.summary?.suppliers?.amount) || 0;
+    const supplierPaymentsCount = Number(paymentSummary?.summary?.suppliers?.count) || 0;
     const expenses = Number(paymentSummary?.summary?.expenses?.amount) || 0;
     
-    // Expected cash = Opening + Cash Sales (not credit) + Customer Receipts - Supplier Payments - Expenses
+    // Expected cash = Opening + Cash Sales + Customer Receipts - Supplier Payments - Expenses
     const expectedCash = openingBalance + cashSales + customerPayments - supplierPayments - expenses;
     const netCashFlow = customerPayments - supplierPayments - expenses;
 
@@ -159,7 +166,7 @@ export const DayStart = () => {
     const barChartData = [
         { name: 'Opening', amount: openingBalance, fill: '#9c27b0' },
         { name: 'Cash Sales', amount: cashSales, fill: '#2196f3' },
-        { name: 'Credit Sales', amount: totalReceivables, fill: '#ff5722' },
+        { name: 'Credit Sales', amount: creditSales, fill: '#ff5722' },
         { name: 'Received', amount: customerPayments, fill: '#4caf50' },
         { name: 'Paid Out', amount: -supplierPayments, fill: '#ff9800' },
         { name: 'Expenses', amount: -expenses, fill: '#f44336' },
