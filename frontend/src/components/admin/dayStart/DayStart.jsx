@@ -312,7 +312,7 @@ export const DayStart = () => {
                                 ₹{cashSales.toLocaleString('en-IN')}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                                {paidOrdersCount} paid orders
+                                {totalOrdersCount} orders ({paidOrdersCount} paid{Number(realTimeSummary?.partialOrdersCount) > 0 ? `, ${realTimeSummary.partialOrdersCount} partial` : ''})
                             </Typography>
                             {creditSales > 0 && (
                                 <Typography variant="caption" sx={{ display: 'block', color: '#ff5722', fontWeight: 'bold' }}>
