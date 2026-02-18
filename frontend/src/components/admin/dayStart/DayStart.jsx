@@ -374,7 +374,7 @@ export const DayStart = () => {
                                 −₹{expenses.toLocaleString('en-IN')}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                                {paymentSummary?.summary?.expenses?.count || 0} expenses
+                                {Number(realTimeSummary?.expensesCount) || 0} expenses
                             </Typography>
                         </Box>
                     </Grid>
