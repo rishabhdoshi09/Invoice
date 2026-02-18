@@ -1,141 +1,172 @@
 <analysis>**original_problem_statement:**
-The session began with a critical bug where products could not be added to invoices on the order creation page (). This was caused by several underlying issues: weighted products would auto-fetch weight from a non-existent scale, causing the form to reset; the  key for adding items was unreliable; and the generated PDF was showing outdated information from previously submitted invoices.
+The user's primary goal is to polish, stabilize, and professionalize an existing invoicing and ledger application. The core focus is on fixing data integrity and mapping issues, preventing data duplication, and enhancing the UI/UX for faster, more intuitive data entry.
 
-The user also requested several new features during the session:
-1.  Add customer suggestions from the database to the Select Customer dropdown on the order creation page.
-2.  On the customer ledger page, allow viewing the complete invoice PDF when clicking on an invoice row.
-3.  Add a quick Add Sale feature directly on the main customers list page.
-4.  After submitting an invoice, show the recently deleted items from that specific invoice for verification before the user starts a new one.
-5.  Hide the Print PDF button until an invoice has been submitted.
+Recent user requests focused on critical data integrity problems:
+1.  **Customer Data Discrepancy:** Balances shown in the customer list view were inconsistent with the detailed view.
+2.  **Data Loss Concern:** User was concerned about data loss after the preview environment's database was reset.
+3.  **Incorrect Balance Calculation:** The logic for calculating customer due amounts was flawed, leading to incorrect balances (e.g., showing a due of ₹39,820.1 when it should have been ₹14,828.4).
+4.  **Customer Receipts Not Showing:** After a UI update, the receipts tab in the customer details view became empty.
+5.  **Double Entry Issue:** Marking an order as Paid and also using Receive Payment for the same order created duplicate accounting entries.
+6.  ** Page Discrepancy:** The Cash Sales and invoice counts on the Day Start page did not match the actual data queried directly from the database.
+7.  **Advance Section:** User requested a dedicated section to manage customer advances.
 
 **User's preferred language**: English
 
 **what currently exists?**
-The project is a full-stack invoicing application with a Node.js/Express backend and a React frontend using a PostgreSQL database. The application's core data persistence is flawed, as the database is reset on every environment restart.
+The application is a full-stack system with a React frontend, a Node.js/Express backend using Sequelize, and a PostgreSQL database.
 
-In this session, the agent successfully fixed the complex product addition flow on the order creation page. Weighted products can now be selected without the form resetting, and the  key reliably adds both weighted (by attempting to fetch weight) and non-weighted products to the order. The agent also resolved a bug where the PDF preview was showing stale data from a previously submitted order instead of the current, live order items.
+The application has a rich feature set, including:
+-   A smart dashboard with quick stats and data integrity checks.
+-   Advanced Tally-like quick entry forms for Customers and Suppliers.
+-   A global search feature ().
+-   UI enhancements like a floating stats widget, a keyboard shortcuts guide, and a notification system.
 
-New features were also implemented: the customer list page () now has an Add Sale icon to quickly create an invoice for a specific customer and a feature to view the full invoice PDF from the customer's transaction ledger. The order creation page () now features a customer search dropdown that pulls from the database and auto-fills the customer's details.
+However, the session's focus shifted to fixing numerous critical data integrity and calculation bugs reported by the user. While many UI features were added, the underlying data logic was found to be flawed and has been undergoing significant fixes. The backend environment in the preview pod has also been unstable, requiring multiple PostgreSQL reinstalls and database resets during the session.
 
 **Last working item**:
--   Last item agent was working: The user clarified that they want to see a list of items that were *deleted* from the current invoice, so they can be reviewed before submission. The agent had just started to pivot from implementing a recently submitted view to a recently deleted view on the order creation page.
+-   Last item agent was working: Fixing a critical data discrepancy on the  page where UI metrics (Cash Sales, invoice counts) did not match direct database queries. The agent identified a faulty caching mechanism in the  service and implemented a new real-time endpoint () to bypass it. The frontend component  was updated to use this new endpoint.
 -   Status: IN PROGRESS
 -   Agent Testing Done: N
--   Which testing method agent to use? Frontend testing agent
+-   Which testing method agent to use? both
 -   User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   Issue 1: Implement view recently deleted items feature on the order creation page. (P0)
--   Issue 2: Persistent data loss on environment restarts. (P1)
--   Issue 3: Invoice searching is not working. (P1)
+-   Issue 1:  page shows incorrect sales data compared to database queries. (P0)
+-   Issue 2: Customer receipts are not showing in the UI after an update. (P1)
+-   Issue 3: Data loss in the preview environment causes confusion and requires repeated setup. (P1)
+-   Issue 4: Invoice searching functionality might be unreliable with real data. (P2)
 
 **Issues Detail:**
--   **Issue 1:** Implement view recently deleted items feature on the order creation page.
-    -   **Attempted fixes:** The agent was building a feature to show recently submitted items, but the user clarified the need is for items *deleted* from the current invoice before submission.
+-   **Issue 1:**  page shows incorrect sales data.
+    -   **Attempted fixes:** A new real-time endpoint  was created in  which directly queries the  table using a new service method in . The frontend  was updated to use a new  hook from .
     -   **Next debug checklist:**
-        1.  In , create a new state to store deleted items, e.g., .
-        2.  Modify the function that handles item deletion to push the removed item into this new state array.
-        3.  Render the  array in a distinct UI section on the page, visible only when it contains items.
-        4.  Ensure this state is cleared after the invoice is successfully submitted ( function) or when a new item is added to the next invoice ( in formik).
-    -   **Why fix this issue and what will be achieved with the fix?** This provides a final verification step for the user, allowing them to confirm which items were removed from an invoice before it's finalized and printed.
+        1.  Restart the backend server to ensure all changes are live.
+        2.  Take a screenshot of the  page.
+        3.  Compare the values on the screenshot with the user's provided SQL query output.
+        4.  If discrepancies still exist, debug the logic in  -> .
+    -   **Why fix this issue and what will be achieved with the fix?** This is a critical data integrity issue that undermines user trust. Fixing it will ensure the daily summary is accurate and reliable.
     -   **Status:** IN PROGRESS
     -   **Is recurring issue?** N
-    -   **Should Test frontend/backend/both after fix?** frontend
+    -   **Should Test frontend/backend/both after fix?** both
     -   **Blocked on other issue:** None
 
--   **Issue 2:** Persistent data loss on environment restarts.
-    -   **Attempted fixes:** The agent has been repeatedly re-installing PostgreSQL and re-seeding necessary data (like , , and users) after every pod restart. This is a recurring workaround, not a fix.
+-   **Issue 2:** Customer receipts are not showing in the UI.
+    -   **Attempted fixes:** The agent confirmed the  DAO function in  returns a  array. The frontend component  is supposed to render this in a Receipts tab within the details dialog. The investigation was inconclusive. The issue was reported by the user with screenshots showing it was broken.
     -   **Next debug checklist:**
-        1.  Investigate if a persistent volume can be configured for the PostgreSQL data directory () to ensure data survives pod restarts. This is an infrastructure-level change.
-    -   **Why fix this issue and what will be achieved with the fix?** This will make the application stateful and usable across sessions, preventing repeated data loss and debugging cycles on an empty database. It is a critical blocker for stable development and testing.
+        1.  Add test data for a customer with associated payments (receipts).
+        2.  Use  to call the endpoint for fetching a customer's details () and verify the JSON response contains the  array.
+        3.  Inspect the network tab in the browser's developer tools when opening the customer details dialog to see what data is being received.
+        4.  Debug the React component  to see why the  array is not being rendered.
+    -   **Why fix this issue and what will be achieved with the fix?** Users cannot view payment history for customers, which is a critical ledger function.
     -   **Status:** NOT STARTED
+    -   **Is recurring issue?** Y
+    -   **Should Test frontend/backend/both after fix?** both
+    -   **Blocked on other issue:** None
+
+-   **Issue 3:** Data loss in the preview environment.
+    -   **Attempted fixes:** The agent had to reinstall PostgreSQL multiple times, which wiped the database. This led to confusion as the user's local data was intact, but the preview environment showed no data. The agent explained this to the user.
+    -   **Next debug checklist:** This is an environment issue. The next agent must be prepared to re-initialize the database at the start of the session by running , creating the database/user, and restarting the backend. Then, create the base ledgers and admin account.
+    -   **Why fix this issue and what will be achieved with the fix?** Acknowledging and quickly recovering from this environmental instability will save time and avoid confusion.
+    -   **Status:** BLOCKED (Environment Instability)
     -   **Is recurring issue?** Y
     -   **Should Test frontend/backend/both after fix?** backend
     -   **Blocked on other issue:** None
 
--   **Issue 3:** Invoice searching is not working.
-    -   **Attempted fixes:** None in this session.
-    -   **Next debug checklist:**
-        1.  Ensure Issue 2 (data persistence) is resolved so that there is data to search.
-        2.  Create test orders and then use the search functionality to confirm the backend logic in  is working as expected.
-        3.  Monitor the frontend network request to ensure the search query is being sent correctly.
-    -   **Why fix this issue and what will be achieved with the fix?** Users need to be able to find past invoices easily.
+-   **Issue 4:** Invoice searching functionality might be unreliable.
+    -   **Attempted fixes:** The agent tested this on a fresh database and it worked. However, it was noted as a recurring issue from a previous fork.
+    -   **Next debug checklist:** After populating the database with sufficient sample data (customers, orders), thoroughly test the invoice search on the  page with different query terms (customer name, invoice number).
+    -   **Why fix this issue and what will be achieved with the fix?** Ensures a core feature is reliable for users.
     -   **Status:** NOT STARTED
     -   **Is recurring issue?** Y
     -   **Should Test frontend/backend/both after fix?** both
-    -   **Blocked on other issue:** Issue 2: Persistent data loss
+    -   **Blocked on other issue:** None
 
 **In progress Task List**:
--   **Task 1:** Complete the implementation of the view recently deleted items feature.
-    -   **Where to resume:** .
-    -   **What will be achieved with this?** Fulfill the user's requirement for verifying deleted items before invoice submission.
+-   **Task 1:** Complete the  page data fix.
+    -   **Where to resume:** The backend and frontend code has been written. The next step is to start the services, populate with test data, and verify that the UI on the  page now shows figures that match direct SQL queries.
+    -   **What will be achieved with this?** The daily business summary will be accurate and reliable.
     -   **Status:** IN PROGRESS
-    -   **Should Test frontend/backend/both after fix?** frontend
+    -   **Should Test frontend/backend/both after fix?** both
     -   **Blocked on something:** None
 
 **Upcoming and Future Tasks**
 -   **Upcoming Tasks:**
-    -   (P1) Full user testing of the overhauled Customers page, including the new Add Sale and View Invoice features.
+    -   (P1) Full user testing of the completely overhauled  and  pages.
 -   **Future Tasks:**
     -   (P2) Enhance the Stock Management module with transaction tracking and valuation.
-    -   (P2) Refactor data models to consistently use foreign key IDs instead of string names to improve data integrity.
+    -   (P2) Refactor remaining data models to consistently use foreign key IDs instead of string names.
+    -   (P2) Refactor the massive  component (1900+ lines).
 
 **Completed work in this session**
--   **Recently completed:**
-    -   Fixed product selection and addition flow on the order creation page ().
-    -   Enabled the  keyboard shortcut to add both weighted and non-weighted products.
-    -   Fixed PDF preview to show live order data instead of a previously submitted order's data.
-    -   Implemented a customer search/autocomplete feature on the order creation page.
-    -   Added an Add Sale dialog for quick invoice creation from the main customers list ().
-    -   Added the ability to view a full invoice PDF from the customer ledger view.
-    -   Hid the Print PDF and Open PDF buttons until an invoice is submitted.
-    -   Resolved a backend  by updating the invoice number sequence in the database.
+-   **Data Integrity & Bug Fixes:**
+    -   **Balance Calculation Logic:** Fixed a major bug where customer/supplier balances were calculated incorrectly ( instead of ). Logic updated in  and .
+    -   **Double Entry Prevention:** Reworked the Toggle Payment Status feature. It now creates/deletes a corresponding entry in the  table to prevent duplicates. The Receive Payment flow now blocks payments to already-paid orders. Logic updated in  and .
+    -   **Field Name Consistency:** Fixed bugs where the backend was returning different field names (e.g., ) than what the frontend expected (), causing UI to show ₹0.
+    -   **Date Format Bug:** Fixed a bug in the payment summary DAO where date filtering failed due to a format mismatch ( vs ).
+
+-   **Feature Enhancements:**
+    -   **Global Search:** Implemented a global search bar in the header ().
+    -   **Advanced UI Additions:**
+        -   Added a floating Quick Stats widget.
+        -   Added a Keyboard Shortcuts help dialog.
+        -   Integrated a smart notification/toast system.
+    -   **Advances Section:** Added a new Advances tab on the customer page to list customers with a credit balance.
+    -   **Payment Status Toggle:** Enhanced the feature to allow billing staff (not just admin) to toggle status, with a mandatory audit name field.
+    -   **ESLint Warnings:** Fixed numerous  warnings across several frontend components.
 
 **Earlier issues found/mentioned but not fixed**
--   **Issue 1:** The root cause of the database being reset on pod restarts has not been addressed. The agent's repeated re-installation of PostgreSQL is a temporary workaround that consumes significant time and effort each session. This points to a lack of persistent storage for the database service in the container environment.
-    -   **Debug checklist:** Investigate the environment's capabilities for mounting persistent volumes.
-    -   **Why to solve this issue and what will be achieved with this?** Solving this will ensure data persistence, making the application reliable and saving significant time on re-seeding and debugging issues related to an empty database.
-    -   **Should Test frontend/backend/both after fix:** backend
-    -   **Is recurring issue?** Y
+-   The issue of customer receipts are not showing after ui update was reported by the user but has not been resolved.
 
 **Known issue recurrence from previous fork**
--   **Issue recurrence in previous fork:** Database reset on pod restarts.
--   **Recurrence count:** 10+ times in this session.
--   **Status:** NOT STARTED
+-   **Issue recurrence in previous fork:** PostgreSQL service instability in the preview environment.
+-   **Recurrence count:** 3+
+-   **Status:** BLOCKED (Environment-level issue)
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
--   **Frontend:** React (Hooks), Formik, Redux Toolkit, Material-UI, Axios, Moment.js, pdfMake.
--   **Backend:** Node.js, Express.js, Sequelize ORM, PostgreSQL.
--   **Architecture:** RESTful API with a SPA frontend.
+-   **Data Integrity Debugging:** The session was dominated by fixing deep-seated bugs in financial calculations. Key patterns included:
+    -   **Inconsistent Logic:** Fixing areas where different parts of the app calculated the same metric (e.g., balance) in different ways.
+    -   **Source of Truth:** Ensuring actions (like marking an order paid) update a single source of truth (the  table) to prevent double entries.
+    -   **Real-time vs. Cached Data:** Bypassing a faulty caching mechanism ( table) by creating a new endpoint that calculates metrics from raw data on demand.
+-   **Backend:** Node.js, Express.js, Sequelize, PostgreSQL.
+-   **Frontend:** React, Material-UI, RTK Query for state management and data fetching.
 
 **key DB schema**
--   : { id, orderNumber, customerId, customerName, totalAmount }
--   : { id, orderId, productId, quantity, price }
--   : { id, name, mobile, currentBalance }
--   : { id, name, price, type }
--   : { id, prefix, currentNumber }
-
-**changes in tech stack**
--   None.
+-   **orders:** Central table for sales. Contains , , , .
+-   **payments:** Central table for all incoming/outgoing cash. Contains ,  ('customer'/'supplier'),  ('order'/'advance').
+-   **customers:** Contains customer info and .
+-   **dailySummary:** A cache table for daily metrics, which was found to be unreliable.
 
 **All files of reference**
--   : Heavily modified for fixing the product addition flow and implementing the new recently deleted view.
--   : Modified to add the Add Sale and View Invoice from Ledger features.
--   : Contains the  definitions for generating invoices.
+-   **Backend (Data Logic):**
+    -   : Core logic for customer balance calculation.
+    -   : Core logic for supplier balance calculation.
+    -   : Logic for toggling payment status.
+    -   : Logic for receiving payments and preventing duplicates.
+    -   : Logic for calculating daily metrics (both cached and real-time).
+    -   : Exposes the new real-time summary endpoint.
+-   **Frontend (UI & State):**
+    -   : UI for the daily summary page.
+    -   : RTK Query definitions, including the new .
+    -   : The main customer ledger page, heavily modified.
+    -   : Main application layout, holds new UI elements.
+    -   : New global search component.
 
 **Areas that need refactoring**:
--   The data models still use string names () in some places instead of foreign key IDs, which could lead to data integrity issues.
+-   : Over 1900 lines long, extremely complex and difficult to maintain.
+-   : Over 900 lines long, could be broken down into smaller components.
 
 **key api endpoints**
--   : Create a new order.
--   : Fetch a single order with its items.
--   : Fetch the list of all customers.
+-   : **(New)** Gets accurate, uncached daily sales summary.
+-   : Gets customer details including orders and payments.
+-   : Toggles an order's payment status.
+-   : Creates a new payment/receipt.
+-   : The old, potentially unreliable summary endpoint.
 
 **Critical Info for New Agent**
--   **DATABASE IS NOT PERSISTENT.** Expect the PostgreSQL database to be empty upon starting. You will need to re-install PostgreSQL (Reading package lists...
+-   **PostgreSQL is Unstable:** The PostgreSQL service in the preview environment frequently crashes. Be prepared to start the session by reinstalling/restarting it (Reading package lists...
 Building dependency tree...
 Reading state information...
 The following additional packages will be installed:
@@ -150,7 +181,7 @@ The following NEW packages will be installed:
   libtypes-serialiser-perl locales logrotate postgresql postgresql-15
   postgresql-client-15 postgresql-client-common postgresql-common ssl-cert
   sysstat
-0 upgraded, 16 newly installed, 0 to remove and 11 not upgraded.
+0 upgraded, 16 newly installed, 0 to remove and 19 not upgraded.
 Need to get 43.3 MB of archives.
 After this operation, 195 MB of additional disk space will be used.
 Get:1 http://deb.debian.org/debian bookworm/main arm64 libjson-perl all 4.10000-1 [87.5 kB]
@@ -164,12 +195,12 @@ Get:8 http://deb.debian.org/debian bookworm/main arm64 libcommon-sense-perl arm6
 Get:9 http://deb.debian.org/debian bookworm/main arm64 libtypes-serialiser-perl all 1.01-1 [12.2 kB]
 Get:10 http://deb.debian.org/debian bookworm/main arm64 libjson-xs-perl arm64 4.040-1~deb12u1 [91.0 kB]
 Get:11 http://deb.debian.org/debian bookworm/main arm64 libllvm14 arm64 1:14.0.6-12 [19.3 MB]
-Get:12 http://deb.debian.org/debian bookworm/main arm64 libpq5 arm64 15.15-0+deb12u1 [186 kB]
-Get:13 http://deb.debian.org/debian bookworm/main arm64 postgresql-client-15 arm64 15.15-0+deb12u1 [1691 kB]
-Get:14 http://deb.debian.org/debian bookworm/main arm64 postgresql-15 arm64 15.15-0+deb12u1 [16.4 MB]
+Get:12 http://deb.debian.org/debian-security bookworm-security/main arm64 libpq5 arm64 15.16-0+deb12u1 [187 kB]
+Get:13 http://deb.debian.org/debian-security bookworm-security/main arm64 postgresql-client-15 arm64 15.16-0+deb12u1 [1690 kB]
+Get:14 http://deb.debian.org/debian-security bookworm-security/main arm64 postgresql-15 arm64 15.16-0+deb12u1 [16.4 MB]
 Get:15 http://deb.debian.org/debian bookworm/main arm64 postgresql all 15+248+deb12u1 [10.2 kB]
 Get:16 http://deb.debian.org/debian bookworm/main arm64 sysstat arm64 12.6.1-1 [570 kB]
-Fetched 43.3 MB in 0s (91.8 MB/s)
+Fetched 43.3 MB in 1s (79.8 MB/s)
 Selecting previously unselected package libjson-perl.
 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 37768 files and directories currently installed.)
 Preparing to unpack .../00-libjson-perl_4.10000-1_all.deb ...
@@ -206,14 +237,14 @@ Selecting previously unselected package libllvm14:arm64.
 Preparing to unpack .../10-libllvm14_1%3a14.0.6-12_arm64.deb ...
 Unpacking libllvm14:arm64 (1:14.0.6-12) ...
 Selecting previously unselected package libpq5:arm64.
-Preparing to unpack .../11-libpq5_15.15-0+deb12u1_arm64.deb ...
-Unpacking libpq5:arm64 (15.15-0+deb12u1) ...
+Preparing to unpack .../11-libpq5_15.16-0+deb12u1_arm64.deb ...
+Unpacking libpq5:arm64 (15.16-0+deb12u1) ...
 Selecting previously unselected package postgresql-client-15.
-Preparing to unpack .../12-postgresql-client-15_15.15-0+deb12u1_arm64.deb ...
-Unpacking postgresql-client-15 (15.15-0+deb12u1) ...
+Preparing to unpack .../12-postgresql-client-15_15.16-0+deb12u1_arm64.deb ...
+Unpacking postgresql-client-15 (15.16-0+deb12u1) ...
 Selecting previously unselected package postgresql-15.
-Preparing to unpack .../13-postgresql-15_15.15-0+deb12u1_arm64.deb ...
-Unpacking postgresql-15 (15.15-0+deb12u1) ...
+Preparing to unpack .../13-postgresql-15_15.16-0+deb12u1_arm64.deb ...
+Unpacking postgresql-15 (15.16-0+deb12u1) ...
 Selecting previously unselected package postgresql.
 Preparing to unpack .../14-postgresql_15+248+deb12u1_all.deb ...
 Unpacking postgresql (15+248+deb12u1) ...
@@ -224,9 +255,9 @@ Setting up logrotate (3.21.0-1) ...
 Created symlink /etc/systemd/system/timers.target.wants/logrotate.timer → /lib/systemd/system/logrotate.timer.
 Setting up postgresql-client-common (248+deb12u1) ...
 Setting up libc-l10n (2.36-9+deb12u13) ...
-Setting up libpq5:arm64 (15.15-0+deb12u1) ...
+Setting up libpq5:arm64 (15.16-0+deb12u1) ...
 Setting up libcommon-sense-perl:arm64 (3.75-3) ...
-Setting up postgresql-client-15 (15.15-0+deb12u1) ...
+Setting up postgresql-client-15 (15.16-0+deb12u1) ...
 update-alternatives: using /usr/share/postgresql/15/man/man1/psql.1.gz to provide /usr/share/man/man1/psql.1.gz (psql.1.gz) in auto mode
 Setting up locales (2.36-9+deb12u13) ...
 debconf: unable to initialize frontend: Dialog
@@ -276,7 +307,7 @@ Removing obsolete dictionary files:
 invoke-rc.d: could not determine current runlevel
 invoke-rc.d: policy-rc.d denied execution of start.
 Created symlink /etc/systemd/system/multi-user.target.wants/postgresql.service → /lib/systemd/system/postgresql.service.
-Setting up postgresql-15 (15.15-0+deb12u1) ...
+Setting up postgresql-15 (15.16-0+deb12u1) ...
 debconf: unable to initialize frontend: Dialog
 debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)
 debconf: falling back to frontend: Readline
@@ -308,41 +339,46 @@ update-alternatives: using /usr/share/postgresql/15/man/man1/postmaster.1.gz to 
 invoke-rc.d: could not determine current runlevel
 invoke-rc.d: policy-rc.d denied execution of start.
 Setting up postgresql (15+248+deb12u1) ...
-Processing triggers for libc-bin (2.36-9+deb12u13) ...), create the user/DB, restart the backend (backend: ERROR (not running)
-backend: ERROR (spawn error)) to allow Sequelize to create tables, and then seed the data (). You will also need to seed the  table () for orders to be created successfully. This is the highest priority recurring problem.
--   The PDF preview may appear blank in the headless browser environment used for testing. This is a known rendering limitation. The agent has confirmed that the PDF data and blob URL are generated correctly. Use console logs or the Open PDF in New Tab button for verification.
+Processing triggers for libc-bin (2.36-9+deb12u13) ...
+Starting PostgreSQL 15 database server: main.) and re-initializing the database (create user, create DB, create ledgers, create admin).
+-   **User's Local Data is Truth:** The user is testing fixes on their own local database, which is populated with real data. The preview database is ephemeral. Coordinate with the user for validation of data-related fixes.
+-   **Data Integrity is #1 Priority:** The user is extremely sensitive to calculation errors and data inconsistencies. Every change must be scrutinized for its impact on financial reporting. The app has a history of subtle data bugs.
+-   **Double-check Calculations:** Do not trust a single implementation. Cross-reference balance calculations between list views, detail views, and dashboard summaries to ensure consistency. The recent fixes aimed to unify this logic around .
 
 **documents and test reports created in this job**
--   None.
+-   /app/test_reports/iteration_9.json
+-   /app/test_reports/iteration_10.json
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.   - **Status: IN PROGRESS**. This is the current task.
-2.   - **Status: Superceded** by the above clarification.
-3.   - **Status: COMPLETED**.
-4.   (referring to customer ledger) - **Status: COMPLETED**.
-5.   - **Status: COMPLETED**.
-6.   - **Status: COMPLETED**.
-7.   (with screenshot showing old PDF) - **Status: COMPLETED**.
-8.   - **Status: ADDRESSED**. The issue was a browser rendering limitation, and a workaround button was provided.
-9.   - **Status: COMPLETED**. The root data issue was fixed.
-10.  - **Status: COMPLETED**. This was traced to a state reset issue and a backend unique constraint error, both of which were fixed.
+1.  **User:** Reports discrepancy between terminal SQL query and DayStart page UI. **Status: IN PROGRESS** (Agent is implementing a fix).
+2.  **User:** Reports that customer receipts are not showing after a UI update. **Status: PENDING**.
+3.  **User:** Reports a double-entry issue when an order is toggled to paid and a payment is also received separately. **Status: RESOLVED**.
+4.  **User:** Asks for a dedicated section for customer advances. **Status: RESOLVED**.
+5.  **User:** Reports incorrect due amount (₹39,820.1 instead of ₹14,828). **Status: RESOLVED**.
+6.  **User:** Provides screenshots showing a massive discrepancy in a customer's balance between the list and detail views. **Status: RESOLVED**.
+7.  **User:** Expresses concern about data from the past being lost. **Status: ADDRESSED** (Agent explained it was a preview DB reset).
+8.  **User:** Reports  and asks to make customer fields optional. **Status: ADDRESSED** (Agent fixed DB connection and confirmed fields were already optional).
+9.  **User:** Provides ESLint warnings. **Status: RESOLVED**.
+10. **User:** Asks to allow billing staff to toggle payment status with mandatory naming. **Status: RESOLVED**.
 
 **Project Health Check:**
--   **Broken:** The application's database is not persistent across restarts, making development and testing extremely inefficient and unreliable.
+-   **Broken:**
+    -    page's financial reporting.
+    -   Display of customer receipts in the customer details dialog.
 -   **Mocked:** None.
 
 **3rd Party Integrations**
--   **RS232 Weight Scale:** A hardware integration handled via a local serial port library. The frontend gracefully handles connection failures.
+-   RS232 Weight Scale (pre-existing hardware integration via a local serial port library).
 
 **Testing status**
--   Testing agent used after significant changes: NO (Agent used screenshot tool for manual E2E testing).
+-   Testing agent used after significant changes: YES, but this was *before* the user reported the most critical data integrity bugs. The subsequent fixes have not been tested by the subagent.
 -   Troubleshoot agent used after agent stuck in loop: NO
--   Test files created: []
--   Known regressions: None from this session's work.
+-   Test files created: None.
+-   Known regressions: The customer receipts UI broke after an update.
 
 **Credentials to test flow:**
 -   **Username:** 
 -   **Password:** 
 
 **What agent forgot to execute**
--   The agent never addressed the root cause of the non-persistent database, despite it being mentioned in the initial handoff and causing numerous interruptions throughout the session. The agent continued to apply the time-consuming workaround of reinstalling and reseeding the database.</analysis>
+-   The agent did not fully investigate and resolve the user's report that customer receipts are not showing. The investigation was started but interrupted by other critical bugs and environment issues.</analysis>
