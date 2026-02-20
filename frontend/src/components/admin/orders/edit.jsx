@@ -775,10 +775,10 @@ export const EditOrder = () => {
             <Button
               size="small"
               variant="contained"
-              startIcon={<PictureAsPdf />}
-              onClick={handleDownloadPdf}
+              startIcon={<Print />}
+              onClick={handlePrintInvoice}
             >
-              Download
+              Print
             </Button>
             <IconButton onClick={handleClosePreview}>
               <CancelIcon />
