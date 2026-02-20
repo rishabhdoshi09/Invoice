@@ -65,6 +65,59 @@ export const EditOrder = () => {
   // Delete confirmation state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  
+  // PDF state
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [previewPdfUrl, setPreviewPdfUrl] = useState(null);
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+
+  // Download PDF function
+  const handleDownloadPdf = () => {
+    if (!orderData) return;
+    setDownloadingPdf(true);
+    try {
+      const pdfDefinition = generatePdfDefinition(orderData);
+      pdfMake.createPdf(pdfDefinition).download(`Invoice_${orderData.orderNumber}.pdf`);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      dispatch(setNotification({
+        open: true,
+        severity: 'error',
+        message: 'Failed to generate PDF'
+      }));
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
+  // View PDF preview
+  const handleViewPdf = () => {
+    if (!orderData) return;
+    try {
+      const pdfDefinition = generatePdfDefinition(orderData);
+      pdfMake.createPdf(pdfDefinition).getBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        setPreviewPdfUrl(url);
+        setPreviewDialogOpen(true);
+      });
+    } catch (error) {
+      console.error('Error generating PDF preview:', error);
+      dispatch(setNotification({
+        open: true,
+        severity: 'error',
+        message: 'Failed to generate PDF preview'
+      }));
+    }
+  };
+
+  // Close preview
+  const handleClosePreview = () => {
+    setPreviewDialogOpen(false);
+    if (previewPdfUrl) {
+      URL.revokeObjectURL(previewPdfUrl);
+      setPreviewPdfUrl(null);
+    }
+  };
 
   useEffect(() => {
     const fetchOrderData = async () => {
