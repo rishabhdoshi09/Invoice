@@ -2,11 +2,25 @@ import { Button, Paper, TextField, Typography, TableContainer, Table, TableHead,
 import { useNavigate } from 'react-router';
 import { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { listOrdersAction, deleteOrderAction } from '../../../store/orders';
+import { listOrdersAction, deleteOrderAction, getOrderAction } from '../../../store/orders';
 import { Pagination } from '../../common/pagination';
 import { useAuth } from '../../../context/AuthContext';
-import { Note, Warning, Clear, Refresh, SwapHoriz, PersonAdd, Person } from '@mui/icons-material';
+import { Note, Warning, Clear, Refresh, SwapHoriz, PersonAdd, Person, Download, Visibility } from '@mui/icons-material';
 import axios from 'axios';
+import pdfMake from 'pdfmake/build/pdfmake';
+import { generatePdfDefinition } from './helper';
+
+// Load pdfMake fonts safely
+try {
+    const vfsFonts = require('pdfmake/build/vfs_fonts');
+    if (vfsFonts?.pdfMake?.vfs) {
+        pdfMake.vfs = vfsFonts.pdfMake.vfs;
+    } else if (vfsFonts?.vfs) {
+        pdfMake.vfs = vfsFonts.vfs;
+    }
+} catch (e) {
+    console.warn('pdfMake fonts not loaded:', e);
+}
 
 // Key for storing scroll position
 const SCROLL_POSITION_KEY = 'orders_scroll_position';
