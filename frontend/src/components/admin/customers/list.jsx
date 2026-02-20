@@ -260,10 +260,10 @@ export const ListCustomers = () => {
             const token = localStorage.getItem('token');
             await axios.post('/api/customers', {
                 name: newCustomer.name.trim(),
-                mobile: newCustomer.mobile || null,
-                email: newCustomer.email || null,
-                address: newCustomer.address || null,
-                gstin: newCustomer.gstin || null,
+                mobile: newCustomer.mobile?.trim() || '',
+                email: newCustomer.email?.trim() || '',
+                address: newCustomer.address?.trim() || '',
+                gstin: newCustomer.gstin?.trim() || '',
                 openingBalance: parseFloat(newCustomer.openingBalance) || 0
             }, { headers: { Authorization: `Bearer ${token}` } });
             
