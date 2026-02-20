@@ -73,25 +73,25 @@ export const ListOrders = () => {
     const [loadingCustomers, setLoadingCustomers] = useState(false);
     const [changedByName, setChangedByName] = useState(''); // Mandatory name for audit
     
-    // PDF download state
-    const [downloadingPdf, setDownloadingPdf] = useState(null);
+    // Print state
+    const [printingInvoice, setPrintingInvoice] = useState(null);
 
-    // Download PDF function
-    const handleDownloadPdf = async (orderId, orderNumber, e) => {
+    // Print Invoice function
+    const handlePrintInvoice = async (orderId, e) => {
         e.stopPropagation();
-        setDownloadingPdf(orderId);
+        setPrintingInvoice(orderId);
         try {
             // Fetch full order details with items
             const orderData = await dispatch(getOrderAction(orderId));
             if (orderData) {
                 const pdfDefinition = generatePdfDefinition(orderData);
-                pdfMake.createPdf(pdfDefinition).download(`Invoice_${orderNumber}.pdf`);
+                pdfMake.createPdf(pdfDefinition).print();
             }
         } catch (error) {
-            console.error('Error generating PDF:', error);
-            alert('Failed to generate PDF. Please try again.');
+            console.error('Error printing invoice:', error);
+            alert('Failed to print invoice. Please try again.');
         } finally {
-            setDownloadingPdf(null);
+            setPrintingInvoice(null);
         }
     };
 
