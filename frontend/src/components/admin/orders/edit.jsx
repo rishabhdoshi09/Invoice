@@ -402,6 +402,30 @@ export const EditOrder = () => {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Edit Order</Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
+          <Tooltip title="View Invoice PDF">
+            <Button 
+              variant="outlined" 
+              color="info"
+              onClick={handleViewPdf}
+              disabled={saving}
+              startIcon={<Visibility />}
+              data-testid="view-pdf-btn"
+            >
+              View PDF
+            </Button>
+          </Tooltip>
+          <Tooltip title="Download Invoice PDF">
+            <Button 
+              variant="outlined" 
+              color="secondary"
+              onClick={handleDownloadPdf}
+              disabled={saving || downloadingPdf}
+              startIcon={downloadingPdf ? <CircularProgress size={18} /> : <PictureAsPdf />}
+              data-testid="download-pdf-btn"
+            >
+              Download PDF
+            </Button>
+          </Tooltip>
           {isAdmin && (
             <Button 
               variant="outlined" 
