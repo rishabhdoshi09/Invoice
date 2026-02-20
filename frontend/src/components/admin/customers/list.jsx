@@ -12,10 +12,24 @@ import {
     Delete, Visibility, Refresh, Add, Receipt, People, Close, 
     ShoppingCart, Search, Download, CheckCircle,
     KeyboardArrowDown, KeyboardArrowUp, PersonAdd, Warning,
-    History, Phone, Email, AccountBalance, TipsAndUpdates
+    History, Phone, Email, AccountBalance, TipsAndUpdates, PictureAsPdf
 } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
+import pdfMake from 'pdfmake/build/pdfmake';
+import { generatePdfDefinition } from '../orders/helper';
+
+// Load pdfMake fonts safely
+try {
+    const vfsFonts = require('pdfmake/build/vfs_fonts');
+    if (vfsFonts?.pdfMake?.vfs) {
+        pdfMake.vfs = vfsFonts.pdfMake.vfs;
+    } else if (vfsFonts?.vfs) {
+        pdfMake.vfs = vfsFonts.vfs;
+    }
+} catch (e) {
+    console.warn('pdfMake fonts not loaded:', e);
+}
 
 export const ListCustomers = () => {
     const navigate = useNavigate();
