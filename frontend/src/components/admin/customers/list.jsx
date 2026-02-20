@@ -128,18 +128,18 @@ export const ListCustomers = () => {
         return data.data || data;
     };
 
-    // Download PDF for an invoice
-    const handleDownloadInvoicePdf = async (order) => {
-        setDownloadingPdf(order.id);
+    // Print Invoice function
+    const handlePrintInvoice = async (order) => {
+        setPrintingInvoice(order.id);
         try {
             const fullOrder = await fetchOrderAndGeneratePdf(order.id);
             const pdfDefinition = generatePdfDefinition(fullOrder);
-            pdfMake.createPdf(pdfDefinition).download(`Invoice_${order.orderNumber}.pdf`);
+            pdfMake.createPdf(pdfDefinition).print();
         } catch (error) {
-            console.error('Error generating PDF:', error);
-            alert('Failed to generate PDF. Please try again.');
+            console.error('Error printing invoice:', error);
+            alert('Failed to print invoice. Please try again.');
         } finally {
-            setDownloadingPdf(null);
+            setPrintingInvoice(null);
         }
     };
 
