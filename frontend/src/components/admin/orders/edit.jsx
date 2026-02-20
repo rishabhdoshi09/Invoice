@@ -67,26 +67,26 @@ export const EditOrder = () => {
   const [deleting, setDeleting] = useState(false);
   
   // PDF state
-  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [printingInvoice, setPrintingInvoice] = useState(false);
   const [previewPdfUrl, setPreviewPdfUrl] = useState(null);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
 
-  // Download PDF function
-  const handleDownloadPdf = () => {
+  // Print Invoice function
+  const handlePrintInvoice = () => {
     if (!orderData) return;
-    setDownloadingPdf(true);
+    setPrintingInvoice(true);
     try {
       const pdfDefinition = generatePdfDefinition(orderData);
-      pdfMake.createPdf(pdfDefinition).download(`Invoice_${orderData.orderNumber}.pdf`);
+      pdfMake.createPdf(pdfDefinition).print();
     } catch (error) {
-      console.error('Error generating PDF:', error);
+      console.error('Error printing invoice:', error);
       dispatch(setNotification({
         open: true,
         severity: 'error',
-        message: 'Failed to generate PDF'
+        message: 'Failed to print invoice'
       }));
     } finally {
-      setDownloadingPdf(false);
+      setPrintingInvoice(false);
     }
   };
 
