@@ -28,7 +28,7 @@ import {
   DialogContentText,
   DialogActions
 } from '@mui/material';
-import { Edit as EditIcon, Save as SaveIcon, Cancel as CancelIcon, NoteAdd, Send, Delete, Warning, PictureAsPdf, Visibility } from '@mui/icons-material';
+import { Edit as EditIcon, Save as SaveIcon, Cancel as CancelIcon, NoteAdd, Send, Delete, Warning, Print, Visibility } from '@mui/icons-material';
 import { getOrderAction, deleteOrderAction } from '../../../store/orders';
 import { setNotification } from '../../../store/application';
 import { useAuth } from '../../../context/AuthContext';
