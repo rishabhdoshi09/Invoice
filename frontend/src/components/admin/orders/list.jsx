@@ -5,7 +5,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { listOrdersAction, deleteOrderAction, getOrderAction } from '../../../store/orders';
 import { Pagination } from '../../common/pagination';
 import { useAuth } from '../../../context/AuthContext';
-import { Note, Warning, Clear, Refresh, SwapHoriz, PersonAdd, Person, Download, Visibility } from '@mui/icons-material';
+import { Note, Warning, Clear, Refresh, SwapHoriz, PersonAdd, Person, Print, Visibility } from '@mui/icons-material';
 import axios from 'axios';
 import pdfMake from 'pdfmake/build/pdfmake';
 import { generatePdfDefinition } from './helper';
