@@ -760,6 +760,50 @@ export const EditOrder = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* PDF Preview Dialog */}
+      <Dialog 
+        open={previewDialogOpen} 
+        onClose={handleClosePreview} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{ sx: { height: '90vh' } }}
+      >
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+          <Typography variant="h6">Invoice Preview - {orderData?.orderNumber}</Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<PictureAsPdf />}
+              onClick={handleDownloadPdf}
+            >
+              Download
+            </Button>
+            <IconButton onClick={handleClosePreview}>
+              <CancelIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column' }}>
+          {previewPdfUrl ? (
+            <iframe
+              src={previewPdfUrl}
+              title="Invoice Preview"
+              style={{ 
+                width: '100%', 
+                height: '100%', 
+                border: 'none',
+                flexGrow: 1
+              }}
+            />
+          ) : (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+              <CircularProgress />
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 };
