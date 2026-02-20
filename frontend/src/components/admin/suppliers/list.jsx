@@ -170,8 +170,8 @@ export const ListSuppliers = () => {
             const token = localStorage.getItem('token');
             await axios.post('/api/suppliers', {
                 name: newSupplier.name.trim(),
-                mobile: newSupplier.mobile || null,
-                gstin: newSupplier.gstin || null,
+                mobile: newSupplier.mobile?.trim() || '',
+                gstin: newSupplier.gstin?.trim() || '',
                 openingBalance: parseFloat(newSupplier.openingBalance) || 0
             }, { headers: { Authorization: `Bearer ${token}` } });
             
