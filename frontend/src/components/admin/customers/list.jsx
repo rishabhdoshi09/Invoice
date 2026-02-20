@@ -989,18 +989,19 @@ export const ListCustomers = () => {
                                                 <TableCell align="right">Paid</TableCell>
                                                 <TableCell align="right">Due</TableCell>
                                                 <TableCell>Status</TableCell>
+                                                <TableCell align="center">Actions</TableCell>
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
                                             {detailsDialog.customer.orders?.length === 0 ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={7} align="center" sx={{ py: 2 }}>No invoices yet</TableCell>
+                                                    <TableCell colSpan={8} align="center" sx={{ py: 2 }}>No invoices yet</TableCell>
                                                 </TableRow>
                                             ) : (
                                                 detailsDialog.customer.orders?.map((o) => (
                                                     <>
-                                                        <TableRow key={o.id} hover sx={{ cursor: 'pointer' }} onClick={() => setExpandedOrder(expandedOrder === o.id ? null : o.id)}>
-                                                            <TableCell>
+                                                        <TableRow key={o.id} hover>
+                                                            <TableCell onClick={() => setExpandedOrder(expandedOrder === o.id ? null : o.id)} sx={{ cursor: 'pointer' }}>
                                                                 <IconButton size="small">
                                                                     {expandedOrder === o.id ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
                                                                 </IconButton>
@@ -1011,10 +1012,36 @@ export const ListCustomers = () => {
                                                             <TableCell align="right" sx={{ color: 'success.main' }}>₹{(o.paidAmount || 0).toLocaleString('en-IN')}</TableCell>
                                                             <TableCell align="right" sx={{ color: 'error.main' }}>₹{(o.dueAmount || 0).toLocaleString('en-IN')}</TableCell>
                                                             <TableCell><Chip label={o.paymentStatus} size="small" color={o.paymentStatus === 'paid' ? 'success' : 'warning'} /></TableCell>
+                                                            <TableCell align="center">
+                                                                <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+                                                                    <Tooltip title="View Invoice">
+                                                                        <IconButton 
+                                                                            size="small" 
+                                                                            color="primary"
+                                                                            onClick={() => handleViewInvoice(o)}
+                                                                            disabled={viewingInvoice === o.id}
+                                                                            data-testid={`view-invoice-${o.id}`}
+                                                                        >
+                                                                            {viewingInvoice === o.id ? <CircularProgress size={18} /> : <Visibility fontSize="small" />}
+                                                                        </IconButton>
+                                                                    </Tooltip>
+                                                                    <Tooltip title="Download PDF">
+                                                                        <IconButton 
+                                                                            size="small" 
+                                                                            color="secondary"
+                                                                            onClick={() => handleDownloadInvoicePdf(o)}
+                                                                            disabled={downloadingPdf === o.id}
+                                                                            data-testid={`download-invoice-${o.id}`}
+                                                                        >
+                                                                            {downloadingPdf === o.id ? <CircularProgress size={18} /> : <PictureAsPdf fontSize="small" />}
+                                                                        </IconButton>
+                                                                    </Tooltip>
+                                                                </Box>
+                                                            </TableCell>
                                                         </TableRow>
                                                         {expandedOrder === o.id && (
                                                             <TableRow>
-                                                                <TableCell colSpan={7} sx={{ bgcolor: '#fafafa', py: 0 }}>
+                                                                <TableCell colSpan={8} sx={{ bgcolor: '#fafafa', py: 0 }}>
                                                                     <Collapse in={true}>
                                                                         <Box sx={{ p: 1.5 }}>
                                                                             <Typography variant="caption" sx={{ fontWeight: 600, color: '#1976d2' }}>
