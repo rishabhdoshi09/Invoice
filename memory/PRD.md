@@ -5,7 +5,42 @@ A billing/invoicing system with React frontend + Node.js backend + PostgreSQL da
 
 ---
 
-## Critical Updates (February 18, 2026 - Latest)
+## Critical Updates (February 20, 2026 - Latest)
+
+### ✅ INVOICE VIEW & PDF DOWNLOAD FEATURE
+
+**User Request:** "Could I get a view + downloadable PDF at these places" (Customer invoices list + Orders list)
+
+**Implementation:**
+1. **Orders List Page (`/orders`):**
+   - Added "PDF" button with download icon next to existing "View" button
+   - Downloads invoice as PDF file with filename `Invoice_{orderNumber}.pdf`
+   - Uses existing `generatePdfDefinition` from helper.js
+
+2. **Customer Detail Dialog (Invoices Tab):**
+   - Added "View" (eye icon) and "Download" (PDF icon) buttons to each invoice row
+   - View opens PDF in an in-app preview modal with iframe
+   - Download saves PDF directly to user's device
+
+3. **Order Edit Page (`/orders/edit/:id`):**
+   - Added "View PDF" and "Download PDF" buttons in the header
+   - View PDF opens full-screen preview dialog
+   - Download PDF saves the invoice
+
+**Files Modified:**
+- `frontend/src/components/admin/orders/list.jsx` - Added PDF download button with pdfMake integration
+- `frontend/src/components/admin/customers/list.jsx` - Added View/Download buttons to invoice rows + preview modal
+- `frontend/src/components/admin/orders/edit.jsx` - Added View PDF and Download PDF buttons
+
+**Technical Details:**
+- Reuses existing `generatePdfDefinition` from `helper.js` for consistent invoice format
+- Uses `pdfMake.createPdf().download()` for direct download
+- Uses `pdfMake.createPdf().getBlob()` + URL.createObjectURL for in-browser preview
+- Proper memory cleanup with URL.revokeObjectURL when closing preview dialogs
+
+---
+
+## Critical Updates (February 18, 2026)
 
 ### ✅ COMPREHENSIVE DATA INTEGRITY AUDIT & FIX
 
