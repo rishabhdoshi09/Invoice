@@ -12,7 +12,7 @@ import {
     Delete, Visibility, Refresh, Add, Receipt, People, Close, 
     ShoppingCart, Search, Download, CheckCircle,
     KeyboardArrowDown, KeyboardArrowUp, PersonAdd, Warning,
-    History, Phone, Email, AccountBalance, TipsAndUpdates, PictureAsPdf
+    History, Phone, Email, AccountBalance, TipsAndUpdates, Print
 } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
