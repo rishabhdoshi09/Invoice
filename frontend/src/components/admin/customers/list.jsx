@@ -119,6 +119,58 @@ export const ListCustomers = () => {
         }
     };
 
+    // Fetch full order details and generate PDF
+    const fetchOrderAndGeneratePdf = async (orderId) => {
+        const token = localStorage.getItem('token');
+        const { data } = await axios.get(`/api/orders/${orderId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        return data.data || data;
+    };
+
+    // Download PDF for an invoice
+    const handleDownloadInvoicePdf = async (order) => {
+        setDownloadingPdf(order.id);
+        try {
+            const fullOrder = await fetchOrderAndGeneratePdf(order.id);
+            const pdfDefinition = generatePdfDefinition(fullOrder);
+            pdfMake.createPdf(pdfDefinition).download(`Invoice_${order.orderNumber}.pdf`);
+        } catch (error) {
+            console.error('Error generating PDF:', error);
+            alert('Failed to generate PDF. Please try again.');
+        } finally {
+            setDownloadingPdf(null);
+        }
+    };
+
+    // View Invoice as PDF in modal
+    const handleViewInvoice = async (order) => {
+        setViewingInvoice(order.id);
+        try {
+            const fullOrder = await fetchOrderAndGeneratePdf(order.id);
+            const pdfDefinition = generatePdfDefinition(fullOrder);
+            pdfMake.createPdf(pdfDefinition).getBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                setInvoicePreviewUrl(url);
+                setInvoicePreviewOpen(true);
+            });
+        } catch (error) {
+            console.error('Error viewing PDF:', error);
+            alert('Failed to load invoice preview. Please try again.');
+        } finally {
+            setViewingInvoice(null);
+        }
+    };
+
+    // Close invoice preview
+    const handleCloseInvoicePreview = () => {
+        setInvoicePreviewOpen(false);
+        if (invoicePreviewUrl) {
+            URL.revokeObjectURL(invoicePreviewUrl);
+            setInvoicePreviewUrl(null);
+        }
+    };
+
     // Check for duplicate customer name/mobile
     const checkDuplicate = useCallback((name, mobile) => {
         if (!name.trim() && !mobile.trim()) {
