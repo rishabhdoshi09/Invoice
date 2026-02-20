@@ -1028,15 +1028,15 @@ export const ListCustomers = () => {
                                                                             {viewingInvoice === o.id ? <CircularProgress size={18} /> : <Visibility fontSize="small" />}
                                                                         </IconButton>
                                                                     </Tooltip>
-                                                                    <Tooltip title="Download PDF">
+                                                                    <Tooltip title="Print Invoice">
                                                                         <IconButton 
                                                                             size="small" 
                                                                             color="secondary"
-                                                                            onClick={() => handleDownloadInvoicePdf(o)}
-                                                                            disabled={downloadingPdf === o.id}
-                                                                            data-testid={`download-invoice-${o.id}`}
+                                                                            onClick={() => handlePrintInvoice(o)}
+                                                                            disabled={printingInvoice === o.id}
+                                                                            data-testid={`print-invoice-${o.id}`}
                                                                         >
-                                                                            {downloadingPdf === o.id ? <CircularProgress size={18} /> : <PictureAsPdf fontSize="small" />}
+                                                                            {printingInvoice === o.id ? <CircularProgress size={18} /> : <Print fontSize="small" />}
                                                                         </IconButton>
                                                                     </Tooltip>
                                                                 </Box>
