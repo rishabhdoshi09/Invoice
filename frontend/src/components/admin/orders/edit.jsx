@@ -52,7 +52,7 @@ export const EditOrder = () => {
   const { orderId } = useParams();
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { user, isAdmin } = useAuth();
+  const { isAdmin } = useAuth();
   
   const [orderData, setOrderData] = useState(null);
   const [loading, setLoading] = useState(true);
