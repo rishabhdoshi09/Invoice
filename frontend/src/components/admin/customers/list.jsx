@@ -1102,6 +1102,57 @@ export const ListCustomers = () => {
                     </>
                 )}
             </Dialog>
+
+            {/* Invoice Preview Dialog */}
+            <Dialog 
+                open={invoicePreviewOpen} 
+                onClose={handleCloseInvoicePreview} 
+                maxWidth="md" 
+                fullWidth
+                PaperProps={{ sx: { height: '90vh' } }}
+            >
+                <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+                    <Typography variant="h6">Invoice Preview</Typography>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<Download />}
+                            onClick={() => {
+                                if (invoicePreviewUrl) {
+                                    const a = document.createElement('a');
+                                    a.href = invoicePreviewUrl;
+                                    a.download = 'Invoice.pdf';
+                                    a.click();
+                                }
+                            }}
+                        >
+                            Download
+                        </Button>
+                        <IconButton onClick={handleCloseInvoicePreview}>
+                            <Close />
+                        </IconButton>
+                    </Box>
+                </DialogTitle>
+                <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column' }}>
+                    {invoicePreviewUrl ? (
+                        <iframe
+                            src={invoicePreviewUrl}
+                            title="Invoice Preview"
+                            style={{ 
+                                width: '100%', 
+                                height: '100%', 
+                                border: 'none',
+                                flexGrow: 1
+                            }}
+                        />
+                    ) : (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                            <CircularProgress />
+                        </Box>
+                    )}
+                </DialogContent>
+            </Dialog>
         </Box>
     );
 };
