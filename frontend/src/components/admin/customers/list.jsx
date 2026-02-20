@@ -1119,18 +1119,22 @@ export const ListCustomers = () => {
                     <Box sx={{ display: 'flex', gap: 1 }}>
                         <Button
                             size="small"
-                            variant="outlined"
-                            startIcon={<Download />}
+                            variant="contained"
+                            startIcon={<Print />}
                             onClick={() => {
                                 if (invoicePreviewUrl) {
-                                    const a = document.createElement('a');
-                                    a.href = invoicePreviewUrl;
-                                    a.download = 'Invoice.pdf';
-                                    a.click();
+                                    const iframe = document.createElement('iframe');
+                                    iframe.style.display = 'none';
+                                    iframe.src = invoicePreviewUrl;
+                                    document.body.appendChild(iframe);
+                                    iframe.onload = () => {
+                                        iframe.contentWindow.print();
+                                        setTimeout(() => document.body.removeChild(iframe), 1000);
+                                    };
                                 }
                             }}
                         >
-                            Download
+                            Print
                         </Button>
                         <IconButton onClick={handleCloseInvoicePreview}>
                             <Close />
