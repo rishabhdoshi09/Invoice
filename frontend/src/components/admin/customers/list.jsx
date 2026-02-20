@@ -290,7 +290,10 @@ export const ListCustomers = () => {
                 const token = localStorage.getItem('token');
                 const { data } = await axios.post('/api/customers', {
                     name: newCustomerName.trim(),
-                    mobile: newCustomerMobile || null,
+                    mobile: newCustomerMobile?.trim() || '',
+                    email: '',
+                    address: '',
+                    gstin: '',
                     openingBalance: 0
                 }, { headers: { Authorization: `Bearer ${token}` } });
                 customerId = data.data.id;
