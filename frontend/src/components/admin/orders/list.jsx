@@ -533,17 +533,17 @@ export const ListOrders = () => {
                                                             View
                                                         </Button>
                                                     </Tooltip>
-                                                    <Tooltip title="Download PDF">
+                                                    <Tooltip title="Print Invoice">
                                                         <Button 
                                                             size="small" 
                                                             variant="outlined"
                                                             color="secondary"
-                                                            onClick={(e) => handleDownloadPdf(row.id, row.orderNumber, e)}
-                                                            disabled={downloadingPdf === row.id}
-                                                            startIcon={downloadingPdf === row.id ? <CircularProgress size={14} /> : <Download fontSize="small" />}
-                                                            data-testid={`download-pdf-${row.id}`}
+                                                            onClick={(e) => handlePrintInvoice(row.id, e)}
+                                                            disabled={printingInvoice === row.id}
+                                                            startIcon={printingInvoice === row.id ? <CircularProgress size={14} /> : <Print fontSize="small" />}
+                                                            data-testid={`print-invoice-${row.id}`}
                                                         >
-                                                            PDF
+                                                            Print
                                                         </Button>
                                                     </Tooltip>
                                                     {isAdmin && (
