@@ -28,11 +28,25 @@ import {
   DialogContentText,
   DialogActions
 } from '@mui/material';
-import { Edit as EditIcon, Save as SaveIcon, Cancel as CancelIcon, NoteAdd, Send, Delete, Warning } from '@mui/icons-material';
+import { Edit as EditIcon, Save as SaveIcon, Cancel as CancelIcon, NoteAdd, Send, Delete, Warning, PictureAsPdf, Visibility } from '@mui/icons-material';
 import { getOrderAction, deleteOrderAction } from '../../../store/orders';
 import { setNotification } from '../../../store/application';
 import { useAuth } from '../../../context/AuthContext';
 import { api } from '../../../store/api'; // RTK Query API for cache invalidation
+import pdfMake from 'pdfmake/build/pdfmake';
+import { generatePdfDefinition } from './helper';
+
+// Load pdfMake fonts safely
+try {
+    const vfsFonts = require('pdfmake/build/vfs_fonts');
+    if (vfsFonts?.pdfMake?.vfs) {
+        pdfMake.vfs = vfsFonts.pdfMake.vfs;
+    } else if (vfsFonts?.vfs) {
+        pdfMake.vfs = vfsFonts.vfs;
+    }
+} catch (e) {
+    console.warn('pdfMake fonts not loaded:', e);
+}
 
 export const EditOrder = () => {
   const { orderId } = useParams();
