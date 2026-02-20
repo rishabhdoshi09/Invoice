@@ -522,13 +522,30 @@ export const ListOrders = () => {
                                             </TableCell>
                                             <TableCell align="center" onClick={(e) => e.stopPropagation()}>
                                                 <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-                                                    <Button 
-                                                        size="small" 
-                                                        variant="outlined"
-                                                        onClick={() => viewOrder(row)}
-                                                    >
-                                                        View
-                                                    </Button>
+                                                    <Tooltip title="View Invoice">
+                                                        <Button 
+                                                            size="small" 
+                                                            variant="outlined"
+                                                            onClick={() => viewOrder(row)}
+                                                            startIcon={<Visibility fontSize="small" />}
+                                                            data-testid={`view-order-${row.id}`}
+                                                        >
+                                                            View
+                                                        </Button>
+                                                    </Tooltip>
+                                                    <Tooltip title="Download PDF">
+                                                        <Button 
+                                                            size="small" 
+                                                            variant="outlined"
+                                                            color="secondary"
+                                                            onClick={(e) => handleDownloadPdf(row.id, row.orderNumber, e)}
+                                                            disabled={downloadingPdf === row.id}
+                                                            startIcon={downloadingPdf === row.id ? <CircularProgress size={14} /> : <Download fontSize="small" />}
+                                                            data-testid={`download-pdf-${row.id}`}
+                                                        >
+                                                            PDF
+                                                        </Button>
+                                                    </Tooltip>
                                                     {isAdmin && (
                                                         <Button 
                                                             size="small" 
