@@ -72,6 +72,28 @@ export const ListOrders = () => {
     const [isNewCustomer, setIsNewCustomer] = useState(false);
     const [loadingCustomers, setLoadingCustomers] = useState(false);
     const [changedByName, setChangedByName] = useState(''); // Mandatory name for audit
+    
+    // PDF download state
+    const [downloadingPdf, setDownloadingPdf] = useState(null);
+
+    // Download PDF function
+    const handleDownloadPdf = async (orderId, orderNumber, e) => {
+        e.stopPropagation();
+        setDownloadingPdf(orderId);
+        try {
+            // Fetch full order details with items
+            const orderData = await dispatch(getOrderAction(orderId));
+            if (orderData) {
+                const pdfDefinition = generatePdfDefinition(orderData);
+                pdfMake.createPdf(pdfDefinition).download(`Invoice_${orderNumber}.pdf`);
+            }
+        } catch (error) {
+            console.error('Error generating PDF:', error);
+            alert('Failed to generate PDF. Please try again.');
+        } finally {
+            setDownloadingPdf(null);
+        }
+    };
 
     // Fetch customers for autocomplete
     const fetchCustomers = async () => {
