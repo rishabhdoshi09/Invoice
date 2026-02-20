@@ -414,16 +414,16 @@ export const EditOrder = () => {
               View PDF
             </Button>
           </Tooltip>
-          <Tooltip title="Download Invoice PDF">
+          <Tooltip title="Print Invoice">
             <Button 
               variant="outlined" 
               color="secondary"
-              onClick={handleDownloadPdf}
-              disabled={saving || downloadingPdf}
-              startIcon={downloadingPdf ? <CircularProgress size={18} /> : <PictureAsPdf />}
-              data-testid="download-pdf-btn"
+              onClick={handlePrintInvoice}
+              disabled={saving || printingInvoice}
+              startIcon={printingInvoice ? <CircularProgress size={18} /> : <Print />}
+              data-testid="print-invoice-btn"
             >
-              Download PDF
+              Print
             </Button>
           </Tooltip>
           {isAdmin && (
