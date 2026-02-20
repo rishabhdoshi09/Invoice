@@ -67,6 +67,12 @@ export const ListCustomers = () => {
     
     // Recent activity
     const [recentReceipts, setRecentReceipts] = useState([]);
+    
+    // PDF download state
+    const [downloadingPdf, setDownloadingPdf] = useState(null);
+    const [viewingInvoice, setViewingInvoice] = useState(null);
+    const [invoicePreviewUrl, setInvoicePreviewUrl] = useState(null);
+    const [invoicePreviewOpen, setInvoicePreviewOpen] = useState(false);
 
     useEffect(() => {
         fetchCustomers();
