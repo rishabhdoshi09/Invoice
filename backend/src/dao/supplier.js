@@ -103,10 +103,10 @@ module.exports = {
             const totalDebit = purchases.reduce((sum, p) => sum + (Number(p.total) || 0), 0) + (Number(supplier.openingBalance) || 0);
             const totalCredit = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
             
-            // Balance = Opening + Sum of all due amounts from purchase bills
+            // Balance = Total Debit - Total Credit
+            // = (Opening Balance + All Purchase Bill Totals) - (All Payments Made)
             // This is the actual amount still owed to the supplier
-            const totalDueFromBills = purchases.reduce((sum, p) => sum + (Number(p.dueAmount) || 0), 0);
-            const balance = (Number(supplier.openingBalance) || 0) + totalDueFromBills;
+            const balance = totalDebit - totalCredit;
 
             return {
                 ...supplier.toJSON(),
@@ -123,12 +123,13 @@ module.exports = {
     },
 
     // List suppliers with calculated balance (NOT stored balance)
-    // Balance = Opening + Sum of dueAmount from all purchase bills (actual unpaid amounts)
+    // Balance = (Opening Balance + All Purchase Bill Totals) - All Payments Made
     listSuppliersWithBalance: async (params = {}) => {
         try {
             // Get all suppliers with dynamically calculated balance
-            // Balance is calculated as: openingBalance + sum of dueAmount from all purchase bills
-            // This represents the actual amount still owed to each supplier
+            // Balance = totalDebit - totalCredit
+            // totalDebit = openingBalance + sum of all purchase bill totals
+            // totalCredit = sum of all payments made
             const suppliers = await db.sequelize.query(`
                 SELECT 
                     s.id,
@@ -140,13 +141,7 @@ module.exports = {
                     s."openingBalance",
                     s."createdAt",
                     s."updatedAt",
-                    COALESCE(s."openingBalance", 0) + 
-                    COALESCE((
-                        SELECT SUM("dueAmount") 
-                        FROM "purchaseBills" 
-                        WHERE "supplierId" = s.id
-                    ), 0) as balance,
-                    COALESCE((
+                    COALESCE(s."openingBalance", 0) + COALESCE((
                         SELECT SUM(total) 
                         FROM "purchaseBills" 
                         WHERE "supplierId" = s.id
@@ -156,7 +151,21 @@ module.exports = {
                         FROM payments 
                         WHERE "partyId" = s.id
                         AND "partyType" = 'supplier'
-                    ), 0) as "totalCredit"
+                    ), 0) as "totalCredit",
+                    (
+                        COALESCE(s."openingBalance", 0) + 
+                        COALESCE((
+                            SELECT SUM(total) 
+                            FROM "purchaseBills" 
+                            WHERE "supplierId" = s.id
+                        ), 0) -
+                        COALESCE((
+                            SELECT SUM(amount) 
+                            FROM payments 
+                            WHERE "partyId" = s.id
+                            AND "partyType" = 'supplier'
+                        ), 0)
+                    ) as balance
                 FROM suppliers s
                 ORDER BY s.name ASC
             `, { type: db.Sequelize.QueryTypes.SELECT });
