@@ -119,7 +119,7 @@ module.exports = {
             const reconciledOrders = orders.map(order => {
                 const orderTotal = Number(order.total) || 0;
                 const actualPaid = Math.min(orderTotal, remainingPayments);
-                remainingPayments = Math.max(0, remainingPayments - orderTotal);
+                remainingPayments -= actualPaid;  // FIX: subtract actualPaid, not orderTotal
                 
                 const actualDue = orderTotal - actualPaid;
                 const actualStatus = actualDue === 0 ? 'paid' : (actualPaid > 0 ? 'partial' : 'unpaid');
