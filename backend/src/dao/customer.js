@@ -120,12 +120,13 @@ module.exports = {
 
     // List customers with calculated balance (NOT stored balance)
     // This ensures balance is always accurate from actual transactions
-    // Balance = Opening + Sum of dueAmount from all orders (actual unpaid amounts)
+    // Balance = (Opening Balance + All Order Totals) - All Payments Received
     listCustomersWithBalance: async (params = {}) => {
         try {
             // Get all customers with dynamically calculated balance
-            // Balance is calculated as: openingBalance + sum of dueAmount from all orders
-            // This represents the actual amount still owed by each customer
+            // Balance = totalDebit - totalCredit
+            // totalDebit = openingBalance + sum of all order totals
+            // totalCredit = sum of all payments received
             const customers = await db.sequelize.query(`
                 SELECT 
                     c.id,
@@ -137,14 +138,7 @@ module.exports = {
                     c."openingBalance",
                     c."createdAt",
                     c."updatedAt",
-                    COALESCE(c."openingBalance", 0) + 
-                    COALESCE((
-                        SELECT SUM("dueAmount") 
-                        FROM orders 
-                        WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
-                        AND "isDeleted" = false
-                    ), 0) as balance,
-                    COALESCE((
+                    COALESCE(c."openingBalance", 0) + COALESCE((
                         SELECT SUM(total) 
                         FROM orders 
                         WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
@@ -155,7 +149,22 @@ module.exports = {
                         FROM payments 
                         WHERE "partyId" = c.id
                         AND "partyType" = 'customer'
-                    ), 0) as "totalCredit"
+                    ), 0) as "totalCredit",
+                    (
+                        COALESCE(c."openingBalance", 0) + 
+                        COALESCE((
+                            SELECT SUM(total) 
+                            FROM orders 
+                            WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
+                            AND "isDeleted" = false
+                        ), 0) -
+                        COALESCE((
+                            SELECT SUM(amount) 
+                            FROM payments 
+                            WHERE "partyId" = c.id
+                            AND "partyType" = 'customer'
+                        ), 0)
+                    ) as balance
                 FROM customers c
                 ORDER BY c.name ASC
             `, { type: db.Sequelize.QueryTypes.SELECT });
