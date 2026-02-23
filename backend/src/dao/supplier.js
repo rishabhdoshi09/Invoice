@@ -123,7 +123,7 @@ module.exports = {
             const reconciledPurchases = purchases.map(purchase => {
                 const purchaseTotal = Number(purchase.total) || 0;
                 const actualPaid = Math.min(purchaseTotal, remainingPayments);
-                remainingPayments = Math.max(0, remainingPayments - purchaseTotal);
+                remainingPayments -= actualPaid;  // FIX: subtract actualPaid, not purchaseTotal
                 
                 const actualDue = purchaseTotal - actualPaid;
                 const actualStatus = actualDue === 0 ? 'paid' : (actualPaid > 0 ? 'partial' : 'unpaid');
