@@ -89,6 +89,27 @@ module.exports = {
                             currentBalance: Math.max(0, (customer.currentBalance || 0) - value.amount)
                         }, { transaction });
                     }
+                    
+                    // CRITICAL FIX: If payment is linked to an order, update the order's paidAmount and dueAmount
+                    if (value.referenceType === 'order' && value.referenceId) {
+                        const order = await db.order.findByPk(value.referenceId, { transaction });
+                        if (order) {
+                            const newPaidAmount = Math.min(
+                                (Number(order.paidAmount) || 0) + value.amount,
+                                Number(order.total) || 0
+                            );
+                            const newDueAmount = Math.max(0, (Number(order.total) || 0) - newPaidAmount);
+                            const newPaymentStatus = newDueAmount === 0 ? 'paid' : (newPaidAmount > 0 ? 'partial' : 'unpaid');
+                            
+                            await order.update({
+                                paidAmount: newPaidAmount,
+                                dueAmount: newDueAmount,
+                                paymentStatus: newPaymentStatus
+                            }, { transaction });
+                            
+                            console.log(`Updated order ${order.orderNumber}: paidAmount=${newPaidAmount}, dueAmount=${newDueAmount}, status=${newPaymentStatus}`);
+                        }
+                    }
                 } else if (value.partyType === 'supplier') {
                     // Supplier payment made: Supplier (Debit) to Cash/Bank (Credit)
                     // Look up supplier by partyId first, then by name
