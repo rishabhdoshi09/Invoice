@@ -99,10 +99,10 @@ module.exports = {
             const totalDebit = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0) + (Number(customer.openingBalance) || 0);
             const totalCredit = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
             
-            // Balance = Opening + Sum of all due amounts from orders
-            // This is the actual amount still owed
-            const totalDueFromOrders = orders.reduce((sum, o) => sum + (Number(o.dueAmount) || 0), 0);
-            const balance = (Number(customer.openingBalance) || 0) + totalDueFromOrders;
+            // Balance = Total Debit - Total Credit
+            // = (Opening Balance + All Order Totals) - (All Payments Received)
+            // This is the actual amount still owed by the customer
+            const balance = totalDebit - totalCredit;
 
             return {
                 ...customer.toJSON(),
