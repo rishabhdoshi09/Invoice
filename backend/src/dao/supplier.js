@@ -76,7 +76,7 @@ module.exports = {
             if (!supplier) return null;
 
             // Get all purchases with items (increases balance - what we owe)
-            // Sort by createdAt DESC (most recent first - date added)
+            // Sort by createdAt ASC (oldest first for FIFO allocation)
             const purchases = await db.purchaseBill.findAll({
                 where: { supplierId },
                 attributes: ['id', 'billNumber', 'billDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus', 'createdAt'],
@@ -85,18 +85,18 @@ module.exports = {
                     as: 'purchaseItems',
                     attributes: ['id', 'name', 'quantity', 'price', 'totalPrice']
                 }],
-                order: [['createdAt', 'DESC']]
+                order: [['createdAt', 'ASC']]  // Oldest first for FIFO
             });
 
             // Get all payments to this supplier by ID only
-            // Sort by createdAt DESC (most recent first - date added)
+            // Sort by createdAt ASC (oldest first for FIFO allocation)
             const payments = await db.payment.findAll({
                 where: { 
                     partyId: supplierId,
                     partyType: 'supplier'
                 },
                 attributes: ['id', 'paymentNumber', 'paymentDate', 'amount', 'referenceType', 'notes', 'createdAt'],
-                order: [['createdAt', 'DESC']]
+                order: [['createdAt', 'ASC']]  // Oldest first
             });
 
             // Calculate totals
@@ -108,13 +108,47 @@ module.exports = {
             // This is the actual amount still owed to the supplier
             const balance = totalDebit - totalCredit;
 
+            // AUTO-RECONCILE: Distribute payments to purchases (FIFO - oldest bills first)
+            // This ensures individual purchase rows show correct paid/due/status
+            let remainingPayments = totalCredit;
+            
+            // First apply to opening balance if any
+            let openingBalanceRemaining = Number(supplier.openingBalance) || 0;
+            if (openingBalanceRemaining > 0 && remainingPayments > 0) {
+                const appliedToOpening = Math.min(openingBalanceRemaining, remainingPayments);
+                remainingPayments -= appliedToOpening;
+            }
+            
+            // Then apply to purchases (oldest first)
+            const reconciledPurchases = purchases.map(purchase => {
+                const purchaseTotal = Number(purchase.total) || 0;
+                const actualPaid = Math.min(purchaseTotal, remainingPayments);
+                remainingPayments = Math.max(0, remainingPayments - purchaseTotal);
+                
+                const actualDue = purchaseTotal - actualPaid;
+                const actualStatus = actualDue === 0 ? 'paid' : (actualPaid > 0 ? 'partial' : 'unpaid');
+                
+                return {
+                    ...purchase.toJSON(),
+                    paidAmount: actualPaid,
+                    dueAmount: actualDue,
+                    paymentStatus: actualStatus
+                };
+            });
+
+            // Reverse back to DESC order for display (most recent first)
+            reconciledPurchases.reverse();
+            
+            // Also reverse payments for display
+            const displayPayments = [...payments].reverse();
+
             return {
                 ...supplier.toJSON(),
                 totalDebit,
                 totalCredit,
                 balance,
-                purchases,
-                payments
+                purchases: reconciledPurchases,
+                payments: displayPayments
             };
         } catch (error) {
             console.log(error);
