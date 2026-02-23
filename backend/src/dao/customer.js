@@ -81,18 +81,18 @@ module.exports = {
                     isDeleted: false
                 },
                 attributes: ['id', 'orderNumber', 'orderDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus', 'createdAt', 'customerId'],
-                order: [['createdAt', 'DESC']]
+                order: [['createdAt', 'ASC']]  // Oldest first for FIFO payment allocation
             });
 
             // Get all payments from this customer by ID only
-            // Sort by createdAt DESC (most recent first - date added)
+            // Sort by createdAt ASC (oldest first for FIFO allocation)
             const payments = await db.payment.findAll({
                 where: { 
                     partyId: customerId,
                     partyType: 'customer'
                 },
                 attributes: ['id', 'paymentNumber', 'paymentDate', 'amount', 'referenceType', 'notes', 'createdAt'],
-                order: [['createdAt', 'DESC']]
+                order: [['createdAt', 'ASC']]  // Oldest first
             });
 
             // Calculate totals
@@ -104,13 +104,47 @@ module.exports = {
             // This is the actual amount still owed by the customer
             const balance = totalDebit - totalCredit;
 
+            // AUTO-RECONCILE: Distribute payments to orders (FIFO - oldest orders first)
+            // This ensures individual order rows show correct paid/due/status
+            let remainingPayments = totalCredit;
+            
+            // First apply to opening balance if any
+            let openingBalanceRemaining = Number(customer.openingBalance) || 0;
+            if (openingBalanceRemaining > 0 && remainingPayments > 0) {
+                const appliedToOpening = Math.min(openingBalanceRemaining, remainingPayments);
+                remainingPayments -= appliedToOpening;
+            }
+            
+            // Then apply to orders (oldest first)
+            const reconciledOrders = orders.map(order => {
+                const orderTotal = Number(order.total) || 0;
+                const actualPaid = Math.min(orderTotal, remainingPayments);
+                remainingPayments = Math.max(0, remainingPayments - orderTotal);
+                
+                const actualDue = orderTotal - actualPaid;
+                const actualStatus = actualDue === 0 ? 'paid' : (actualPaid > 0 ? 'partial' : 'unpaid');
+                
+                return {
+                    ...order.toJSON(),
+                    paidAmount: actualPaid,
+                    dueAmount: actualDue,
+                    paymentStatus: actualStatus
+                };
+            });
+
+            // Reverse back to DESC order for display (most recent first)
+            reconciledOrders.reverse();
+            
+            // Also reverse payments for display
+            const displayPayments = [...payments].reverse();
+
             return {
                 ...customer.toJSON(),
                 totalDebit,
                 totalCredit,
                 balance,
-                orders,
-                payments
+                orders: reconciledOrders,
+                payments: displayPayments
             };
         } catch (error) {
             console.log(error);
