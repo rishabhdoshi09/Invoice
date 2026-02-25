@@ -47,6 +47,22 @@ module.exports = (sequelize, Sequelize) => {
             },
             notes: {
                 type: Sequelize.TEXT
+            },
+            isDeleted: {
+                type: Sequelize.BOOLEAN,
+                defaultValue: false
+            },
+            deletedAt: {
+                type: Sequelize.DATE,
+                allowNull: true
+            },
+            deletedBy: {
+                type: Sequelize.UUID,
+                allowNull: true
+            },
+            deletedByName: {
+                type: Sequelize.STRING,
+                allowNull: true
             }
         }
     );
