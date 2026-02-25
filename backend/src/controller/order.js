@@ -192,6 +192,20 @@ module.exports = {
                     await db.ledgerEntry.bulkCreate(ledgerEntries, { transaction });
                 }
 
+                // === NEW DOUBLE-ENTRY LEDGER: Real-time posting ===
+                // Runs in the SAME transaction — if this fails, order creation rolls back
+                if (orderObj.customerId) {
+                    try {
+                        await postInvoiceToLedger(
+                            { ...orderObj, id: orderId, createdAt: new Date() },
+                            transaction
+                        );
+                    } catch (ledgerError) {
+                        console.error(`[LEDGER] Failed to post invoice ${orderObj.orderNumber}:`, ledgerError.message);
+                        throw ledgerError; // Rollback the entire transaction
+                    }
+                }
+
                 return await Services.order.getOrder({id: orderId }, transaction);
             });
 
