@@ -100,12 +100,17 @@ module.exports = {
             });
 
             // Calculate totals
-            const totalDebit = purchases.reduce((sum, p) => sum + (Number(p.total) || 0), 0) + (Number(supplier.openingBalance) || 0);
-            const totalCredit = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            const totalPurchaseAmount = purchases.reduce((sum, p) => sum + (Number(p.total) || 0), 0);
+            const totalDebit = totalPurchaseAmount + (Number(supplier.openingBalance) || 0);
+            
+            // Get payments from BOTH sources:
+            const sumPurchasePaidAmount = purchases.reduce((sum, p) => sum + (Number(p.paidAmount) || 0), 0);
+            const sumPaymentsTable = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            
+            // Use the LARGER of the two as the actual total paid
+            const totalCredit = Math.max(sumPurchasePaidAmount, sumPaymentsTable);
             
             // Balance = Total Debit - Total Credit
-            // = (Opening Balance + All Purchase Bill Totals) - (All Payments Made)
-            // This is the actual amount still owed to the supplier
             const balance = totalDebit - totalCredit;
 
             // AUTO-RECONCILE: Distribute payments to purchases (FIFO - oldest bills first)
