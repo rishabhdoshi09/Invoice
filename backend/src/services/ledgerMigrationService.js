@@ -569,44 +569,31 @@ class LedgerMigrationService {
             result.customers.push(row);
 
             // ── 4. Mismatch breakdown ──────────────────────────
-            if (!isMatched && ledgerBalance.hasLedgerAccount) {
-                const batches = await db.sequelize.query(`
-                    SELECT 
-                        jb.id,
-                        jb."batchNumber",
-                        jb."referenceType",
-                        jb."referenceId",
-                        jb."transactionDate",
-                        jb.description,
-                        le.debit,
-                        le.credit,
-                        le.narration
-                    FROM ledger_entries le
-                    INNER JOIN journal_batches jb ON le."batchId" = jb.id
-                    WHERE le."accountId" = :accountId
-                      AND jb."isPosted" = true
-                      AND jb."isReversed" = false
-                    ORDER BY jb."transactionDate" ASC, le."createdAt" ASC
-                `, {
-                    replacements: { accountId: ledgerBalance.accountId },
-                    type: db.Sequelize.QueryTypes.SELECT
-                });
-
-                result.mismatches.push({
-                    customerId: customer.id,
-                    customerName: customer.name,
-                    oldBalance: row.oldBalance,
-                    ledgerBalance: row.ledgerBalance,
-                    difference: row.difference,
-                    oldSystemOrders: orders.map(o => ({
-                        orderId: o.id,
-                        orderNumber: o.orderNumber,
-                        total: Number(o.total) || 0,
-                        paidAmount: Number(o.paidAmount) || 0,
-                        dueAmount: Number(o.dueAmount) || 0,
-                        createdAt: o.createdAt
-                    })),
-                    ledgerBatches: batches.map(b => ({
+            if (!isMatched) {
+                let ledgerBatches = [];
+                if (ledgerBalance.hasLedgerAccount) {
+                    const batches = await db.sequelize.query(`
+                        SELECT 
+                            jb.id,
+                            jb."batchNumber",
+                            jb."referenceType",
+                            jb."referenceId",
+                            jb."transactionDate",
+                            jb.description,
+                            le.debit,
+                            le.credit,
+                            le.narration
+                        FROM ledger_entries le
+                        INNER JOIN journal_batches jb ON le."batchId" = jb.id
+                        WHERE le."accountId" = :accountId
+                          AND jb."isPosted" = true
+                          AND jb."isReversed" = false
+                        ORDER BY jb."transactionDate" ASC, le."createdAt" ASC
+                    `, {
+                        replacements: { accountId: ledgerBalance.accountId },
+                        type: db.Sequelize.QueryTypes.SELECT
+                    });
+                    ledgerBatches = batches.map(b => ({
                         batchId: b.id,
                         batchNumber: b.batchNumber,
                         referenceType: b.referenceType,
@@ -616,7 +603,25 @@ class LedgerMigrationService {
                         debit: Number(b.debit) || 0,
                         credit: Number(b.credit) || 0,
                         narration: b.narration
-                    }))
+                    }));
+                }
+
+                result.mismatches.push({
+                    customerId: customer.id,
+                    customerName: customer.name,
+                    oldBalance: row.oldBalance,
+                    ledgerBalance: row.ledgerBalance,
+                    difference: row.difference,
+                    hasLedgerAccount: ledgerBalance.hasLedgerAccount,
+                    oldSystemOrders: orders.map(o => ({
+                        orderId: o.id,
+                        orderNumber: o.orderNumber,
+                        total: Number(o.total) || 0,
+                        paidAmount: Number(o.paidAmount) || 0,
+                        dueAmount: Number(o.dueAmount) || 0,
+                        createdAt: o.createdAt
+                    })),
+                    ledgerBatches
                 });
             }
         }
