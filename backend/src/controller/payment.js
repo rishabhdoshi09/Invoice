@@ -407,11 +407,19 @@ module.exports = {
                 });
             }
 
+            // Prevent deleting already-deleted payments
+            if (payment.isDeleted) {
+                return res.status(400).send({
+                    status: 400,
+                    message: 'This payment has already been deleted'
+                });
+            }
+
             // Use transaction for all reversal operations
             await db.sequelize.transaction(async (transaction) => {
-                // Reverse the payment updates
+                // Reverse the payment updates on the referenced order/purchase
                 if (payment.referenceType === 'order' && payment.referenceId) {
-                    const order = await Services.order.getOrder({ id: payment.referenceId });
+                    const order = await Services.order.getOrder({ id: payment.referenceId }, transaction);
                     if (order) {
                         const newPaidAmount = Math.max(0, (Number(order.paidAmount) || 0) - Number(payment.amount));
                         const newDueAmount = Number(order.total) - newPaidAmount;
@@ -475,21 +483,25 @@ module.exports = {
                         }, { transaction });
                     }
                 }
+
+                // Create REVERSAL journal batch in the new ledger (swap debit/credit)
+                try {
+                    await reversePaymentLedger(payment, transaction);
+                } catch (ledgerError) {
+                    console.error(`[LEDGER] Payment reversal failed for ${payment.paymentNumber}:`, ledgerError.message);
+                    throw ledgerError;
+                }
                 
-                // Reverse ledger entries for payment
-                await db.ledgerEntry.destroy({
-                    where: {
-                        referenceType: 'payment',
-                        referenceId: payment.id
+                // Soft delete the payment (preserve for audit trail)
+                await db.payment.update(
+                    {
+                        isDeleted: true,
+                        deletedAt: new Date(),
+                        deletedBy: req.user?.id || null,
+                        deletedByName: req.user?.name || req.user?.username || null
                     },
-                    transaction
-                });
-                
-                // Delete the payment record
-                await db.payment.destroy({
-                    where: { id: req.params.paymentId },
-                    transaction
-                });
+                    { where: { id: req.params.paymentId }, transaction }
+                );
             });
 
             return res.status(200).send({
