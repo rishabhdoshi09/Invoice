@@ -352,18 +352,8 @@ class LedgerMigrationService {
         const purchaseAccount = await db.account.findOne({ where: { code: '5300' } });
         const cashAccount = await db.account.findOne({ where: { code: '1100' } });
 
-        // Parse bill date
-        let transactionDate;
-        if (purchase.billDate) {
-            const parts = purchase.billDate.split('-');
-            if (parts.length === 3 && parts[0].length === 2) {
-                transactionDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
-            } else {
-                transactionDate = purchase.billDate;
-            }
-        } else {
-            transactionDate = purchase.createdAt;
-        }
+        // Use purchase.createdAt as the journal date (preserves original timestamps)
+        const transactionDate = purchase.createdAt;
 
         // Create purchase entry
         // DR: Purchase Expense (expense increases)
