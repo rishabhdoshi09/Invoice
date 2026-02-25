@@ -254,7 +254,7 @@ const LedgerModule = () => {
             </Paper>
 
             {/* Date Range Filter */}
-            {[1, 2, 3].includes(activeTab) && (
+            {[2, 3, 4].includes(activeTab) && (
                 <Paper sx={{ p: 2, mb: 2 }}>
                     <Grid container spacing={2} alignItems="center">
                         <Grid item xs={12} sm={4}>
