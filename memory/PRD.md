@@ -60,6 +60,11 @@ frontend/src/
   - `[LEDGER] POSTED` logging for every batch
   - Fixed double-counting bug in payment.js (removed duplicate order update)
   - `ledger_entries.batchId`/`accountId` made nullable for old system coexistence
+- [x] **Daily Drift Check** (`GET /api/ledger/daily-drift-check`):
+  - Per-customer: old SUM(dueAmount) vs ledger receivable balance
+  - System totals: Sales + Payments cross-checked
+  - Returns `DRIFT_DETECTED` or `OK` with timestamp logging
+  - 100% read-only, optimized with raw SQL
 - [x] Journal batch reversal
 - [x] Report queries: Trial Balance, P&L, Balance Sheet, Account Ledger
 - [x] Migration service (orders, payments, purchases) — fixed association bug
