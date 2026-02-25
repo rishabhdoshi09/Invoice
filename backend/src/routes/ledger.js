@@ -1,37 +1,32 @@
-const express = require('express');
-const router = express.Router();
 const ledgerController = require('../controller/ledger');
 const { authenticate, authorize } = require('../middleware/auth');
 
-// All routes require authentication
-router.use(authenticate);
+module.exports = (router) => {
+    // ==================== ACCOUNTS ====================
+    router.post('/ledger/accounts/initialize', authenticate, authorize('admin'), ledgerController.initializeAccounts);
+    router.get('/ledger/accounts', authenticate, ledgerController.listAccounts);
+    router.post('/ledger/accounts', authenticate, authorize('admin'), ledgerController.createAccount);
+    router.get('/ledger/accounts/:id', authenticate, ledgerController.getAccount);
+    router.get('/ledger/accounts/:id/balance', authenticate, ledgerController.getAccountBalance);
+    router.get('/ledger/accounts/:id/ledger', authenticate, ledgerController.getAccountLedger);
 
-// ==================== ACCOUNTS ====================
-router.post('/accounts/initialize', authorize('admin'), ledgerController.initializeAccounts);
-router.get('/accounts', ledgerController.listAccounts);
-router.post('/accounts', authorize('admin'), ledgerController.createAccount);
-router.get('/accounts/:id', ledgerController.getAccount);
-router.get('/accounts/:id/balance', ledgerController.getAccountBalance);
-router.get('/accounts/:id/ledger', ledgerController.getAccountLedger);
+    // ==================== JOURNAL BATCHES ====================
+    router.get('/ledger/journal-batches', authenticate, ledgerController.listJournalBatches);
+    router.post('/ledger/journal-batches', authenticate, ledgerController.createJournalBatch);
+    router.get('/ledger/journal-batches/:id', authenticate, ledgerController.getJournalBatch);
+    router.post('/ledger/journal-batches/:id/reverse', authenticate, authorize('admin'), ledgerController.reverseJournalBatch);
 
-// ==================== JOURNAL BATCHES ====================
-router.get('/journal-batches', ledgerController.listJournalBatches);
-router.post('/journal-batches', ledgerController.createJournalBatch);
-router.get('/journal-batches/:id', ledgerController.getJournalBatch);
-router.post('/journal-batches/:id/reverse', authorize('admin'), ledgerController.reverseJournalBatch);
+    // ==================== REPORTS ====================
+    router.get('/ledger/reports/trial-balance', authenticate, ledgerController.getTrialBalance);
+    router.get('/ledger/reports/profit-loss', authenticate, ledgerController.getProfitAndLoss);
+    router.get('/ledger/reports/balance-sheet', authenticate, ledgerController.getBalanceSheet);
 
-// ==================== REPORTS ====================
-router.get('/reports/trial-balance', ledgerController.getTrialBalance);
-router.get('/reports/profit-loss', ledgerController.getProfitAndLoss);
-router.get('/reports/balance-sheet', ledgerController.getBalanceSheet);
+    // ==================== PARTY BALANCES ====================
+    router.get('/ledger/customers/:customerId/balance', authenticate, ledgerController.getCustomerLedgerBalance);
+    router.get('/ledger/suppliers/:supplierId/balance', authenticate, ledgerController.getSupplierLedgerBalance);
 
-// ==================== PARTY BALANCES ====================
-router.get('/customers/:customerId/ledger-balance', ledgerController.getCustomerLedgerBalance);
-router.get('/suppliers/:supplierId/ledger-balance', ledgerController.getSupplierLedgerBalance);
-
-// ==================== MIGRATION ====================
-router.post('/migration/run', authorize('admin'), ledgerController.runMigration);
-router.get('/migration/reconciliation', authorize('admin'), ledgerController.getReconciliationReport);
-router.delete('/migration/clear', authorize('admin'), ledgerController.clearMigration);
-
-module.exports = router;
+    // ==================== MIGRATION ====================
+    router.post('/ledger/migration/run', authenticate, authorize('admin'), ledgerController.runMigration);
+    router.get('/ledger/migration/reconciliation', authenticate, authorize('admin'), ledgerController.getReconciliationReport);
+    router.delete('/ledger/migration/clear', authenticate, authorize('admin'), ledgerController.clearMigration);
+};
