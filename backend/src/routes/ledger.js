@@ -25,6 +25,9 @@ module.exports = (router) => {
     router.get('/ledger/customers/:customerId/balance', authenticate, ledgerController.getCustomerLedgerBalance);
     router.get('/ledger/suppliers/:supplierId/balance', authenticate, ledgerController.getSupplierLedgerBalance);
 
+    // ==================== HEALTH CHECK ====================
+    router.get('/ledger/health-check', authenticate, ledgerController.healthCheck);
+
     // ==================== MIGRATION ====================
     router.post('/ledger/migration/run', authenticate, authorize('admin'), ledgerController.runMigration);
     router.get('/ledger/migration/reconciliation', authenticate, authorize('admin'), ledgerController.getReconciliationReport);
