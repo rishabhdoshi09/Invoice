@@ -214,6 +214,23 @@ module.exports = {
                     await db.ledgerEntry.bulkCreate(ledgerEntries, { transaction });
                 }
 
+                // === NEW DOUBLE-ENTRY LEDGER: Real-time posting ===
+                // Runs in the SAME transaction — if this fails, payment creation rolls back
+                if (value.partyType === 'customer') {
+                    try {
+                        const customerIdForLedger = response.partyId || value.partyId;
+                        await postPaymentToLedger(
+                            { ...value, id: response.id, paymentNumber: response.paymentNumber, createdAt: new Date() },
+                            customerIdForLedger,
+                            value.partyName,
+                            transaction
+                        );
+                    } catch (ledgerError) {
+                        console.error(`[LEDGER] Failed to post payment ${response.paymentNumber}:`, ledgerError.message);
+                        throw ledgerError; // Rollback the entire transaction
+                    }
+                }
+
                 // Update reference (order or purchase) payment status
                 if (value.referenceType === 'order' && value.referenceId) {
                     const order = await Services.order.getOrder({ id: value.referenceId });
