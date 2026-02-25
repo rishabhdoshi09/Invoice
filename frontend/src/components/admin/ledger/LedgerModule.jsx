@@ -169,7 +169,8 @@ const LedgerModule = () => {
         try {
             setMigrationRunning(true);
             setError(null);
-            await axios.post('/api/ledger/migration/run', {}, getAuthHeader());
+            const { data } = await axios.post('/api/ledger/migration/run', {}, getAuthHeader());
+            setMigrationResult(data.data);
             setSuccess('Migration completed successfully');
             await fetchReconciliation();
         } catch (err) {
