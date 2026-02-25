@@ -73,6 +73,14 @@ frontend/src/
   - Migration Control Panel: Run/Clear buttons, migration summary
   - Drift detail table: per-customer breakdown when mismatches exist
   - System totals: Sales + Payments matched/mismatched chips
+- [x] **Soft Delete + Ledger Reversal** (audit-safe financial record deletion):
+  - Invoice delete: soft delete (`isDeleted=true`) + REVERSAL journal batch (swapped debit/credit)
+  - Payment delete: soft delete + REVERSAL journal batch (was hard delete before)
+  - Added `isDeleted`, `deletedAt`, `deletedBy`, `deletedByName` to payments table
+  - Single transaction wrapping soft delete + reversal
+  - Prevents double-delete (400 "already been deleted")
+  - Ledger stays balanced after all deletions
+  - Old ledger entries preserved (no more `destroy`)
 - [x] Journal batch reversal
 - [x] Report queries: Trial Balance, P&L, Balance Sheet, Account Ledger
 - [x] Migration service (orders, payments, purchases) — fixed association bug
