@@ -94,6 +94,7 @@ const AppContent = () => {
           <Route path="tally-export" element={<TallyExport />} />
           <Route path="gst-export" element={<ProtectedRoute adminOnly><GstExportTool /></ProtectedRoute>} />
           <Route path="day-start" element={<DayStart />} />
+          <Route path="ledger" element={<ProtectedRoute adminOnly><LedgerModule /></ProtectedRoute>} />
           <Route 
             path="admin-dashboard" 
             element={
