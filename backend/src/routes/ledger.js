@@ -28,6 +28,9 @@ module.exports = (router) => {
     // ==================== HEALTH CHECK ====================
     router.get('/ledger/health-check', authenticate, ledgerController.healthCheck);
 
+    // ==================== DRIFT CHECK ====================
+    router.get('/ledger/daily-drift-check', authenticate, ledgerController.dailyDriftCheck);
+
     // ==================== MIGRATION ====================
     router.post('/ledger/migration/run', authenticate, authorize('admin'), ledgerController.runMigration);
     router.get('/ledger/migration/reconciliation', authenticate, authorize('admin'), ledgerController.getReconciliationReport);
