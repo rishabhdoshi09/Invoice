@@ -157,7 +157,6 @@ const LedgerModule = () => {
             setLoading(true);
             await axios.delete('/api/ledger/migration/clear', getAuthHeader());
             setSuccess('Migration data cleared');
-            setMigrationResults(null);
             await fetchReconciliation();
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to clear migration');
