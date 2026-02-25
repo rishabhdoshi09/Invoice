@@ -233,26 +233,42 @@ class LedgerService {
         }
 
         try {
-            // Validate entries
-            if (!batchData.entries || batchData.entries.length < 2) {
+            // Validate: prevent empty batches
+            if (!batchData.entries || !Array.isArray(batchData.entries) || batchData.entries.length === 0) {
+                throw new Error('Journal batch cannot be empty');
+            }
+
+            // Validate: minimum 2 entries for double-entry
+            if (batchData.entries.length < 2) {
                 throw new Error('Journal batch must have at least 2 entries');
             }
 
-            // Calculate totals
+            // Calculate totals with strict validation
             let totalDebit = 0;
             let totalCredit = 0;
             for (const entry of batchData.entries) {
-                if (entry.debit < 0 || entry.credit < 0) {
+                const debit = Number(entry.debit);
+                const credit = Number(entry.credit);
+
+                if (isNaN(debit) || isNaN(credit)) {
+                    throw new Error('Debit and credit values must be valid numbers');
+                }
+                if (debit < 0 || credit < 0) {
                     throw new Error('Debit and credit values cannot be negative');
                 }
-                totalDebit += Number(entry.debit) || 0;
-                totalCredit += Number(entry.credit) || 0;
+                totalDebit += debit;
+                totalCredit += credit;
             }
 
-            // Check if balanced
+            // Validate: batch must have actual monetary movement
+            if (totalDebit === 0 && totalCredit === 0) {
+                throw new Error('Journal batch has no monetary values');
+            }
+
+            // Check if balanced (SUM(debit) must equal SUM(credit))
             const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01;
             if (!isBalanced) {
-                throw new Error(`Journal batch is not balanced. Debit: ${totalDebit}, Credit: ${totalCredit}`);
+                throw new Error(`Journal batch is not balanced. Debit: ${totalDebit.toFixed(2)}, Credit: ${totalCredit.toFixed(2)}, Difference: ${Math.abs(totalDebit - totalCredit).toFixed(2)}`);
             }
 
             // Create batch

@@ -168,19 +168,8 @@ class LedgerMigrationService {
             throw new Error('Sales account not found');
         }
 
-        // Parse order date
-        let transactionDate;
-        if (order.orderDate) {
-            // Handle DD-MM-YYYY format
-            const parts = order.orderDate.split('-');
-            if (parts.length === 3 && parts[0].length === 2) {
-                transactionDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
-            } else {
-                transactionDate = order.orderDate;
-            }
-        } else {
-            transactionDate = order.createdAt;
-        }
+        // Use order.createdAt as the journal date (preserves original timestamps)
+        const transactionDate = order.createdAt;
 
         // Create journal entry for the SALE
         // DR: Customer Account (receivable increases)
@@ -268,18 +257,8 @@ class LedgerMigrationService {
 
         const cashAccount = await db.account.findOne({ where: { code: '1100' } });
 
-        // Parse payment date
-        let transactionDate;
-        if (payment.paymentDate) {
-            const parts = payment.paymentDate.split('-');
-            if (parts.length === 3 && parts[0].length === 2) {
-                transactionDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
-            } else {
-                transactionDate = payment.paymentDate;
-            }
-        } else {
-            transactionDate = payment.createdAt;
-        }
+        // Use payment.createdAt as the journal date (preserves original timestamps)
+        const transactionDate = payment.createdAt;
 
         if (payment.partyType === 'customer' && payment.partyId) {
             // Customer payment
