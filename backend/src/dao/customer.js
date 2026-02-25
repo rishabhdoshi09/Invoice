@@ -161,7 +161,6 @@ module.exports = {
                         WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
                         AND "isDeleted" = false
                     ), 0) as balance
-                    ) as balance
                 FROM customers c
                 ORDER BY c.name ASC
             `, { type: db.Sequelize.QueryTypes.SELECT });
