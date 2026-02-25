@@ -284,9 +284,9 @@ const LedgerModule = () => {
                                 variant="contained"
                                 startIcon={<Refresh />}
                                 onClick={() => {
-                                    if (activeTab === 1) fetchTrialBalance();
-                                    if (activeTab === 2) fetchProfitLoss();
-                                    if (activeTab === 3) fetchBalanceSheet();
+                                    if (activeTab === 2) fetchTrialBalance();
+                                    if (activeTab === 3) fetchProfitLoss();
+                                    if (activeTab === 4) fetchBalanceSheet();
                                 }}
                             >
                                 Refresh
