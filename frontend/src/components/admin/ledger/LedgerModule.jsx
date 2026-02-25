@@ -40,6 +40,33 @@ const LedgerModule = () => {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     });
 
+    // Fetch Health Check
+    const fetchHealth = async () => {
+        try {
+            const { data } = await axios.get('/api/ledger/health-check', getAuthHeader());
+            setHealthData(data.data);
+        } catch (err) {
+            console.error('Health check failed:', err);
+        }
+    };
+
+    // Fetch Drift Check
+    const fetchDrift = async () => {
+        try {
+            const { data } = await axios.get('/api/ledger/daily-drift-check', getAuthHeader());
+            setDriftData(data.data);
+        } catch (err) {
+            console.error('Drift check failed:', err);
+        }
+    };
+
+    // Fetch Dashboard (health + drift in parallel)
+    const fetchDashboard = async () => {
+        setLoading(true);
+        try { await Promise.all([fetchHealth(), fetchDrift()]); }
+        finally { setLoading(false); }
+    };
+
     // Fetch accounts
     const fetchAccounts = async () => {
         try {
