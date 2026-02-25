@@ -233,7 +233,7 @@ module.exports = {
 
                 // Update reference (order or purchase) payment status
                 if (value.referenceType === 'order' && value.referenceId) {
-                    const order = await Services.order.getOrder({ id: value.referenceId });
+                    const order = await Services.order.getOrder({ id: value.referenceId }, transaction);
                     if (order) {
                         // Check if order is already paid - prevent double payment
                         if (order.paymentStatus === 'paid') {
@@ -250,13 +250,13 @@ module.exports = {
                             paymentStatus = 'partial';
                         }
 
-                        await Services.order.updateOrder(
-                            { id: value.referenceId },
+                        await db.order.update(
                             { 
                                 paidAmount: newPaidAmount, 
                                 dueAmount: newDueAmount,
                                 paymentStatus: paymentStatus
-                            }
+                            },
+                            { where: { id: value.referenceId }, transaction }
                         );
                     }
                 } else if (value.partyType === 'customer' && value.partyName && !value.referenceId) {
