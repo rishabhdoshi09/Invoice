@@ -67,6 +67,12 @@ frontend/src/
   - 100% read-only, optimized with raw SQL
   - **Scheduled via node-cron** at 02:00 AM daily (async, non-blocking)
   - Console-highlighted output on drift, email alert hook prepared for future
+- [x] **Ledger Admin Dashboard** (frontend `/ledger` → Dashboard tab):
+  - Health Card: Total Debits, Total Credits, Balanced status (green/red)
+  - Drift Status Card: Status, Mismatch count, Last check timestamp
+  - Migration Control Panel: Run/Clear buttons, migration summary
+  - Drift detail table: per-customer breakdown when mismatches exist
+  - System totals: Sales + Payments matched/mismatched chips
 - [x] Journal batch reversal
 - [x] Report queries: Trial Balance, P&L, Balance Sheet, Account Ledger
 - [x] Migration service (orders, payments, purchases) — fixed association bug
