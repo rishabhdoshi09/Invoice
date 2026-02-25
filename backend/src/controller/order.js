@@ -4,6 +4,7 @@ const Services = require('../services');
 const Validations = require('../validations');
 const db = require('../models');
 const { createAuditLog } = require('../middleware/auditLogger');
+const { postInvoiceToLedger } = require('../services/realTimeLedger');
 
 // Helper to get client IP
 const getClientIP = (req) => {
