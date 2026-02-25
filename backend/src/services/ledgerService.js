@@ -364,6 +364,38 @@ class LedgerService {
         }
     }
 
+    // ==================== HEALTH CHECK ====================
+
+    /**
+     * System-wide ledger health check
+     * Returns total debits, total credits, and whether the system is balanced
+     */
+    async healthCheck() {
+        const db = this.db;
+
+        const result = await db.sequelize.query(`
+            SELECT 
+                COALESCE(SUM(le.debit), 0) as "totalDebits",
+                COALESCE(SUM(le.credit), 0) as "totalCredits"
+            FROM ledger_entries le
+            INNER JOIN journal_batches jb ON le."batchId" = jb.id
+            WHERE jb."isPosted" = true AND jb."isReversed" = false
+        `, {
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+
+        const totalDebits = Number(result[0]?.totalDebits) || 0;
+        const totalCredits = Number(result[0]?.totalCredits) || 0;
+        const isBalanced = Math.abs(totalDebits - totalCredits) < 0.01;
+
+        return {
+            totalDebits,
+            totalCredits,
+            difference: Math.abs(totalDebits - totalCredits),
+            isBalanced
+        };
+    }
+
     // ==================== BALANCE CALCULATIONS ====================
 
     /**
