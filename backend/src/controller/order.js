@@ -425,6 +425,14 @@ module.exports = {
                 });
             }
 
+            // Prevent deleting already-deleted orders
+            if (order.isDeleted) {
+                return res.status(400).send({
+                    status: 400,
+                    message: 'This invoice has already been deleted'
+                });
+            }
+
             // Use transaction for all delete operations
             await db.sequelize.transaction(async (transaction) => {
                 // Update daily summary to subtract deleted order
@@ -443,25 +451,29 @@ module.exports = {
                             await customer.update({
                                 currentBalance: Math.max(0, (Number(customer.currentBalance) || 0) - dueAmount)
                             }, { transaction });
-                            console.log(`Reversed customer ${customer.name} balance by ₹${dueAmount}`);
+                            console.log(`Reversed customer ${customer.name} balance by ${dueAmount}`);
                         }
                     } catch (custError) {
                         console.error('Failed to reverse customer balance:', custError);
                     }
                 }
 
-                // Delete ledger entries for this order
-                await db.ledgerEntry.destroy({
-                    where: {
-                        referenceType: 'order',
-                        referenceId: orderId
-                    },
-                    transaction
-                });
+                // Create REVERSAL journal batch in the new ledger (swap debit/credit)
+                try {
+                    await reverseInvoiceLedger(order, transaction);
+                } catch (ledgerError) {
+                    console.error(`[LEDGER] Invoice reversal failed for ${order.orderNumber}:`, ledgerError.message);
+                    throw ledgerError;
+                }
 
-                // Soft delete the order
+                // Soft delete the order (preserve old ledger entries for audit trail)
                 await db.order.update(
-                    { isDeleted: true },
+                    {
+                        isDeleted: true,
+                        deletedAt: new Date(),
+                        deletedBy: req.user?.id || null,
+                        deletedByName: req.user?.name || req.user?.username || null
+                    },
                     { where: { id: orderId }, transaction }
                 );
             });
