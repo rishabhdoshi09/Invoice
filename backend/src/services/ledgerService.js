@@ -396,6 +396,127 @@ class LedgerService {
         };
     }
 
+    // ==================== DAILY DRIFT CHECK ====================
+
+    /**
+     * Lightweight read-only drift detection.
+     * Compares old system vs ledger for every customer + system totals.
+     * Designed to run daily to catch real-time posting failures early.
+     */
+    async dailyDriftCheck() {
+        const db = this.db;
+        const timestamp = new Date().toISOString();
+
+        // ── 1. Per-customer: old SUM(dueAmount) vs ledger receivable ──
+        const customerDrift = await db.sequelize.query(`
+            WITH old_system AS (
+                SELECT
+                    c.id           AS customer_id,
+                    c.name         AS customer_name,
+                    COALESCE(SUM(o."dueAmount"), 0) AS old_outstanding
+                FROM customers c
+                LEFT JOIN orders o
+                    ON (o."customerId" = c.id OR (o."customerName" = c.name AND o."customerId" IS NULL))
+                    AND o."isDeleted" = false
+                GROUP BY c.id, c.name
+            ),
+            ledger_system AS (
+                SELECT
+                    a."partyId"    AS customer_id,
+                    a.name         AS account_name,
+                    COALESCE(SUM(le.debit), 0) - COALESCE(SUM(le.credit), 0) AS ledger_balance
+                FROM accounts a
+                LEFT JOIN ledger_entries le ON le."accountId" = a.id
+                LEFT JOIN journal_batches jb ON le."batchId" = jb.id
+                    AND jb."isPosted" = true AND jb."isReversed" = false
+                WHERE a."partyType" = 'customer'
+                GROUP BY a."partyId", a.name
+            )
+            SELECT
+                os.customer_id,
+                os.customer_name,
+                os.old_outstanding,
+                COALESCE(ls.ledger_balance, 0) AS ledger_balance,
+                ROUND((os.old_outstanding - COALESCE(ls.ledger_balance, 0))::numeric, 2) AS difference
+            FROM old_system os
+            LEFT JOIN ledger_system ls ON ls.customer_id = os.customer_id
+            WHERE ABS(os.old_outstanding - COALESCE(ls.ledger_balance, 0)) >= 0.01
+            ORDER BY ABS(os.old_outstanding - COALESCE(ls.ledger_balance, 0)) DESC
+        `, { type: db.Sequelize.QueryTypes.SELECT });
+
+        // ── 2. System totals ──────────────────────────────────────
+        const [salesTotals] = await db.sequelize.query(`
+            SELECT
+                (SELECT COALESCE(SUM(total), 0) FROM orders WHERE "isDeleted" = false)
+                    AS old_sales,
+                COALESCE(SUM(le.credit), 0)
+                    AS ledger_sales_credit
+            FROM accounts a
+            LEFT JOIN ledger_entries le ON le."accountId" = a.id
+            LEFT JOIN journal_batches jb ON le."batchId" = jb.id
+                AND jb."isPosted" = true AND jb."isReversed" = false
+            WHERE a.code = '4100'
+        `, { type: db.Sequelize.QueryTypes.SELECT });
+
+        const [paymentTotals] = await db.sequelize.query(`
+            SELECT
+                (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE "partyType" = 'customer')
+                    AS old_payments,
+                COALESCE(SUM(le.debit), 0)
+                    AS ledger_cash_debit
+            FROM accounts a
+            LEFT JOIN ledger_entries le ON le."accountId" = a.id
+            LEFT JOIN journal_batches jb ON le."batchId" = jb.id
+                AND jb."isPosted" = true AND jb."isReversed" = false
+            WHERE a.code = '1100'
+        `, { type: db.Sequelize.QueryTypes.SELECT });
+
+        const oldSales = Number(salesTotals?.old_sales) || 0;
+        const ledgerSales = Number(salesTotals?.ledger_sales_credit) || 0;
+        const salesDiff = Number((oldSales - ledgerSales).toFixed(2));
+        const salesMatched = Math.abs(salesDiff) < 0.01;
+
+        const oldPayments = Number(paymentTotals?.old_payments) || 0;
+        const ledgerCash = Number(paymentTotals?.ledger_cash_debit) || 0;
+        const paymentsDiff = Number((oldPayments - ledgerCash).toFixed(2));
+        const paymentsMatched = Math.abs(paymentsDiff) < 0.01;
+
+        // ── 3. Determine status ───────────────────────────────────
+        const hasDrift = customerDrift.length > 0 || !salesMatched || !paymentsMatched;
+
+        return {
+            status: hasDrift ? 'DRIFT_DETECTED' : 'OK',
+            readOnly: true,
+            timestamp,
+            customerDrift: customerDrift.map(r => ({
+                customerId: r.customer_id,
+                customerName: r.customer_name,
+                oldOutstanding: Number(r.old_outstanding),
+                ledgerBalance: Number(r.ledger_balance),
+                difference: Number(r.difference)
+            })),
+            systemTotals: {
+                sales: {
+                    oldSystem: oldSales,
+                    ledgerCredit: ledgerSales,
+                    difference: salesDiff,
+                    isMatched: salesMatched
+                },
+                payments: {
+                    oldSystem: oldPayments,
+                    ledgerCashDebit: ledgerCash,
+                    difference: paymentsDiff,
+                    isMatched: paymentsMatched
+                }
+            },
+            summary: {
+                customersWithDrift: customerDrift.length,
+                salesMatched,
+                paymentsMatched
+            }
+        };
+    }
+
     // ==================== BALANCE CALCULATIONS ====================
 
     /**
