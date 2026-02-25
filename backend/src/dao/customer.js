@@ -128,13 +128,10 @@ module.exports = {
         }
     },
 
-    // List customers with calculated balance (NOT stored balance)
-    // This ensures balance is always accurate from actual transactions
-    // Balance = (Opening Balance + All Order Totals) - MAX(sum of order.paidAmount, sum of payments)
+    // List customers with calculated balance
+    // Balance = Opening Balance + Sum of all order dueAmounts (source of truth)
     listCustomersWithBalance: async (params = {}) => {
         try {
-            // Get all customers with dynamically calculated balance
-            // Uses MAX of order paidAmounts vs payments table to handle both scenarios
             const customers = await db.sequelize.query(`
                 SELECT 
                     c.id,
@@ -152,42 +149,18 @@ module.exports = {
                         WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
                         AND "isDeleted" = false
                     ), 0) as "totalDebit",
-                    GREATEST(
-                        COALESCE((
-                            SELECT SUM("paidAmount") 
-                            FROM orders 
-                            WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
-                            AND "isDeleted" = false
-                        ), 0),
-                        COALESCE((
-                            SELECT SUM(amount) 
-                            FROM payments 
-                            WHERE "partyId" = c.id
-                            AND "partyType" = 'customer'
-                        ), 0)
-                    ) as "totalCredit",
-                    (
-                        COALESCE(c."openingBalance", 0) + 
-                        COALESCE((
-                            SELECT SUM(total) 
-                            FROM orders 
-                            WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
-                            AND "isDeleted" = false
-                        ), 0) -
-                        GREATEST(
-                            COALESCE((
-                                SELECT SUM("paidAmount") 
-                                FROM orders 
-                                WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
-                                AND "isDeleted" = false
-                            ), 0),
-                            COALESCE((
-                                SELECT SUM(amount) 
-                                FROM payments 
-                                WHERE "partyId" = c.id
-                                AND "partyType" = 'customer'
-                            ), 0)
-                        )
+                    COALESCE((
+                        SELECT SUM("paidAmount") 
+                        FROM orders 
+                        WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
+                        AND "isDeleted" = false
+                    ), 0) as "totalCredit",
+                    COALESCE(c."openingBalance", 0) + COALESCE((
+                        SELECT SUM("dueAmount") 
+                        FROM orders 
+                        WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
+                        AND "isDeleted" = false
+                    ), 0) as balance
                     ) as balance
                 FROM customers c
                 ORDER BY c.name ASC
