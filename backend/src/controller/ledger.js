@@ -329,6 +329,19 @@ module.exports = {
     // ==================== MIGRATION ====================
 
     /**
+     * Health check - system-wide ledger balance verification
+     */
+    healthCheck: async (req, res) => {
+        try {
+            const result = await ledgerService.healthCheck();
+            return res.json({ status: 200, data: result });
+        } catch (error) {
+            console.error('Error running health check:', error);
+            return res.status(500).json({ status: 500, message: error.message });
+        }
+    },
+
+    /**
      * Run full migration
      */
     runMigration: async (req, res) => {
