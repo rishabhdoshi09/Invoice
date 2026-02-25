@@ -599,8 +599,8 @@ const LedgerModule = () => {
                 </TableContainer>
             )}
 
-            {/* Tab 1: Trial Balance */}
-            {activeTab === 1 && !loading && trialBalance && (
+            {/* Tab 2: Trial Balance */}
+            {activeTab === 2 && !loading && trialBalance && (
                 <Paper sx={{ p: 2 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                         <Typography variant="h6">Trial Balance as of {trialBalance.asOfDate}</Typography>
@@ -644,8 +644,8 @@ const LedgerModule = () => {
                 </Paper>
             )}
 
-            {/* Tab 2: Profit & Loss */}
-            {activeTab === 2 && !loading && profitLoss && (
+            {/* Tab 3: Profit & Loss */}
+            {activeTab === 3 && !loading && profitLoss && (
                 <Grid container spacing={2}>
                     <Grid item xs={12} md={6}>
                         <Paper sx={{ p: 2 }}>
@@ -699,8 +699,8 @@ const LedgerModule = () => {
                 </Grid>
             )}
 
-            {/* Tab 3: Balance Sheet */}
-            {activeTab === 3 && !loading && balanceSheet && (
+            {/* Tab 4: Balance Sheet */}
+            {activeTab === 4 && !loading && balanceSheet && (
                 <Grid container spacing={2}>
                     <Grid item xs={12} md={6}>
                         <Paper sx={{ p: 2 }}>
@@ -771,8 +771,8 @@ const LedgerModule = () => {
                 </Grid>
             )}
 
-            {/* Tab 4: Reconciliation */}
-            {activeTab === 4 && !loading && (
+            {/* Tab 5: Reconciliation */}
+            {activeTab === 5 && !loading && (
                 <Paper sx={{ p: 2 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                         <Typography variant="h6">Reconciliation Report</Typography>
@@ -874,8 +874,8 @@ const LedgerModule = () => {
                 </Paper>
             )}
 
-            {/* Tab 5: Journal Entries */}
-            {activeTab === 5 && !loading && (
+            {/* Tab 6: Journal Entries */}
+            {activeTab === 6 && !loading && (
                 <Paper sx={{ p: 2 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                         <Typography variant="h6">Journal Batches</Typography>
