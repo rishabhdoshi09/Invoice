@@ -302,8 +302,250 @@ const LedgerModule = () => {
                 </Box>
             )}
 
-            {/* Tab 0: Chart of Accounts */}
+            {/* Tab 0: Dashboard */}
             {activeTab === 0 && !loading && (
+                <Box>
+                    <Grid container spacing={2} sx={{ mb: 2 }}>
+                        {/* Health Card */}
+                        <Grid item xs={12} md={4}>
+                            <Card
+                                data-testid="health-card"
+                                sx={{
+                                    bgcolor: healthData?.isBalanced ? '#0d2818' : '#3b0a0a',
+                                    color: '#fff',
+                                    border: '1px solid',
+                                    borderColor: healthData?.isBalanced ? '#1b5e20' : '#b71c1c',
+                                }}
+                            >
+                                <CardContent>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                                        {healthData?.isBalanced
+                                            ? <CheckCircle sx={{ color: '#4caf50' }} />
+                                            : <Error sx={{ color: '#f44336' }} />}
+                                        <Typography variant="subtitle2" sx={{ opacity: 0.8, letterSpacing: 1, textTransform: 'uppercase' }}>
+                                            Ledger Health
+                                        </Typography>
+                                    </Box>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                        <Typography variant="body2" sx={{ opacity: 0.7 }}>Total Debits</Typography>
+                                        <Typography variant="body1" sx={{ fontFamily: 'monospace', fontWeight: 700 }} data-testid="health-total-debits">
+                                            {formatCurrency(healthData?.totalDebits)}
+                                        </Typography>
+                                    </Box>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                        <Typography variant="body2" sx={{ opacity: 0.7 }}>Total Credits</Typography>
+                                        <Typography variant="body1" sx={{ fontFamily: 'monospace', fontWeight: 700 }} data-testid="health-total-credits">
+                                            {formatCurrency(healthData?.totalCredits)}
+                                        </Typography>
+                                    </Box>
+                                    <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)', my: 1.5 }} />
+                                    <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                                        <Chip
+                                            data-testid="health-balanced-status"
+                                            icon={healthData?.isBalanced ? <CheckCircle /> : <Error />}
+                                            label={healthData?.isBalanced ? 'BALANCED' : 'UNBALANCED'}
+                                            sx={{
+                                                bgcolor: healthData?.isBalanced ? '#1b5e20' : '#b71c1c',
+                                                color: '#fff',
+                                                fontWeight: 700,
+                                                letterSpacing: 1,
+                                                '& .MuiChip-icon': { color: '#fff' }
+                                            }}
+                                        />
+                                    </Box>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+
+                        {/* Drift Status Card */}
+                        <Grid item xs={12} md={4}>
+                            <Card
+                                data-testid="drift-card"
+                                sx={{
+                                    bgcolor: driftData?.status === 'OK' ? '#0d2818' : driftData ? '#3b0a0a' : '#1a1a2e',
+                                    color: '#fff',
+                                    border: '1px solid',
+                                    borderColor: driftData?.status === 'OK' ? '#1b5e20' : driftData ? '#b71c1c' : '#333',
+                                }}
+                            >
+                                <CardContent>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                                        {driftData?.status === 'OK'
+                                            ? <CheckCircle sx={{ color: '#4caf50' }} />
+                                            : <Warning sx={{ color: '#ff9800' }} />}
+                                        <Typography variant="subtitle2" sx={{ opacity: 0.8, letterSpacing: 1, textTransform: 'uppercase' }}>
+                                            Drift Monitor
+                                        </Typography>
+                                    </Box>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                        <Typography variant="body2" sx={{ opacity: 0.7 }}>Status</Typography>
+                                        <Chip
+                                            data-testid="drift-status"
+                                            label={driftData?.status || 'N/A'}
+                                            size="small"
+                                            sx={{
+                                                bgcolor: driftData?.status === 'OK' ? '#1b5e20' : '#b71c1c',
+                                                color: '#fff',
+                                                fontWeight: 700,
+                                                fontSize: '0.7rem',
+                                            }}
+                                        />
+                                    </Box>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                        <Typography variant="body2" sx={{ opacity: 0.7 }}>Mismatches</Typography>
+                                        <Typography variant="body1" sx={{ fontWeight: 700 }} data-testid="drift-mismatch-count">
+                                            {driftData?.summary?.customersWithDrift ?? '-'}
+                                        </Typography>
+                                    </Box>
+                                    <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)', my: 1.5 }} />
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <Typography variant="body2" sx={{ opacity: 0.7 }}>Last Check</Typography>
+                                        <Typography variant="caption" sx={{ fontFamily: 'monospace', opacity: 0.9 }} data-testid="drift-timestamp">
+                                            {driftData?.timestamp
+                                                ? new Date(driftData.timestamp).toLocaleString()
+                                                : 'Never'}
+                                        </Typography>
+                                    </Box>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+
+                        {/* Migration Control Panel */}
+                        <Grid item xs={12} md={4}>
+                            <Card
+                                data-testid="migration-card"
+                                sx={{
+                                    bgcolor: '#1a1a2e',
+                                    color: '#fff',
+                                    border: '1px solid #333',
+                                }}
+                            >
+                                <CardContent>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                                        <Sync sx={{ color: '#90caf9' }} />
+                                        <Typography variant="subtitle2" sx={{ opacity: 0.8, letterSpacing: 1, textTransform: 'uppercase' }}>
+                                            Migration Control
+                                        </Typography>
+                                    </Box>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
+                                        <Button
+                                            data-testid="migration-run-btn"
+                                            variant="contained"
+                                            fullWidth
+                                            startIcon={migrationRunning ? <CircularProgress size={16} color="inherit" /> : <PlayArrow />}
+                                            onClick={runMigration}
+                                            disabled={migrationRunning}
+                                            sx={{ bgcolor: '#1565c0', '&:hover': { bgcolor: '#0d47a1' } }}
+                                        >
+                                            {migrationRunning ? 'Migrating...' : 'Run Migration'}
+                                        </Button>
+                                        <Button
+                                            data-testid="migration-clear-btn"
+                                            variant="outlined"
+                                            fullWidth
+                                            color="error"
+                                            onClick={clearMigration}
+                                            disabled={migrationRunning}
+                                            sx={{ borderColor: '#b71c1c', color: '#ef5350', '&:hover': { bgcolor: 'rgba(183,28,28,0.1)' } }}
+                                        >
+                                            Clear Migration Data
+                                        </Button>
+                                    </Box>
+                                    {migrationResult && (
+                                        <Box data-testid="migration-summary" sx={{ bgcolor: 'rgba(255,255,255,0.05)', borderRadius: 1, p: 1.5, mt: 1 }}>
+                                            <Typography variant="caption" sx={{ opacity: 0.6, display: 'block', mb: 0.5 }}>Last Migration</Typography>
+                                            <Typography variant="body2">
+                                                Customers: {migrationResult.customers?.migrated ?? 0} &bull;
+                                                Orders: {migrationResult.orders?.migrated ?? 0} &bull;
+                                                Payments: {migrationResult.payments?.migrated ?? 0}
+                                            </Typography>
+                                            {(migrationResult.orders?.errors?.length > 0 || migrationResult.payments?.errors?.length > 0) && (
+                                                <Typography variant="body2" sx={{ color: '#ef5350', mt: 0.5 }}>
+                                                    Errors: {(migrationResult.orders?.errors?.length || 0) + (migrationResult.payments?.errors?.length || 0)}
+                                                </Typography>
+                                            )}
+                                        </Box>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                    </Grid>
+
+                    {/* Drift detail table — only when drifted customers exist */}
+                    {driftData?.customerDrift?.length > 0 && (
+                        <Paper sx={{ p: 2, bgcolor: '#fff8e1', border: '1px solid #ffe082' }}>
+                            <Typography variant="subtitle2" sx={{ mb: 1, color: '#e65100', fontWeight: 700 }}>
+                                Customers with Balance Drift
+                            </Typography>
+                            <TableContainer sx={{ maxHeight: 260 }}>
+                                <Table size="small" stickyHeader>
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell>Customer</TableCell>
+                                            <TableCell align="right">Old System</TableCell>
+                                            <TableCell align="right">Ledger</TableCell>
+                                            <TableCell align="right">Difference</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {driftData.customerDrift.map((c) => (
+                                            <TableRow key={c.customerId} data-testid={`drift-row-${c.customerId}`}>
+                                                <TableCell>{c.customerName}</TableCell>
+                                                <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatCurrency(c.oldOutstanding)}</TableCell>
+                                                <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatCurrency(c.ledgerBalance)}</TableCell>
+                                                <TableCell align="right" sx={{ fontFamily: 'monospace', color: 'error.main', fontWeight: 700 }}>
+                                                    {formatCurrency(c.difference)}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                        </Paper>
+                    )}
+
+                    {/* System totals from drift check */}
+                    {driftData?.systemTotals && (
+                        <Grid container spacing={2} sx={{ mt: 1 }}>
+                            <Grid item xs={12} md={6}>
+                                <Paper sx={{ p: 2, border: '1px solid', borderColor: driftData.systemTotals.sales.isMatched ? '#c8e6c9' : '#ffcdd2' }}>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <Typography variant="subtitle2">Sales Total</Typography>
+                                        <Chip
+                                            size="small"
+                                            label={driftData.systemTotals.sales.isMatched ? 'MATCHED' : 'MISMATCH'}
+                                            color={driftData.systemTotals.sales.isMatched ? 'success' : 'error'}
+                                        />
+                                    </Box>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+                                        <Typography variant="body2" color="text.secondary">Old: {formatCurrency(driftData.systemTotals.sales.oldSystem)}</Typography>
+                                        <Typography variant="body2" color="text.secondary">Ledger: {formatCurrency(driftData.systemTotals.sales.ledgerCredit)}</Typography>
+                                    </Box>
+                                </Paper>
+                            </Grid>
+                            <Grid item xs={12} md={6}>
+                                <Paper sx={{ p: 2, border: '1px solid', borderColor: driftData.systemTotals.payments.isMatched ? '#c8e6c9' : '#ffcdd2' }}>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <Typography variant="subtitle2">Payments Total</Typography>
+                                        <Chip
+                                            size="small"
+                                            label={driftData.systemTotals.payments.isMatched ? 'MATCHED' : 'MISMATCH'}
+                                            color={driftData.systemTotals.payments.isMatched ? 'success' : 'error'}
+                                        />
+                                    </Box>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+                                        <Typography variant="body2" color="text.secondary">Old: {formatCurrency(driftData.systemTotals.payments.oldSystem)}</Typography>
+                                        <Typography variant="body2" color="text.secondary">Ledger: {formatCurrency(driftData.systemTotals.payments.ledgerCashDebit)}</Typography>
+                                    </Box>
+                                </Paper>
+                            </Grid>
+                        </Grid>
+                    )}
+                </Box>
+            )}
+
+            {/* Tab 1: Chart of Accounts */}
+            {activeTab === 1 && !loading && (
                 <TableContainer component={Paper}>
                     <Table size="small">
                         <TableHead>
