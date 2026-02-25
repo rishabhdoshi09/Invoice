@@ -498,6 +498,234 @@ class LedgerMigrationService {
     }
 
     /**
+     * SAFE MODE: Full read-only reconciliation validation
+     * Compares old system vs ledger at every level:
+     *   1. Per-customer balance comparison
+     *   2. System-wide totals (sales, payments, receivables)
+     *   3. Mismatch breakdown with batch detail
+     * Does NOT modify any data.
+     */
+    async runSafeReconciliation() {
+        const db = this.db;
+
+        const result = {
+            readOnly: true,
+            timestamp: new Date().toISOString(),
+            customers: [],
+            systemTotals: {},
+            mismatches: [],
+            healthCheck: null,
+            summary: {}
+        };
+
+        // ── 1. Per-customer comparison ─────────────────────────
+        const customers = await db.customer.findAll({ order: [['name', 'ASC']] });
+
+        let totalOldBalance = 0;
+        let totalLedgerBalance = 0;
+        let matchedCount = 0;
+        let mismatchedCount = 0;
+
+        for (const customer of customers) {
+            // Old system: openingBalance + SUM(dueAmount) for non-deleted orders
+            const orders = await db.order.findAll({
+                where: {
+                    [db.Sequelize.Op.or]: [
+                        { customerId: customer.id },
+                        { customerName: customer.name, customerId: null }
+                    ],
+                    isDeleted: false
+                },
+                attributes: ['id', 'orderNumber', 'total', 'paidAmount', 'dueAmount', 'createdAt'],
+                order: [['createdAt', 'ASC']]
+            });
+
+            const oldDueSum = orders.reduce((sum, o) => sum + (Number(o.dueAmount) || 0), 0);
+            const oldBalance = (Number(customer.openingBalance) || 0) + oldDueSum;
+
+            // Ledger: SUM(debit - credit) from receivable account for this customer
+            const ledgerBalance = await this.ledgerService.getCustomerLedgerBalance(customer.id);
+
+            const difference = Number((oldBalance - ledgerBalance.balance).toFixed(2));
+            const isMatched = Math.abs(difference) < 0.01;
+
+            if (isMatched) matchedCount++;
+            else mismatchedCount++;
+
+            totalOldBalance += oldBalance;
+            totalLedgerBalance += ledgerBalance.balance;
+
+            const row = {
+                customerId: customer.id,
+                customerName: customer.name,
+                oldBalance: Number(oldBalance.toFixed(2)),
+                ledgerBalance: Number(ledgerBalance.balance.toFixed(2)),
+                difference,
+                isMatched,
+                orderCount: orders.length,
+                openingBalance: Number(customer.openingBalance) || 0
+            };
+
+            result.customers.push(row);
+
+            // ── 4. Mismatch breakdown ──────────────────────────
+            if (!isMatched && ledgerBalance.hasLedgerAccount) {
+                const batches = await db.sequelize.query(`
+                    SELECT 
+                        jb.id,
+                        jb."batchNumber",
+                        jb."referenceType",
+                        jb."referenceId",
+                        jb."transactionDate",
+                        jb.description,
+                        le.debit,
+                        le.credit,
+                        le.narration
+                    FROM ledger_entries le
+                    INNER JOIN journal_batches jb ON le."batchId" = jb.id
+                    WHERE le."accountId" = :accountId
+                      AND jb."isPosted" = true
+                      AND jb."isReversed" = false
+                    ORDER BY jb."transactionDate" ASC, le."createdAt" ASC
+                `, {
+                    replacements: { accountId: ledgerBalance.accountId },
+                    type: db.Sequelize.QueryTypes.SELECT
+                });
+
+                result.mismatches.push({
+                    customerId: customer.id,
+                    customerName: customer.name,
+                    oldBalance: row.oldBalance,
+                    ledgerBalance: row.ledgerBalance,
+                    difference: row.difference,
+                    oldSystemOrders: orders.map(o => ({
+                        orderId: o.id,
+                        orderNumber: o.orderNumber,
+                        total: Number(o.total) || 0,
+                        paidAmount: Number(o.paidAmount) || 0,
+                        dueAmount: Number(o.dueAmount) || 0,
+                        createdAt: o.createdAt
+                    })),
+                    ledgerBatches: batches.map(b => ({
+                        batchId: b.id,
+                        batchNumber: b.batchNumber,
+                        referenceType: b.referenceType,
+                        referenceId: b.referenceId,
+                        transactionDate: b.transactionDate,
+                        description: b.description,
+                        debit: Number(b.debit) || 0,
+                        credit: Number(b.credit) || 0,
+                        narration: b.narration
+                    }))
+                });
+            }
+        }
+
+        // ── 2. System-wide totals ──────────────────────────────
+        // Old system: total sales
+        const oldSalesResult = await db.sequelize.query(`
+            SELECT COALESCE(SUM(total), 0) as "totalSales"
+            FROM orders WHERE "isDeleted" = false
+        `, { type: db.Sequelize.QueryTypes.SELECT });
+        const oldTotalSales = Number(oldSalesResult[0]?.totalSales) || 0;
+
+        // Old system: total payments from payments table
+        const oldPaymentsResult = await db.sequelize.query(`
+            SELECT COALESCE(SUM(amount), 0) as "totalPayments"
+            FROM payments WHERE "partyType" = 'customer'
+        `, { type: db.Sequelize.QueryTypes.SELECT });
+        const oldTotalPayments = Number(oldPaymentsResult[0]?.totalPayments) || 0;
+
+        // Old system: total paidAmount on orders (inline payments)
+        const oldInlinePayResult = await db.sequelize.query(`
+            SELECT COALESCE(SUM("paidAmount"), 0) as "totalInlinePaid"
+            FROM orders WHERE "isDeleted" = false
+        `, { type: db.Sequelize.QueryTypes.SELECT });
+        const oldTotalInlinePaid = Number(oldInlinePayResult[0]?.totalInlinePaid) || 0;
+
+        // Old system: total receivable outstanding
+        const oldReceivableResult = await db.sequelize.query(`
+            SELECT COALESCE(SUM("dueAmount"), 0) as "totalDue"
+            FROM orders WHERE "isDeleted" = false
+        `, { type: db.Sequelize.QueryTypes.SELECT });
+        const oldTotalReceivable = Number(oldReceivableResult[0]?.totalDue) || 0;
+
+        // Ledger: Sales account (4100) total credit
+        const salesAccount = await db.account.findOne({ where: { code: '4100' } });
+        let ledgerSalesCredit = 0;
+        if (salesAccount) {
+            const salesBal = await this.ledgerService.getAccountBalance(salesAccount.id);
+            ledgerSalesCredit = salesBal.totalCredit;
+        }
+
+        // Ledger: Cash account (1100) net balance
+        const cashAccount = await db.account.findOne({ where: { code: '1100' } });
+        let ledgerCashBalance = 0;
+        let ledgerCashDebit = 0;
+        if (cashAccount) {
+            const cashBal = await this.ledgerService.getAccountBalance(cashAccount.id);
+            ledgerCashBalance = cashBal.balance;
+            ledgerCashDebit = cashBal.totalDebit;
+        }
+
+        // Ledger: Receivable (1300 + all 1300-* sub-accounts) net balance
+        const receivableAccounts = await db.account.findAll({
+            where: {
+                [db.Sequelize.Op.or]: [
+                    { code: '1300' },
+                    { code: { [db.Sequelize.Op.like]: '1300-%' } }
+                ]
+            }
+        });
+        let ledgerReceivableBalance = 0;
+        for (const acc of receivableAccounts) {
+            const bal = await this.ledgerService.getAccountBalance(acc.id);
+            ledgerReceivableBalance += bal.balance;
+        }
+
+        result.systemTotals = {
+            sales: {
+                oldSystem: Number(oldTotalSales.toFixed(2)),
+                ledgerSalesCredit: Number(ledgerSalesCredit.toFixed(2)),
+                difference: Number((oldTotalSales - ledgerSalesCredit).toFixed(2)),
+                isMatched: Math.abs(oldTotalSales - ledgerSalesCredit) < 0.01
+            },
+            payments: {
+                oldSystemPaymentsTable: Number(oldTotalPayments.toFixed(2)),
+                oldSystemInlinePaid: Number(oldTotalInlinePaid.toFixed(2)),
+                ledgerCashDebit: Number(ledgerCashDebit.toFixed(2)),
+                ledgerCashNetBalance: Number(ledgerCashBalance.toFixed(2)),
+                note: 'Cash debit = money received. Compare oldSystemPaymentsTable + oldSystemInlinePaid vs ledgerCashDebit'
+            },
+            receivables: {
+                oldSystemDueTotal: Number(oldTotalReceivable.toFixed(2)),
+                ledgerReceivableBalance: Number(ledgerReceivableBalance.toFixed(2)),
+                difference: Number((oldTotalReceivable - ledgerReceivableBalance).toFixed(2)),
+                isMatched: Math.abs(oldTotalReceivable - ledgerReceivableBalance) < 0.01,
+                note: 'Ledger receivable = SUM(debit-credit) across all 1300-* accounts'
+            }
+        };
+
+        // ── 3. Health check ────────────────────────────────────
+        result.healthCheck = await this.ledgerService.healthCheck();
+
+        // ── Summary ────────────────────────────────────────────
+        result.summary = {
+            totalCustomers: customers.length,
+            matched: matchedCount,
+            mismatched: mismatchedCount,
+            totalOldBalance: Number(totalOldBalance.toFixed(2)),
+            totalLedgerBalance: Number(totalLedgerBalance.toFixed(2)),
+            overallDifference: Number((totalOldBalance - totalLedgerBalance).toFixed(2)),
+            salesMatched: result.systemTotals.sales.isMatched,
+            receivablesMatched: result.systemTotals.receivables.isMatched,
+            ledgerBalanced: result.healthCheck.isBalanced
+        };
+
+        return result;
+    }
+
+    /**
      * Clear all migration data (reversible)
      */
     async clearMigrationData() {
