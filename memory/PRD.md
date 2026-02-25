@@ -51,6 +51,15 @@ frontend/src/
   - System-wide totals: Sales, Payments, Receivables cross-checked
   - Mismatch breakdown with batch-level detail and order-level detail
   - 100% read-only — verified with before/after row count check
+- [x] **Real-Time Ledger Posting (SAFE PARALLEL MODE)**:
+  - Invoice creation auto-posts INVOICE journal batch (DR Receivable, CR Sales)
+  - Payment recording auto-posts PAYMENT journal batch (DR Cash, CR Receivable)
+  - Wrapped in SAME transaction as original write (atomicity)
+  - Old system (dueAmount/paidAmount) runs unchanged in parallel
+  - Duplicate prevention via unique constraint on (referenceType, referenceId)
+  - `[LEDGER] POSTED` logging for every batch
+  - Fixed double-counting bug in payment.js (removed duplicate order update)
+  - `ledger_entries.batchId`/`accountId` made nullable for old system coexistence
 - [x] Journal batch reversal
 - [x] Report queries: Trial Balance, P&L, Balance Sheet, Account Ledger
 - [x] Migration service (orders, payments, purchases) — fixed association bug
