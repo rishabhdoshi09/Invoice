@@ -32,7 +32,6 @@ const LedgerModule = () => {
 
     // Migration states
     const [migrationRunning, setMigrationRunning] = useState(false);
-    const [migrationResults, setMigrationResults] = useState(null);
 
     const getAuthHeader = () => ({
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
