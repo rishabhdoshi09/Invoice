@@ -221,6 +221,12 @@ export const Layout = () =>  {
             icon: <Dashboard />,
             path: 'admin-dashboard'
         });
+        pages.push({
+            key: 'ledger',
+            label: 'Ledger Module', 
+            icon: <Book />,
+            path: 'ledger'
+        });
     }
 
     useEffect(()=>{
