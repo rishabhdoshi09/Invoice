@@ -9,7 +9,7 @@ module.exports = (sequelize, Sequelize) => {
             },
             batchId: {
                 type: Sequelize.UUID,
-                allowNull: false,
+                allowNull: true,
                 references: {
                     model: 'journal_batches',
                     key: 'id'
@@ -17,7 +17,7 @@ module.exports = (sequelize, Sequelize) => {
             },
             accountId: {
                 type: Sequelize.UUID,
-                allowNull: false,
+                allowNull: true,
                 references: {
                     model: 'accounts',
                     key: 'id'
