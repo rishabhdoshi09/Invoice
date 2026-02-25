@@ -356,6 +356,26 @@ module.exports = {
     },
 
     /**
+     * Daily drift check — lightweight read-only comparison
+     * between old system and ledger for early mismatch detection.
+     */
+    dailyDriftCheck: async (req, res) => {
+        try {
+            const report = await ledgerService.dailyDriftCheck();
+            const status = report.status;
+            if (status === 'DRIFT_DETECTED') {
+                console.warn(`[LEDGER] DRIFT_DETECTED at ${report.timestamp} — ${report.customerDrift.length} customer(s) drifted, sales match=${report.systemTotals.sales.isMatched}, payments match=${report.systemTotals.payments.isMatched}`);
+            } else {
+                console.log(`[LEDGER] Daily drift check OK at ${report.timestamp}`);
+            }
+            return res.json({ status: 200, data: report });
+        } catch (error) {
+            console.error('[LEDGER] Drift check error:', error);
+            return res.status(500).json({ status: 500, message: error.message });
+        }
+    },
+
+    /**
      * SAFE MODE: Full read-only reconciliation validation
      */
     safeReconciliation: async (req, res) => {
