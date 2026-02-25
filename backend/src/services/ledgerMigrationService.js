@@ -56,7 +56,6 @@ class LedgerMigrationService {
         console.log('Step 4: Migrating orders to ledger...');
         const orders = await db.order.findAll({
             where: { isDeleted: false },
-            include: [{ model: db.customer, as: 'customer' }],
             order: [['createdAt', 'ASC']]
         });
 
