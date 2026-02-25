@@ -96,12 +96,22 @@ module.exports = {
             });
 
             // Calculate totals
-            const totalDebit = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0) + (Number(customer.openingBalance) || 0);
-            const totalCredit = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            const totalOrderAmount = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+            const totalDebit = totalOrderAmount + (Number(customer.openingBalance) || 0);
+            
+            // Get payments from BOTH sources:
+            // 1. Sum of paidAmount from orders (payments recorded directly on orders)
+            // 2. Sum of amount from payments table (separate payment records)
+            const sumOrderPaidAmount = orders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
+            const sumPaymentsTable = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            
+            // Use the LARGER of the two as the actual total received
+            // This handles both scenarios:
+            // - Payments recorded on orders but not in payments table
+            // - Payments recorded in payments table but not on orders
+            const totalCredit = Math.max(sumOrderPaidAmount, sumPaymentsTable);
             
             // Balance = Total Debit - Total Credit
-            // = (Opening Balance + All Order Totals) - (All Payments Received)
-            // This is the actual amount still owed by the customer
             const balance = totalDebit - totalCredit;
 
             // AUTO-RECONCILE: Distribute payments to orders (FIFO - oldest orders first)
