@@ -2,13 +2,11 @@ import { useState, useEffect } from 'react';
 import {
     Box, Paper, Typography, Tabs, Tab, Button, Table, TableBody, TableCell,
     TableContainer, TableHead, TableRow, Chip, CircularProgress, Alert,
-    Dialog, DialogTitle, DialogContent, DialogActions, TextField, Grid,
-    Card, CardContent, IconButton, Tooltip, Divider, Select, MenuItem,
-    FormControl, InputLabel
+    TextField, Grid, Card, CardContent, Divider
 } from '@mui/material';
 import {
     AccountBalance, Receipt, Assessment, Sync, PlayArrow,
-    Refresh, CheckCircle, Error, Warning, TrendingUp, TrendingDown
+    Refresh, CheckCircle, Error, Warning, TrendingUp
 } from '@mui/icons-material';
 import axios from 'axios';
 
