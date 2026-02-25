@@ -242,13 +242,14 @@ const LedgerModule = () => {
                 {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
                 {success && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>{success}</Alert>}
 
-                <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                    <Tab label="Chart of Accounts" icon={<AccountBalance />} iconPosition="start" />
-                    <Tab label="Trial Balance" icon={<Assessment />} iconPosition="start" />
-                    <Tab label="Profit & Loss" icon={<TrendingUp />} iconPosition="start" />
-                    <Tab label="Balance Sheet" icon={<Receipt />} iconPosition="start" />
-                    <Tab label="Reconciliation" icon={<Sync />} iconPosition="start" />
-                    <Tab label="Journal Entries" icon={<Receipt />} iconPosition="start" />
+                <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} variant="scrollable" scrollButtons="auto" sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                    <Tab label="Dashboard" icon={<Assessment />} iconPosition="start" data-testid="tab-dashboard" />
+                    <Tab label="Chart of Accounts" icon={<AccountBalance />} iconPosition="start" data-testid="tab-accounts" />
+                    <Tab label="Trial Balance" icon={<Assessment />} iconPosition="start" data-testid="tab-trial-balance" />
+                    <Tab label="Profit & Loss" icon={<TrendingUp />} iconPosition="start" data-testid="tab-profit-loss" />
+                    <Tab label="Balance Sheet" icon={<Receipt />} iconPosition="start" data-testid="tab-balance-sheet" />
+                    <Tab label="Reconciliation" icon={<Sync />} iconPosition="start" data-testid="tab-reconciliation" />
+                    <Tab label="Journal Entries" icon={<Receipt />} iconPosition="start" data-testid="tab-journal-entries" />
                 </Tabs>
             </Paper>
 
