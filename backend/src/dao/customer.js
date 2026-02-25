@@ -108,47 +108,19 @@ module.exports = {
             // This is the source of truth as it's maintained when orders are created/updated
             const balance = (Number(customer.openingBalance) || 0) + totalDue;
 
-            // AUTO-RECONCILE: Distribute payments to orders (FIFO - oldest orders first)
-            // This ensures individual order rows show correct paid/due/status
-            let remainingPayments = totalCredit;
+            // Sort orders by date DESC for display (most recent first)
+            orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             
-            // First apply to opening balance if any
-            let openingBalanceRemaining = Number(customer.openingBalance) || 0;
-            if (openingBalanceRemaining > 0 && remainingPayments > 0) {
-                const appliedToOpening = Math.min(openingBalanceRemaining, remainingPayments);
-                remainingPayments -= appliedToOpening;
-            }
-            
-            // Then apply to orders (oldest first)
-            const reconciledOrders = orders.map(order => {
-                const orderTotal = Number(order.total) || 0;
-                const actualPaid = Math.min(orderTotal, remainingPayments);
-                remainingPayments -= actualPaid;  // FIX: subtract actualPaid, not orderTotal
-                
-                const actualDue = orderTotal - actualPaid;
-                const actualStatus = actualDue === 0 ? 'paid' : (actualPaid > 0 ? 'partial' : 'unpaid');
-                
-                return {
-                    ...order.toJSON(),
-                    paidAmount: actualPaid,
-                    dueAmount: actualDue,
-                    paymentStatus: actualStatus
-                };
-            });
-
-            // Reverse back to DESC order for display (most recent first)
-            reconciledOrders.reverse();
-            
-            // Also reverse payments for display
-            const displayPayments = [...payments].reverse();
+            // Sort payments by date DESC for display
+            payments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
             return {
                 ...customer.toJSON(),
                 totalDebit,
                 totalCredit,
                 balance,
-                orders: reconciledOrders,
-                payments: displayPayments
+                orders: orders.map(o => o.toJSON ? o.toJSON() : o),
+                payments: payments.map(p => p.toJSON ? p.toJSON() : p)
             };
         } catch (error) {
             console.log(error);
