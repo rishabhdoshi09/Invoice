@@ -130,12 +130,10 @@ module.exports = {
         }
     },
 
-    // List suppliers with calculated balance (NOT stored balance)
-    // Balance = (Opening Balance + All Purchase Bill Totals) - MAX(sum of paidAmount, sum of payments)
+    // List suppliers with calculated balance
+    // Balance = Opening Balance + Sum of all purchase bill dueAmounts (source of truth)
     listSuppliersWithBalance: async (params = {}) => {
         try {
-            // Get all suppliers with dynamically calculated balance
-            // Uses MAX of purchase paidAmounts vs payments table to handle both scenarios
             const suppliers = await db.sequelize.query(`
                 SELECT 
                     s.id,
@@ -152,40 +150,16 @@ module.exports = {
                         FROM "purchaseBills" 
                         WHERE "supplierId" = s.id
                     ), 0) as "totalDebit",
-                    GREATEST(
-                        COALESCE((
-                            SELECT SUM("paidAmount") 
-                            FROM "purchaseBills" 
-                            WHERE "supplierId" = s.id
-                        ), 0),
-                        COALESCE((
-                            SELECT SUM(amount) 
-                            FROM payments 
-                            WHERE "partyId" = s.id
-                            AND "partyType" = 'supplier'
-                        ), 0)
-                    ) as "totalCredit",
-                    (
-                        COALESCE(s."openingBalance", 0) + 
-                        COALESCE((
-                            SELECT SUM(total) 
-                            FROM "purchaseBills" 
-                            WHERE "supplierId" = s.id
-                        ), 0) -
-                        GREATEST(
-                            COALESCE((
-                                SELECT SUM("paidAmount") 
-                                FROM "purchaseBills" 
-                                WHERE "supplierId" = s.id
-                            ), 0),
-                            COALESCE((
-                                SELECT SUM(amount) 
-                                FROM payments 
-                                WHERE "partyId" = s.id
-                                AND "partyType" = 'supplier'
-                            ), 0)
-                        )
-                    ) as balance
+                    COALESCE((
+                        SELECT SUM("paidAmount") 
+                        FROM "purchaseBills" 
+                        WHERE "supplierId" = s.id
+                    ), 0) as "totalCredit",
+                    COALESCE(s."openingBalance", 0) + COALESCE((
+                        SELECT SUM("dueAmount") 
+                        FROM "purchaseBills" 
+                        WHERE "supplierId" = s.id
+                    ), 0) as balance
                 FROM suppliers s
                 ORDER BY s.name ASC
             `, { type: db.Sequelize.QueryTypes.SELECT });
