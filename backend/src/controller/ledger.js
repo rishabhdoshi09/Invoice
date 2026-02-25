@@ -356,6 +356,19 @@ module.exports = {
     },
 
     /**
+     * SAFE MODE: Full read-only reconciliation validation
+     */
+    safeReconciliation: async (req, res) => {
+        try {
+            const report = await migrationService.runSafeReconciliation();
+            return res.json({ status: 200, data: report });
+        } catch (error) {
+            console.error('Error running safe reconciliation:', error);
+            return res.status(500).json({ status: 500, message: error.message });
+        }
+    },
+
+    /**
      * Get migration status / reconciliation report
      */
     getReconciliationReport: async (req, res) => {
