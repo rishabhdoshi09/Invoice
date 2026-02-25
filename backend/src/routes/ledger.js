@@ -31,5 +31,6 @@ module.exports = (router) => {
     // ==================== MIGRATION ====================
     router.post('/ledger/migration/run', authenticate, authorize('admin'), ledgerController.runMigration);
     router.get('/ledger/migration/reconciliation', authenticate, authorize('admin'), ledgerController.getReconciliationReport);
+    router.get('/ledger/migration/safe-reconciliation', authenticate, authorize('admin'), ledgerController.safeReconciliation);
     router.delete('/ledger/migration/clear', authenticate, authorize('admin'), ledgerController.clearMigration);
 };
