@@ -172,7 +172,126 @@ async function postPaymentToLedger(payment, customerId, customerName, transactio
     }
 }
 
+/**
+ * Create a REVERSAL journal batch for a deleted invoice.
+ * Swaps debit/credit from the original INVOICE batch.
+ *
+ * @param {Object} order - The order being soft-deleted
+ * @param {Object} transaction - The active Sequelize transaction
+ */
+async function reverseInvoiceLedger(order, transaction) {
+    try {
+        // Find the original INVOICE batch
+        const originalBatch = await db.journalBatch.findOne({
+            where: { referenceType: 'INVOICE', referenceId: order.id, isReversed: false },
+            transaction
+        });
+        if (!originalBatch) {
+            console.log(`[LEDGER] SKIP REVERSAL: No INVOICE batch found for order ${order.orderNumber || order.id}`);
+            return { skipped: true, reason: 'no_original_batch' };
+        }
+
+        // Prevent double reversal
+        const existingReversal = await db.journalBatch.findOne({
+            where: { referenceType: 'REVERSAL', referenceId: order.id },
+            transaction
+        });
+        if (existingReversal) {
+            console.log(`[LEDGER] SKIP REVERSAL: Invoice ${order.orderNumber || order.id} already reversed`);
+            return { skipped: true, reason: 'already_reversed' };
+        }
+
+        // Fetch original entries
+        const originalEntries = await db.ledgerEntry.findAll({
+            where: { batchId: originalBatch.id },
+            transaction
+        });
+
+        // Create reversal batch with swapped debit/credit
+        const result = await ledgerService.createJournalBatch({
+            referenceType: 'REVERSAL',
+            referenceId: order.id,
+            description: `Reversal of Invoice ${order.orderNumber || ''} (deleted)`,
+            transactionDate: new Date(),
+            entries: originalEntries.map(e => ({
+                accountId: e.accountId,
+                debit: Number(e.credit) || 0,
+                credit: Number(e.debit) || 0,
+                narration: `Reversal: ${e.narration || ''}`
+            }))
+        }, transaction);
+
+        // Mark original batch as reversed
+        await originalBatch.update({ isReversed: true }, { transaction });
+
+        console.log(`[LEDGER] REVERSED: Invoice ${order.orderNumber || order.id} → batch ${result.batch.batchNumber}`);
+        return { reversed: true, batchNumber: result.batch.batchNumber };
+
+    } catch (error) {
+        console.error(`[LEDGER] REVERSAL ERROR: Invoice ${order.orderNumber || order.id} — ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Create a REVERSAL journal batch for a deleted payment.
+ * Swaps debit/credit from the original PAYMENT batch.
+ *
+ * @param {Object} payment - The payment being soft-deleted
+ * @param {Object} transaction - The active Sequelize transaction
+ */
+async function reversePaymentLedger(payment, transaction) {
+    try {
+        const originalBatch = await db.journalBatch.findOne({
+            where: { referenceType: 'PAYMENT', referenceId: payment.id, isReversed: false },
+            transaction
+        });
+        if (!originalBatch) {
+            console.log(`[LEDGER] SKIP REVERSAL: No PAYMENT batch found for payment ${payment.paymentNumber || payment.id}`);
+            return { skipped: true, reason: 'no_original_batch' };
+        }
+
+        const existingReversal = await db.journalBatch.findOne({
+            where: { referenceType: 'REVERSAL', referenceId: payment.id },
+            transaction
+        });
+        if (existingReversal) {
+            console.log(`[LEDGER] SKIP REVERSAL: Payment ${payment.paymentNumber || payment.id} already reversed`);
+            return { skipped: true, reason: 'already_reversed' };
+        }
+
+        const originalEntries = await db.ledgerEntry.findAll({
+            where: { batchId: originalBatch.id },
+            transaction
+        });
+
+        const result = await ledgerService.createJournalBatch({
+            referenceType: 'REVERSAL',
+            referenceId: payment.id,
+            description: `Reversal of Payment ${payment.paymentNumber || ''} (deleted)`,
+            transactionDate: new Date(),
+            entries: originalEntries.map(e => ({
+                accountId: e.accountId,
+                debit: Number(e.credit) || 0,
+                credit: Number(e.debit) || 0,
+                narration: `Reversal: ${e.narration || ''}`
+            }))
+        }, transaction);
+
+        await originalBatch.update({ isReversed: true }, { transaction });
+
+        console.log(`[LEDGER] REVERSED: Payment ${payment.paymentNumber || payment.id} → batch ${result.batch.batchNumber}`);
+        return { reversed: true, batchNumber: result.batch.batchNumber };
+
+    } catch (error) {
+        console.error(`[LEDGER] REVERSAL ERROR: Payment ${payment.paymentNumber || payment.id} — ${error.message}`);
+        throw error;
+    }
+}
+
 module.exports = {
     postInvoiceToLedger,
-    postPaymentToLedger
+    postPaymentToLedger,
+    reverseInvoiceLedger,
+    reversePaymentLedger
 };
