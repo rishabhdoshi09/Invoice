@@ -18,6 +18,9 @@ const LedgerModule = () => {
 
     // Data states
     const [accounts, setAccounts] = useState([]);
+    const [healthData, setHealthData] = useState(null);
+    const [driftData, setDriftData] = useState(null);
+    const [migrationResult, setMigrationResult] = useState(null);
     const [trialBalance, setTrialBalance] = useState(null);
     const [profitLoss, setProfitLoss] = useState(null);
     const [balanceSheet, setBalanceSheet] = useState(null);
