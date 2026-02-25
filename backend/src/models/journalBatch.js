@@ -73,7 +73,15 @@ module.exports = (sequelize, Sequelize) => {
                 { fields: ['referenceId'] },
                 { fields: ['transactionDate'] },
                 { fields: ['batchNumber'] },
-                { fields: ['isPosted'] }
+                { fields: ['isPosted'] },
+                {
+                    unique: true,
+                    fields: ['referenceType', 'referenceId'],
+                    where: {
+                        referenceType: ['INVOICE', 'PAYMENT', 'PURCHASE', 'EXPENSE']
+                    },
+                    name: 'journal_batches_ref_unique'
+                }
             ]
         }
     );
