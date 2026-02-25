@@ -43,6 +43,9 @@ app.listen(PORT, async () => {
     await db.sequelize.sync({ force: false });
     console.log('Database Synced Successfully');
 
+    // Start scheduled jobs (async, non-blocking)
+    require('./src/scheduler').init(db);
+
     console.log(`Server started on port: ${PORT}`);
   } catch (err) {
     console.error('Error during server startup:', err);
