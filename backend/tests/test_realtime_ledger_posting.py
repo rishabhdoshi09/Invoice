@@ -400,14 +400,13 @@ class TestRealTimeLedgerPosting:
         }
         
         self.session.post(f"{BASE_URL}/api/orders", json=order_data)
-        order = self.session.post(f"{BASE_URL}/api/orders", json=order_data).json()
-        # Note: This creates TWO orders, but we only care about health check
         
         # Create order properly
         order_resp = self.session.post(f"{BASE_URL}/api/orders", json={
             **order_data,
             "customerName": f"TEST_HealthCheck2_{unique_suffix}"
         })
+        assert order_resp.status_code == 200, f"Order creation failed: {order_resp.text}"
         order = order_resp.json()["data"]
         order_id = order["id"]
         customer_id = order.get("customerId")
