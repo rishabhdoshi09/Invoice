@@ -197,12 +197,13 @@ const LedgerModule = () => {
     };
 
     useEffect(() => {
-        if (activeTab === 0) fetchAccounts();
-        if (activeTab === 1) fetchTrialBalance();
-        if (activeTab === 2) fetchProfitLoss();
-        if (activeTab === 3) fetchBalanceSheet();
-        if (activeTab === 4) fetchReconciliation();
-        if (activeTab === 5) fetchJournalBatches();
+        if (activeTab === 0) fetchDashboard();
+        if (activeTab === 1) fetchAccounts();
+        if (activeTab === 2) fetchTrialBalance();
+        if (activeTab === 3) fetchProfitLoss();
+        if (activeTab === 4) fetchBalanceSheet();
+        if (activeTab === 5) fetchReconciliation();
+        if (activeTab === 6) fetchJournalBatches();
     }, [activeTab]);
 
     const formatCurrency = (amount) => {
