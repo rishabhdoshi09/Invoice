@@ -46,9 +46,14 @@ frontend/src/
   4. DB indexes on `ledger_entries.accountId`, `ledger_entries.batchId`, `journal_batches.referenceType`
   5. FK constraints: `ledger_entries.accountId → accounts.id`, `ledger_entries.batchId → journal_batches.id`
   6. Health-check endpoint: `GET /api/ledger/health-check`
+- [x] **Safe Reconciliation Validator** (`GET /api/ledger/migration/safe-reconciliation`):
+  - Per-customer comparison: old balance (opening + SUM(dueAmount)) vs ledger balance
+  - System-wide totals: Sales, Payments, Receivables cross-checked
+  - Mismatch breakdown with batch-level detail and order-level detail
+  - 100% read-only — verified with before/after row count check
 - [x] Journal batch reversal
 - [x] Report queries: Trial Balance, P&L, Balance Sheet, Account Ledger
-- [x] Migration service (orders, payments, purchases)
+- [x] Migration service (orders, payments, purchases) — fixed association bug
 - [x] Reconciliation report (old system vs ledger comparison)
 - [x] Invoice View and Print features (old system)
 - [x] Customer/supplier optional field bug fix (old system)
