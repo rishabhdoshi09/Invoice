@@ -1,0 +1,79 @@
+{
+  "summary": "Real-Time Ledger Posting (SAFE PARALLEL MODE) - 10/10 tests PASSED. Core features verified: (1) Order creation auto-posts INVOICE journal batch with DR Customer Receivable / CR Sales Revenue, (2) Payment creation auto-posts PAYMENT journal batch with DR Cash / CR Customer Receivable, (3) Duplicate prevention via unique constraint, (4) Health check remains balanced, (5) Transaction atomicity via code review, (6) [LEDGER] logging confirmed. CRITICAL BUG FOUND in payment.js causing double-counting of paidAmount.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/payments",
+        "issue": "DOUBLE UPDATE BUG: Order paidAmount is updated TWICE - once at lines 95-113 (CRITICAL FIX block) and again at lines 235-260 (Update reference block). A 2000 payment results in paidAmount increasing by 4000 instead of 2000.",
+        "priority": "HIGH",
+        "file": "/app/backend/src/controller/payment.js",
+        "fix": "Remove the first update block (lines 95-113) since lines 235-260 already handle the same logic"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_realtime_ledger_posting.py",
+    "/app/test_reports/pytest/realtime_ledger_results.xml"
+  ],
+  "action_items": [
+    "FIX: Remove duplicate paidAmount update in /app/backend/src/controller/payment.js - delete lines 95-113 (CRITICAL FIX block) since lines 235-260 already handle order paidAmount/dueAmount updates"
+  ],
+  "critical_code_review_comments": [
+    "CRITICAL BUG: payment.js has TWO places updating order.paidAmount when processing customer payments. Lines 95-113 and lines 235-260 both do: newPaidAmount = order.paidAmount + payment.amount. This causes payments to be counted TWICE.",
+    "postInvoiceToLedger() correctly creates balanced journal batches with DR Customer Receivable (1300-xxx) / CR Sales Revenue (4100)",
+    "postPaymentToLedger() correctly creates balanced journal batches with DR Cash (1100) / CR Customer Receivable (1300-xxx)",
+    "Duplicate prevention works via findOne check before creating batch + unique index on (referenceType, referenceId)",
+    "Transaction atomicity implemented: both postInvoiceToLedger and postPaymentToLedger run inside the same Sequelize transaction as the original write",
+    "Logging format verified: [LEDGER] POSTED: Invoice/Payment {number} -> batch {batchNumber} (DR {amount}, CR {amount})"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_realtime_ledger_posting.py"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10 tests passed)",
+    "frontend": "N/A (backend only testing)"
+  },
+  "test_credentials": {
+    "username": "Rishabh",
+    "password": "molybdenumR@99877"
+  },
+  "seed_data_creation": "Created multiple TEST_ prefixed orders and payments during testing",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Real-time ledger posting feature works correctly for INVOICE and PAYMENT journal batches. System remains balanced (131000/131000). CRITICAL BUG: payment.js double-updates order paidAmount. After fixing, retest payment flow to verify paidAmount updates correctly (unpaid->partial->paid).",
+  "features_verified": [
+    "POST /api/orders - Auto-posts INVOICE journal batch (DR Customer Receivable, CR Sales Revenue) - WORKING",
+    "POST /api/payments - Auto-posts PAYMENT journal batch (DR Cash, CR Customer Receivable) - WORKING",
+    "Duplicate prevention - Unique constraint on (referenceType, referenceId) - WORKING",
+    "Old system unchanged - order.dueAmount/paidAmount still set at creation - WORKING",
+    "GET /api/ledger/health-check - Returns balanced state - WORKING",
+    "Logging - [LEDGER] POSTED entries in backend logs - WORKING",
+    "Non-customer payments skip ledger posting - WORKING",
+    "Transaction atomicity - Code review verified - WORKING"
+  ],
+  "features_with_bugs": [
+    "Payment flow (unpaid->partial->paid) - BUG: paidAmount double-counted due to duplicate update in payment.js"
+  ],
+  "health_check_result": {
+    "totalDebits": 131000,
+    "totalCredits": 131000,
+    "difference": 0,
+    "isBalanced": true
+  },
+  "rca_of_issue": {
+    "bug_title": "Payment Double-Counting Bug in payment.js",
+    "root_cause": "payment.js controller has TWO code blocks that update order.paidAmount for customer payments with referenceType='order': (1) Lines 95-113 in 'CRITICAL FIX' block, (2) Lines 235-260 in 'Update reference' block. Both blocks execute sequentially within the same transaction, causing the payment amount to be added twice.",
+    "reproduction_steps": [
+      "1. Create an unpaid order with total=6000",
+      "2. Create a payment of 2000 against that order",
+      "3. Fetch the order - paidAmount will be 4000 instead of 2000"
+    ],
+    "mitigation": "Remove the first update block (lines 95-113) in payment.js. The second block (lines 235-260) already handles all the necessary logic including the 'already paid' check."
+  }
+}
