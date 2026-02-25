@@ -32,7 +32,7 @@ module.exports = {
     },
     listPayments: async (filterObj) => {
         try {
-            const whereClause = {};
+            const whereClause = { isDeleted: false };
             
             if (filterObj.q && filterObj.q !== "") {
                 whereClause[db.Sequelize.Op.or] = [
