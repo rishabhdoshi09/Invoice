@@ -396,6 +396,7 @@ module.exports = {
         
         const payments = await db.payment.findAll({
             where: {
+                isDeleted: false,
                 [db.Sequelize.Op.or]: [
                     { paymentDate: dateDDMMYYYY },
                     { paymentDate: dateDDMMYYYY_dash },
