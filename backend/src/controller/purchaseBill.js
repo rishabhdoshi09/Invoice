@@ -2,6 +2,7 @@ const uuidv4 = require('uuid/v4');
 const Services = require('../services');
 const Validations = require('../validations');
 const db = require('../models');
+const { postPurchaseToLedger, reversePurchaseLedger } = require('../services/realTimeLedger');
 
 module.exports = {
     createPurchaseBill: async (req, res) => {
