@@ -414,12 +414,12 @@ class LedgerService {
                 SELECT
                     c.id           AS customer_id,
                     c.name         AS customer_name,
-                    COALESCE(SUM(o."dueAmount"), 0) AS old_outstanding
+                    COALESCE(c."openingBalance", 0) + COALESCE(SUM(o."dueAmount"), 0) AS old_outstanding
                 FROM customers c
                 LEFT JOIN orders o
                     ON (o."customerId" = c.id OR (o."customerName" = c.name AND o."customerId" IS NULL))
                     AND o."isDeleted" = false
-                GROUP BY c.id, c.name
+                GROUP BY c.id, c.name, c."openingBalance"
             ),
             ledger_system AS (
                 SELECT
