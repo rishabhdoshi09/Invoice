@@ -18,12 +18,12 @@ module.exports = {
             const result = await db.sequelize.transaction(async (transaction) => {
                 const response = await Services.payment.createPayment(value, transaction);
 
-                // Dynamically get the Cash/Bank Ledger ID
+                // Dynamically get the Cash/Bank Ledger ID (old single-entry system)
+                let CASH_BANK_LEDGER_ID = null;
                 const cashBankLedger = await Services.ledger.getLedgerByName('Cash Account');
-                if (!cashBankLedger) {
-                    throw new Error('Cash Account Ledger not found. Please create a ledger named "Cash Account".');
+                if (cashBankLedger) {
+                    CASH_BANK_LEDGER_ID = cashBankLedger.id;
                 }
-                const CASH_BANK_LEDGER_ID = cashBankLedger.id;
                 
                 // Create ledger entries for payment
                 const ledgerEntries = [];
