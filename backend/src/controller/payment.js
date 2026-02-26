@@ -515,12 +515,25 @@ module.exports = {
                     }
                 }
 
+                // Reverse supplier balance for standalone supplier payments (advance, etc.)
+                if (payment.partyType === 'supplier' && payment.partyId && payment.referenceType !== 'purchase') {
+                    const supplier = await db.supplier.findByPk(payment.partyId);
+                    if (supplier) {
+                        await supplier.update({
+                            currentBalance: (Number(supplier.currentBalance) || 0) + Number(payment.amount)
+                        }, { transaction });
+                    }
+                }
+
                 // Create REVERSAL journal batch in the new ledger (swap debit/credit)
                 try {
-                    await reversePaymentLedger(payment, transaction);
+                    const accountsExist = await db.account.count({ transaction });
+                    if (accountsExist > 0) {
+                        await reversePaymentLedger(payment, transaction);
+                    }
                 } catch (ledgerError) {
                     console.error(`[LEDGER] Payment reversal failed for ${payment.paymentNumber}:`, ledgerError.message);
-                    throw ledgerError;
+                    // Don't crash delete if ledger reversal fails
                 }
                 
                 // Soft delete the payment (preserve for audit trail)
