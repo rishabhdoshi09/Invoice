@@ -99,16 +99,19 @@ module.exports = {
                 order: [['createdAt', 'ASC']]  // Oldest first
             });
 
-            // Calculate totals - use stored dueAmount as source of truth
+            // Calculate totals
             const totalPurchases = purchases.reduce((sum, p) => sum + (Number(p.total) || 0), 0);
-            const totalPaid = purchases.reduce((sum, p) => sum + (Number(p.paidAmount) || 0), 0);
-            const totalDue = purchases.reduce((sum, p) => sum + (Number(p.dueAmount) || 0), 0);
+            const totalPaidOnBills = purchases.reduce((sum, p) => sum + (Number(p.paidAmount) || 0), 0);
+            const totalStandalonePayments = payments
+                .filter(p => p.referenceType !== 'purchase')
+                .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            const totalPaid = totalPaidOnBills + totalStandalonePayments;
             
             const totalDebit = totalPurchases + (Number(supplier.openingBalance) || 0);
             const totalCredit = totalPaid;
             
-            // Balance = Opening + Sum of all due amounts (stored on purchase bills)
-            const balance = (Number(supplier.openingBalance) || 0) + totalDue;
+            // Balance = Opening + Purchases - All Payments
+            const balance = (Number(supplier.openingBalance) || 0) + totalPurchases - totalPaid;
 
             // Sort purchases by date DESC for display
             purchases.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
