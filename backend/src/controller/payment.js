@@ -194,19 +194,24 @@ module.exports = {
                 }
 
                 // === NEW DOUBLE-ENTRY LEDGER: Real-time posting ===
-                // Runs in the SAME transaction — if this fails, payment creation rolls back
+                // Non-blocking: if Chart of Accounts isn't set up, log warning but don't crash payment creation
                 if (value.partyType === 'customer') {
                     try {
-                        const customerIdForLedger = response.partyId || value.partyId;
-                        await postPaymentToLedger(
-                            { ...value, id: response.id, paymentNumber: response.paymentNumber, createdAt: new Date() },
-                            customerIdForLedger,
-                            value.partyName,
-                            transaction
-                        );
+                        const accountsExist = await db.account.count({ transaction });
+                        if (accountsExist > 0) {
+                            const customerIdForLedger = response.partyId || value.partyId;
+                            await postPaymentToLedger(
+                                { ...value, id: response.id, paymentNumber: response.paymentNumber, createdAt: new Date() },
+                                customerIdForLedger,
+                                value.partyName,
+                                transaction
+                            );
+                        } else {
+                            console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — payment ${response.paymentNumber} not posted to ledger`);
+                        }
                     } catch (ledgerError) {
                         console.error(`[LEDGER] Failed to post payment ${response.paymentNumber}:`, ledgerError.message);
-                        throw ledgerError; // Rollback the entire transaction
+                        // Don't crash payment creation — ledger posting is supplementary
                     }
                 }
 
