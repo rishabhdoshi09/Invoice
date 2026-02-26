@@ -193,16 +193,21 @@ module.exports = {
                 }
 
                 // === NEW DOUBLE-ENTRY LEDGER: Real-time posting ===
-                // Runs in the SAME transaction — if this fails, order creation rolls back
+                // Non-blocking: if Chart of Accounts isn't set up, log warning but don't crash order creation
                 if (orderObj.customerId) {
                     try {
-                        await postInvoiceToLedger(
-                            { ...orderObj, id: orderId, createdAt: new Date() },
-                            transaction
-                        );
+                        const accountsExist = await db.account.count({ transaction });
+                        if (accountsExist > 0) {
+                            await postInvoiceToLedger(
+                                { ...orderObj, id: orderId, createdAt: new Date() },
+                                transaction
+                            );
+                        } else {
+                            console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — invoice ${orderObj.orderNumber} not posted to ledger`);
+                        }
                     } catch (ledgerError) {
                         console.error(`[LEDGER] Failed to post invoice ${orderObj.orderNumber}:`, ledgerError.message);
-                        throw ledgerError; // Rollback the entire transaction
+                        // Don't crash order creation — ledger posting is supplementary
                     }
                 }
 
