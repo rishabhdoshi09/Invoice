@@ -156,10 +156,9 @@ class LedgerMigrationService {
         const openingBalance = Number(customer.openingBalance) || 0;
         if (openingBalance === 0) return;
 
-        // Prevent duplicate migration — use a deterministic reference ID
-        const refId = `OB-${customer.id}`;
+        // Prevent duplicate migration — check for existing OPENING batch for this customer
         const existing = await db.journalBatch.findOne({
-            where: { referenceType: 'OPENING', referenceId: refId }
+            where: { referenceType: 'OPENING', referenceId: customer.id }
         });
         if (existing) return;
 
