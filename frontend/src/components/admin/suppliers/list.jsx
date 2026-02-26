@@ -1123,6 +1123,7 @@ export const ListSuppliers = () => {
                                                 <TableCell>Date</TableCell>
                                                 <TableCell align="right">Amount</TableCell>
                                                 <TableCell>Notes</TableCell>
+                                                <TableCell align="center">Action</TableCell>
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
