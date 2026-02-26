@@ -52,6 +52,27 @@ class LedgerMigrationService {
             }
         }
 
+        // Step 3.5: Migrate customer opening balances
+        console.log('Step 3.5: Migrating customer opening balances...');
+        results.openingBalances = { migrated: 0, skipped: 0, errors: [] };
+        for (const customer of customers) {
+            try {
+                const ob = Number(customer.openingBalance) || 0;
+                if (ob === 0) {
+                    results.openingBalances.skipped++;
+                    continue;
+                }
+                await this.migrateOpeningBalance(customer);
+                results.openingBalances.migrated++;
+            } catch (error) {
+                results.openingBalances.errors.push({
+                    id: customer.id,
+                    name: customer.name,
+                    error: error.message
+                });
+            }
+        }
+
         // Step 4: Migrate orders (invoices) to ledger
         console.log('Step 4: Migrating orders to ledger...');
         const orders = await db.order.findAll({
