@@ -188,25 +188,52 @@ module.exports = {
                 });
             }
 
-            const response = await Services.purchaseBill.deletePurchaseBill({ id: req.params.purchaseId });
-            
-            // Update supplier balance
-            const supplier = await Services.supplier.getSupplier({ id: purchase.supplierId });
-            if (supplier) {
-                const newBalance = (supplier.currentBalance || 0) - purchase.dueAmount;
-                await Services.supplier.updateSupplier(
-                    { id: purchase.supplierId },
-                    { currentBalance: newBalance }
-                );
-            }
-            
-            if(response){
-                return res.status(200).send({
-                    status:200,
-                    message: 'purchase bill deleted successfully',
-                    data: response
+            // Check if already soft-deleted
+            if (purchase.isDeleted) {
+                return res.status(400).send({
+                    status: 400,
+                    message: "This purchase bill has already been deleted"
                 });
             }
+
+            await db.sequelize.transaction(async (transaction) => {
+                // Soft delete instead of hard delete
+                await db.purchaseBill.update(
+                    {
+                        isDeleted: true,
+                        deletedAt: new Date(),
+                        deletedBy: req.user?.id || null,
+                        deletedByName: req.user?.name || null
+                    },
+                    { where: { id: req.params.purchaseId }, transaction }
+                );
+
+                // Update supplier balance
+                const supplier = await Services.supplier.getSupplier({ id: purchase.supplierId });
+                if (supplier) {
+                    const newBalance = (supplier.currentBalance || 0) - purchase.dueAmount;
+                    await Services.supplier.updateSupplier(
+                        { id: purchase.supplierId },
+                        { currentBalance: newBalance }
+                    );
+                }
+
+                // Reverse ledger entry if accounts exist
+                try {
+                    const accountsExist = await db.account.count({ transaction });
+                    if (accountsExist > 0) {
+                        await reversePurchaseLedger(purchase, transaction);
+                    }
+                } catch (ledgerError) {
+                    console.error(`[LEDGER] Failed to reverse purchase ${purchase.billNumber}:`, ledgerError.message);
+                }
+            });
+
+            return res.status(200).send({
+                status: 200,
+                message: 'purchase bill deleted successfully',
+                data: { id: req.params.purchaseId }
+            });
             
         }catch(error){
             console.log(error);
