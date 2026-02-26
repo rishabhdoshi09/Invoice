@@ -44,7 +44,11 @@ app.listen(PORT, async () => {
     console.log('Database Synced Successfully');
 
     // Start scheduled jobs (async, non-blocking)
-    require('./src/scheduler').init(db);
+    try {
+      require('./src/scheduler').init(db);
+    } catch (e) {
+      console.warn('[SCHEDULER] Skipped — ' + e.message);
+    }
 
     console.log(`Server started on port: ${PORT}`);
   } catch (err) {
