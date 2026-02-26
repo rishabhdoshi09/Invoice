@@ -2,7 +2,7 @@ const uuidv4 = require('uuid/v4');
 const Services = require('../services');
 const Validations = require('../validations');
 const db = require('../models');
-const { postPaymentToLedger, reversePaymentLedger } = require('../services/realTimeLedger');
+const { postPaymentToLedger, reversePaymentLedger, postSupplierPaymentToLedger } = require('../services/realTimeLedger');
 
 module.exports = {
     createPayment: async (req, res) => {
