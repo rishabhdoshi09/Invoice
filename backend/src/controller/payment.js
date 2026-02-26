@@ -215,6 +215,26 @@ module.exports = {
                     }
                 }
 
+                // === NEW DOUBLE-ENTRY LEDGER: Supplier payment posting ===
+                if (value.partyType === 'supplier') {
+                    try {
+                        const accountsExist = await db.account.count({ transaction });
+                        if (accountsExist > 0) {
+                            const supplierIdForLedger = response.partyId || value.partyId;
+                            await postSupplierPaymentToLedger(
+                                { ...value, id: response.id, paymentNumber: response.paymentNumber, createdAt: new Date() },
+                                supplierIdForLedger,
+                                value.partyName,
+                                transaction
+                            );
+                        } else {
+                            console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — supplier payment ${response.paymentNumber} not posted to ledger`);
+                        }
+                    } catch (ledgerError) {
+                        console.error(`[LEDGER] Failed to post supplier payment ${response.paymentNumber}:`, ledgerError.message);
+                    }
+                }
+
                 // Update reference (order or purchase) payment status
                 if (value.referenceType === 'order' && value.referenceId) {
                     const order = await Services.order.getOrder({ id: value.referenceId }, transaction);
