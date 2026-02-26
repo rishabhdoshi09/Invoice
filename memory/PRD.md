@@ -46,51 +46,25 @@ frontend/src/
   4. DB indexes on `ledger_entries.accountId`, `ledger_entries.batchId`, `journal_batches.referenceType`
   5. FK constraints: `ledger_entries.accountId → accounts.id`, `ledger_entries.batchId → journal_batches.id`
   6. Health-check endpoint: `GET /api/ledger/health-check`
-- [x] **Safe Reconciliation Validator** (`GET /api/ledger/migration/safe-reconciliation`):
-  - Per-customer comparison: old balance (opening + SUM(dueAmount)) vs ledger balance
-  - System-wide totals: Sales, Payments, Receivables cross-checked
-  - Mismatch breakdown with batch-level detail and order-level detail
-  - 100% read-only — verified with before/after row count check
-- [x] **Real-Time Ledger Posting (SAFE PARALLEL MODE)**:
-  - Invoice creation auto-posts INVOICE journal batch (DR Receivable, CR Sales)
-  - Payment recording auto-posts PAYMENT journal batch (DR Cash, CR Receivable)
-  - Wrapped in SAME transaction as original write (atomicity)
-  - Old system (dueAmount/paidAmount) runs unchanged in parallel
-  - Duplicate prevention via unique constraint on (referenceType, referenceId)
-  - `[LEDGER] POSTED` logging for every batch
-  - Fixed double-counting bug in payment.js (removed duplicate order update)
-  - `ledger_entries.batchId`/`accountId` made nullable for old system coexistence
-- [x] **Daily Drift Check** (`GET /api/ledger/daily-drift-check`):
-  - Per-customer: old SUM(dueAmount) vs ledger receivable balance
-  - System totals: Sales + Payments cross-checked
-  - Returns `DRIFT_DETECTED` or `OK` with timestamp logging
-  - 100% read-only, optimized with raw SQL
-  - **Scheduled via node-cron** at 02:00 AM daily (async, non-blocking)
-  - Console-highlighted output on drift, email alert hook prepared for future
-- [x] **Ledger Admin Dashboard** (frontend `/ledger` → Dashboard tab):
-  - Health Card: Total Debits, Total Credits, Balanced status (green/red)
-  - Drift Status Card: Status, Mismatch count, Last check timestamp
-  - Migration Control Panel: Run/Clear buttons, migration summary
-  - Drift detail table: per-customer breakdown when mismatches exist
-  - System totals: Sales + Payments matched/mismatched chips
-- [x] **Soft Delete + Ledger Reversal** (audit-safe financial record deletion):
-  - Invoice delete: soft delete (`isDeleted=true`) + REVERSAL journal batch (swapped debit/credit)
-  - Payment delete: soft delete + REVERSAL journal batch (was hard delete before)
-  - Added `isDeleted`, `deletedAt`, `deletedBy`, `deletedByName` to payments table
-  - Single transaction wrapping soft delete + reversal
-  - Prevents double-delete (400 "already been deleted")
-  - Ledger stays balanced after all deletions
-  - Old ledger entries preserved (no more `destroy`)
+- [x] **Safe Reconciliation Validator** (`GET /api/ledger/migration/safe-reconciliation`)
+- [x] **Real-Time Ledger Posting (SAFE PARALLEL MODE)** — Invoices + Payments
+- [x] **Purchase Bill + Supplier Payment → Ledger Posting** (NEW Feb 26):
+  - Purchase creation auto-posts PURCHASE journal batch (DR Purchase Expenses 5300, CR Supplier Payable 2100-xxx)
+  - Supplier payment auto-posts PAYMENT journal batch (DR Supplier Payable 2100-xxx, CR Cash 1100)
+  - Purchase deletion → soft delete + REVERSAL journal batch
+  - Graceful fallback: if Chart of Accounts not initialized, logs warning instead of crashing
+- [x] **Daily Drift Check** (`GET /api/ledger/daily-drift-check`)
+- [x] **Ledger Admin Dashboard** (frontend `/ledger` → Dashboard tab)
+- [x] **Soft Delete + Ledger Reversal** (invoices, payments, purchase bills)
 - [x] Journal batch reversal
 - [x] Report queries: Trial Balance, P&L, Balance Sheet, Account Ledger
-- [x] Migration service (orders, payments, purchases, **opening balances**) — fixed association bug
-  - Opening balances posted as OPENING journal batch (DR Receivable, CR Opening Balance Equity 3300)
-  - Handles positive (customer owes) and negative (advance) opening balances
-  - Idempotent: skips if already migrated
+- [x] Migration service (orders, payments, purchases, **opening balances**)
 - [x] Reconciliation report (old system vs ledger comparison)
 - [x] Invoice View and Print features (old system)
 - [x] Customer/supplier optional field bug fix (old system)
 - [x] Balance calculation revert to stable formula (old system)
+- [x] **Graceful degradation**: Old ledger system (Cash Account, Purchase Account) no longer crashes if not set up
+- [x] **Migration script**: `migrations/add_soft_delete_columns.js` — one command to sync all new DB columns
 
 ## Prioritized Backlog
 
