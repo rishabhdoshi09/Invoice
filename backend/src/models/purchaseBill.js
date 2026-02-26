@@ -48,6 +48,23 @@ module.exports = (sequelize, Sequelize) => {
             paymentStatus: {
                 type: Sequelize.ENUM('paid', 'partial', 'unpaid'),
                 defaultValue: 'unpaid'
+            },
+            // Soft delete fields
+            isDeleted: {
+                type: Sequelize.BOOLEAN,
+                defaultValue: false
+            },
+            deletedAt: {
+                type: Sequelize.DATE,
+                allowNull: true
+            },
+            deletedBy: {
+                type: Sequelize.UUID,
+                allowNull: true
+            },
+            deletedByName: {
+                type: Sequelize.STRING,
+                allowNull: true
             }
         }
     );
