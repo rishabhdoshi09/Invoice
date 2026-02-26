@@ -143,6 +143,59 @@ class LedgerMigrationService {
     }
 
     /**
+     * Migrate a customer's opening balance to the ledger.
+     * Positive balance (customer owes us):
+     *   DR: Customer Receivable Account
+     *   CR: Opening Balance Equity (3300)
+     * Negative balance (we owe customer — advance/credit):
+     *   DR: Opening Balance Equity (3300)
+     *   CR: Customer Receivable Account
+     */
+    async migrateOpeningBalance(customer) {
+        const db = this.db;
+        const openingBalance = Number(customer.openingBalance) || 0;
+        if (openingBalance === 0) return;
+
+        // Prevent duplicate migration — use a deterministic reference ID
+        const refId = `OB-${customer.id}`;
+        const existing = await db.journalBatch.findOne({
+            where: { referenceType: 'OPENING', referenceId: refId }
+        });
+        if (existing) return;
+
+        const customerAccount = await this.ledgerService.getOrCreateCustomerAccount(
+            customer.id, customer.name
+        );
+
+        let obEquity = await db.account.findOne({ where: { code: '3300' } });
+        if (!obEquity) {
+            throw new Error('Opening Balance Equity account (3300) not found. Re-initialize chart of accounts.');
+        }
+
+        const absAmount = Math.abs(openingBalance);
+        const entries = openingBalance > 0
+            ? [
+                { accountId: customerAccount.id, debit: absAmount, credit: 0, narration: `Opening balance — ${customer.name}` },
+                { accountId: obEquity.id, debit: 0, credit: absAmount, narration: `Opening balance — ${customer.name}` }
+              ]
+            : [
+                { accountId: obEquity.id, debit: absAmount, credit: 0, narration: `Opening balance (advance) — ${customer.name}` },
+                { accountId: customerAccount.id, debit: 0, credit: absAmount, narration: `Opening balance (advance) — ${customer.name}` }
+              ];
+
+        await this.ledgerService.createJournalBatch({
+            referenceType: 'OPENING',
+            referenceId: refId,
+            description: `Opening balance for ${customer.name}: ${openingBalance}`,
+            transactionDate: customer.createdAt,
+            entries
+        });
+
+        console.log(`[MIGRATION] Opening balance posted for ${customer.name}: ${openingBalance}`);
+    }
+
+
+    /**
      * Migrate a single order to ledger
      * DR: Customer Account (Receivable increases)
      * CR: Sales Revenue (Income increases)
