@@ -1129,7 +1129,7 @@ export const ListSuppliers = () => {
                                         <TableBody>
                                             {detailsDialog.supplier.payments?.length === 0 ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={4} align="center" sx={{ py: 2 }}>No payments yet</TableCell>
+                                                    <TableCell colSpan={5} align="center" sx={{ py: 2 }}>No payments yet</TableCell>
                                                 </TableRow>
                                             ) : (
                                                 detailsDialog.supplier.payments?.map((p) => (
@@ -1138,6 +1138,11 @@ export const ListSuppliers = () => {
                                                         <TableCell>{p.paymentDate ? moment(p.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('DD/MM/YY') : '-'}</TableCell>
                                                         <TableCell align="right" sx={{ fontWeight: 600, color: 'success.main' }}>₹{(p.amount || 0).toLocaleString('en-IN')}</TableCell>
                                                         <TableCell>{p.notes || '-'}</TableCell>
+                                                        <TableCell align="center">
+                                                            <IconButton size="small" color="error" onClick={() => handleDeletePayment(p.id)} data-testid={`delete-payment-${p.id}`}>
+                                                                <Delete fontSize="small" />
+                                                            </IconButton>
+                                                        </TableCell>
                                                     </TableRow>
                                                 ))
                                             )}
