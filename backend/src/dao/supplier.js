@@ -78,7 +78,7 @@ module.exports = {
             // Get all purchases with items (increases balance - what we owe)
             // Sort by createdAt ASC (oldest first for FIFO allocation)
             const purchases = await db.purchaseBill.findAll({
-                where: { supplierId },
+                where: { supplierId, isDeleted: false },
                 attributes: ['id', 'billNumber', 'billDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus', 'createdAt'],
                 include: [{
                     model: db.purchaseItem,
