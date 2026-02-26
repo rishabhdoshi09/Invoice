@@ -184,7 +184,7 @@ class LedgerMigrationService {
 
         await this.ledgerService.createJournalBatch({
             referenceType: 'OPENING',
-            referenceId: refId,
+            referenceId: customer.id,
             description: `Opening balance for ${customer.name}: ${openingBalance}`,
             transactionDate: customer.createdAt,
             entries
