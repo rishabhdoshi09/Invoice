@@ -96,7 +96,7 @@ module.exports = {
                         const accountsExist = await db.account.count({ transaction });
                         if (accountsExist > 0) {
                             await postPurchaseToLedger(
-                                { ...purchaseObj, id: purchaseBillId, billNumber, createdAt: new Date() },
+                                { ...purchaseObj, id: purchaseBillId, billNumber, supplierName: supplier?.name || 'Unknown Supplier', createdAt: new Date() },
                                 transaction
                             );
                         } else {
