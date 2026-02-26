@@ -60,16 +60,18 @@ module.exports = {
                         await response.update({ partyId: customer.id }, { transaction });
                     }
                     
-                    // Always record the cash receipt
-                    ledgerEntries.push({
-                        ledgerId: CASH_BANK_LEDGER_ID,
-                        entryDate: value.paymentDate,
-                        debit: value.amount,
-                        credit: 0,
-                        description: `Payment received from ${value.partyName || customer?.name || 'Customer'} - ${value.referenceType}`,
-                        referenceType: 'payment',
-                        referenceId: response.id
-                    });
+                    // Always record the cash receipt (old ledger system)
+                    if (CASH_BANK_LEDGER_ID) {
+                        ledgerEntries.push({
+                            ledgerId: CASH_BANK_LEDGER_ID,
+                            entryDate: value.paymentDate,
+                            debit: value.amount,
+                            credit: 0,
+                            description: `Payment received from ${value.partyName || customer?.name || 'Customer'} - ${value.referenceType}`,
+                            referenceType: 'payment',
+                            referenceId: response.id
+                        });
+                    }
                     
                     // If customer has a ledger, record the credit entry
                     if (customer && customer.ledgerId) {
