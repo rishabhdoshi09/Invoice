@@ -93,7 +93,8 @@ module.exports = {
             const payments = await db.payment.findAll({
                 where: { 
                     partyId: supplierId,
-                    partyType: 'supplier'
+                    partyType: 'supplier',
+                    isDeleted: false
                 },
                 attributes: ['id', 'paymentNumber', 'paymentDate', 'amount', 'referenceType', 'notes', 'createdAt'],
                 order: [['createdAt', 'ASC']]  // Oldest first
