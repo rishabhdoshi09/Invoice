@@ -90,6 +90,23 @@ module.exports = {
                     );
                 }
 
+                // === NEW DOUBLE-ENTRY LEDGER: Real-time posting ===
+                if (purchaseObj.supplierId) {
+                    try {
+                        const accountsExist = await db.account.count({ transaction });
+                        if (accountsExist > 0) {
+                            await postPurchaseToLedger(
+                                { ...purchaseObj, id: purchaseBillId, billNumber, createdAt: new Date() },
+                                transaction
+                            );
+                        } else {
+                            console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — purchase ${billNumber} not posted to ledger`);
+                        }
+                    } catch (ledgerError) {
+                        console.error(`[LEDGER] Failed to post purchase ${billNumber}:`, ledgerError.message);
+                    }
+                }
+
                 return await Services.purchaseBill.getPurchaseBill({id: purchaseBillId });
             });
 
