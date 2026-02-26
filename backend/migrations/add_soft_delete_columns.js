@@ -32,6 +32,12 @@ async function migrate() {
             // Ledger entries: make batchId and accountId nullable
             `ALTER TABLE "ledger_entries" ALTER COLUMN "batchId" DROP NOT NULL`,
             `ALTER TABLE "ledger_entries" ALTER COLUMN "accountId" DROP NOT NULL`,
+
+            // Purchase bills: soft delete columns
+            `ALTER TABLE "purchaseBills" ADD COLUMN IF NOT EXISTS "isDeleted" BOOLEAN DEFAULT false`,
+            `ALTER TABLE "purchaseBills" ADD COLUMN IF NOT EXISTS "deletedAt" TIMESTAMP WITH TIME ZONE`,
+            `ALTER TABLE "purchaseBills" ADD COLUMN IF NOT EXISTS "deletedBy" UUID`,
+            `ALTER TABLE "purchaseBills" ADD COLUMN IF NOT EXISTS "deletedByName" VARCHAR(255)`,
         ];
 
         for (const sql of queries) {
