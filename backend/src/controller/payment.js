@@ -123,16 +123,18 @@ module.exports = {
                         await response.update({ partyId: supplier.id }, { transaction });
                     }
                     
-                    // Always record the cash payment
-                    ledgerEntries.push({
-                        ledgerId: CASH_BANK_LEDGER_ID,
-                        entryDate: value.paymentDate,
-                        debit: 0,
-                        credit: value.amount,
-                        description: `Payment to ${value.partyName || supplier?.name || 'Supplier'} - ${value.referenceType}`,
-                        referenceType: 'payment',
-                        referenceId: response.id
-                    });
+                    // Always record the cash payment (old ledger system)
+                    if (CASH_BANK_LEDGER_ID) {
+                        ledgerEntries.push({
+                            ledgerId: CASH_BANK_LEDGER_ID,
+                            entryDate: value.paymentDate,
+                            debit: 0,
+                            credit: value.amount,
+                            description: `Payment to ${value.partyName || supplier?.name || 'Supplier'} - ${value.referenceType}`,
+                            referenceType: 'payment',
+                            referenceId: response.id
+                        });
+                    }
                     
                     // If supplier has a ledger, record the debit entry
                     if (supplier && supplier.ledgerId) {
