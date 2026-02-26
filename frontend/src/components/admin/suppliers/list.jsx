@@ -376,6 +376,22 @@ export const ListSuppliers = () => {
         }
     };
 
+    const handleDeletePayment = async (paymentId) => {
+        if (!window.confirm('Delete this payment?')) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`/api/payments/${paymentId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (detailsDialog.supplier?.id) {
+                fetchSupplierDetails(detailsDialog.supplier.id);
+            }
+            fetchSuppliers();
+        } catch (error) {
+            alert('Error: ' + (error.response?.data?.message || error.message));
+        }
+    };
+
     // Export
     const handleExport = () => {
         const headers = ['Name', 'Mobile', 'GSTIN', 'Purchases', 'Paid', 'Balance'];
