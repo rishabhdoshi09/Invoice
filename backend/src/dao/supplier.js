@@ -149,16 +149,38 @@ module.exports = {
                         SELECT SUM(total) 
                         FROM "purchaseBills" 
                         WHERE "supplierId" = s.id
+                          AND (COALESCE("isDeleted", false) = false)
                     ), 0) as "totalDebit",
                     COALESCE((
                         SELECT SUM("paidAmount") 
                         FROM "purchaseBills" 
                         WHERE "supplierId" = s.id
+                          AND (COALESCE("isDeleted", false) = false)
+                    ), 0) + COALESCE((
+                        SELECT SUM(amount) 
+                        FROM payments 
+                        WHERE "partyId" = s.id 
+                          AND "partyType" = 'supplier'
+                          AND (COALESCE("isDeleted", false) = false)
+                          AND "referenceType" != 'purchase'
                     ), 0) as "totalCredit",
                     COALESCE(s."openingBalance", 0) + COALESCE((
-                        SELECT SUM("dueAmount") 
+                        SELECT SUM(total) 
                         FROM "purchaseBills" 
                         WHERE "supplierId" = s.id
+                          AND (COALESCE("isDeleted", false) = false)
+                    ), 0) - COALESCE((
+                        SELECT SUM("paidAmount") 
+                        FROM "purchaseBills" 
+                        WHERE "supplierId" = s.id
+                          AND (COALESCE("isDeleted", false) = false)
+                    ), 0) - COALESCE((
+                        SELECT SUM(amount) 
+                        FROM payments 
+                        WHERE "partyId" = s.id 
+                          AND "partyType" = 'supplier'
+                          AND (COALESCE("isDeleted", false) = false)
+                          AND "referenceType" != 'purchase'
                     ), 0) as balance
                 FROM suppliers s
                 ORDER BY s.name ASC
