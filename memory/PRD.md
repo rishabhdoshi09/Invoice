@@ -83,7 +83,10 @@ frontend/src/
   - Old ledger entries preserved (no more `destroy`)
 - [x] Journal batch reversal
 - [x] Report queries: Trial Balance, P&L, Balance Sheet, Account Ledger
-- [x] Migration service (orders, payments, purchases) — fixed association bug
+- [x] Migration service (orders, payments, purchases, **opening balances**) — fixed association bug
+  - Opening balances posted as OPENING journal batch (DR Receivable, CR Opening Balance Equity 3300)
+  - Handles positive (customer owes) and negative (advance) opening balances
+  - Idempotent: skips if already migrated
 - [x] Reconciliation report (old system vs ledger comparison)
 - [x] Invoice View and Print features (old system)
 - [x] Customer/supplier optional field bug fix (old system)
