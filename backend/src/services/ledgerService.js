@@ -29,6 +29,7 @@ class LedgerService {
             { code: '3000', name: 'Equity', type: 'EQUITY', isSystemAccount: true },
             { code: '3100', name: 'Owner\'s Capital', type: 'EQUITY', parentCode: '3000', isSystemAccount: true },
             { code: '3200', name: 'Retained Earnings', type: 'EQUITY', parentCode: '3000', isSystemAccount: true },
+            { code: '3300', name: 'Opening Balance Equity', type: 'EQUITY', parentCode: '3000', isSystemAccount: true },
 
             // INCOME Accounts
             { code: '4000', name: 'Income', type: 'INCOME', isSystemAccount: true },
