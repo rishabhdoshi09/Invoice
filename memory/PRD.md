@@ -3,6 +3,8 @@
 ## Original Problem Statement
 Build a production-grade, double-entry accounting ledger module on top of an existing invoicing application (React + Express + PostgreSQL). The module must be additive and reversible — no modifications to existing `orders` or `payments` tables.
 
+Additionally, the user suspects billing fraud and needs a comprehensive **Bill Tampering Audit Trail** to silently log item deletions, bill deletions, and weight scale usage.
+
 ## Core Requirements
 1. **Additive Architecture**: New tables (`accounts`, `journal_batches`, `ledger_entries`) without altering existing tables.
 2. **Double-Entry Principle**: Every financial event recorded as balanced debit/credit entries.
@@ -10,81 +12,89 @@ Build a production-grade, double-entry accounting ledger module on top of an exi
 4. **Data Migration**: Repeatable, reversible migration of historical data from `orders`/`payments`.
 5. **Safety & Production-Readiness**: DB transactions, validation, indexes, FK constraints.
 6. **UI Integration**: `/ledger` tab for reports and migration tools.
+7. **Fraud Detection**: Silent audit trail logging item deletions, bill deletions, weight scale usage.
+8. **Tally-style Supplier Ledger**: Date-sorted, debit/credit/running balance view.
 
 ## Architecture
 ```
 backend/src/
-  models/       → account.js, journalBatch.js, ledgerEntry.js
-  services/     → ledgerService.js, ledgerMigrationService.js
-  controller/   → ledger.js
-  routes/       → ledger.js
+  models/       → account.js, journalBatch.js, ledgerEntry.js, billAuditLog.model.js, weightLog.model.js
+  services/     → ledgerService.js, ledgerMigrationService.js, realTimeLedger.js
+  controller/   → ledger.js, audit.js
+  routes/       → ledger.js, audit.js
 frontend/src/
-  components/admin/ledger/ → LedgerModule.jsx (placeholder)
+  components/admin/ledger/ → LedgerModule.jsx
+  components/admin/audit/ → BillAuditLogs.jsx
+  components/admin/suppliers/ → list.jsx (Tally-style ledger)
 ```
 
 ## Key API Endpoints
 - `POST /api/ledger/accounts/initialize` — seed chart of accounts
 - `GET /api/ledger/accounts` — list accounts
-- `POST /api/ledger/journal-batches` — create journal batch (validated, transactional)
+- `POST /api/ledger/journal-batches` — create journal batch
 - `GET /api/ledger/health-check` — system-wide debit/credit balance check
 - `POST /api/ledger/migration/run` — run data migration
-- `GET /api/ledger/migration/reconciliation` — old vs new balance comparison
 - `GET /api/ledger/reports/trial-balance`
 - `GET /api/ledger/reports/profit-loss`
 - `GET /api/ledger/reports/balance-sheet`
+- `POST /api/audit/item-deleted` — log item deletion
+- `GET /api/audit/tampering-logs` — get audit logs
+- `POST /api/audit/weight-capture` — log weight fetch
 
 ## What's Been Implemented
 
 ### Completed (Feb 2026)
 - [x] Ledger module scaffolding: models, services, controller, routes
-- [x] Chart of accounts with 18 default accounts (ASSET, LIABILITY, EQUITY, INCOME, EXPENSE)
+- [x] Chart of accounts with 18 default accounts
 - [x] Double-entry journal batch creation with full validation
-- [x] **Safe Verification Mode** (all 6 features, 17/17 tests passed):
-  1. DB transactions (atomic batch + entries)
-  2. Strict validation (unbalanced, negative, empty, single-entry, all-zero rejection)
-  3. Migration date preservation (uses `createdAt` from original records)
-  4. DB indexes on `ledger_entries.accountId`, `ledger_entries.batchId`, `journal_batches.referenceType`
-  5. FK constraints: `ledger_entries.accountId → accounts.id`, `ledger_entries.batchId → journal_batches.id`
-  6. Health-check endpoint: `GET /api/ledger/health-check`
-- [x] **Safe Reconciliation Validator** (`GET /api/ledger/migration/safe-reconciliation`)
-- [x] **Real-Time Ledger Posting (SAFE PARALLEL MODE)** — Invoices + Payments
-- [x] **Purchase Bill + Supplier Payment → Ledger Posting** (NEW Feb 26):
-  - Purchase creation auto-posts PURCHASE journal batch (DR Purchase Expenses 5300, CR Supplier Payable 2100-xxx)
-  - Supplier payment auto-posts PAYMENT journal batch (DR Supplier Payable 2100-xxx, CR Cash 1100)
-  - Purchase deletion → soft delete + REVERSAL journal batch
-  - Graceful fallback: if Chart of Accounts not initialized, logs warning instead of crashing
-- [x] **Daily Drift Check** (`GET /api/ledger/daily-drift-check`)
-- [x] **Ledger Admin Dashboard** (frontend `/ledger` → Dashboard tab)
-- [x] **Soft Delete + Ledger Reversal** (invoices, payments, purchase bills)
+- [x] Safe Verification Mode (17/17 tests passed)
+- [x] Safe Reconciliation Validator
+- [x] Real-Time Ledger Posting (SAFE PARALLEL MODE)
+- [x] Purchase Bill + Supplier Payment → Ledger Posting
+- [x] Daily Drift Check
+- [x] Ledger Admin Dashboard (frontend `/ledger`)
+- [x] Soft Delete + Ledger Reversal
 - [x] Journal batch reversal
 - [x] Report queries: Trial Balance, P&L, Balance Sheet, Account Ledger
-- [x] Migration service (orders, payments, purchases, **opening balances**)
-- [x] Reconciliation report (old system vs ledger comparison)
-- [x] Invoice View and Print features (old system)
-- [x] Customer/supplier optional field bug fix (old system)
-- [x] Balance calculation revert to stable formula (old system)
-- [x] **Graceful degradation**: Old ledger system (Cash Account, Purchase Account) no longer crashes if not set up
-- [x] **Migration script**: `migrations/add_soft_delete_columns.js` — one command to sync all new DB columns
+- [x] Migration service
+- [x] Fraud Detection & Audit Trail (bill_audit_logs, weight_logs)
+- [x] Admin-only Bill Audit Trail page (`/bill-audit`)
+- [x] **Tally-style Supplier Ledger** — Redesigned supplier detail dialog with:
+  - Date-sorted entries (oldest first, Tally convention)
+  - Running balance with Dr/Cr notation
+  - Opening Balance → Purchases (Debit) → Payments (Credit) → Closing Balance
+  - Credit entries for purchases paid at creation time
+  - Expandable purchase items view
+  - Delete functionality preserved for purchases and payments
+  - Professional monospace number formatting
+- [x] **Smart Quick Entry Bar** — Streamlined entry for:
+  - Add Supplier (keyboard-driven, Enter to submit)
+  - Quick Payment (auto-fills due amount, shows balance chip)
+  - Quick Purchase (inline item editing, auto-total, paid/credit toggle)
+  - Auto-focus on critical fields
+  - Duplicate supplier detection
 
 ## Prioritized Backlog
 
 ### P0 — Next Up
-- [ ] Build Ledger UI: migration trigger, reconciliation report, health dashboard
-- [ ] Test migration end-to-end with real production data
+- [ ] Implement automated database migration system (sequelize-cli) for user's local env
+- [ ] Present comprehensive code audit findings to user
 
 ### P1 — Core Features
 - [ ] Frontend reports: Account Ledger, Trial Balance, P&L, Balance Sheet
-- [ ] Real-time journal posting: hook order/payment creation into ledger
+- [ ] Implement FOR UPDATE row-level locks for concurrency fixes
 - [ ] Customer/Supplier balance comparison widget (old vs ledger)
 
 ### P2 — Future
 - [ ] Deprecate old balance calculation; ledger becomes single source of truth
-- [ ] Extend for Supplier accounts, Expenses, Bank Reconciliation, GST
-- [ ] Refactor large frontend components (`orders/create.jsx`, `customers/list.jsx`)
+- [ ] Role-Based Access Control (RBAC) for API security
+- [ ] Standardize error handling across all backend controllers
+- [ ] Refactor large frontend components with global state manager
 
 ## Known Issues
 - Old invoice module balance calculations are fragile (will be superseded by ledger)
 - PostgreSQL not available in preview pod by default (user tests locally)
+- User's local dev env is fragile due to lack of automated DB migrations
 
 ## Test Credentials
 - Username: `Rishabh`, Password: `molybdenumR@99877`
