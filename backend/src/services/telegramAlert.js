@@ -214,10 +214,10 @@ async function sendDailySummary() {
         const dateStr = today.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
 
         let msg = [
-            `📋 *DAILY FRAUD SUMMARY — ${dateStr}*`,
+            `📋 <b>DAILY FRAUD SUMMARY — ${dateStr}</b>`,
             `Alert Level: ${alertLevel}`,
             ``,
-            `*Activity:*`,
+            `<b>Activity:</b>`,
             `• Orders: ${orderCount} (₹${totalSales.toLocaleString('en-IN')})`,
             `• Items deleted from bills: ${itemDeletions} (₹${totalDeletedValue.toLocaleString('en-IN')})`,
             `• Bills deleted: ${billsDeleted} (₹${billsDeletedValue.toLocaleString('en-IN')})`,
@@ -228,11 +228,11 @@ async function sendDailySummary() {
 
         if (redFlags.length > 0) {
             msg.push('');
-            msg.push('*⚠️ Red Flags:*');
-            redFlags.forEach(f => msg.push(`• ${f}`));
+            msg.push('<b>⚠️ Red Flags:</b>');
+            redFlags.forEach(f => msg.push(`• ${esc(f)}`));
         } else {
             msg.push('');
-            msg.push('_No suspicious activity detected today._');
+            msg.push('<i>No suspicious activity detected today.</i>');
         }
 
         await sendTelegram(msg.join('\n'));
