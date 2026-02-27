@@ -193,7 +193,7 @@ module.exports = {
     sendTestAlert: async (req, res) => {
         try {
             const result = await telegram.sendTelegram(
-                `🧪 *Test Alert*\n\nThis is a test from your Fraud Alert system.\nIf you see this, alerts are working!\n\n_Sent by: ${req.user?.name || req.user?.username || 'Admin'}_`
+                `🧪 <b>Test Alert</b>\n\nThis is a test from your Fraud Alert system.\nIf you see this, alerts are working!\n\n<i>Sent by: ${req.user?.name || req.user?.username || 'Admin'}</i>`
             );
             return res.json({ status: 200, message: 'Test alert sent to Telegram', data: result });
         } catch (error) {
