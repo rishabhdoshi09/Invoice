@@ -1327,14 +1327,16 @@ export const CreateOrder = () => {
           axios.post('/api/audit/item-deleted', {
             productName: item.name || item.productName || 'Unknown',
             quantity: item.quantity || item.netWeight || 0,
-            price: item.pricePerKg || item.price || 0,
+            price: item.pricePerKg || item.productPrice || item.price || 0,
             totalPrice: item.totalPrice || 0,
             billTotal: next.total || 0,
             customerName: prev.customerName || null,
+            deviceInfo: item.type === 'weighted' ? 'WEIGHTED (Scale)' : 'MANUAL (Non-weighted)',
             billSnapshot: next.orderItems.map(i => ({
               name: i.name || i.productName,
               qty: i.quantity || i.netWeight,
-              total: i.totalPrice
+              total: i.totalPrice,
+              type: i.type === 'weighted' ? 'W' : 'M'
             }))
           }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
         } catch (e) { /* silent */ }
