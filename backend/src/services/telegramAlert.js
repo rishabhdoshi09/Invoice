@@ -525,10 +525,12 @@ async function sendFullAuditReport(options = {}) {
 
 module.exports = {
     sendTelegram,
+    esc,
     alertItemDeleted,
     alertBillDeleted,
     alertPaymentToggle,
     alertUnusedWeight,
+    alertOrderCreated,
     sendDailySummary,
     sendFullAuditReport
 };
