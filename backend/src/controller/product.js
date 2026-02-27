@@ -203,19 +203,6 @@ module.exports = {
             // Check if connection seems stale (no data in last 30 seconds while expecting continuous data)
             const isStale = lastDataReceived && (Date.now() - lastDataReceived > 30000);
             const effectiveStatus = isStale ? 'stale' : connectionStatus;
-            
-            // Log significant weight fetches (weight > 0 and user is authenticated)
-            const currentWeight = Number(weight) || 0;
-            if (currentWeight > 0 && req.user) {
-                try {
-                    const db = require('../models');
-                    await db.weightLog.create({
-                        weight: currentWeight,
-                        userId: req.user.id,
-                        userName: req.user.name || req.user.username
-                    });
-                } catch (e) { /* silent — don't break weight fetch */ }
-            }
 
             return res.status(200).send({
                 status: 200,
