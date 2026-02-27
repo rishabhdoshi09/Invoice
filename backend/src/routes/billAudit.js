@@ -32,6 +32,13 @@ module.exports = (router) => {
         );
 
     router
+        .route('/audit/weight-captured')
+        .post(
+            authenticate,
+            Controller.billAudit.logWeightCapture
+        );
+
+    router
         .route('/audit/weight-consumed')
         .post(
             authenticate,
