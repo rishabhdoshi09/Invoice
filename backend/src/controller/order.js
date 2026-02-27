@@ -784,6 +784,28 @@ module.exports = {
                         }, { transaction });
                     }
                 }
+
+                // === DOUBLE-ENTRY LEDGER: Post payment toggle ===
+                // Non-blocking: if Chart of Accounts isn't set up, log warning but don't crash
+                if (customerIdToUpdate) {
+                    try {
+                        const accountsExist = await db.account.count({ transaction });
+                        if (accountsExist > 0) {
+                            await postPaymentStatusToggleToLedger(
+                                { ...order.toJSON ? order.toJSON() : order, customerId: customerIdToUpdate },
+                                oldStatus,
+                                newStatus,
+                                changedByTrimmed,
+                                transaction
+                            );
+                        } else {
+                            console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — toggle for ${order.orderNumber} not posted to ledger`);
+                        }
+                    } catch (ledgerError) {
+                        console.error(`[LEDGER] Failed to post toggle for ${order.orderNumber}:`, ledgerError.message);
+                        // Don't crash toggle — ledger posting is supplementary
+                    }
+                }
                 
                 return customerIdToUpdate;
             });
