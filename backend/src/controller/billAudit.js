@@ -42,6 +42,16 @@ module.exports = {
                 deviceInfo: deviceInfo || null
             });
 
+            // Fire Telegram alert (non-blocking)
+            telegram.alertItemDeleted({
+                itemName: productName,
+                quantity, price, totalPrice,
+                type: req.body.itemType || 'manual',
+                invoiceContext: { orderNumber: nextInvoiceHint },
+                user: req.user?.name || req.user?.username,
+                timestamp: new Date()
+            });
+
             return res.status(200).json({ status: 200, data: { id: log.id } });
         } catch (error) {
             console.error('Bill audit log error:', error.message);
