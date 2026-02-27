@@ -424,7 +424,7 @@ async function sendFullAuditReport(options = {}) {
             let toggleMsg = [
                 ``,
                 `━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-                `💱 *PAYMENT TOGGLES: ${toggleCount}*`,
+                `💱 <b>PAYMENT TOGGLES: ${toggleCount}</b>`,
                 `━━━━━━━━━━━━━━━━━━━━━━━━━━`,
             ];
 
@@ -435,7 +435,7 @@ async function sendFullAuditReport(options = {}) {
                     limit: 20
                 });
                 for (const b of toggleBatches) {
-                    toggleMsg.push(`• ${b.description?.substring(0, 80) || 'Toggle'} — ₹${b.totalDebit}`);
+                    toggleMsg.push(`• ${esc((b.description || 'Toggle').substring(0, 80))} — ₹${b.totalDebit}`);
                 }
             } catch (e) { /* ok */ }
 
@@ -456,12 +456,12 @@ async function sendFullAuditReport(options = {}) {
 
         let footer = [
             `━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-            `*Overall: ${alertLevel}*`,
+            `<b>Overall: ${alertLevel}</b>`,
         ];
         if (redFlags.length > 0) {
-            footer.push('Red flags: ' + redFlags.join(', '));
+            footer.push('Red flags: ' + redFlags.map(f => esc(f)).join(', '));
         }
-        footer.push(`_Report generated at ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}_`);
+        footer.push(`<i>Report generated at ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`);
 
         messages.push(footer.join('\n'));
 
