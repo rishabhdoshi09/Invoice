@@ -288,47 +288,46 @@ async function sendFullAuditReport(options = {}) {
 
         // Header message
         let header = [
-            `📊 *COMPLETE BILL AUDIT REPORT*`,
+            `📊 <b>COMPLETE BILL AUDIT REPORT</b>`,
             `📅 ${dateLabel}`,
             ``,
             `━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-            `📋 *TAB 1: ITEM DELETIONS*`,
+            `📋 <b>TAB 1: ITEM DELETIONS</b>`,
             `━━━━━━━━━━━━━━━━━━━━━━━━━━`,
             ``,
-            `*Summary:*`,
-            `• Item Removals: *${itemRemovals.length}*`,
-            `• Bill Clears: *${billClears.length}*`,
-            `• Bill Deletes: *${billDeletes.length}*`,
-            `• Total Deleted Value: *${fmt(totalDeletedValue)}*`,
+            `<b>Summary:</b>`,
+            `• Item Removals: <b>${itemRemovals.length}</b>`,
+            `• Bill Clears: <b>${billClears.length}</b>`,
+            `• Bill Deletes: <b>${billDeletes.length}</b>`,
+            `• Total Deleted Value: <b>${fmt(totalDeletedValue)}</b>`,
         ];
 
         if (itemRemovals.length === 0 && billClears.length === 0 && billDeletes.length === 0) {
-            header.push('', '_No deletion events recorded._');
+            header.push('', '<i>No deletion events recorded.</i>');
         }
 
         messages.push(header.join('\n'));
 
         // Item removal details (batched to fit Telegram limit)
         if (itemRemovals.length > 0) {
-            let batch = [``, `*🚨 Item Removals (${itemRemovals.length}):*`, ``];
+            let batch = [``, `<b>🚨 Item Removals (${itemRemovals.length}):</b>`, ``];
 
             for (let i = 0; i < itemRemovals.length; i++) {
                 const log = itemRemovals[i];
                 const isScale = log.deviceInfo?.includes('WEIGHTED');
                 const entry = [
-                    `*${i + 1}.* ${log.productName}`,
-                    `   Qty: ${log.quantity || '-'} | Price: ${fmt(log.price)} | Value: *${fmt(log.totalPrice)}*`,
-                    `   Type: ${isScale ? '⚖️ Scale' : '✏️ Manual'} | By: ${log.userName || '?'}`,
+                    `<b>${i + 1}.</b> ${esc(log.productName)}`,
+                    `   Qty: ${log.quantity || '-'} | Price: ${fmt(log.price)} | Value: <b>${fmt(log.totalPrice)}</b>`,
+                    `   Type: ${isScale ? '⚖️ Scale' : '✏️ Manual'} | By: ${esc(log.userName) || '?'}`,
                     `   Time: ${timeStr(log.createdAt)}`,
-                    log.invoiceContext ? `   Invoice: \`${log.invoiceContext}\`` : '',
-                    log.customerName ? `   Customer: ${log.customerName}` : '',
+                    log.invoiceContext ? `   Invoice: <code>${esc(log.invoiceContext)}</code>` : '',
+                    log.customerName ? `   Customer: ${esc(log.customerName)}` : '',
                     ``
                 ].filter(Boolean).join('\n');
 
-                // Check if adding this entry would exceed limit
                 if ((batch.join('\n') + entry).length > 3800) {
                     messages.push(batch.join('\n'));
-                    batch = [`*...continued:*`, ``];
+                    batch = [`<b>...continued:</b>`, ``];
                 }
                 batch.push(entry);
             }
@@ -337,21 +336,21 @@ async function sendFullAuditReport(options = {}) {
 
         // Bill clears
         if (billClears.length > 0) {
-            let batch = [`*🧹 Bill Clears (${billClears.length}):*`, ``];
+            let batch = [`<b>🧹 Bill Clears (${billClears.length}):</b>`, ``];
             for (const log of billClears) {
-                batch.push(`• ${log.productName} — ${fmt(log.totalPrice)} | By: ${log.userName} | ${timeStr(log.createdAt)}`);
+                batch.push(`• ${esc(log.productName)} — ${fmt(log.totalPrice)} | By: ${esc(log.userName)} | ${timeStr(log.createdAt)}`);
             }
             messages.push(batch.join('\n'));
         }
 
         // Bill deletes
         if (billDeletes.length > 0) {
-            let batch = [`*🗑️ Bill Deletes (${billDeletes.length}):*`, ``];
+            let batch = [`<b>🗑️ Bill Deletes (${billDeletes.length}):</b>`, ``];
             for (const log of billDeletes) {
                 batch.push([
-                    `• ${log.productName || 'Bill'} — *${fmt(log.totalPrice)}*`,
-                    `  By: ${log.userName} | ${timeStr(log.createdAt)}`,
-                    log.invoiceContext ? `  Invoice: \`${log.invoiceContext}\`` : '',
+                    `• ${esc(log.productName) || 'Bill'} — <b>${fmt(log.totalPrice)}</b>`,
+                    `  By: ${esc(log.userName)} | ${timeStr(log.createdAt)}`,
+                    log.invoiceContext ? `  Invoice: <code>${esc(log.invoiceContext)}</code>` : '',
                     ``
                 ].filter(Boolean).join('\n'));
             }
