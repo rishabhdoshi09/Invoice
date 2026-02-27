@@ -16,6 +16,28 @@ const EVENT_LABELS = {
 };
 
 export const BillAuditLogs = () => {
+    const [activeTab, setActiveTab] = useState(0);
+    return (
+        <Box data-testid="bill-audit-logs" sx={{ maxWidth: 1200, mx: 'auto' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Box>
+                    <Typography variant="h5" fontWeight={700}>Bill Audit Trail</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        Track deletions, weight fetches, and suspicious activity
+                    </Typography>
+                </Box>
+            </Box>
+            <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
+                <Tab label="Item Deletions" icon={<Delete fontSize="small" />} iconPosition="start" />
+                <Tab label="Weight Fetches" icon={<FitnessCenter fontSize="small" />} iconPosition="start" />
+            </Tabs>
+            {activeTab === 0 && <DeletionLogs />}
+            {activeTab === 1 && <WeightLogs />}
+        </Box>
+    );
+};
+
+const DeletionLogs = () => {
     const [logs, setLogs] = useState([]);
     const [summary, setSummary] = useState({});
     const [count, setCount] = useState(0);
