@@ -78,7 +78,7 @@ module.exports = (sequelize, Sequelize) => {
                     unique: true,
                     fields: ['referenceType', 'referenceId'],
                     where: {
-                        referenceType: ['INVOICE', 'PAYMENT', 'PURCHASE', 'EXPENSE']
+                        referenceType: ['INVOICE', 'PAYMENT', 'PURCHASE', 'EXPENSE', 'INVOICE_CASH']
                     },
                     name: 'journal_batches_ref_unique'
                 }
