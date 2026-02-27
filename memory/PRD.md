@@ -73,20 +73,25 @@ frontend/src/
 
 ## Prioritized Backlog
 
-### P0 — Next Up
-- [ ] Implement automated database migration system (sequelize-cli) for user's local env
-- [ ] Present comprehensive code audit findings to user
+### P0 — Critical Security (Next)
+- [ ] Add rate limiting (`express-rate-limit`) to all API endpoints
+- [ ] Restrict CORS to specific frontend domain
+- [ ] Disable `/api/auth/setup` endpoint after first admin created
+- [ ] Add `FOR UPDATE` row locks in payment toggle, order create, payment create
 
 ### P1 — Core Features
 - [ ] Frontend reports: Account Ledger, Trial Balance, P&L, Balance Sheet
-- [ ] Implement FOR UPDATE row-level locks for concurrency fixes
-- [ ] Customer/Supplier balance comparison widget (old vs ledger)
+- [ ] Add input validation (Joi) to remaining 7 controllers
+- [ ] Set up automated database backup (pg_dump cron)
+- [ ] Enhanced fraud alerts (price modification logging, suspicious activity thresholds)
 
 ### P2 — Future
-- [ ] Deprecate old balance calculation; ledger becomes single source of truth
-- [ ] Role-Based Access Control (RBAC) for API security
-- [ ] Standardize error handling across all backend controllers
-- [ ] Refactor large frontend components with global state manager
+- [ ] Centralize error handling with middleware
+- [ ] Structured logging (winston/pino)
+- [ ] Split large controllers into smaller modules
+- [ ] Role-Based Access Control (RBAC)
+- [ ] Weekly biller activity summary report
+- [ ] Customer/Supplier balance comparison widget (old vs ledger)
 
 ## Known Issues
 - Old invoice module balance calculations are fragile (will be superseded by ledger)
