@@ -659,6 +659,15 @@ export const CreateOrder = () => {
     setFetchedViaScale(true);
     const price = Number(formik.values.productPrice) || 0;
     formik.setFieldValue('totalPrice', Number((price * weight).toFixed(2)));
+
+    // Silent audit: log this explicit weight capture
+    try {
+      const token = localStorage.getItem('token');
+      axios.post('/api/audit/weight-captured', { weight }, {
+        headers: { Authorization: `Bearer ${token}` }
+      }).catch(() => {});
+    } catch (e) { /* silent */ }
+
     return true;
   }, [dispatch, formik]);
 
