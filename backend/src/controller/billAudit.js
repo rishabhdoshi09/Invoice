@@ -97,7 +97,7 @@ module.exports = {
             const items = (billSnapshot || []).map(i => `${i.name || '?'} (₹${i.totalPrice || i.total || 0})`).join(', ');
             telegram.sendTelegram(
                 `🧹 <b>BILL CLEARED</b>\n\n` +
-                `<b>Items:</b> ${itemCount} — ${telegram.constructor ? items : items}\n` +
+                `<b>Items:</b> ${itemCount} — ${items}\n` +
                 `<b>Total Value:</b> ₹${(billTotal || 0).toLocaleString('en-IN')}\n` +
                 `<b>Customer:</b> ${customerName || 'Walk-in'}\n` +
                 `<b>By:</b> ${req.user?.name || req.user?.username || '?'}\n` +
