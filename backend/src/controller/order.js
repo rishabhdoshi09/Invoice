@@ -557,6 +557,15 @@ module.exports = {
                     deviceInfo: req.headers['user-agent']
                 });
             } catch (e) { /* silent */ }
+
+            // Fire live Telegram alert
+            telegram.alertBillDeleted({
+                orderNumber: order.orderNumber,
+                total: order.total,
+                customerName: order.customerName,
+                user: req.user?.name || req.user?.username,
+                timestamp: new Date()
+            });
             
             return res.status(200).send({
                 status: 200,
