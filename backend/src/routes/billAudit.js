@@ -44,4 +44,21 @@ module.exports = (router) => {
             authenticate,
             Controller.billAudit.markWeightConsumed
         );
+
+    // Telegram alert endpoints (admin only)
+    router
+        .route('/audit/telegram/test')
+        .post(
+            authenticate,
+            authorize('admin'),
+            Controller.billAudit.sendTestAlert
+        );
+
+    router
+        .route('/audit/telegram/daily-summary')
+        .post(
+            authenticate,
+            authorize('admin'),
+            Controller.billAudit.sendDailySummaryNow
+        );
 };
