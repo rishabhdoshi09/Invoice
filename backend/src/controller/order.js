@@ -511,6 +511,27 @@ module.exports = {
                     reason: req.body.reason || 'No reason provided'
                 }
             });
+
+            // Also log to bill tampering audit
+            try {
+                await db.billAuditLog.create({
+                    eventType: 'BILL_DELETED',
+                    userId: req.user?.id || null,
+                    userName: req.user?.name || req.user?.username || 'unknown',
+                    invoiceContext: order.orderNumber,
+                    orderId: orderId,
+                    productName: `${order.orderItems?.length || 0} item(s)`,
+                    totalPrice: order.total,
+                    billTotal: order.total,
+                    customerName: order.customerName || null,
+                    billSnapshot: order.orderItems?.map(i => ({
+                        name: i.name,
+                        qty: i.quantity,
+                        total: i.totalPrice
+                    })),
+                    deviceInfo: req.headers['user-agent']
+                });
+            } catch (e) { /* silent */ }
             
             return res.status(200).send({
                 status: 200,
