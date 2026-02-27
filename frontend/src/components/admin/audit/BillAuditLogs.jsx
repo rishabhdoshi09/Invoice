@@ -234,6 +234,15 @@ const DeletionLogs = () => {
                                             />
                                         </TableCell>
                                         <TableCell>
+                                            {log.deviceInfo?.includes('WEIGHTED') ? (
+                                                <Chip label="Scale" size="small" sx={{ bgcolor: '#e3f2fd', color: '#1565c0', fontWeight: 600 }} icon={<Scale fontSize="small" />} />
+                                            ) : log.deviceInfo?.includes('MANUAL') ? (
+                                                <Chip label="Manual" size="small" sx={{ bgcolor: '#f3e5f5', color: '#7b1fa2', fontWeight: 600 }} />
+                                            ) : (
+                                                <Chip label="-" size="small" variant="outlined" />
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
                                             <Typography variant="body2" fontWeight={600}>{log.productName}</Typography>
                                             {log.customerName && (
                                                 <Typography variant="caption" color="text.secondary">
