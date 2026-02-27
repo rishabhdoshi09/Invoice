@@ -193,6 +193,7 @@ const DeletionLogs = () => {
                         <TableRow>
                             <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Time</TableCell>
                             <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Event</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Type</TableCell>
                             <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Product</TableCell>
                             <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }} align="right">Qty</TableCell>
                             <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }} align="right">Price</TableCell>
