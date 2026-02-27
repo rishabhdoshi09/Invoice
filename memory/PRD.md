@@ -72,9 +72,13 @@ frontend/src/
 - [x] **Telegram Fraud Alert Bot** — Real-time alerts to admin's phone via Telegram:
   - Instant alerts: Item deleted from bill, bill deleted, payment status toggled
   - Daily summary at 9:00 PM IST with red flag analysis
-  - Alert levels: GREEN (clean), YELLOW (1-2 flags), RED (3+ flags)
-  - Manual trigger endpoints for test + on-demand summary
-  - Cron job for automated daily summary
+  - Full audit report to Telegram (mirrors /bill-audit page completely):
+    - Tab 1: Item Deletions — product name, qty, price, value, type (Scale/Manual), by whom, time, invoice#, customer
+    - Tab 2: Weight Fetches — consumed vs unmatched, with details
+    - Payment Toggles — all status changes with amounts and descriptions
+    - Alert levels: 🟢 ALL CLEAR / 🟡 NEEDS ATTENTION / 🔴 HIGH RISK
+  - "Send Report to Telegram" button on the bill-audit page UI
+  - API endpoints: test, daily-summary, full-report
 
 ## Prioritized Backlog
 
