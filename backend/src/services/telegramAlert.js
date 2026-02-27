@@ -13,7 +13,7 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 // ─── Send message via Telegram Bot API ───────────────────────────
-function sendTelegram(text, parseMode = 'Markdown') {
+function sendTelegram(text, parseMode = 'HTML') {
     return new Promise((resolve, reject) => {
         if (!BOT_TOKEN || !CHAT_ID) {
             console.warn('[TELEGRAM] Bot token or chat ID not configured — skipping alert');
