@@ -374,39 +374,37 @@ async function sendFullAuditReport(options = {}) {
 
         let weightMsg = [
             `━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-            `⚖️ *TAB 2: WEIGHT FETCHES*`,
+            `⚖️ <b>TAB 2: WEIGHT FETCHES</b>`,
             `━━━━━━━━━━━━━━━━━━━━━━━━━━`,
             ``,
-            `*Summary:*`,
-            `• Total Fetches: *${weightLogs.length}*`,
-            `• Added to Bill: *${consumedWeights.length}*`,
-            `• NOT Added to Bill: *${unmatchedWeights.length}*${unmatchedWeights.length > 0 ? ' ⚠️' : ''}`,
-            `• Unmatched Weight: *${totalUnmatchedKg.toFixed(2)} kg*`,
+            `<b>Summary:</b>`,
+            `• Total Fetches: <b>${weightLogs.length}</b>`,
+            `• Added to Bill: <b>${consumedWeights.length}</b>`,
+            `• NOT Added to Bill: <b>${unmatchedWeights.length}</b>${unmatchedWeights.length > 0 ? ' ⚠️' : ''}`,
+            `• Unmatched Weight: <b>${totalUnmatchedKg.toFixed(2)} kg</b>`,
         ];
 
         if (weightLogs.length === 0) {
-            weightMsg.push('', '_No weight readings recorded._');
+            weightMsg.push('', '<i>No weight readings recorded.</i>');
         }
 
-        // Unmatched weights detail (RED FLAGS)
         if (unmatchedWeights.length > 0) {
-            weightMsg.push('', `*⚠️ Unmatched Weights (${unmatchedWeights.length}):*`, ``);
+            weightMsg.push('', `<b>⚠️ Unmatched Weights (${unmatchedWeights.length}):</b>`, ``);
             for (const w of unmatchedWeights.slice(0, 20)) {
-                weightMsg.push(`• *${Number(w.weight).toFixed(3)} kg* — ${timeStr(w.createdAt)} — By: ${w.userName || '?'}`);
+                weightMsg.push(`• <b>${Number(w.weight).toFixed(3)} kg</b> — ${timeStr(w.createdAt)} — By: ${esc(w.userName) || '?'}`);
             }
             if (unmatchedWeights.length > 20) {
-                weightMsg.push(`_...and ${unmatchedWeights.length - 20} more_`);
+                weightMsg.push(`<i>...and ${unmatchedWeights.length - 20} more</i>`);
             }
         }
 
-        // Consumed weights (brief)
         if (consumedWeights.length > 0) {
-            weightMsg.push('', `*✅ Added to Bill (${consumedWeights.length}):*`, ``);
+            weightMsg.push('', `<b>✅ Added to Bill (${consumedWeights.length}):</b>`, ``);
             for (const w of consumedWeights.slice(0, 15)) {
-                weightMsg.push(`• ${Number(w.weight).toFixed(3)} kg → ${w.orderNumber || '?'} | ${timeStr(w.createdAt)}`);
+                weightMsg.push(`• ${Number(w.weight).toFixed(3)} kg → ${esc(w.orderNumber) || '?'} | ${timeStr(w.createdAt)}`);
             }
             if (consumedWeights.length > 15) {
-                weightMsg.push(`_...and ${consumedWeights.length - 15} more_`);
+                weightMsg.push(`<i>...and ${consumedWeights.length - 15} more</i>`);
             }
         }
 
