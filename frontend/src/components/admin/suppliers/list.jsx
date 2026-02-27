@@ -193,6 +193,7 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone }) => {
                         data-testid="payment-supplier-select"
                         size="small" options={sortedSuppliers}
                         getOptionLabel={o => o.name || ''}
+                        isOptionEqualToValue={(opt, val) => opt.id === val.id}
                         value={paySup}
                         onChange={(_, v) => { setPaySup(v); if (v?.balance > 0) setPayAmt(v.balance.toString()); }}
                         sx={{ width: 240 }}
@@ -239,6 +240,7 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone }) => {
                             data-testid="purchase-supplier-select"
                             size="small" options={sortedSuppliers}
                             getOptionLabel={o => o.name || ''}
+                            isOptionEqualToValue={(opt, val) => opt.id === val.id}
                             value={purSup} onChange={(_, v) => setPurSup(v)}
                             sx={{ width: 220 }}
                             renderInput={p => <TextField {...p} inputRef={firstRef} label="Supplier *" />}
@@ -341,18 +343,30 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
         });
     }
 
-    // Purchases → Debit
+    // Purchases → Debit (and credit if paid at purchase time)
     (s.purchases || []).forEach(p => {
         const d = p.billDate ? moment(p.billDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(p.createdAt);
+        const dateStr = d.isValid() ? d.format('DD/MM/YYYY') : '-';
+        const sortStr = d.isValid() ? d.toISOString() : '9999-12-31T23:59:59';
         ledgerEntries.push({
             id: p.id,
-            date: d.isValid() ? d.format('DD/MM/YYYY') : '-',
-            sortKey: d.isValid() ? d.toISOString() : '9999-12-31T23:59:59',
-            particulars: 'Purchase' + (p.paymentStatus === 'paid' ? ' (Paid)' : ''),
+            date: dateStr, sortKey: sortStr,
+            particulars: 'Purchase',
             refNo: p.billNumber || '-',
             debit: Number(p.total) || 0, credit: 0,
             type: 'purchase', raw: p
         });
+        // If purchase was paid at creation, show credit entry for the paid amount
+        if (p.paymentStatus === 'paid' && Number(p.paidAmount) > 0) {
+            ledgerEntries.push({
+                id: `${p.id}-paid`,
+                date: dateStr, sortKey: sortStr + 'Z', // sort just after the purchase
+                particulars: `Paid against ${p.billNumber || 'Purchase'}`,
+                refNo: p.billNumber || '-',
+                debit: 0, credit: Number(p.paidAmount),
+                type: 'bill-payment', raw: p
+            });
+        }
     });
 
     // Payments → Credit
