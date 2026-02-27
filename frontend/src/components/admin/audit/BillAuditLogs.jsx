@@ -5,7 +5,7 @@ import {
     InputLabel, Grid, IconButton, Tooltip, Dialog, DialogTitle, DialogContent,
     DialogActions, Button, Alert, Tabs, Tab
 } from '@mui/material';
-import { Visibility, Warning, Delete, RemoveCircle, HighlightOff, Refresh, Scale, FitnessCenter } from '@mui/icons-material';
+import { Visibility, Warning, Delete, RemoveCircle, HighlightOff, Refresh, Scale, FitnessCenter, Telegram } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
 
@@ -17,6 +17,25 @@ const EVENT_LABELS = {
 
 export const BillAuditLogs = () => {
     const [activeTab, setActiveTab] = useState(0);
+    const [sending, setSending] = useState(false);
+    const [sent, setSent] = useState(false);
+
+    const sendToTelegram = async () => {
+        setSending(true);
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post('/api/audit/telegram/full-report', null, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setSent(true);
+            setTimeout(() => setSent(false), 4000);
+        } catch (e) {
+            alert('Failed to send: ' + (e.response?.data?.message || e.message));
+        } finally {
+            setSending(false);
+        }
+    };
+
     return (
         <Box data-testid="bill-audit-logs" sx={{ maxWidth: 1200, mx: 'auto' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
@@ -26,6 +45,18 @@ export const BillAuditLogs = () => {
                         Track deletions, weight fetches, and suspicious activity
                     </Typography>
                 </Box>
+                <Button
+                    data-testid="send-telegram-report"
+                    variant="contained"
+                    startIcon={sending ? null : <Telegram />}
+                    onClick={sendToTelegram}
+                    disabled={sending}
+                    color={sent ? 'success' : 'primary'}
+                    size="small"
+                    sx={{ textTransform: 'none', minWidth: 180 }}
+                >
+                    {sending ? 'Sending...' : sent ? 'Sent to Telegram!' : 'Send Report to Telegram'}
+                </Button>
             </Box>
             <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
                 <Tab label="Item Deletions" icon={<Delete fontSize="small" />} iconPosition="start" />
