@@ -503,6 +503,158 @@ async function reversePurchaseLedger(purchase, transaction) {
     }
 }
 
+/**
+ * Post a ledger entry when order payment status is toggled.
+ * 
+ * unpaid → paid:  DR Cash (1100), CR Customer Receivable (1200-xxx)
+ *   → Customer paid, cash comes in, receivable goes down.
+ *
+ * paid → unpaid:  DR Customer Receivable (1200-xxx), CR Cash (1100)
+ *   → Reverse the payment — receivable goes back up, cash goes out.
+ *
+ * @param {Object} order - The order being toggled
+ * @param {string} oldStatus - Previous payment status ('paid' or 'unpaid')
+ * @param {string} newStatus - New payment status ('paid' or 'unpaid')
+ * @param {string} changedBy - Name of person who toggled
+ * @param {Object} transaction - The active Sequelize transaction
+ */
+async function postPaymentStatusToggleToLedger(order, oldStatus, newStatus, changedBy, transaction) {
+    try {
+        const total = Number(order.total) || 0;
+        if (total <= 0) {
+            console.log(`[LEDGER] SKIP TOGGLE: Order ${order.orderNumber} has zero/negative total`);
+            return { skipped: true, reason: 'zero_total' };
+        }
+
+        const customerId = order.customerId;
+        if (!customerId) {
+            console.log(`[LEDGER] SKIP TOGGLE: Order ${order.orderNumber} has no customer ID`);
+            return { skipped: true, reason: 'no_customer_id' };
+        }
+
+        // Get or create customer receivable account
+        const customerAccount = await ledgerService.getOrCreateCustomerAccount(
+            customerId,
+            order.customerName || 'Walk-in Customer',
+            transaction
+        );
+
+        // Get cash account (code 1100)
+        const cashAccount = await db.account.findOne({
+            where: { code: '1100' },
+            transaction
+        });
+        if (!cashAccount) {
+            throw new Error('[LEDGER] Cash account (1100) not found. Run chart of accounts initialization first.');
+        }
+
+        let entries;
+        let referenceType;
+        let description;
+
+        if (oldStatus === 'unpaid' && newStatus === 'paid') {
+            // Customer paid → DR Cash, CR Customer Receivable
+            referenceType = 'PAYMENT_TOGGLE';
+            description = `Payment received (toggled) for Invoice ${order.orderNumber} — ${order.customerName || 'Walk-in'} [by ${changedBy}]`;
+            entries = [
+                { accountId: cashAccount.id, debit: total, credit: 0, narration: `Payment received: Invoice ${order.orderNumber}` },
+                { accountId: customerAccount.id, debit: 0, credit: total, narration: `Payment received: Invoice ${order.orderNumber}` }
+            ];
+        } else if (oldStatus === 'paid' && newStatus === 'unpaid') {
+            // Reverse payment → DR Customer Receivable, CR Cash
+            referenceType = 'PAYMENT_TOGGLE';
+            description = `Payment reversed (toggled) for Invoice ${order.orderNumber} — ${order.customerName || 'Walk-in'} [by ${changedBy}]`;
+            entries = [
+                { accountId: customerAccount.id, debit: total, credit: 0, narration: `Payment reversed: Invoice ${order.orderNumber}` },
+                { accountId: cashAccount.id, debit: 0, credit: total, narration: `Payment reversed: Invoice ${order.orderNumber}` }
+            ];
+        } else {
+            console.log(`[LEDGER] SKIP TOGGLE: No-op status change ${oldStatus} → ${newStatus} for ${order.orderNumber}`);
+            return { skipped: true, reason: 'noop' };
+        }
+
+        const result = await ledgerService.createJournalBatch({
+            referenceType,
+            referenceId: order.id,
+            description,
+            transactionDate: new Date(),
+            entries
+        }, transaction);
+
+        console.log(`[LEDGER] TOGGLE POSTED: ${order.orderNumber} ${oldStatus}→${newStatus} → batch ${result.batch.batchNumber}`);
+        return { posted: true, batchNumber: result.batch.batchNumber, batchId: result.batch.id };
+
+    } catch (error) {
+        console.error(`[LEDGER] TOGGLE ERROR: Order ${order.orderNumber || order.id} — ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Post the implicit cash receipt when an invoice is created as "paid".
+ * This is separate from postInvoiceToLedger (which records the sale).
+ * 
+ * DR Cash (1100), CR Customer Receivable (1200-xxx)
+ *
+ * @param {Object} order - The created order record
+ * @param {Object} transaction - The active Sequelize transaction
+ */
+async function postInvoiceCashReceiptToLedger(order, transaction) {
+    try {
+        const paidAmount = Number(order.paidAmount) || 0;
+        if (paidAmount <= 0) {
+            return { skipped: true, reason: 'not_paid' };
+        }
+
+        const customerId = order.customerId;
+        if (!customerId) {
+            return { skipped: true, reason: 'no_customer_id' };
+        }
+
+        // Prevent duplicates — use a unique referenceType
+        const existing = await db.journalBatch.findOne({
+            where: { referenceType: 'INVOICE_CASH', referenceId: order.id },
+            transaction
+        });
+        if (existing) {
+            console.log(`[LEDGER] SKIP: Invoice cash receipt for ${order.orderNumber} already posted`);
+            return { skipped: true, batchNumber: existing.batchNumber };
+        }
+
+        const customerAccount = await ledgerService.getOrCreateCustomerAccount(
+            customerId,
+            order.customerName || 'Walk-in Customer',
+            transaction
+        );
+
+        const cashAccount = await db.account.findOne({
+            where: { code: '1100' },
+            transaction
+        });
+        if (!cashAccount) {
+            throw new Error('[LEDGER] Cash account (1100) not found.');
+        }
+
+        const result = await ledgerService.createJournalBatch({
+            referenceType: 'INVOICE_CASH',
+            referenceId: order.id,
+            description: `Cash received for Invoice ${order.orderNumber} — ${order.customerName || 'Walk-in'}`,
+            transactionDate: order.createdAt || new Date(),
+            entries: [
+                { accountId: cashAccount.id, debit: paidAmount, credit: 0, narration: `Cash: Invoice ${order.orderNumber}` },
+                { accountId: customerAccount.id, debit: 0, credit: paidAmount, narration: `Cash: Invoice ${order.orderNumber}` }
+            ]
+        }, transaction);
+
+        console.log(`[LEDGER] POSTED: Invoice cash ${order.orderNumber} → batch ${result.batch.batchNumber} (DR Cash ${paidAmount}, CR Customer ${paidAmount})`);
+        return { posted: true, batchNumber: result.batch.batchNumber };
+
+    } catch (error) {
+        console.error(`[LEDGER] CASH RECEIPT ERROR: Invoice ${order.orderNumber || order.id} — ${error.message}`);
+        throw error;
+    }
+}
+
 module.exports = {
     postInvoiceToLedger,
     postPaymentToLedger,
@@ -510,5 +662,7 @@ module.exports = {
     reversePaymentLedger,
     postPurchaseToLedger,
     postSupplierPaymentToLedger,
-    reversePurchaseLedger
+    reversePurchaseLedger,
+    postPaymentStatusToggleToLedger,
+    postInvoiceCashReceiptToLedger
 };
