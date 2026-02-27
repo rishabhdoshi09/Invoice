@@ -1311,6 +1311,25 @@ export const CreateOrder = () => {
           total: subTotal + tax, 
           orderItems: prev.orderItems.filter((_, i) => i !== index) 
         };
+
+        // Silent audit log — fire and forget, don't block UI
+        try {
+          const token = localStorage.getItem('token');
+          axios.post('/api/audit/item-deleted', {
+            productName: item.name || item.productName || 'Unknown',
+            quantity: item.quantity || item.netWeight || 0,
+            price: item.pricePerKg || item.price || 0,
+            totalPrice: item.totalPrice || 0,
+            billTotal: next.total || 0,
+            customerName: prev.customerName || null,
+            billSnapshot: next.orderItems.map(i => ({
+              name: i.name || i.productName,
+              qty: i.quantity || i.netWeight,
+              total: i.totalPrice
+            }))
+          }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+        } catch (e) { /* silent */ }
+
         try { generatePdf(next); } catch {}
         return next;
       });
