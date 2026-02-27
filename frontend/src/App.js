@@ -24,6 +24,7 @@ import { DayStart } from "./components/admin/dayStart/DayStart";
 import { GstExportTool } from "./components/admin/gstExport/GstExportTool";
 import { StockManagement } from "./components/admin/stock/StockManagement";
 import LedgerModule from "./components/admin/ledger/LedgerModule";
+import BillAuditLogs from "./components/admin/audit/BillAuditLogs";
 import { CircularProgress, Box } from "@mui/material";
 import { NotificationProvider } from "./components/common/SmartNotifications";
 import { KeyboardShortcutsHelp, useKeyboardShortcutsHelp } from "./components/common/KeyboardShortcuts";
