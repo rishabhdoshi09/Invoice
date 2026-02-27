@@ -117,6 +117,46 @@ function alertUnusedWeight(details) {
     sendTelegram(msg).catch(e => console.error('[TELEGRAM] Alert failed:', e.message));
 }
 
+/**
+ * Alert: New sales order/bill created
+ */
+function alertOrderCreated(details) {
+    const { orderNumber, customerName, total, paidAmount, dueAmount, paymentStatus, items, createdBy, orderDate } = details;
+    const isPaid = paymentStatus === 'paid';
+    const statusIcon = isPaid ? '✅' : '🔴';
+    const statusText = isPaid ? 'PAID' : `DUE ₹${(dueAmount || 0).toLocaleString('en-IN')}`;
+
+    let msg = [
+        `🧾 <b>NEW BILL CREATED</b>`,
+        ``,
+        `<b>Invoice:</b> ${esc(orderNumber)}`,
+        `<b>Customer:</b> ${esc(customerName) || 'Walk-in'}`,
+        `<b>Total:</b> ₹${(total || 0).toLocaleString('en-IN')} ${statusIcon} ${statusText}`,
+    ];
+
+    // Item list
+    if (items && items.length > 0) {
+        msg.push(``, `<b>Items:</b>`);
+        for (const item of items.slice(0, 15)) {
+            const qty = item.quantity || item.qty || 0;
+            const price = item.productPrice || item.price || 0;
+            const itemTotal = item.totalPrice || (qty * price) || 0;
+            msg.push(`  • ${esc(item.name)} — ${qty} x ₹${price} = <b>₹${itemTotal.toLocaleString('en-IN')}</b>`);
+        }
+        if (items.length > 15) {
+            msg.push(`  <i>...and ${items.length - 15} more items</i>`);
+        }
+    }
+
+    msg.push(
+        ``,
+        `<b>By:</b> ${esc(createdBy) || '?'}`,
+        `<b>Time:</b> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`
+    );
+
+    sendTelegram(msg.join('\n')).catch(e => console.error('[TELEGRAM] Alert failed:', e.message));
+}
+
 // ─── Daily Summary ───────────────────────────────────────────────
 
 /**
