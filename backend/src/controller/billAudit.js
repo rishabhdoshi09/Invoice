@@ -187,6 +187,30 @@ module.exports = {
         }
     },
 
+    // ── Telegram Alert Endpoints ──
+
+    // Send a test alert to verify Telegram connection
+    sendTestAlert: async (req, res) => {
+        try {
+            const result = await telegram.sendTelegram(
+                `🧪 *Test Alert*\n\nThis is a test from your Fraud Alert system.\nIf you see this, alerts are working!\n\n_Sent by: ${req.user?.name || req.user?.username || 'Admin'}_`
+            );
+            return res.json({ status: 200, message: 'Test alert sent to Telegram', data: result });
+        } catch (error) {
+            return res.status(500).json({ status: 500, message: `Failed to send: ${error.message}` });
+        }
+    },
+
+    // Manually trigger the daily summary
+    sendDailySummaryNow: async (req, res) => {
+        try {
+            const result = await telegram.sendDailySummary();
+            return res.json({ status: 200, message: 'Daily summary sent', data: result });
+        } catch (error) {
+            return res.status(500).json({ status: 500, message: error.message });
+        }
+    },
+
     // Get weight logs with unmatched filter
     getWeightLogs: async (req, res) => {
         try {
