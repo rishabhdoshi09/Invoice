@@ -234,6 +234,19 @@ module.exports = {
                 userAgent: req.headers['user-agent']
             });
 
+            // Mark recent weight fetches as consumed for this user
+            try {
+                const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+                await db.weightLog.update(
+                    { consumed: true, orderId: result.id, orderNumber: result.orderNumber },
+                    { where: {
+                        userId: req.user?.id,
+                        consumed: false,
+                        createdAt: { [db.Sequelize.Op.gte]: fiveMinAgo }
+                    }}
+                );
+            } catch (e) { /* silent */ }
+
             return res.status(200).send({
                 status: 200,
                 message: 'order created successfully',
