@@ -503,6 +503,5 @@ module.exports = {
     alertPaymentToggle,
     alertUnusedWeight,
     sendDailySummary,
-    sendSummaryForRange,
     sendFullAuditReport
 };
