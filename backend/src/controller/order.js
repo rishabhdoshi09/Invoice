@@ -202,6 +202,13 @@ module.exports = {
                                 { ...orderObj, id: orderId, createdAt: new Date() },
                                 transaction
                             );
+                            // If order is paid (fully or partially), also post the cash receipt
+                            if (orderObj.paidAmount > 0) {
+                                await postInvoiceCashReceiptToLedger(
+                                    { ...orderObj, id: orderId, createdAt: new Date() },
+                                    transaction
+                                );
+                            }
                         } else {
                             console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — invoice ${orderObj.orderNumber} not posted to ledger`);
                         }
