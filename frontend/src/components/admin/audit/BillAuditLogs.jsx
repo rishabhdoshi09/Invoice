@@ -205,7 +205,7 @@ const DeletionLogs = () => {
                     </TableHead>
                     <TableBody>
                         {loading ? (
-                            <TableRow><TableCell colSpan={9} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={10} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
                         ) : logs.length === 0 ? (
                             <TableRow><TableCell colSpan={10} align="center" sx={{ py: 4, color: 'text.secondary' }}>No audit events found for this date range</TableCell></TableRow>
                         ) : (
