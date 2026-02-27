@@ -81,21 +81,7 @@ const DeletionLogs = () => {
     };
 
     return (
-        <Box data-testid="bill-audit-logs" sx={{ maxWidth: 1200, mx: 'auto' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-                <Box>
-                    <Typography variant="h5" fontWeight={700}>Bill Audit Trail</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        Track all item deletions, bill clears, and bill deletions
-                    </Typography>
-                </Box>
-                <Tooltip title="Refresh">
-                    <IconButton onClick={fetchLogs} data-testid="refresh-audit-logs">
-                        <Refresh />
-                    </IconButton>
-                </Tooltip>
-            </Box>
-
+        <Box>
             {/* Summary Cards */}
             <Grid container spacing={2} sx={{ mb: 3 }}>
                 <Grid item xs={6} sm={3}>
