@@ -1,5 +1,5 @@
 const Controller = require('../controller');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 
 module.exports = (router) => {
     router
@@ -21,5 +21,20 @@ module.exports = (router) => {
         .get(
             authenticate,
             Controller.billAudit.getTamperingLogs
+        );
+
+    // Weight audit endpoints
+    router
+        .route('/audit/weight-logs')
+        .get(
+            authenticate,
+            Controller.billAudit.getWeightLogs
+        );
+
+    router
+        .route('/audit/weight-consumed')
+        .post(
+            authenticate,
+            Controller.billAudit.markWeightConsumed
         );
 };
