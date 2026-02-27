@@ -157,6 +157,25 @@ module.exports = {
         }
     },
 
+    // Log an explicit weight capture (called when biller clicks "Fetch Weight" button)
+    logWeightCapture: async (req, res) => {
+        try {
+            const { weight } = req.body;
+            const w = Number(weight) || 0;
+            if (w <= 0) {
+                return res.status(200).json({ status: 200, message: 'zero weight, not logged' });
+            }
+            const log = await db.weightLog.create({
+                weight: w,
+                userId: req.user?.id || null,
+                userName: req.user?.name || req.user?.username || 'unknown'
+            });
+            return res.status(200).json({ status: 200, data: { id: log.id } });
+        } catch (error) {
+            return res.status(500).json({ status: 500, message: error.message });
+        }
+    },
+
     // Get weight logs with unmatched filter
     getWeightLogs: async (req, res) => {
         try {
