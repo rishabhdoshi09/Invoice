@@ -255,11 +255,245 @@ async function sendDailySummary() {
     }
 }
 
-// ─── Manual trigger: send summary for any date range ─────────────
-async function sendSummaryForRange(startDate, endDate) {
-    // Reuse daily summary logic with custom range
-    // For now, just trigger the daily one
-    return await sendDailySummary();
+// ─── Full Audit Report (mirrors /bill-audit page) ────────────────
+
+/**
+ * Send complete bill audit report to Telegram.
+ * Mirrors the /bill-audit UI — both "Item Deletions" and "Weight Fetches" tabs.
+ * Splits into multiple messages if needed (Telegram 4096 char limit).
+ * 
+ * @param {Object} options - { startDate, endDate } (defaults to today)
+ */
+async function sendFullAuditReport(options = {}) {
+    try {
+        const { Op } = require('sequelize');
+        const startDate = options.startDate ? new Date(options.startDate) : new Date(new Date().setHours(0, 0, 0, 0));
+        const endDate = options.endDate ? new Date(new Date(options.endDate).setHours(23, 59, 59, 999)) : new Date(new Date().setHours(23, 59, 59, 999));
+        const dateRange = { [Op.gte]: startDate, [Op.lte]: endDate };
+        const dateLabel = startDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+
+        const messages = [];
+
+        // ═══════════════════════════════════════════════
+        // PART 1: ITEM DELETIONS TAB
+        // ═══════════════════════════════════════════════
+        let auditLogs = [];
+        try {
+            auditLogs = await db.billAuditLog.findAll({
+                where: { createdAt: dateRange },
+                order: [['createdAt', 'DESC']]
+            });
+        } catch (e) { /* table may not exist */ }
+
+        const itemRemovals = auditLogs.filter(l => l.eventType === 'ITEM_REMOVED');
+        const billClears = auditLogs.filter(l => l.eventType === 'BILL_CLEARED');
+        const billDeletes = auditLogs.filter(l => l.eventType === 'BILL_DELETED');
+        const totalDeletedValue = auditLogs.reduce((s, l) => s + (Number(l.totalPrice) || 0), 0);
+
+        const fmt = (v) => `₹${(Number(v) || 0).toLocaleString('en-IN')}`;
+        const timeStr = (d) => new Date(d).toLocaleString('en-IN', { 
+            hour: '2-digit', minute: '2-digit', second: '2-digit', 
+            hour12: true, timeZone: 'Asia/Kolkata' 
+        });
+
+        // Header message
+        let header = [
+            `📊 *COMPLETE BILL AUDIT REPORT*`,
+            `📅 ${dateLabel}`,
+            ``,
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+            `📋 *TAB 1: ITEM DELETIONS*`,
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+            ``,
+            `*Summary:*`,
+            `• Item Removals: *${itemRemovals.length}*`,
+            `• Bill Clears: *${billClears.length}*`,
+            `• Bill Deletes: *${billDeletes.length}*`,
+            `• Total Deleted Value: *${fmt(totalDeletedValue)}*`,
+        ];
+
+        if (itemRemovals.length === 0 && billClears.length === 0 && billDeletes.length === 0) {
+            header.push('', '_No deletion events recorded._');
+        }
+
+        messages.push(header.join('\n'));
+
+        // Item removal details (batched to fit Telegram limit)
+        if (itemRemovals.length > 0) {
+            let batch = [``, `*🚨 Item Removals (${itemRemovals.length}):*`, ``];
+
+            for (let i = 0; i < itemRemovals.length; i++) {
+                const log = itemRemovals[i];
+                const isScale = log.deviceInfo?.includes('WEIGHTED');
+                const entry = [
+                    `*${i + 1}.* ${log.productName}`,
+                    `   Qty: ${log.quantity || '-'} | Price: ${fmt(log.price)} | Value: *${fmt(log.totalPrice)}*`,
+                    `   Type: ${isScale ? '⚖️ Scale' : '✏️ Manual'} | By: ${log.userName || '?'}`,
+                    `   Time: ${timeStr(log.createdAt)}`,
+                    log.invoiceContext ? `   Invoice: \`${log.invoiceContext}\`` : '',
+                    log.customerName ? `   Customer: ${log.customerName}` : '',
+                    ``
+                ].filter(Boolean).join('\n');
+
+                // Check if adding this entry would exceed limit
+                if ((batch.join('\n') + entry).length > 3800) {
+                    messages.push(batch.join('\n'));
+                    batch = [`*...continued:*`, ``];
+                }
+                batch.push(entry);
+            }
+            if (batch.length > 2) messages.push(batch.join('\n'));
+        }
+
+        // Bill clears
+        if (billClears.length > 0) {
+            let batch = [`*🧹 Bill Clears (${billClears.length}):*`, ``];
+            for (const log of billClears) {
+                batch.push(`• ${log.productName} — ${fmt(log.totalPrice)} | By: ${log.userName} | ${timeStr(log.createdAt)}`);
+            }
+            messages.push(batch.join('\n'));
+        }
+
+        // Bill deletes
+        if (billDeletes.length > 0) {
+            let batch = [`*🗑️ Bill Deletes (${billDeletes.length}):*`, ``];
+            for (const log of billDeletes) {
+                batch.push([
+                    `• ${log.productName || 'Bill'} — *${fmt(log.totalPrice)}*`,
+                    `  By: ${log.userName} | ${timeStr(log.createdAt)}`,
+                    log.invoiceContext ? `  Invoice: \`${log.invoiceContext}\`` : '',
+                    ``
+                ].filter(Boolean).join('\n'));
+            }
+            messages.push(batch.join('\n'));
+        }
+
+        // ═══════════════════════════════════════════════
+        // PART 2: WEIGHT FETCHES TAB
+        // ═══════════════════════════════════════════════
+        let weightLogs = [];
+        try {
+            weightLogs = await db.weightLog.findAll({
+                where: { createdAt: dateRange },
+                order: [['createdAt', 'DESC']]
+            });
+        } catch (e) { /* table may not exist */ }
+
+        const consumedWeights = weightLogs.filter(w => w.consumed);
+        const unmatchedWeights = weightLogs.filter(w => !w.consumed);
+        const totalUnmatchedKg = unmatchedWeights.reduce((s, w) => s + (Number(w.weight) || 0), 0);
+
+        let weightMsg = [
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+            `⚖️ *TAB 2: WEIGHT FETCHES*`,
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+            ``,
+            `*Summary:*`,
+            `• Total Fetches: *${weightLogs.length}*`,
+            `• Added to Bill: *${consumedWeights.length}*`,
+            `• NOT Added to Bill: *${unmatchedWeights.length}*${unmatchedWeights.length > 0 ? ' ⚠️' : ''}`,
+            `• Unmatched Weight: *${totalUnmatchedKg.toFixed(2)} kg*`,
+        ];
+
+        if (weightLogs.length === 0) {
+            weightMsg.push('', '_No weight readings recorded._');
+        }
+
+        // Unmatched weights detail (RED FLAGS)
+        if (unmatchedWeights.length > 0) {
+            weightMsg.push('', `*⚠️ Unmatched Weights (${unmatchedWeights.length}):*`, ``);
+            for (const w of unmatchedWeights.slice(0, 20)) {
+                weightMsg.push(`• *${Number(w.weight).toFixed(3)} kg* — ${timeStr(w.createdAt)} — By: ${w.userName || '?'}`);
+            }
+            if (unmatchedWeights.length > 20) {
+                weightMsg.push(`_...and ${unmatchedWeights.length - 20} more_`);
+            }
+        }
+
+        // Consumed weights (brief)
+        if (consumedWeights.length > 0) {
+            weightMsg.push('', `*✅ Added to Bill (${consumedWeights.length}):*`, ``);
+            for (const w of consumedWeights.slice(0, 15)) {
+                weightMsg.push(`• ${Number(w.weight).toFixed(3)} kg → ${w.orderNumber || '?'} | ${timeStr(w.createdAt)}`);
+            }
+            if (consumedWeights.length > 15) {
+                weightMsg.push(`_...and ${consumedWeights.length - 15} more_`);
+            }
+        }
+
+        messages.push(weightMsg.join('\n'));
+
+        // ═══════════════════════════════════════════════
+        // PART 3: PAYMENT TOGGLES
+        // ═══════════════════════════════════════════════
+        let toggleCount = 0;
+        try {
+            toggleCount = await db.journalBatch.count({
+                where: { referenceType: 'PAYMENT_TOGGLE', createdAt: dateRange }
+            });
+        } catch (e) { /* ok */ }
+
+        if (toggleCount > 0) {
+            let toggleMsg = [
+                ``,
+                `━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+                `💱 *PAYMENT TOGGLES: ${toggleCount}*`,
+                `━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+            ];
+
+            try {
+                const toggleBatches = await db.journalBatch.findAll({
+                    where: { referenceType: 'PAYMENT_TOGGLE', createdAt: dateRange },
+                    order: [['createdAt', 'DESC']],
+                    limit: 20
+                });
+                for (const b of toggleBatches) {
+                    toggleMsg.push(`• ${b.description?.substring(0, 80) || 'Toggle'} — ₹${b.totalDebit}`);
+                }
+            } catch (e) { /* ok */ }
+
+            messages.push(toggleMsg.join('\n'));
+        }
+
+        // ═══════════════════════════════════════════════
+        // FOOTER
+        // ═══════════════════════════════════════════════
+        const redFlags = [];
+        if (itemRemovals.length > 3) redFlags.push(`${itemRemovals.length} items deleted`);
+        if (billDeletes.length > 0) redFlags.push(`${billDeletes.length} bills deleted`);
+        if (unmatchedWeights.length > 2) redFlags.push(`${unmatchedWeights.length} unused weights`);
+        if (toggleCount > 4) redFlags.push(`${toggleCount} payment toggles`);
+
+        const alertLevel = redFlags.length >= 3 ? '🔴 HIGH RISK' :
+                          redFlags.length >= 1 ? '🟡 NEEDS ATTENTION' : '🟢 ALL CLEAR';
+
+        let footer = [
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+            `*Overall: ${alertLevel}*`,
+        ];
+        if (redFlags.length > 0) {
+            footer.push('Red flags: ' + redFlags.join(', '));
+        }
+        footer.push(`_Report generated at ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}_`);
+
+        messages.push(footer.join('\n'));
+
+        // Send all messages sequentially
+        for (const msg of messages) {
+            if (msg.trim()) {
+                await sendTelegram(msg);
+                // Small delay between messages to avoid rate limiting
+                await new Promise(r => setTimeout(r, 300));
+            }
+        }
+
+        console.log(`[TELEGRAM] Full audit report sent (${messages.length} messages)`);
+        return { sent: true, messageCount: messages.length, alertLevel };
+
+    } catch (error) {
+        console.error('[TELEGRAM] Failed to send full audit report:', error.message);
+        throw error;
+    }
 }
 
 module.exports = {
@@ -269,5 +503,6 @@ module.exports = {
     alertPaymentToggle,
     alertUnusedWeight,
     sendDailySummary,
-    sendSummaryForRange
+    sendSummaryForRange,
+    sendFullAuditReport
 };
