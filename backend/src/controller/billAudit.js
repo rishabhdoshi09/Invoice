@@ -1,5 +1,6 @@
 const db = require('../models');
 const Services = require('../services');
+const telegram = require('../services/telegramAlert');
 
 module.exports = {
     // Log item removal from bill (called by frontend silently)
