@@ -412,5 +412,27 @@ module.exports = {
             console.error('Error clearing migration:', error);
             return res.status(500).json({ status: 500, message: error.message });
         }
+    },
+
+    /**
+     * Backfill missing cash receipt entries for historical paid orders.
+     * Query param: ?dryRun=false to actually execute (default is dry run)
+     */
+    backfillCashReceipts: async (req, res) => {
+        try {
+            const dryRun = req.query.dryRun !== 'false';
+            console.log(`[BACKFILL] Starting cash receipt backfill (dryRun=${dryRun})...`);
+            const result = await migrationService.backfillMissingCashReceipts({ dryRun });
+            return res.json({
+                status: 200,
+                message: dryRun
+                    ? `Dry run complete: ${result.fixed} orders would be fixed`
+                    : `Backfill complete: ${result.fixed} cash receipts posted`,
+                data: result
+            });
+        } catch (error) {
+            console.error('Error in cash receipt backfill:', error);
+            return res.status(500).json({ status: 500, message: error.message });
+        }
     }
 };
