@@ -47,6 +47,18 @@ function init(db) {
     });
 
     console.log('[SCHEDULER] Daily drift check registered — runs at 02:00 server time');
+
+    // ── Daily Fraud Summary — every day at 21:00 IST (15:30 UTC) ──
+    cron.schedule('30 15 * * *', async () => {
+        try {
+            console.log('[SCHEDULER] Running daily fraud summary...');
+            await telegram.sendDailySummary();
+        } catch (err) {
+            console.error(`[SCHEDULER] Daily fraud summary failed: ${err.message}`);
+        }
+    });
+
+    console.log('[SCHEDULER] Daily fraud summary registered — runs at 9:00 PM IST');
 }
 
 module.exports = { init };
