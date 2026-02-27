@@ -59,20 +59,17 @@ frontend/src/
 - [x] Migration service
 - [x] Fraud Detection & Audit Trail (bill_audit_logs, weight_logs)
 - [x] Admin-only Bill Audit Trail page (`/bill-audit`)
-- [x] **Tally-style Supplier Ledger** — Redesigned supplier detail dialog with:
-  - Date-sorted entries (oldest first, Tally convention)
-  - Running balance with Dr/Cr notation
-  - Opening Balance → Purchases (Debit) → Payments (Credit) → Closing Balance
-  - Credit entries for purchases paid at creation time
-  - Expandable purchase items view
-  - Delete functionality preserved for purchases and payments
-  - Professional monospace number formatting
-- [x] **Smart Quick Entry Bar** — Streamlined entry for:
-  - Add Supplier (keyboard-driven, Enter to submit)
-  - Quick Payment (auto-fills due amount, shows balance chip)
-  - Quick Purchase (inline item editing, auto-total, paid/credit toggle)
-  - Auto-focus on critical fields
-  - Duplicate supplier detection
+- [x] **Tally-style Supplier Ledger** — Redesigned supplier detail dialog
+- [x] **Smart Quick Entry Bar** — Streamlined entry for suppliers, payments, purchases
+- [x] **Payment Status Toggle ↔ Ledger Integration** — When toggling orders between paid/unpaid:
+  - `paid → unpaid`: Posts PAYMENT_TOGGLE reversal (DR Customer Receivable, CR Cash)
+  - `unpaid → paid`: Posts PAYMENT_TOGGLE receipt (DR Cash, CR Customer Receivable)
+  - All toggles create permanent, balanced journal batches with full audit trail
+- [x] **Invoice Cash Receipt Posting** — When orders are created as "paid", now correctly posts both:
+  - INVOICE batch: DR Customer Receivable, CR Sales Revenue (the sale)
+  - INVOICE_CASH batch: DR Cash, CR Customer Receivable (the cash receipt)
+  - This fixes the root cause of drift between old system and ledger for paid orders
+- [x] **Customer Linking Fix** — Orders now link to customer records regardless of paid/unpaid status (previously only credit sales linked customers)
 
 ## Prioritized Backlog
 
