@@ -1,175 +1,274 @@
-# COMPREHENSIVE APPLICATION AUDIT REPORT
-Generated: $(date)
-
-## SYSTEM ARCHITECTURE
-- **Backend**: Node.js + Express on port 8001
-- **Frontend**: React on port 3000
-- **Database**: PostgreSQL 15
-- **Routing**: Backend uses `/api` prefix, Frontend uses React Router
+# Comprehensive Code Audit Report
+**Application**: Double-Entry Accounting Ledger & Invoicing System  
+**Date**: 27 Feb 2026  
+**Scope**: Full-stack (React + Express + PostgreSQL)
 
 ---
 
-## BACKEND API AUDIT RESULTS
+## EXECUTIVE SUMMARY
 
-### ✅ WORKING ENDPOINTS (17/18 tested)
+| Area | Score | Risk Level |
+|------|-------|------------|
+| **Core Accounting Logic** | 9/10 | LOW |
+| **Fraud Detection** | 8/10 | LOW |
+| **Data Integrity** | 6/10 | MEDIUM |
+| **Security** | 4/10 | HIGH |
+| **Code Quality** | 5/10 | MEDIUM |
+| **DevOps & Deployment** | 3/10 | HIGH |
 
-#### 1. Products Module ✓
-- GET /api/products - List all products
-- GET /api/products?limit=10&offset=0 - Pagination working
-- POST /api/products - Create product
-- PUT /api/products/:id - Update product
-- DELETE /api/products/:id - Delete product
-
-#### 2. Orders Module ✓
-- GET /api/orders - List all orders
-- GET /api/orders?limit=10&offset=0 - Pagination working
-- POST /api/orders - Create order
-- GET /api/orders/:id - Get specific order
-- PUT /api/orders/:id - Update order
-- DELETE /api/orders/:id - Delete order
-
-#### 3. Suppliers Module ✓
-- GET /api/suppliers - List all suppliers
-- GET /api/suppliers?q=ABC - Search working
-- POST /api/suppliers - Create supplier
-- GET /api/suppliers/:id - Get specific supplier
-- PUT /api/suppliers/:id - Update supplier
-- DELETE /api/suppliers/:id - Delete supplier (with FK constraint handling)
-
-#### 4. Customers Module ✓
-- GET /api/customers - List all customers
-- GET /api/customers?limit=10&offset=0 - Pagination working
-- POST /api/customers - Create customer
-- GET /api/customers/:id - Get specific customer
-- PUT /api/customers/:id - Update customer
-- DELETE /api/customers/:id - Delete customer (with FK constraint handling)
-
-#### 5. Purchases Module ✓
-- GET /api/purchases - List all purchase bills
-- GET /api/purchases?limit=10&offset=0 - Pagination working
-- POST /api/purchases - Create purchase bill
-- GET /api/purchases/:id - Get specific purchase
-- PUT /api/purchases/:id - Update purchase
-- DELETE /api/purchases/:id - Delete purchase
-
-#### 6. Payments Module ✓
-- GET /api/payments - List all payments
-- GET /api/payments?limit=10 - Pagination working
-- POST /api/payments - Create payment
-- GET /api/payments/:id - Get specific payment
-
-#### 7. Reports Module ✓
-- GET /api/reports/outstanding-receivables - Outstanding from customers
-- GET /api/reports/outstanding-payables - Outstanding to suppliers
-- GET /api/reports/party-statement/:partyType/:partyId - Party statement
-
-#### 8. Tally Export Module ✓
-- GET /api/export/tally/sales - Export all sales (CSV)
-- GET /api/export/tally/purchases - Export all purchases (CSV)
-- GET /api/export/tally/payments - Export payments (CSV)
-- GET /api/export/tally/outstanding - Export outstanding (CSV)
-- POST /api/export/tally/sales - Export selected sales (NEW)
-- POST /api/export/tally/purchases - Export selected purchases (NEW)
+**Overall**: The accounting logic is solid and production-worthy. The fraud detection system is well-designed. However, there are **critical security gaps** and **data integrity risks** that should be addressed before considering this production-ready for sensitive financial data.
 
 ---
 
-## FRONTEND ROUTING AUDIT RESULTS
+## 1. STRENGTHS (What's Working Well)
 
-### ✅ ALL ROUTES WORKING (9/9)
+### 1.1 Double-Entry Ledger Design
+- Clean separation between old system and new ledger (additive, reversible)
+- Every transaction creates balanced journal batches (debit = credit)
+- Health check endpoint validates system-wide balance
+- Drift detection runs daily to catch mismatches early
 
-1. ✓ / → Redirects to /products
-2. ✓ /products → Products list page
-3. ✓ /orders → Orders list page
-4. ✓ /orders/create → Create order page
-5. ✓ /suppliers → Suppliers list page
-6. ✓ /customers → Customers list page
-7. ✓ /purchases → Purchases list page
-8. ✓ /payments → Payments list page
-9. ✓ /reports → Outstanding reports page
-10. ✓ /tally-export → Tally export page (with tabs)
+### 1.2 Fraud Detection
+- Silent audit trail logs are excellent — billers can't detect they're being monitored
+- Weight scale tracking with "used/unused" status is a smart anti-fraud measure
+- Item deletion logging captures product details, value, time, and context
 
----
+### 1.3 Migration Strategy
+- Historical data migration is repeatable and idempotent
+- Safe reconciliation mode does read-only comparison
+- Backfill endpoint handles cash receipt gaps
 
-## KEY FEATURES VERIFIED
-
-### ✅ Suppliers Management
-- Create/Read/Update/Delete operations working
-- Opening balance correctly sets currentBalance
-- Foreign key constraint prevents deletion when purchase bills exist
-- User-friendly error messages
-
-### ✅ Customers Management
-- Complete CRUD operations
-- Opening balance feature working
-- Integrated with orders
-
-### ✅ Purchase Bills
-- Creation with items working
-- Supplier association working
-- Tax calculations included
-
-### ✅ Tally Export (Enhanced)
-- Checkbox selection for individual bills ✓
-- Select All functionality ✓
-- Date range filtering ✓
-- Three tabs: Sales, Purchases, Payments & Outstanding ✓
-- CSV download working ✓
+### 1.4 Business Logic
+- Payment toggle with ledger integration is correctly implemented
+- Customer/supplier balance calculations properly account for soft-deletes
+- Opening balance handling works for both customers and suppliers
 
 ---
 
-## INFRASTRUCTURE STATUS
+## 2. CRITICAL SECURITY VULNERABILITIES
 
-### Services Running
-- ✓ Backend (PID: running on 8001)
-- ✓ Frontend (PID: running on 3000)
-- ✓ PostgreSQL (PID: running on 5432)
+### 2.1 No Rate Limiting (CRITICAL)
+**Risk**: Brute-force attacks on login, API abuse  
+**Current**: Zero rate limiting on any endpoint  
+**Fix**: Add `express-rate-limit` middleware
+```
+Priority: P0 — Takes 30 minutes to implement
+```
 
-### Database Schema
-- ✓ All tables created and synced
-- ✓ Foreign key relationships established
-- ✓ Opening balance fields configured correctly
+### 2.2 CORS Wide Open (HIGH)
+**Risk**: Any website can make API calls to your backend  
+**Current**: `app.use(cors())` — allows ALL origins  
+**Fix**: Whitelist only your frontend domains
+```javascript
+app.use(cors({ origin: ['https://your-domain.com'] }))
+```
+```
+Priority: P0 — Takes 5 minutes
+```
+
+### 2.3 JWT Secret Hardcoded Risk (HIGH)
+**Risk**: If JWT secret is weak or leaked, anyone can forge admin tokens  
+**Verify**: Ensure `JWT_SECRET` in .env is a strong random string (32+ chars)  
+```
+Priority: P0 — Verify immediately
+```
+
+### 2.4 No Input Sanitization on Raw Queries (MEDIUM)
+**Risk**: 28 raw SQL queries found — potential SQL injection  
+**Current**: Most use Sequelize replacements (parameterized), which is good  
+**Audit**: Verify ALL raw queries use `replacements:` not string interpolation  
+```
+Priority: P1 — Audit takes 1 hour
+```
+
+### 2.5 Setup Endpoint Always Available (MEDIUM)
+**Risk**: `/api/auth/setup` and `/api/auth/setup-check` have no authentication  
+**Current**: Anyone can check if setup is complete. If the setup logic doesn't properly prevent re-setup after initial admin creation, this is exploitable.  
+**Fix**: Disable setup endpoint after first admin is created  
+```
+Priority: P1
+```
 
 ---
 
-## KNOWN ISSUES
+## 3. DATA INTEGRITY RISKS
 
-### Non-Critical
-1. React Router Future Flag Warnings (cosmetic, won't affect functionality)
-2. Some API request aborts in console (normal behavior during navigation)
+### 3.1 Race Conditions (HIGH)
+**Risk**: Concurrent requests can cause incorrect balances  
+**Current**: 19 `findOne`/`findByPk` calls WITHOUT transaction; only 1 WITH transaction  
+**Example**: Two billers toggling the same order's payment status simultaneously could create double ledger entries  
+**Fix**: Add `FOR UPDATE` row locks in critical paths:
+- `togglePaymentStatus` 
+- `createOrder` (customer balance update)
+- `deleteOrder` (ledger reversal)
+- `createPayment` (party balance update)
+```
+Priority: P0 — Most critical data integrity fix
+```
 
-### Fixed During Audit
-1. ✓ PostgreSQL was missing (now installed and configured)
-2. ✓ Frontend proxy missing (now added to package.json)
-3. ✓ Customer management backend missing (now created)
-4. ✓ Purchase service missing in frontend (now created)
-5. ✓ Delete operations improved with better error handling
+### 3.2 No Unique Constraint on Customer Name + Mobile (MEDIUM)
+**Risk**: Duplicate customer records with slightly different names ("Sharma" vs "SHARMA")  
+**Current**: Customer lookup is case-sensitive  
+**Fix**: Add case-insensitive unique index or normalize names on insert  
+```
+Priority: P1
+```
+
+### 3.3 Decimal Precision (LOW)
+**Current**: `DECIMAL(15,2)` is correct for financial data  
+**Note**: Ensure all JavaScript calculations use `Number()` consistently — avoid floating-point arithmetic bugs  
+```
+Status: OK — properly handled
+```
 
 ---
 
-## RECOMMENDATIONS
+## 4. CODE QUALITY ISSUES
 
-### Immediate (Optional)
-- Add Product Edit page (/products/edit/:id)
-- Add Customer Edit modal or page
-- Add validation feedback on forms
+### 4.1 Large Files (Maintainability Risk)
+| File | Lines | Concern |
+|------|-------|---------|
+| `ledgerMigrationService.js` | 1031 | Should split into separate migration handlers |
+| `order.js` (controller) | 857 | Handles creation, editing, deletion, toggle, notes, audit |
+| `ledgerService.js` | 807 | Core service — acceptable but could use splitting |
+| `realTimeLedger.js` | 668 | Growing with each new feature |
+| `payment.js` (controller) | 639 | Complex payment logic |
 
-### Future Enhancements
-- Add pagination controls in UI
-- Add sorting options in tables
-- Add bulk delete operations
-- Add export to Excel (in addition to CSV)
-- Add dashboard with charts
+**Recommendation**: Extract order controller into smaller modules (orderCreate, orderUpdate, orderToggle, etc.)
+
+### 4.2 Inconsistent Error Handling
+**Current**: Mix of:
+- `throw new Error(...)` 
+- `return res.status(500).send({...})`
+- `console.error` + silent failure
+- Try/catch that swallows errors
+
+**Fix**: Create a centralized error handler middleware:
+```javascript
+app.use((err, req, res, next) => {
+    console.error(err);
+    res.status(err.status || 500).json({ 
+        status: err.status || 500, 
+        message: err.message 
+    });
+});
+```
+```
+Priority: P2
+```
+
+### 4.3 No Input Validation on 7 of 15 Controllers
+**Current**: Only 8 of 15 controllers have Joi validation  
+**Missing validation on**: dashboard, ledger, stock, audit, reports, supplier, dailyExpense  
+**Risk**: Invalid data can reach the database  
+```
+Priority: P1
+```
 
 ---
 
-## CONCLUSION
+## 5. FRAUD DETECTION GAPS
 
-**Application Health: EXCELLENT ✅**
+### 5.1 What the Audit Trail COVERS (Good)
+- Item deletion from bill before submission
+- Bill deletion after submission  
+- Weight scale usage and whether weight was added to a bill
+- Manual vs. scale item differentiation
+- Payment status toggles (now with ledger entries)
 
-- Backend API: 100% functional
-- Frontend Routing: 100% functional  
-- Database: Fully operational
-- Core Features: All working as expected
+### 5.2 What the Audit Trail MISSES (Gaps)
 
-The invoicing application with Tally-like features is production-ready with all major functionality tested and verified.
+| Gap | Risk | Recommendation |
+|-----|------|----------------|
+| **Price modifications** | Biller reduces item price before submitting | Log original price vs submitted price |
+| **Quantity modifications** | Biller reduces quantity (e.g., 5kg → 4kg) | Log weight from scale vs entered quantity |
+| **Discount abuse** | Biller applies unauthorized discounts | Require admin approval for discounts > X% |
+| **Order editing after submission** | Biller edits a submitted order | Log all field changes with before/after values |
+| **Customer swapping** | Biller changes customer on a credit sale | Log customer name changes on orders |
+| **Void patterns** | Biller creates and immediately deletes orders | Alert when delete rate > threshold |
+| **Cash handling** | Biller collects cash but marks as unpaid | Cross-reference payment toggles with cash drawer |
 
+### 5.3 Recommended Fraud Alerts
+```
+P0: Alert when same biller deletes > 3 items per day
+P0: Alert when order is created and deleted within 5 minutes
+P1: Alert when total weight from scale ≠ total weight in bill
+P1: Alert when price entered < minimum product price
+P2: Weekly summary of all modifications by each biller
+```
+
+---
+
+## 6. ARCHITECTURE & DEVOPS
+
+### 6.1 Database Migrations (FIXED in this session)
+**Before**: Manual ALTER TABLE commands shared via chat  
+**After**: `sequelize-cli` with consolidated migration file  
+**Command**: `npx sequelize-cli db:migrate`
+
+### 6.2 No Backup Strategy (CRITICAL)
+**Risk**: Database corruption or accidental deletion = total data loss  
+**Fix**: 
+```
+P0: Set up pg_dump cron job (daily automated backups)
+P0: Test restore procedure
+P1: Set up point-in-time recovery (WAL archiving)
+```
+
+### 6.3 No Logging Infrastructure
+**Current**: `console.log` everywhere  
+**Fix**: Use `winston` or `pino` with:
+- Log levels (error, warn, info, debug)
+- File rotation
+- Structured JSON format for analysis
+```
+Priority: P2
+```
+
+### 6.4 No Health Check Endpoint
+**Current**: No simple `/health` endpoint for monitoring  
+**Fix**: Add endpoint that checks DB connectivity + returns version  
+```
+Priority: P2
+```
+
+---
+
+## 7. RECOMMENDED ACTION PLAN
+
+### Phase 1: Critical Security (1-2 days)
+1. Add rate limiting (`express-rate-limit`) — all endpoints
+2. Restrict CORS to your domain
+3. Verify JWT secret strength
+4. Disable `/api/auth/setup` after first admin
+
+### Phase 2: Data Integrity (2-3 days)
+1. Add `FOR UPDATE` row locks in payment toggle, order create, payment create
+2. Add input validation to all controllers
+3. Set up database backup cron job
+
+### Phase 3: Fraud Detection Enhancement (1 week)
+1. Log price/quantity modifications
+2. Add suspicious activity alerts (threshold-based)
+3. Build weekly biller activity summary
+
+### Phase 4: Code Quality (Ongoing)
+1. Centralize error handling
+2. Split large controllers
+3. Add structured logging
+4. Write integration tests for critical flows
+
+---
+
+## 8. WHAT KEEPS YOUR DATA SAFE TODAY
+
+Despite the issues above, several things are working in your favor:
+1. **Double-entry accounting** — Every transaction is balanced. If something goes wrong, the health check will catch it.
+2. **Silent audit trail** — Your biller doesn't know they're being watched.
+3. **Ledger is additive** — Old system data is untouched. You can always fall back.
+4. **Soft deletes** — Nothing is truly deleted. Every deletion is recoverable.
+5. **Drift detection** — Daily automated check catches discrepancies.
+
+---
+
+*Report generated as part of the comprehensive code audit requested by the application owner.*
