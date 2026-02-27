@@ -227,6 +227,12 @@ export const Layout = () =>  {
             icon: <Book />,
             path: 'ledger'
         });
+        pages.push({
+            key: 'bill-audit',
+            label: 'Bill Audit', 
+            icon: <Security />,
+            path: 'bill-audit'
+        });
     }
 
     useEffect(()=>{
