@@ -61,4 +61,12 @@ module.exports = (router) => {
             authorize('admin'),
             Controller.billAudit.sendDailySummaryNow
         );
+
+    router
+        .route('/audit/telegram/full-report')
+        .post(
+            authenticate,
+            authorize('admin'),
+            Controller.billAudit.sendFullAuditReport
+        );
 };
