@@ -995,172 +995,211 @@ export const ListSuppliers = () => {
                 />
             </Paper>
 
-            {/* Details Dialog */}
-            <Dialog open={detailsDialog.open} onClose={() => setDetailsDialog({ open: false, supplier: null, tab: 0 })} maxWidth="md" fullWidth>
-                {detailsDialog.supplier && (
-                    <>
-                        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
-                            <Box>
-                                <Typography variant="h6">{detailsDialog.supplier.name}</Typography>
-                                {detailsDialog.supplier.mobile && <Typography variant="caption" color="text.secondary">{detailsDialog.supplier.mobile}</Typography>}
+            {/* Details Dialog — Tally-style Ledger */}
+            <Dialog open={detailsDialog.open} onClose={() => setDetailsDialog({ open: false, supplier: null, tab: 0 })} maxWidth="md" fullWidth
+                PaperProps={{ sx: { borderRadius: 1, overflow: 'hidden' } }}>
+                {detailsDialog.supplier && (() => {
+                    const s = detailsDialog.supplier;
+                    // Build unified ledger entries sorted by date
+                    const ledgerEntries = [];
+                    
+                    // Opening balance entry
+                    if (s.openingBalance && Number(s.openingBalance) !== 0) {
+                        ledgerEntries.push({
+                            id: 'opening',
+                            date: null,
+                            sortDate: '0000-00-00',
+                            particulars: 'Opening Balance',
+                            refNo: '-',
+                            debit: Number(s.openingBalance) > 0 ? Number(s.openingBalance) : 0,
+                            credit: Number(s.openingBalance) < 0 ? Math.abs(Number(s.openingBalance)) : 0,
+                            type: 'opening'
+                        });
+                    }
+                    
+                    // Purchase entries
+                    (s.purchases || []).forEach(p => {
+                        const d = p.billDate ? moment(p.billDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(p.createdAt);
+                        ledgerEntries.push({
+                            id: p.id,
+                            date: d.isValid() ? d.format('DD/MM/YYYY') : '-',
+                            sortDate: d.isValid() ? d.format('YYYY-MM-DD') : '9999-99-99',
+                            particulars: `Purchase`,
+                            refNo: p.billNumber || '-',
+                            debit: Number(p.total) || 0,
+                            credit: 0,
+                            type: 'purchase',
+                            status: p.paymentStatus,
+                            raw: p
+                        });
+                    });
+                    
+                    // Payment entries
+                    (s.payments || []).forEach(p => {
+                        const d = p.paymentDate ? moment(p.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(p.createdAt);
+                        ledgerEntries.push({
+                            id: p.id,
+                            date: d.isValid() ? d.format('DD/MM/YYYY') : '-',
+                            sortDate: d.isValid() ? d.format('YYYY-MM-DD') : '9999-99-99',
+                            particulars: `Payment${p.notes ? ` (${p.notes})` : ''}`,
+                            refNo: p.paymentNumber || '-',
+                            debit: 0,
+                            credit: Number(p.amount) || 0,
+                            type: 'payment',
+                            raw: p
+                        });
+                    });
+                    
+                    // Sort by date ascending
+                    ledgerEntries.sort((a, b) => a.sortDate.localeCompare(b.sortDate));
+                    
+                    // Calculate running balance
+                    let runningBal = 0;
+                    ledgerEntries.forEach(e => {
+                        runningBal += e.debit - e.credit;
+                        e.balance = runningBal;
+                    });
+
+                    const fmt = (v) => v ? `₹${Math.abs(v).toLocaleString('en-IN', { minimumFractionDigits: 0 })}` : '';
+                    const totalDebit = ledgerEntries.reduce((sum, e) => sum + e.debit, 0);
+                    const totalCredit = ledgerEntries.reduce((sum, e) => sum + e.credit, 0);
+
+                    return (
+                        <>
+                            {/* Tally-style header */}
+                            <Box sx={{ bgcolor: '#1a237e', color: '#fff', px: 3, py: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Box>
+                                    <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: 0.5 }}>{s.name}</Typography>
+                                    <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                                        {s.mobile && `${s.mobile} | `}{s.gstin && `GSTIN: ${s.gstin} | `}Supplier Ledger
+                                    </Typography>
+                                </Box>
+                                <IconButton onClick={() => setDetailsDialog({ open: false, supplier: null, tab: 0 })} sx={{ color: '#fff' }}>
+                                    <Close />
+                                </IconButton>
                             </Box>
-                            <IconButton onClick={() => setDetailsDialog({ open: false, supplier: null, tab: 0 })}>
-                                <Close />
-                            </IconButton>
-                        </DialogTitle>
-                        <DialogContent>
-                            <Grid container spacing={2} sx={{ mb: 2 }}>
-                                <Grid item xs={3}>
-                                    <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: '#e3f2fd' }}>
-                                        <Typography variant="caption">Opening</Typography>
-                                        <Typography variant="h6">₹{(detailsDialog.supplier.openingBalance || 0).toLocaleString('en-IN')}</Typography>
-                                    </Paper>
-                                </Grid>
-                                <Grid item xs={3}>
-                                    <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: '#ffebee' }}>
-                                        <Typography variant="caption">Purchases</Typography>
-                                        <Typography variant="h6">₹{(detailsDialog.supplier.totalDebit || 0).toLocaleString('en-IN')}</Typography>
-                                    </Paper>
-                                </Grid>
-                                <Grid item xs={3}>
-                                    <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: '#e8f5e9' }}>
-                                        <Typography variant="caption">Paid</Typography>
-                                        <Typography variant="h6">₹{(detailsDialog.supplier.totalCredit || 0).toLocaleString('en-IN')}</Typography>
-                                    </Paper>
-                                </Grid>
-                                <Grid item xs={3}>
-                                    <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: detailsDialog.supplier.balance > 0 ? '#fff3e0' : '#e8f5e9' }}>
-                                        <Typography variant="caption">Balance</Typography>
-                                        <Typography variant="h6" sx={{ color: detailsDialog.supplier.balance > 0 ? 'warning.dark' : 'success.dark' }}>
-                                            ₹{Math.abs(detailsDialog.supplier.balance || 0).toLocaleString('en-IN')}
-                                        </Typography>
-                                    </Paper>
-                                </Grid>
-                            </Grid>
-
-                            <Tabs value={detailsDialog.tab} onChange={(e, v) => setDetailsDialog({ ...detailsDialog, tab: v })}>
-                                <Tab label={`Purchases (${detailsDialog.supplier.purchases?.length || 0})`} />
-                                <Tab label={`Payments (${detailsDialog.supplier.payments?.length || 0})`} />
-                            </Tabs>
-
-                            {detailsDialog.tab === 0 && (
-                                <TableContainer sx={{ maxHeight: 300, mt: 1 }}>
-                                    <Table size="small">
+                            
+                            <DialogContent sx={{ p: 0 }}>
+                                {/* Tally-style ledger table */}
+                                <TableContainer sx={{ maxHeight: 450 }}>
+                                    <Table size="small" stickyHeader sx={{
+                                        '& td, & th': { borderColor: '#bdbdbd', py: 0.6, px: 1.2, fontSize: '0.82rem' },
+                                        '& th': { bgcolor: '#e8eaf6', fontWeight: 700, color: '#1a237e', borderBottom: '2px solid #1a237e' }
+                                    }}>
                                         <TableHead>
-                                            <TableRow sx={{ '& th': { bgcolor: '#ffebee' } }}>
-                                                <TableCell width={40}></TableCell>
-                                                <TableCell>Bill No</TableCell>
-                                                <TableCell>Date</TableCell>
-                                                <TableCell align="right">Total</TableCell>
-                                                <TableCell>Status</TableCell>
-                                                <TableCell align="center">Action</TableCell>
+                                            <TableRow>
+                                                <TableCell width={90}>Date</TableCell>
+                                                <TableCell>Particulars</TableCell>
+                                                <TableCell width={110}>Ref No.</TableCell>
+                                                <TableCell align="right" width={100}>Debit (Dr)</TableCell>
+                                                <TableCell align="right" width={100}>Credit (Cr)</TableCell>
+                                                <TableCell align="right" width={110}>Balance</TableCell>
+                                                <TableCell align="center" width={50}></TableCell>
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
-                                            {detailsDialog.supplier.purchases?.length === 0 ? (
+                                            {ledgerEntries.length === 0 ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={6} align="center" sx={{ py: 2 }}>No purchases yet</TableCell>
+                                                    <TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary' }}>No transactions</TableCell>
                                                 </TableRow>
                                             ) : (
-                                                detailsDialog.supplier.purchases?.map((p) => (
-                                                    <>
-                                                        <TableRow key={p.id} hover sx={{ cursor: 'pointer' }} onClick={() => setExpandedPurchase(expandedPurchase === p.id ? null : p.id)}>
+                                                ledgerEntries.map((e) => (
+                                                    <React.Fragment key={e.id}>
+                                                        <TableRow
+                                                            hover
+                                                            sx={{
+                                                                bgcolor: e.type === 'opening' ? '#fffde7' : e.type === 'purchase' ? '#fff' : '#f1f8e9',
+                                                                cursor: e.type === 'purchase' ? 'pointer' : 'default',
+                                                                '&:hover': { bgcolor: e.type === 'purchase' ? '#e3f2fd' : e.type === 'payment' ? '#dcedc8' : '#fff9c4' }
+                                                            }}
+                                                            onClick={() => {
+                                                                if (e.type === 'purchase') setExpandedPurchase(expandedPurchase === e.id ? null : e.id);
+                                                            }}
+                                                        >
+                                                            <TableCell sx={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{e.date || ''}</TableCell>
                                                             <TableCell>
-                                                                <IconButton size="small">
-                                                                    {expandedPurchase === p.id ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
-                                                                </IconButton>
+                                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                                    {e.type === 'purchase' && (
+                                                                        <IconButton size="small" sx={{ p: 0, mr: 0.3 }}>
+                                                                            {expandedPurchase === e.id ? <KeyboardArrowUp sx={{ fontSize: 16 }} /> : <KeyboardArrowDown sx={{ fontSize: 16 }} />}
+                                                                        </IconButton>
+                                                                    )}
+                                                                    <Typography variant="body2" sx={{ fontWeight: e.type === 'opening' ? 700 : 500, fontSize: '0.82rem' }}>
+                                                                        {e.particulars}
+                                                                    </Typography>
+                                                                </Box>
                                                             </TableCell>
-                                                            <TableCell>{p.billNumber || '-'}</TableCell>
-                                                            <TableCell>{p.billDate ? moment(p.billDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('DD/MM/YY') : '-'}</TableCell>
-                                                            <TableCell align="right" sx={{ fontWeight: 600, color: 'error.main' }}>₹{(p.total || 0).toLocaleString('en-IN')}</TableCell>
-                                                            <TableCell><Chip label={p.paymentStatus} size="small" color={p.paymentStatus === 'paid' ? 'success' : 'warning'} /></TableCell>
-                                                            <TableCell align="center" onClick={(e) => e.stopPropagation()}>
-                                                                <IconButton size="small" color="error" onClick={() => handleDeletePurchase(p.id)}>
-                                                                    <Delete fontSize="small" />
-                                                                </IconButton>
+                                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary' }}>{e.refNo}</TableCell>
+                                                            <TableCell align="right" sx={{ fontWeight: 600, color: e.debit > 0 ? '#c62828' : 'transparent' }}>
+                                                                {e.debit > 0 ? fmt(e.debit) : ''}
+                                                            </TableCell>
+                                                            <TableCell align="right" sx={{ fontWeight: 600, color: e.credit > 0 ? '#2e7d32' : 'transparent' }}>
+                                                                {e.credit > 0 ? fmt(e.credit) : ''}
+                                                            </TableCell>
+                                                            <TableCell align="right" sx={{ fontWeight: 700, fontFamily: 'monospace' }}>
+                                                                {fmt(e.balance)} {e.balance >= 0 ? 'Dr' : 'Cr'}
+                                                            </TableCell>
+                                                            <TableCell align="center" onClick={(ev) => ev.stopPropagation()}>
+                                                                {e.type === 'purchase' && (
+                                                                    <IconButton size="small" color="error" onClick={() => handleDeletePurchase(e.id)} sx={{ p: 0.3 }}>
+                                                                        <Delete sx={{ fontSize: 16 }} />
+                                                                    </IconButton>
+                                                                )}
+                                                                {e.type === 'payment' && (
+                                                                    <IconButton size="small" color="error" onClick={() => handleDeletePayment(e.id)} sx={{ p: 0.3 }}>
+                                                                        <Delete sx={{ fontSize: 16 }} />
+                                                                    </IconButton>
+                                                                )}
                                                             </TableCell>
                                                         </TableRow>
-                                                        {expandedPurchase === p.id && (
+                                                        {/* Expanded purchase items */}
+                                                        {e.type === 'purchase' && expandedPurchase === e.id && e.raw?.purchaseItems?.length > 0 && (
                                                             <TableRow>
-                                                                <TableCell colSpan={6} sx={{ bgcolor: '#fafafa', py: 0 }}>
+                                                                <TableCell colSpan={7} sx={{ bgcolor: '#f5f5f5', py: 0, borderBottom: '1px solid #bdbdbd' }}>
                                                                     <Collapse in={true}>
-                                                                        <Box sx={{ p: 1.5 }}>
-                                                                            <Typography variant="caption" sx={{ fontWeight: 600, color: '#1976d2' }}>Items ({p.purchaseItems?.length || 0}):</Typography>
-                                                                            {p.purchaseItems?.length > 0 ? (
-                                                                                <Table size="small" sx={{ mt: 0.5 }}>
-                                                                                    <TableBody>
-                                                                                        {p.purchaseItems.map((item, idx) => (
-                                                                                            <TableRow key={idx}>
-                                                                                                <TableCell>{item.name}</TableCell>
-                                                                                                <TableCell align="right">{item.quantity} × ₹{item.price}</TableCell>
-                                                                                                <TableCell align="right" sx={{ fontWeight: 500 }}>= ₹{item.totalPrice}</TableCell>
-                                                                                            </TableRow>
-                                                                                        ))}
-                                                                                    </TableBody>
-                                                                                </Table>
-                                                                            ) : (
-                                                                                <Typography variant="body2" color="text.secondary">No items recorded</Typography>
-                                                                            )}
+                                                                        <Box sx={{ pl: 5, py: 0.8 }}>
+                                                                            {e.raw.purchaseItems.map((item, idx) => (
+                                                                                <Typography key={idx} variant="body2" sx={{ fontSize: '0.78rem', color: '#555', lineHeight: 1.6 }}>
+                                                                                    {item.name} — {item.quantity} × ₹{item.price} = <strong>₹{(item.totalPrice || 0).toLocaleString('en-IN')}</strong>
+                                                                                </Typography>
+                                                                            ))}
                                                                         </Box>
                                                                     </Collapse>
                                                                 </TableCell>
                                                             </TableRow>
                                                         )}
-                                                    </>
+                                                    </React.Fragment>
                                                 ))
                                             )}
                                         </TableBody>
-                                    </Table>
-                                </TableContainer>
-                            )}
-
-                            {detailsDialog.tab === 1 && (
-                                <TableContainer sx={{ maxHeight: 300, mt: 1 }}>
-                                    <Table size="small">
-                                        <TableHead>
-                                            <TableRow sx={{ '& th': { bgcolor: '#e8f5e9' } }}>
-                                                <TableCell>Payment #</TableCell>
-                                                <TableCell>Date</TableCell>
-                                                <TableCell align="right">Amount</TableCell>
-                                                <TableCell>Notes</TableCell>
-                                                <TableCell align="center">Action</TableCell>
-                                            </TableRow>
-                                        </TableHead>
-                                        <TableBody>
-                                            {detailsDialog.supplier.payments?.length === 0 ? (
-                                                <TableRow>
-                                                    <TableCell colSpan={5} align="center" sx={{ py: 2 }}>No payments yet</TableCell>
+                                        {/* Tally-style totals row */}
+                                        {ledgerEntries.length > 0 && (
+                                            <TableBody>
+                                                <TableRow sx={{ '& td': { borderTop: '2px solid #1a237e', bgcolor: '#e8eaf6', fontWeight: 700 } }}>
+                                                    <TableCell colSpan={3} sx={{ fontWeight: 700, color: '#1a237e' }}>TOTAL</TableCell>
+                                                    <TableCell align="right" sx={{ color: '#c62828' }}>{fmt(totalDebit)}</TableCell>
+                                                    <TableCell align="right" sx={{ color: '#2e7d32' }}>{fmt(totalCredit)}</TableCell>
+                                                    <TableCell align="right" sx={{ fontFamily: 'monospace', color: '#1a237e' }}>
+                                                        {fmt(totalDebit - totalCredit)} {(totalDebit - totalCredit) >= 0 ? 'Dr' : 'Cr'}
+                                                    </TableCell>
+                                                    <TableCell></TableCell>
                                                 </TableRow>
-                                            ) : (
-                                                detailsDialog.supplier.payments?.map((p) => (
-                                                    <TableRow key={p.id} hover>
-                                                        <TableCell>{p.paymentNumber}</TableCell>
-                                                        <TableCell>{p.paymentDate ? moment(p.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('DD/MM/YY') : '-'}</TableCell>
-                                                        <TableCell align="right" sx={{ fontWeight: 600, color: 'success.main' }}>₹{(p.amount || 0).toLocaleString('en-IN')}</TableCell>
-                                                        <TableCell>{p.notes || '-'}</TableCell>
-                                                        <TableCell align="center">
-                                                            <IconButton size="small" color="error" onClick={() => handleDeletePayment(p.id)} data-testid={`delete-payment-${p.id}`}>
-                                                                <Delete fontSize="small" />
-                                                            </IconButton>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))
-                                            )}
-                                        </TableBody>
+                                            </TableBody>
+                                        )}
                                     </Table>
                                 </TableContainer>
-                            )}
-                        </DialogContent>
-                        <DialogActions>
-                            <Button onClick={() => handleQuickPayFromTable(detailsDialog.supplier)} startIcon={<Payment />} color="success">
-                                Make Payment
-                            </Button>
-                            <Button onClick={() => handleQuickPurchaseFromTable(detailsDialog.supplier)} startIcon={<ShoppingBag />}>
-                                Add Purchase
-                            </Button>
-                        </DialogActions>
-                    </>
-                )}
+                            </DialogContent>
+                            <DialogActions sx={{ bgcolor: '#f5f5f5', borderTop: '1px solid #ddd', px: 2, py: 1 }}>
+                                <Button onClick={() => handleQuickPayFromTable(s)} startIcon={<Payment />} variant="contained" color="success" size="small">
+                                    Make Payment
+                                </Button>
+                                <Button onClick={() => handleQuickPurchaseFromTable(s)} startIcon={<ShoppingBag />} variant="contained" size="small">
+                                    Add Purchase
+                                </Button>
+                            </DialogActions>
+                        </>
+                    );
+                })()}
             </Dialog>
         </Box>
     );
