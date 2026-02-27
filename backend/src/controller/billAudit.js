@@ -93,6 +93,18 @@ module.exports = {
                 deviceInfo: deviceInfo || null
             });
 
+            // Fire live Telegram alert
+            const items = (billSnapshot || []).map(i => `${i.name || '?'} (₹${i.totalPrice || i.total || 0})`).join(', ');
+            telegram.sendTelegram(
+                `🧹 <b>BILL CLEARED</b>\n\n` +
+                `<b>Items:</b> ${itemCount} — ${telegram.constructor ? items : items}\n` +
+                `<b>Total Value:</b> ₹${(billTotal || 0).toLocaleString('en-IN')}\n` +
+                `<b>Customer:</b> ${customerName || 'Walk-in'}\n` +
+                `<b>By:</b> ${req.user?.name || req.user?.username || '?'}\n` +
+                `<b>Time:</b> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}\n` +
+                `<b>Invoice:</b> ${nextInvoiceHint}`
+            ).catch(e => console.error('[TELEGRAM]', e.message));
+
             return res.status(200).json({ status: 200, data: { id: log.id } });
         } catch (error) {
             console.error('Bill audit log error:', error.message);
