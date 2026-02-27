@@ -834,6 +834,198 @@ class LedgerMigrationService {
             throw error;
         }
     }
+
+    /**
+     * Backfill missing cash receipt entries for historical paid orders.
+     * 
+     * Problem: Orders created as "paid" before the INVOICE_CASH fix only had
+     * the INVOICE/MIGRATION batch (DR Customer Receivable, CR Sales Revenue)
+     * but NOT the cash receipt (DR Cash, CR Customer Receivable).
+     * This causes drift between the old system (dueAmount=0) and the ledger
+     * (which still shows a receivable balance).
+     *
+     * This method:
+     * 1. Finds all paid orders with paidAmount > 0
+     * 2. Checks if a cash receipt batch already exists (INVOICE_CASH or second MIGRATION batch)
+     * 3. For missing ones, posts DR Cash, CR Customer Receivable
+     * 4. Also backfills customerId if missing (the customer linking bug fix)
+     *
+     * @param {Object} options - { dryRun: boolean }
+     * @returns {Object} - { fixed, skipped, errors, dryRunEntries }
+     */
+    async backfillMissingCashReceipts(options = {}) {
+        const db = this.db;
+        const dryRun = options.dryRun !== false; // default to dry run for safety
+        const results = {
+            dryRun,
+            totalPaidOrders: 0,
+            alreadyHaveCashReceipt: 0,
+            noCustomerAccount: 0,
+            fixed: 0,
+            customerLinked: 0,
+            errors: [],
+            details: []
+        };
+
+        // Get all non-deleted paid orders
+        const paidOrders = await db.order.findAll({
+            where: {
+                paymentStatus: 'paid',
+                paidAmount: { [db.Sequelize.Op.gt]: 0 },
+                isDeleted: false
+            },
+            order: [['createdAt', 'ASC']]
+        });
+
+        results.totalPaidOrders = paidOrders.length;
+        console.log(`[BACKFILL] Found ${paidOrders.length} paid orders to check`);
+
+        const cashAccount = await db.account.findOne({ where: { code: '1100' } });
+        if (!cashAccount) {
+            throw new Error('Cash account (1100) not found. Initialize chart of accounts first.');
+        }
+
+        for (const order of paidOrders) {
+            try {
+                const orderId = order.id;
+                const paidAmount = Number(order.paidAmount) || 0;
+
+                // Check if any cash receipt already exists for this order
+                // Could be INVOICE_CASH (new system) or a second MIGRATION batch with "Payment" in description
+                const existingCash = await db.journalBatch.findOne({
+                    where: {
+                        referenceId: orderId,
+                        [db.Sequelize.Op.or]: [
+                            { referenceType: 'INVOICE_CASH' },
+                            {
+                                referenceType: 'MIGRATION',
+                                description: { [db.Sequelize.Op.like]: '%Payment for Invoice%' }
+                            },
+                            {
+                                referenceType: 'MIGRATION',
+                                description: { [db.Sequelize.Op.like]: '%Payment received%' }
+                            }
+                        ]
+                    }
+                });
+
+                if (existingCash) {
+                    results.alreadyHaveCashReceipt++;
+                    continue;
+                }
+
+                // Ensure customerId is set — backfill if missing
+                let customerId = order.customerId;
+                if (!customerId && order.customerName) {
+                    const customer = await db.customer.findOne({
+                        where: { name: order.customerName.trim() }
+                    });
+                    if (customer) {
+                        customerId = customer.id;
+                        if (!dryRun) {
+                            await order.update({ customerId: customer.id });
+                            results.customerLinked++;
+                        }
+                    } else if (order.customerMobile) {
+                        const byMobile = await db.customer.findOne({
+                            where: { mobile: order.customerMobile }
+                        });
+                        if (byMobile) {
+                            customerId = byMobile.id;
+                            if (!dryRun) {
+                                await order.update({ customerId: byMobile.id });
+                                results.customerLinked++;
+                            }
+                        }
+                    }
+                }
+
+                if (!customerId) {
+                    results.noCustomerAccount++;
+                    results.details.push({
+                        orderNumber: order.orderNumber,
+                        action: 'SKIP',
+                        reason: 'No customer linked and could not find by name/mobile',
+                        customerName: order.customerName
+                    });
+                    continue;
+                }
+
+                // Get customer receivable account
+                const customerAccount = await db.account.findOne({
+                    where: { partyId: customerId, partyType: 'customer' }
+                });
+
+                if (!customerAccount) {
+                    // Try to create it
+                    let custAccountObj;
+                    try {
+                        custAccountObj = await this.ledgerService.getOrCreateCustomerAccount(
+                            customerId,
+                            order.customerName || 'Unknown'
+                        );
+                    } catch (e) {
+                        results.noCustomerAccount++;
+                        results.details.push({
+                            orderNumber: order.orderNumber,
+                            action: 'SKIP',
+                            reason: `Customer account not found and could not create: ${e.message}`
+                        });
+                        continue;
+                    }
+                    if (!custAccountObj) {
+                        results.noCustomerAccount++;
+                        continue;
+                    }
+                }
+
+                const custAcctId = customerAccount ? customerAccount.id :
+                    (await db.account.findOne({ where: { partyId: customerId, partyType: 'customer' } })).id;
+
+                if (dryRun) {
+                    results.details.push({
+                        orderNumber: order.orderNumber,
+                        action: 'WILL_FIX',
+                        paidAmount,
+                        customerName: order.customerName,
+                        entry: `DR Cash ₹${paidAmount}, CR ${order.customerName} ₹${paidAmount}`
+                    });
+                    results.fixed++;
+                } else {
+                    // Post the cash receipt
+                    await this.ledgerService.createJournalBatch({
+                        referenceType: 'INVOICE_CASH',
+                        referenceId: orderId,
+                        description: `Backfill: Cash received for Invoice ${order.orderNumber} — ${order.customerName || 'Walk-in'}`,
+                        transactionDate: order.createdAt,
+                        entries: [
+                            { accountId: cashAccount.id, debit: paidAmount, credit: 0, narration: `Backfill cash: Invoice ${order.orderNumber}` },
+                            { accountId: custAcctId, debit: 0, credit: paidAmount, narration: `Backfill cash: Invoice ${order.orderNumber}` }
+                        ]
+                    });
+
+                    results.details.push({
+                        orderNumber: order.orderNumber,
+                        action: 'FIXED',
+                        paidAmount,
+                        customerName: order.customerName
+                    });
+                    results.fixed++;
+                    console.log(`[BACKFILL] Fixed: ${order.orderNumber} — ₹${paidAmount} cash receipt posted`);
+                }
+
+            } catch (error) {
+                results.errors.push({
+                    orderNumber: order.orderNumber,
+                    orderId: order.id,
+                    error: error.message
+                });
+            }
+        }
+
+        console.log(`[BACKFILL] Complete: ${results.fixed} fixed, ${results.alreadyHaveCashReceipt} already OK, ${results.errors.length} errors`);
+        return results;
+    }
 }
 
 module.exports = LedgerMigrationService;
