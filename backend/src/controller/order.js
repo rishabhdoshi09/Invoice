@@ -259,6 +259,18 @@ module.exports = {
                 );
             } catch (e) { /* silent */ }
 
+            // Fire live Telegram alert for new bill
+            telegram.alertOrderCreated({
+                orderNumber: result.orderNumber,
+                customerName: result.customerName,
+                total: result.total,
+                paidAmount: result.paidAmount,
+                dueAmount: result.dueAmount,
+                paymentStatus: result.paymentStatus,
+                items: orderItems,
+                createdBy: req.user?.name || req.user?.username
+            });
+
             return res.status(200).send({
                 status: 200,
                 message: 'order created successfully',
