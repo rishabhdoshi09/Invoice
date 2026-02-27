@@ -379,7 +379,7 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
     const totalDebit = ledgerEntries.reduce((sum, e) => sum + e.debit, 0);
     const totalCredit = ledgerEntries.reduce((sum, e) => sum + e.credit, 0);
     const closingBal = totalDebit - totalCredit;
-    const fmt = v => v ? `₹${Math.abs(v).toLocaleString('en-IN', { minimumFractionDigits: 0 })}` : '';
+    const fmt = v => v != null && v !== 0 ? `₹${Math.abs(v).toLocaleString('en-IN', { minimumFractionDigits: 0 })}` : '₹0';
 
     return (
         <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth data-testid="supplier-ledger-dialog"
