@@ -3,9 +3,9 @@ import {
     Box, Typography, Card, CardContent, Table, TableBody, TableCell, TableContainer,
     TableHead, TableRow, Paper, Chip, TextField, MenuItem, Select, FormControl,
     InputLabel, Grid, IconButton, Tooltip, Dialog, DialogTitle, DialogContent,
-    DialogActions, Button, Alert
+    DialogActions, Button, Alert, Tabs, Tab
 } from '@mui/material';
-import { Visibility, Warning, Delete, RemoveCircle, HighlightOff, Refresh } from '@mui/icons-material';
+import { Visibility, Warning, Delete, RemoveCircle, HighlightOff, Refresh, Scale, FitnessCenter } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
 
