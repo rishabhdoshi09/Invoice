@@ -56,9 +56,10 @@ module.exports = {
                 const invoiceInfo = await Services.invoiceSequence.generateInvoiceNumber(transaction);
                 orderObj.orderNumber = invoiceInfo.invoiceNumber;
                 
-                // If this is a credit sale (unpaid/partial) with customer info, create/update customer record FIRST
+                // If customer info is provided, create/update customer record FIRST
                 // This ensures customerId is set BEFORE the order is created
-                if (orderObj.dueAmount > 0 && orderObj.customerName && orderObj.customerName.trim()) {
+                // Link customers for ALL orders (paid or credit) when customer info is available
+                if (orderObj.customerName && orderObj.customerName.trim()) {
                     try {
                         // Check if customer already exists by mobile or name
                         let existingCustomer = null;
@@ -76,10 +77,11 @@ module.exports = {
                         }
 
                         if (existingCustomer) {
-                            // Update existing customer's balance and mobile if missing
-                            const updateData = {
-                                currentBalance: (Number(existingCustomer.currentBalance) || 0) + orderObj.dueAmount
-                            };
+                            // Update existing customer's balance (only for credit sales)
+                            const updateData = {};
+                            if (orderObj.dueAmount > 0) {
+                                updateData.currentBalance = (Number(existingCustomer.currentBalance) || 0) + orderObj.dueAmount;
+                            }
                             // Update mobile if customer doesn't have one but order does
                             if (!existingCustomer.mobile && orderObj.customerMobile) {
                                 updateData.mobile = orderObj.customerMobile;
@@ -88,9 +90,11 @@ module.exports = {
                             if (!existingCustomer.address && orderObj.customerAddress) {
                                 updateData.address = orderObj.customerAddress;
                             }
-                            await existingCustomer.update(updateData, { transaction });
+                            if (Object.keys(updateData).length > 0) {
+                                await existingCustomer.update(updateData, { transaction });
+                            }
                             orderObj.customerId = existingCustomer.id;
-                            console.log(`Credit sale: Linked to existing customer ${existingCustomer.name} (ID: ${existingCustomer.id})`);
+                            console.log(`Order: Linked to existing customer ${existingCustomer.name} (ID: ${existingCustomer.id})`);
                         } else {
                             // Create new customer
                             const newCustomer = await db.customer.create({
@@ -99,10 +103,10 @@ module.exports = {
                                 mobile: orderObj.customerMobile || null,
                                 address: orderObj.customerAddress || null,
                                 openingBalance: 0,
-                                currentBalance: orderObj.dueAmount
+                                currentBalance: orderObj.dueAmount > 0 ? orderObj.dueAmount : 0
                             }, { transaction });
                             orderObj.customerId = newCustomer.id;
-                            console.log(`Credit sale: Created new customer ${newCustomer.name} (ID: ${newCustomer.id})`);
+                            console.log(`Order: Created new customer ${newCustomer.name} (ID: ${newCustomer.id})`);
                         }
                     } catch (customerError) {
                         console.error('Failed to create/update customer:', customerError);
