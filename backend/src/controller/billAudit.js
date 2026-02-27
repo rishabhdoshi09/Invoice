@@ -211,6 +211,21 @@ module.exports = {
         }
     },
 
+    // Send complete bill audit report (mirrors /bill-audit page) to Telegram
+    sendFullAuditReport: async (req, res) => {
+        try {
+            const { startDate, endDate } = req.query;
+            const result = await telegram.sendFullAuditReport({ startDate, endDate });
+            return res.json({
+                status: 200,
+                message: `Full audit report sent to Telegram (${result.messageCount} messages)`,
+                data: result
+            });
+        } catch (error) {
+            return res.status(500).json({ status: 500, message: error.message });
+        }
+    },
+
     // Get weight logs with unmatched filter
     getWeightLogs: async (req, res) => {
         try {
