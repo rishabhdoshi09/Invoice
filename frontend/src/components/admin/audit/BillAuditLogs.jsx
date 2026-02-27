@@ -374,4 +374,181 @@ const DeletionLogs = () => {
     );
 };
 
+const WeightLogs = () => {
+    const [logs, setLogs] = useState([]);
+    const [summary, setSummary] = useState({});
+    const [count, setCount] = useState(0);
+    const [loading, setLoading] = useState(true);
+    const [filters, setFilters] = useState({
+        consumed: '',
+        startDate: moment().format('YYYY-MM-DD'),
+        endDate: moment().format('YYYY-MM-DD')
+    });
+
+    const fetchLogs = useCallback(async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const params = new URLSearchParams({ limit: '200' });
+            if (filters.consumed !== '') params.append('consumed', filters.consumed);
+            if (filters.startDate) params.append('startDate', filters.startDate);
+            if (filters.endDate) params.append('endDate', filters.endDate);
+
+            const res = await axios.get(`/api/audit/weight-logs?${params}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.data?.data) {
+                setLogs(res.data.data.rows || []);
+                setSummary(res.data.data.summary || {});
+                setCount(res.data.data.count || 0);
+            }
+        } catch (err) {
+            console.error('Failed to fetch weight logs:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [filters]);
+
+    useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+    return (
+        <Box>
+            {/* Summary Cards */}
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={6} sm={3}>
+                    <Card sx={{ bgcolor: '#e8f5e9', borderLeft: '4px solid #4caf50' }}>
+                        <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                            <Typography variant="caption" color="text.secondary">Today's Weight Fetches</Typography>
+                            <Typography variant="h4" fontWeight={700} color="#2e7d32">
+                                {summary.todayTotalFetches || 0}
+                            </Typography>
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                    <Card sx={{ bgcolor: '#e3f2fd', borderLeft: '4px solid #1976d2' }}>
+                        <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                            <Typography variant="caption" color="text.secondary">Added to Bill</Typography>
+                            <Typography variant="h4" fontWeight={700} color="#0d47a1">
+                                {summary.todayConsumed || 0}
+                            </Typography>
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                    <Card sx={{ bgcolor: (summary.todayUnmatched > 0) ? '#ffebee' : '#f5f5f5', borderLeft: `4px solid ${(summary.todayUnmatched > 0) ? '#f44336' : '#9e9e9e'}` }}>
+                        <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                            <Typography variant="caption" color="text.secondary">NOT Added to Bill</Typography>
+                            <Typography variant="h4" fontWeight={700} color={(summary.todayUnmatched > 0) ? '#c62828' : 'text.secondary'}>
+                                {summary.todayUnmatched || 0}
+                            </Typography>
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                    <Card sx={{ bgcolor: (summary.todayUnmatched > 0) ? '#fff3e0' : '#f5f5f5', borderLeft: `4px solid ${(summary.todayUnmatched > 0) ? '#ff9800' : '#9e9e9e'}` }}>
+                        <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                            <Typography variant="caption" color="text.secondary">Unmatched Weight (kg)</Typography>
+                            <Typography variant="h4" fontWeight={700} color={(summary.todayUnmatchedWeight > 0) ? '#e65100' : 'text.secondary'}>
+                                {(summary.todayUnmatchedWeight || 0).toFixed(2)}
+                            </Typography>
+                        </CardContent>
+                    </Card>
+                </Grid>
+            </Grid>
+
+            {summary.todayUnmatched > 0 && (
+                <Alert severity="warning" sx={{ mb: 2 }} icon={<Warning />} data-testid="weight-alert">
+                    <strong>{summary.todayUnmatched} weight reading{summary.todayUnmatched !== 1 ? 's' : ''} fetched but never added to a bill!</strong> — Total unmatched: {(summary.todayUnmatchedWeight || 0).toFixed(2)} kg
+                </Alert>
+            )}
+
+            {/* Filters */}
+            <Card sx={{ mb: 2 }}>
+                <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                    <Grid container spacing={2} alignItems="center">
+                        <Grid item xs={12} sm={3}>
+                            <FormControl fullWidth size="small">
+                                <InputLabel>Status</InputLabel>
+                                <Select
+                                    value={filters.consumed}
+                                    label="Status"
+                                    onChange={(e) => setFilters(f => ({ ...f, consumed: e.target.value }))}
+                                >
+                                    <MenuItem value="">All</MenuItem>
+                                    <MenuItem value="false">Unmatched Only</MenuItem>
+                                    <MenuItem value="true">Added to Bill</MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                            <TextField label="From" type="date" size="small" fullWidth value={filters.startDate}
+                                onChange={(e) => setFilters(f => ({ ...f, startDate: e.target.value }))} InputLabelProps={{ shrink: true }} />
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                            <TextField label="To" type="date" size="small" fullWidth value={filters.endDate}
+                                onChange={(e) => setFilters(f => ({ ...f, endDate: e.target.value }))} InputLabelProps={{ shrink: true }} />
+                        </Grid>
+                        <Grid item xs={12} sm={3}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant="body2" color="text.secondary">{count} record{count !== 1 ? 's' : ''}</Typography>
+                                <IconButton size="small" onClick={fetchLogs}><Refresh fontSize="small" /></IconButton>
+                            </Box>
+                        </Grid>
+                    </Grid>
+                </CardContent>
+            </Card>
+
+            {/* Table */}
+            <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                <Table stickyHeader size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Time</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }} align="right">Weight (kg)</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Status</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Linked Invoice</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Fetched By</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
+                        ) : logs.length === 0 ? (
+                            <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4, color: 'text.secondary' }}>No weight logs found</TableCell></TableRow>
+                        ) : (
+                            logs.map((log) => (
+                                <TableRow key={log.id} hover sx={{ bgcolor: !log.consumed ? '#fff8e1' : 'inherit' }}>
+                                    <TableCell>
+                                        <Typography variant="body2" fontWeight={500}>{moment(log.createdAt).format('hh:mm:ss A')}</Typography>
+                                        <Typography variant="caption" color="text.secondary">{moment(log.createdAt).format('DD/MM/YY')}</Typography>
+                                    </TableCell>
+                                    <TableCell align="right">
+                                        <Typography fontWeight={700} fontSize="1.1rem">{Number(log.weight).toFixed(3)}</Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                        {log.consumed ? (
+                                            <Chip label="Added to Bill" color="success" size="small" variant="outlined" />
+                                        ) : (
+                                            <Chip label="NOT in any Bill" color="error" size="small" variant="filled" />
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        {log.orderNumber ? (
+                                            <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{log.orderNumber}</Typography>
+                                        ) : (
+                                            <Typography variant="body2" color="error.main" fontWeight={600}>--</Typography>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>{log.userName || '-'}</TableCell>
+                                </TableRow>
+                            ))
+                        )}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
+    );
+};
+
 export default BillAuditLogs;
