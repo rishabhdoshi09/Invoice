@@ -7,6 +7,7 @@
 
 const cron = require('node-cron');
 const LedgerService = require('./services/ledgerService');
+const telegram = require('./services/telegramAlert');
 
 let initialized = false;
 
