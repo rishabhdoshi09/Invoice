@@ -53,77 +53,67 @@ function sendTelegram(text, parseMode = 'HTML') {
     });
 }
 
+// ─── Escape HTML special chars in user data ─────────────────────
+function esc(text) {
+    if (!text) return '';
+    return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 // ─── Real-time alerts (fire-and-forget) ──────────────────────────
 
-/**
- * Alert: Item deleted from bill before submission
- */
 function alertItemDeleted(details) {
     const { itemName, quantity, price, totalPrice, type, invoiceContext, user, timestamp } = details;
     const msg = [
-        `🚨 *ITEM DELETED FROM BILL*`,
+        `🚨 <b>ITEM DELETED FROM BILL</b>`,
         ``,
-        `*Item:* ${itemName}`,
-        `*Qty:* ${quantity} | *Price:* ₹${price} | *Value:* ₹${totalPrice}`,
-        `*Type:* ${type === 'scale' ? '⚖️ Scale' : '✏️ Manual'}`,
-        `*By:* ${user || 'Unknown'}`,
-        `*Time:* ${new Date(timestamp || Date.now()).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`,
-        invoiceContext ? `*Invoice:* ${invoiceContext.orderNumber || 'Draft'}` : ''
+        `<b>Item:</b> ${esc(itemName)}`,
+        `<b>Qty:</b> ${quantity} | <b>Price:</b> ₹${price} | <b>Value:</b> ₹${totalPrice}`,
+        `<b>Type:</b> ${type === 'scale' ? '⚖️ Scale' : '✏️ Manual'}`,
+        `<b>By:</b> ${esc(user) || 'Unknown'}`,
+        `<b>Time:</b> ${new Date(timestamp || Date.now()).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`,
+        invoiceContext ? `<b>Invoice:</b> ${esc(invoiceContext.orderNumber || 'Draft')}` : ''
     ].filter(Boolean).join('\n');
-
     sendTelegram(msg).catch(e => console.error('[TELEGRAM] Alert failed:', e.message));
 }
 
-/**
- * Alert: Submitted bill deleted
- */
 function alertBillDeleted(details) {
     const { orderNumber, total, customerName, user, timestamp } = details;
     const msg = [
-        `🗑️ *BILL DELETED*`,
+        `🗑️ <b>BILL DELETED</b>`,
         ``,
-        `*Invoice:* ${orderNumber}`,
-        `*Amount:* ₹${(total || 0).toLocaleString('en-IN')}`,
-        `*Customer:* ${customerName || 'Walk-in'}`,
-        `*By:* ${user || 'Unknown'}`,
-        `*Time:* ${new Date(timestamp || Date.now()).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`
+        `<b>Invoice:</b> ${esc(orderNumber)}`,
+        `<b>Amount:</b> ₹${(total || 0).toLocaleString('en-IN')}`,
+        `<b>Customer:</b> ${esc(customerName) || 'Walk-in'}`,
+        `<b>By:</b> ${esc(user) || 'Unknown'}`,
+        `<b>Time:</b> ${new Date(timestamp || Date.now()).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`
     ].join('\n');
-
     sendTelegram(msg).catch(e => console.error('[TELEGRAM] Alert failed:', e.message));
 }
 
-/**
- * Alert: Payment status toggled
- */
 function alertPaymentToggle(details) {
     const { orderNumber, total, oldStatus, newStatus, changedBy, customerName } = details;
     const msg = [
-        `💱 *PAYMENT STATUS CHANGED*`,
+        `💱 <b>PAYMENT STATUS CHANGED</b>`,
         ``,
-        `*Invoice:* ${orderNumber}`,
-        `*Amount:* ₹${(total || 0).toLocaleString('en-IN')}`,
-        `*Customer:* ${customerName || 'Walk-in'}`,
-        `*Changed:* ${oldStatus} → ${newStatus}`,
-        `*By:* ${changedBy}`,
-        `*Time:* ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`
+        `<b>Invoice:</b> ${esc(orderNumber)}`,
+        `<b>Amount:</b> ₹${(total || 0).toLocaleString('en-IN')}`,
+        `<b>Customer:</b> ${esc(customerName) || 'Walk-in'}`,
+        `<b>Changed:</b> ${oldStatus} → ${newStatus}`,
+        `<b>By:</b> ${esc(changedBy)}`,
+        `<b>Time:</b> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`
     ].join('\n');
-
     sendTelegram(msg).catch(e => console.error('[TELEGRAM] Alert failed:', e.message));
 }
 
-/**
- * Alert: Weight fetched but not used
- */
 function alertUnusedWeight(details) {
     const { weight, userId, timestamp } = details;
     const msg = [
-        `⚖️ *WEIGHT FETCHED — NOT USED*`,
+        `⚖️ <b>WEIGHT FETCHED — NOT USED</b>`,
         ``,
-        `*Weight:* ${weight} kg`,
-        `*Time:* ${new Date(timestamp || Date.now()).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`,
-        `_This weight was read from the scale but never added to any bill_`
+        `<b>Weight:</b> ${weight} kg`,
+        `<b>Time:</b> ${new Date(timestamp || Date.now()).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`,
+        `<i>This weight was read from the scale but never added to any bill</i>`
     ].join('\n');
-
     sendTelegram(msg).catch(e => console.error('[TELEGRAM] Alert failed:', e.message));
 }
 
