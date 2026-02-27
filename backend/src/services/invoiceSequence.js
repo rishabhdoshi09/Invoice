@@ -113,6 +113,7 @@ module.exports = {
         if (!sequence) {
             return {
                 currentNumber: 0,
+                nextNumber: 1,
                 dailyNumber: 0,
                 lastDate: null,
                 prefix: 'INV',
@@ -122,9 +123,10 @@ module.exports = {
 
         return {
             currentNumber: sequence.currentNumber,
+            nextNumber: (sequence.currentNumber || 0) + 1,
             dailyNumber: sequence.dailyNumber,
             lastDate: sequence.lastDate,
-            prefix: sequence.prefix,
+            prefix: sequence.prefix || 'INV',
             financialYear: currentFY,
             lastFinancialYear: sequence.lastFinancialYear
         };
