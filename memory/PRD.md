@@ -69,7 +69,12 @@ frontend/src/
   - INVOICE batch: DR Customer Receivable, CR Sales Revenue (the sale)
   - INVOICE_CASH batch: DR Cash, CR Customer Receivable (the cash receipt)
   - This fixes the root cause of drift between old system and ledger for paid orders
-- [x] **Customer Linking Fix** — Orders now link to customer records regardless of paid/unpaid status (previously only credit sales linked customers)
+- [x] **Telegram Fraud Alert Bot** — Real-time alerts to admin's phone via Telegram:
+  - Instant alerts: Item deleted from bill, bill deleted, payment status toggled
+  - Daily summary at 9:00 PM IST with red flag analysis
+  - Alert levels: GREEN (clean), YELLOW (1-2 flags), RED (3+ flags)
+  - Manual trigger endpoints for test + on-demand summary
+  - Cron job for automated daily summary
 
 ## Prioritized Backlog
 
