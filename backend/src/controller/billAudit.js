@@ -193,6 +193,16 @@ module.exports = {
                 userId: req.user?.id || null,
                 userName: req.user?.name || req.user?.username || 'unknown'
             });
+
+            // Fire live Telegram alert
+            telegram.sendTelegram(
+                `⚖️ <b>WEIGHT FETCHED</b>\n\n` +
+                `<b>Weight:</b> ${w.toFixed(3)} kg\n` +
+                `<b>By:</b> ${req.user?.name || req.user?.username || '?'}\n` +
+                `<b>Time:</b> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}\n` +
+                `<i>Waiting to see if this gets added to a bill...</i>`
+            ).catch(e => console.error('[TELEGRAM]', e.message));
+
             return res.status(200).json({ status: 200, data: { id: log.id } });
         } catch (error) {
             return res.status(500).json({ status: 500, message: error.message });
