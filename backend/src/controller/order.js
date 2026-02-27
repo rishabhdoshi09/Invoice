@@ -841,6 +841,16 @@ module.exports = {
             // Get updated order
             const updatedOrder = await Services.order.getOrder({ id: orderId });
 
+            // Fire Telegram alert (non-blocking)
+            telegram.alertPaymentToggle({
+                orderNumber: order.orderNumber,
+                total: order.total,
+                oldStatus,
+                newStatus,
+                changedBy: changedByTrimmed,
+                customerName: order.customerName
+            });
+
             return res.status(200).send({
                 status: 200,
                 message: `Payment status updated to ${newStatus}`,
