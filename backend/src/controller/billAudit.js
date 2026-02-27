@@ -138,5 +138,71 @@ module.exports = {
             console.error('Get tampering logs error:', error.message);
             return res.status(500).json({ status: 500, message: error.message });
         }
+    },
+
+    // Mark weight(s) as consumed when an order is submitted
+    markWeightConsumed: async (req, res) => {
+        try {
+            const { weightLogIds, orderId, orderNumber } = req.body;
+            if (!weightLogIds || !weightLogIds.length) {
+                return res.status(400).json({ status: 400, message: 'weightLogIds required' });
+            }
+            await db.weightLog.update(
+                { consumed: true, orderId: orderId || null, orderNumber: orderNumber || null },
+                { where: { id: { [db.Sequelize.Op.in]: weightLogIds } } }
+            );
+            return res.status(200).json({ status: 200, message: `${weightLogIds.length} weight(s) marked consumed` });
+        } catch (error) {
+            return res.status(500).json({ status: 500, message: error.message });
+        }
+    },
+
+    // Get weight logs with unmatched filter
+    getWeightLogs: async (req, res) => {
+        try {
+            const { startDate, endDate, consumed, limit = 200, offset = 0 } = req.query;
+            const where = {};
+
+            if (consumed === 'true') where.consumed = true;
+            else if (consumed === 'false') where.consumed = false;
+
+            if (startDate || endDate) {
+                where.createdAt = {};
+                if (startDate) where.createdAt[db.Sequelize.Op.gte] = new Date(startDate);
+                if (endDate) where.createdAt[db.Sequelize.Op.lte] = new Date(new Date(endDate).setHours(23, 59, 59));
+            }
+
+            const logs = await db.weightLog.findAndCountAll({
+                where,
+                order: [['createdAt', 'DESC']],
+                limit: parseInt(limit),
+                offset: parseInt(offset)
+            });
+
+            // Today's summary
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayLogs = await db.weightLog.findAll({
+                where: { createdAt: { [db.Sequelize.Op.gte]: today } }
+            });
+
+            const summary = {
+                todayTotalFetches: todayLogs.length,
+                todayConsumed: todayLogs.filter(l => l.consumed).length,
+                todayUnmatched: todayLogs.filter(l => !l.consumed).length,
+                todayUnmatchedWeight: todayLogs.filter(l => !l.consumed).reduce((sum, l) => sum + (Number(l.weight) || 0), 0)
+            };
+
+            return res.status(200).json({
+                status: 200,
+                data: {
+                    summary,
+                    count: logs.count,
+                    rows: logs.rows
+                }
+            });
+        } catch (error) {
+            return res.status(500).json({ status: 500, message: error.message });
+        }
     }
 };
