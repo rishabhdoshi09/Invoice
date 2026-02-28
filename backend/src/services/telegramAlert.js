@@ -144,7 +144,8 @@ function alertOrderCreated(details) {
             const qty = item.quantity || item.qty || 0;
             const price = item.productPrice || item.price || 0;
             const itemTotal = item.totalPrice || (qty * price) || 0;
-            msg.push(`  • ${esc(item.name)} — ${qty} x ₹${price} = <b>₹${itemTotal.toLocaleString('en-IN')}</b>`);
+            const altLabel = item.altName && item.altName.trim() ? ` (${esc(item.altName.trim())})` : '';
+            msg.push(`  • ${esc(item.name)}${altLabel} — ${qty} x ₹${price} = <b>₹${itemTotal.toLocaleString('en-IN')}</b>`);
         }
         if (items.length > 15) {
             msg.push(`  <i>...and ${items.length - 15} more items</i>`);
