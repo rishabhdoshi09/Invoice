@@ -134,7 +134,7 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
                 }))
             }, { headers });
             const name = purSup.name;
-            setPurSup(null); setPurBill(''); setPurItems([{ name: '', qty: '', price: '', total: 0 }]); setPurPaid(false);
+            setPurBill(''); setPurItems([{ name: '', qty: '', price: '', total: 0 }]); setPurPaid(false);
             onDone(`Purchase ₹${purTotal.toLocaleString('en-IN')} from ${name}`);
         } catch (e) { alert(e.response?.data?.message || e.message); }
         finally { setSaving(false); }
