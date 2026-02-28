@@ -623,12 +623,12 @@ export const ListSuppliers = () => {
 
     // Quick actions from table → open entry bar pre-filled
     const handlePayFromTable = (supplier) => {
+        setPrefilledSupplier(supplier);
         setEntryMode('payment');
-        // The payment form auto-fills when supplier is selected via autocomplete
-        // We'll pass this through a ref or just set mode
     };
 
     const handlePurchaseFromTable = (supplier) => {
+        setPrefilledSupplier(supplier);
         setEntryMode('purchase');
     };
 
