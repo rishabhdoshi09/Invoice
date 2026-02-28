@@ -16,7 +16,7 @@ import axios from 'axios';
 import moment from 'moment';
 
 // ─── Compact inline entry bar ────────────────────────────────────
-const QuickEntryBar = ({ mode, setMode, suppliers, onDone }) => {
+const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) => {
     // Shared
     const [saving, setSaving] = useState(false);
     const firstRef = useRef(null);
