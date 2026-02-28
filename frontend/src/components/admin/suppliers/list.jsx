@@ -564,7 +564,7 @@ export const ListSuppliers = () => {
     const [rowsPerPage, setRowsPerPage] = useState(15);
     const [entryMode, setEntryMode] = useState(null);
     const [successMsg, setSuccessMsg] = useState('');
-
+    const [prefilledSupplier, setPrefilledSupplier] = useState(null);
     useEffect(() => { fetchSuppliers(); }, []);
 
     const fetchSuppliers = async () => {
