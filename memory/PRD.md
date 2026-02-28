@@ -73,6 +73,7 @@ frontend/src/
 - [x] "Send Report to Telegram" button on bill-audit page
 - [x] Alt Name (altName) support in Telegram bill creation alerts
 - [x] Closing balance (Expected Cash in Drawer) in Telegram bill alerts
+- [x] Supplier auto-fill & batch mode in purchase bill / payment forms
 - [x] IPv4 network fix for Telegram (dns.setDefaultResultOrder)
 - [x] Database migration system using sequelize-cli
 - [x] Historical data backfill for ledger drift
