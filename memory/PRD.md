@@ -14,13 +14,15 @@ Additionally, the user suspects billing fraud and needs a comprehensive **Bill T
 6. **UI Integration**: `/ledger` tab for reports and migration tools.
 7. **Fraud Detection**: Silent audit trail logging item deletions, bill deletions, weight scale usage.
 8. **Tally-style Supplier Ledger**: Date-sorted, debit/credit/running balance view.
+9. **Real-Time Alerts**: Telegram bot for instant fraud alerts and new bill notifications.
+10. **Alt Name Support**: Include product alternate names in Telegram bill alerts.
 
 ## Architecture
 ```
 backend/src/
-  models/       → account.js, journalBatch.js, ledgerEntry.js, billAuditLog.model.js, weightLog.model.js
-  services/     → ledgerService.js, ledgerMigrationService.js, realTimeLedger.js
-  controller/   → ledger.js, audit.js
+  models/       → account.js, journalBatch.js, ledgerEntry.js, billAuditLog.js, weightLog.js
+  services/     → ledgerService.js, ledgerMigrationService.js, realTimeLedger.js, telegramAlert.js
+  controller/   → ledger.js, audit.js, telegram.js, order.js
   routes/       → ledger.js, audit.js
 frontend/src/
   components/admin/ledger/ → LedgerModule.jsx
@@ -40,6 +42,8 @@ frontend/src/
 - `POST /api/audit/item-deleted` — log item deletion
 - `GET /api/audit/tampering-logs` — get audit logs
 - `POST /api/audit/weight-capture` — log weight fetch
+- `POST /api/telegram/full-audit-report` — send audit report to Telegram
+- `POST /api/migrations/backfill-cash-receipts` — fix historical ledger drift
 
 ## What's Been Implemented
 
@@ -59,26 +63,18 @@ frontend/src/
 - [x] Migration service
 - [x] Fraud Detection & Audit Trail (bill_audit_logs, weight_logs)
 - [x] Admin-only Bill Audit Trail page (`/bill-audit`)
-- [x] **Tally-style Supplier Ledger** — Redesigned supplier detail dialog
-- [x] **Smart Quick Entry Bar** — Streamlined entry for suppliers, payments, purchases
-- [x] **Payment Status Toggle ↔ Ledger Integration** — When toggling orders between paid/unpaid:
-  - `paid → unpaid`: Posts PAYMENT_TOGGLE reversal (DR Customer Receivable, CR Cash)
-  - `unpaid → paid`: Posts PAYMENT_TOGGLE receipt (DR Cash, CR Customer Receivable)
-  - All toggles create permanent, balanced journal batches with full audit trail
-- [x] **Invoice Cash Receipt Posting** — When orders are created as "paid", now correctly posts both:
-  - INVOICE batch: DR Customer Receivable, CR Sales Revenue (the sale)
-  - INVOICE_CASH batch: DR Cash, CR Customer Receivable (the cash receipt)
-  - This fixes the root cause of drift between old system and ledger for paid orders
-- [x] **Telegram Fraud Alert Bot** — Real-time alerts to admin's phone via Telegram:
-  - Instant alerts: Item deleted from bill, bill deleted, payment status toggled
-  - Daily summary at 9:00 PM IST with red flag analysis
-  - Full audit report to Telegram (mirrors /bill-audit page completely):
-    - Tab 1: Item Deletions — product name, qty, price, value, type (Scale/Manual), by whom, time, invoice#, customer
-    - Tab 2: Weight Fetches — consumed vs unmatched, with details
-    - Payment Toggles — all status changes with amounts and descriptions
-    - Alert levels: 🟢 ALL CLEAR / 🟡 NEEDS ATTENTION / 🔴 HIGH RISK
-  - "Send Report to Telegram" button on the bill-audit page UI
-  - API endpoints: test, daily-summary, full-report
+- [x] Tally-style Supplier Ledger — Redesigned supplier detail dialog
+- [x] Smart Quick Entry Bar — Streamlined entry for suppliers, payments, purchases
+- [x] Payment Status Toggle ↔ Ledger Integration
+- [x] Invoice Cash Receipt Posting
+- [x] Telegram Fraud Alert Bot — Real-time alerts for all suspicious activities
+- [x] Daily fraud summary via Telegram (9:00 PM IST)
+- [x] Full audit report to Telegram (mirrors /bill-audit page)
+- [x] "Send Report to Telegram" button on bill-audit page
+- [x] Alt Name (altName) support in Telegram bill creation alerts
+- [x] IPv4 network fix for Telegram (dns.setDefaultResultOrder)
+- [x] Database migration system using sequelize-cli
+- [x] Historical data backfill for ledger drift
 
 ## Prioritized Backlog
 
@@ -89,10 +85,10 @@ frontend/src/
 - [ ] Add `FOR UPDATE` row locks in payment toggle, order create, payment create
 
 ### P1 — Core Features
+- [ ] Present comprehensive code audit report to user
 - [ ] Frontend reports: Account Ledger, Trial Balance, P&L, Balance Sheet
 - [ ] Add input validation (Joi) to remaining 7 controllers
 - [ ] Set up automated database backup (pg_dump cron)
-- [ ] Enhanced fraud alerts (price modification logging, suspicious activity thresholds)
 
 ### P2 — Future
 - [ ] Centralize error handling with middleware
@@ -100,12 +96,14 @@ frontend/src/
 - [ ] Split large controllers into smaller modules
 - [ ] Role-Based Access Control (RBAC)
 - [ ] Weekly biller activity summary report
-- [ ] Customer/Supplier balance comparison widget (old vs ledger)
+- [ ] Frontend state management refactor (Redux/Zustand)
 
 ## Known Issues
 - Old invoice module balance calculations are fragile (will be superseded by ledger)
 - PostgreSQL not available in preview pod by default (user tests locally)
-- User's local dev env is fragile due to lack of automated DB migrations
+- User's local dev env has IPv6 connectivity issues (code workaround in place)
 
 ## Test Credentials
 - Username: `Rishabh`, Password: `molybdenumR@99877`
+- Telegram Bot Token: `8336582297:AAF3EtRshWDu3p57L9SHaWd3RvALD2OIrc8`
+- Telegram Chat ID: `6016362708`
