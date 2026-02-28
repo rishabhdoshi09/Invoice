@@ -99,7 +99,7 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
                 referenceType: 'advance', notes: payNotes
             }, { headers });
             const name = paySup.name;
-            setPaySup(null); setPayAmt(''); setPayNotes('');
+            setPayAmt(''); setPayNotes('');
             onDone(`Paid ₹${parseFloat(payAmt).toLocaleString('en-IN')} → ${name}`);
         } catch (e) { alert(e.response?.data?.message || e.message); }
         finally { setSaving(false); }
