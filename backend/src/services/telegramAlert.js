@@ -5,35 +5,55 @@
  * billing activity is detected. Also sends a daily summary.
  */
 
-const axios = require('axios');
+const https = require('https');
+const dns = require('dns');
 const db = require('../models');
 const { Op } = require('sequelize');
 
+// Force IPv4 DNS resolution (fixes ETIMEDOUT on IPv6 networks)
+dns.setDefaultResultOrder('ipv4first');
+
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const TELEGRAM_URL = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
 
 // ─── Send message via Telegram Bot API ───────────────────────────
-async function sendTelegram(text, parseMode = 'HTML') {
-    if (!BOT_TOKEN || !CHAT_ID) {
-        console.warn('[TELEGRAM] Bot token or chat ID not configured — skipping alert');
-        return { skipped: true };
-    }
+function sendTelegram(text, parseMode = 'HTML') {
+    return new Promise((resolve, reject) => {
+        if (!BOT_TOKEN || !CHAT_ID) {
+            console.warn('[TELEGRAM] Bot token or chat ID not configured — skipping alert');
+            return resolve({ skipped: true });
+        }
 
-    try {
-        const { data } = await axios.post(TELEGRAM_URL, {
+        const payload = JSON.stringify({
             chat_id: CHAT_ID,
             text: text.substring(0, 4000),
             parse_mode: parseMode,
             disable_web_page_preview: true
-        }, { timeout: 10000 });
+        });
 
-        if (!data.ok) throw new Error(data.description || 'Telegram API error');
-        return data;
-    } catch (error) {
-        console.error('[TELEGRAM] Send failed:', error.message);
-        throw error;
-    }
+        const req = https.request({
+            hostname: 'api.telegram.org',
+            path: `/bot${BOT_TOKEN}/sendMessage`,
+            method: 'POST',
+            family: 4,
+            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
+        }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.ok) resolve(parsed);
+                    else reject(new Error(`Telegram API error: ${parsed.description}`));
+                } catch (e) { reject(e); }
+            });
+        });
+
+        req.on('error', reject);
+        req.setTimeout(10000, () => { req.destroy(); reject(new Error('Telegram request timeout')); });
+        req.write(payload);
+        req.end();
+    });
 }
 
 // ─── Escape HTML special chars in user data ─────────────────────
