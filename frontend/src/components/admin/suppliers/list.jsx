@@ -812,8 +812,8 @@ export const ListSuppliers = () => {
                 onClose={() => setDetailsDialog({ open: false, supplier: null })}
                 onDeletePurchase={handleDeletePurchase}
                 onDeletePayment={handleDeletePayment}
-                onPayment={(s) => { setDetailsDialog({ open: false, supplier: null }); setEntryMode('payment'); }}
-                onPurchase={(s) => { setDetailsDialog({ open: false, supplier: null }); setEntryMode('purchase'); }}
+                onPayment={(s) => { setDetailsDialog({ open: false, supplier: null }); setPrefilledSupplier(s); setEntryMode('payment'); }}
+                onPurchase={(s) => { setDetailsDialog({ open: false, supplier: null }); setPrefilledSupplier(s); setEntryMode('purchase'); }}
             />
         </Box>
     );
