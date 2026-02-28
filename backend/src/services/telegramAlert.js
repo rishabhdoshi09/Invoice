@@ -121,9 +121,59 @@ function alertUnusedWeight(details) {
 }
 
 /**
+ * Compute expected cash in drawer for today.
+ * Formula: Opening Balance + Cash Sales + Customer Receipts - Supplier Payments - Expenses
+ */
+async function getExpectedCashInDrawer() {
+    try {
+        const moment = require('moment-timezone');
+        const today = moment().format('YYYY-MM-DD');
+        const todayDDMMYYYY = moment().format('DD-MM-YYYY');
+
+        // 1. Opening balance from daily summary
+        let openingBalance = 0;
+        const summary = await db.dailySummary.findOne({ where: { date: today } });
+        if (summary) openingBalance = Number(summary.openingBalance) || 0;
+
+        // 2. Cash sales (paidAmount from today's orders)
+        const orders = await db.order.findAll({
+            where: { orderDate: todayDDMMYYYY, isDeleted: false }
+        });
+        const cashSales = orders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
+        const totalOrders = orders.length;
+        const paidOrders = orders.filter(o => o.paymentStatus === 'paid').length;
+
+        // 3. Payments breakdown
+        const dateFormats = [
+            todayDDMMYYYY,
+            moment().format('DD/MM/YYYY'),
+            moment().format('YYYY-MM-DD')
+        ];
+        const payments = await db.payment.findAll({
+            where: { isDeleted: false, paymentDate: { [Op.in]: dateFormats } }
+        });
+
+        const todaysOrderIds = orders.map(o => String(o.id));
+        // Customer receipts: only for PAST orders (today's order payments already in cashSales)
+        const customerReceipts = payments
+            .filter(p => p.partyType === 'customer' && !(p.referenceType === 'order' && todaysOrderIds.includes(String(p.referenceId))))
+            .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        const supplierPayments = payments.filter(p => p.partyType === 'supplier').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        const expenses = payments.filter(p => p.partyType === 'expense').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+        const expectedCash = openingBalance + cashSales + customerReceipts - supplierPayments - expenses;
+
+        return { expectedCash, openingBalance, cashSales, customerReceipts, supplierPayments, expenses, totalOrders, paidOrders };
+    } catch (e) {
+        console.error('[TELEGRAM] Failed to compute cash in drawer:', e.message);
+        return null;
+    }
+}
+
+/**
  * Alert: New sales order/bill created
  */
-function alertOrderCreated(details) {
+async function alertOrderCreated(details) {
     const { orderNumber, customerName, total, paidAmount, dueAmount, paymentStatus, items, createdBy, orderDate } = details;
     const isPaid = paymentStatus === 'paid';
     const statusIcon = isPaid ? '✅' : '🔴';
@@ -150,6 +200,17 @@ function alertOrderCreated(details) {
         if (items.length > 15) {
             msg.push(`  <i>...and ${items.length - 15} more items</i>`);
         }
+    }
+
+    // Closing balance (Expected Cash in Drawer)
+    const cashData = await getExpectedCashInDrawer();
+    if (cashData) {
+        msg.push(``);
+        msg.push(`━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        msg.push(`💰 <b>Expected Cash in Drawer</b>`);
+        msg.push(`<b>₹${cashData.expectedCash.toLocaleString('en-IN')}</b>`);
+        msg.push(`<i>OB: ₹${cashData.openingBalance.toLocaleString('en-IN')} + Sales: ₹${cashData.cashSales.toLocaleString('en-IN')} + Recv: ₹${cashData.customerReceipts.toLocaleString('en-IN')} − Pay: ₹${cashData.supplierPayments.toLocaleString('en-IN')} − Exp: ₹${cashData.expenses.toLocaleString('en-IN')}</i>`);
+        msg.push(`<i>Today: ${cashData.totalOrders} orders (${cashData.paidOrders} paid)</i>`);
     }
 
     msg.push(
