@@ -45,6 +45,19 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
         setTimeout(() => firstRef.current?.focus(), 100);
     }, [mode]);
 
+    // Auto-fill supplier when prefilledSupplier changes
+    useEffect(() => {
+        if (prefilledSupplier) {
+            if (mode === 'payment') {
+                setPaySup(prefilledSupplier);
+                if (prefilledSupplier.balance > 0) setPayAmt(prefilledSupplier.balance.toString());
+            }
+            if (mode === 'purchase') {
+                setPurSup(prefilledSupplier);
+            }
+        }
+    }, [prefilledSupplier, mode]);
+
     // Duplicate check
     const checkDup = useCallback((name) => {
         if (!name.trim()) { setDupWarn(''); return; }
