@@ -699,7 +699,7 @@ export const ListSuppliers = () => {
             )}
 
             {/* Quick Entry Bar */}
-            <QuickEntryBar mode={entryMode} setMode={setEntryMode} suppliers={suppliers} onDone={handleEntryDone} />
+            <QuickEntryBar mode={entryMode} setMode={setEntryMode} suppliers={suppliers} onDone={handleEntryDone} prefilledSupplier={prefilledSupplier} />
 
             {/* Search + Filter */}
             <Paper sx={{ p: 1, mb: 1.5, display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap', border: '1px solid #e0e0e0' }}>
