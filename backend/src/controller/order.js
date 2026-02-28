@@ -259,7 +259,7 @@ module.exports = {
                 );
             } catch (e) { /* silent */ }
 
-            // Fire live Telegram alert for new bill
+            // Fire live Telegram alert for new bill (async, non-blocking)
             telegram.alertOrderCreated({
                 orderNumber: result.orderNumber,
                 customerName: result.customerName,
@@ -269,7 +269,7 @@ module.exports = {
                 paymentStatus: result.paymentStatus,
                 items: orderItems,
                 createdBy: req.user?.name || req.user?.username
-            });
+            }).catch(e => console.error('[TELEGRAM] alertOrderCreated error:', e.message));
 
             return res.status(200).send({
                 status: 200,
