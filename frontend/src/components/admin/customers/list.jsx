@@ -540,10 +540,11 @@ export const ListCustomers = () => {
             {/* Quick Entry Tabs */}
             <Paper sx={{ mb: 2 }}>
                 <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                    <Tab icon={<PersonAdd />} label="Add Customer" iconPosition="start" sx={{ minHeight: 48 }} />
-                    <Tab icon={<Badge badgeContent={customersWithDue} color="success"><Receipt /></Badge>} label="Receive Payment" iconPosition="start" sx={{ minHeight: 48 }} />
-                    <Tab icon={<Badge badgeContent={customers.filter(c => c.balance < 0).length} color="warning"><AccountBalance /></Badge>} label="Advances" iconPosition="start" sx={{ minHeight: 48 }} />
-                    <Tab icon={<History />} label="Recent" iconPosition="start" sx={{ minHeight: 48 }} />
+                    <Tab icon={<PersonAdd />} label="Add Customer" iconPosition="start" sx={{ minHeight: 48 }} data-testid="tab-add-customer" />
+                    <Tab icon={<ShoppingCart />} label="Quick Sale" iconPosition="start" sx={{ minHeight: 48, color: 'success.main' }} data-testid="tab-quick-sale" />
+                    <Tab icon={<Badge badgeContent={customersWithDue} color="success"><Receipt /></Badge>} label="Receive Payment" iconPosition="start" sx={{ minHeight: 48 }} data-testid="tab-receive-payment" />
+                    <Tab icon={<Badge badgeContent={customers.filter(c => c.balance < 0).length} color="warning"><AccountBalance /></Badge>} label="Advances" iconPosition="start" sx={{ minHeight: 48 }} data-testid="tab-advances" />
+                    <Tab icon={<History />} label="Recent" iconPosition="start" sx={{ minHeight: 48 }} data-testid="tab-recent" />
                 </Tabs>
 
                 <Box sx={{ p: 2 }}>
