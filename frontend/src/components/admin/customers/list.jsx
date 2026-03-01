@@ -642,8 +642,125 @@ export const ListCustomers = () => {
                         </Box>
                     )}
 
-                    {/* Tab 1: Receive Payment */}
+                    {/* Tab 1: Quick Add Sale */}
                     {activeTab === 1 && (
+                        <Box>
+                            <Grid container spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
+                                <Grid item xs={12} sm={3}>
+                                    <Autocomplete
+                                        size="small"
+                                        options={customers}
+                                        getOptionLabel={(o) => o.name || ''}
+                                        value={saleCustomer}
+                                        onChange={(e, v) => setSaleCustomer(v)}
+                                        renderInput={(params) => <TextField {...params} label="Customer *" data-testid="sale-customer-input" />}
+                                        renderOption={(props, option) => (
+                                            <li {...props}>
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                                                    <Typography variant="body2">{option.name}</Typography>
+                                                    {option.balance > 0 && <Chip label={`Due ₹${option.balance.toLocaleString('en-IN')}`} size="small" color="warning" sx={{ height: 18, fontSize: '0.65rem' }} />}
+                                                </Box>
+                                            </li>
+                                        )}
+                                    />
+                                </Grid>
+                                <Grid item xs={6} sm={2}>
+                                    <TextField
+                                        fullWidth size="small" type="date" label="Sale Date"
+                                        value={saleDate}
+                                        onChange={(e) => setSaleDate(e.target.value)}
+                                        InputLabelProps={{ shrink: true }}
+                                        data-testid="sale-date-input"
+                                    />
+                                </Grid>
+                                <Grid item xs={6} sm={2}>
+                                    <FormControlLabel
+                                        control={<Switch size="small" checked={salePaid} onChange={(e) => setSalePaid(e.target.checked)} data-testid="sale-paid-switch" />}
+                                        label={<Typography variant="body2" sx={{ fontWeight: 500, color: salePaid ? 'success.main' : 'warning.main' }}>{salePaid ? 'Cash (Paid)' : 'Credit (Due)'}</Typography>}
+                                    />
+                                </Grid>
+                                <Grid item xs={6} sm={2}>
+                                    <TextField fullWidth size="small" label="Notes" value={saleNotes} onChange={(e) => setSaleNotes(e.target.value)} placeholder="Optional" data-testid="sale-notes-input" />
+                                </Grid>
+                                <Grid item xs={6} sm={3}>
+                                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                        <Typography variant="h6" sx={{ fontWeight: 700, color: 'success.dark', whiteSpace: 'nowrap' }}>
+                                            ₹{saleTotal.toLocaleString('en-IN')}
+                                        </Typography>
+                                        <Button
+                                            fullWidth variant="contained" color="success"
+                                            onClick={handleQuickSale} disabled={saving}
+                                            startIcon={saving ? <CircularProgress size={16} /> : <ShoppingCart />}
+                                            data-testid="sale-submit-btn"
+                                        >
+                                            Add Sale
+                                        </Button>
+                                    </Box>
+                                </Grid>
+                            </Grid>
+
+                            {/* Item rows */}
+                            <Paper variant="outlined" sx={{ p: 1.5 }}>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>ITEMS ({saleItems.length})</Typography>
+                                    <Button size="small" startIcon={<Add />} onClick={addSaleItem} data-testid="sale-add-item-btn">Add Row</Button>
+                                </Box>
+                                {saleItems.map((item, idx) => (
+                                    <Grid container spacing={1} key={idx} alignItems="center" sx={{ mb: 0.5 }}>
+                                        <Grid item xs={5} sm={4}>
+                                            <TextField
+                                                fullWidth size="small" placeholder="Item name"
+                                                value={item.name}
+                                                onChange={(e) => handleSaleItemChange(idx, 'name', e.target.value)}
+                                                inputRef={idx === 0 ? saleItemRef : null}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' && idx === saleItems.length - 1 && item.name) addSaleItem();
+                                                }}
+                                                data-testid={`sale-item-name-${idx}`}
+                                            />
+                                        </Grid>
+                                        <Grid item xs={2} sm={2}>
+                                            <TextField
+                                                fullWidth size="small" placeholder="Qty" type="number"
+                                                value={item.qty}
+                                                onChange={(e) => handleSaleItemChange(idx, 'qty', e.target.value)}
+                                                data-testid={`sale-item-qty-${idx}`}
+                                            />
+                                        </Grid>
+                                        <Grid item xs={2} sm={2}>
+                                            <TextField
+                                                fullWidth size="small" placeholder="Price" type="number"
+                                                value={item.price}
+                                                onChange={(e) => handleSaleItemChange(idx, 'price', e.target.value)}
+                                                InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
+                                                data-testid={`sale-item-price-${idx}`}
+                                            />
+                                        </Grid>
+                                        <Grid item xs={2} sm={3}>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 70 }}>
+                                                    = ₹{(item.total || 0).toLocaleString('en-IN')}
+                                                </Typography>
+                                                {saleItems.length > 1 && (
+                                                    <IconButton size="small" onClick={() => removeSaleItem(idx)} data-testid={`sale-item-remove-${idx}`}>
+                                                        <Close fontSize="small" color="error" />
+                                                    </IconButton>
+                                                )}
+                                            </Box>
+                                        </Grid>
+                                    </Grid>
+                                ))}
+                            </Paper>
+                            {saleCustomer && (
+                                <Alert severity="info" sx={{ mt: 1, py: 0 }}>
+                                    Batch mode: After submission, customer &amp; date stay selected. Keep adding sales!
+                                </Alert>
+                            )}
+                        </Box>
+                    )}
+
+                    {/* Tab 2: Receive Payment */}
+                    {activeTab === 2 && (
                         <Box>
                             <Grid container spacing={2} alignItems="center">
                                 <Grid item xs={12} sm={4}>
