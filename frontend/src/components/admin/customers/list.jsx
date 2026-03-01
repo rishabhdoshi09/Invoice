@@ -905,8 +905,8 @@ export const ListCustomers = () => {
                         </Box>
                     )}
 
-                    {/* Tab 2: Advances */}
-                    {activeTab === 2 && (
+                    {/* Tab 3: Advances */}
+                    {activeTab === 3 && (
                         <Box>
                             <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <AccountBalance color="warning" fontSize="small" />
