@@ -352,9 +352,81 @@ export const ListCustomers = () => {
 
     // Quick receipt from table
     const handleQuickReceiptFromTable = (customer) => {
-        setActiveTab(1);
+        setActiveTab(2);
         setSelectedCustomer(customer);
         setReceiptAmount(customer.balance > 0 ? customer.balance.toString() : '');
+    };
+
+    // ========== QUICK ADD SALE ==========
+    const saleTotal = saleItems.reduce((s, i) => s + (i.total || 0), 0);
+
+    const handleSaleItemChange = (idx, field, value) => {
+        const updated = [...saleItems];
+        updated[idx][field] = value;
+        if (field === 'qty' || field === 'price') {
+            const q = parseFloat(updated[idx].qty) || 0;
+            const p = parseFloat(updated[idx].price) || 0;
+            updated[idx].total = Math.round(q * p * 100) / 100;
+        }
+        setSaleItems(updated);
+    };
+
+    const addSaleItem = () => {
+        setSaleItems([...saleItems, { name: '', qty: '', price: '', total: 0 }]);
+    };
+
+    const removeSaleItem = (idx) => {
+        if (saleItems.length <= 1) return;
+        setSaleItems(saleItems.filter((_, i) => i !== idx));
+    };
+
+    const handleQuickSale = async () => {
+        if (!saleCustomer) { alert('Select a customer'); return; }
+        const validItems = saleItems.filter(i => i.name.trim() && i.total > 0);
+        if (validItems.length === 0) { alert('Add at least one item with name and amount'); return; }
+
+        setSaving(true);
+        try {
+            const token = localStorage.getItem('token');
+            const total = validItems.reduce((s, i) => s + i.total, 0);
+            const paid = salePaid ? total : 0;
+
+            await axios.post('/api/orders', {
+                orderDate: moment(saleDate).format('DD-MM-YYYY'),
+                customerName: saleCustomer.name,
+                customerMobile: saleCustomer.mobile || '',
+                subTotal: total,
+                total: total,
+                paidAmount: paid,
+                dueAmount: total - paid,
+                paymentStatus: salePaid ? 'paid' : 'unpaid',
+                notes: saleNotes,
+                orderItems: validItems.map((item, idx) => ({
+                    name: item.name.trim(),
+                    quantity: parseFloat(item.qty) || 1,
+                    productPrice: parseFloat(item.price) || item.total,
+                    totalPrice: item.total,
+                    type: 'non-weighted',
+                    sortOrder: idx
+                }))
+            }, { headers: { Authorization: `Bearer ${token}` } });
+
+            showSuccess(`Sale ₹${total.toLocaleString('en-IN')} → ${saleCustomer.name} (${moment(saleDate).format('DD/MM/YY')})`);
+            // Batch mode: keep customer & date, clear items
+            setSaleItems([{ name: '', qty: '', price: '', total: 0 }]);
+            setSaleNotes('');
+            fetchCustomers();
+            setTimeout(() => saleItemRef.current?.focus(), 100);
+        } catch (error) {
+            alert('Error: ' + (error.response?.data?.message || error.message));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleQuickSaleFromTable = (customer) => {
+        setActiveTab(1);
+        setSaleCustomer(customer);
     };
 
     // Navigate to create order
