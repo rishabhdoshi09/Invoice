@@ -61,6 +61,14 @@ export const ListCustomers = () => {
     const [createNewCustomer, setCreateNewCustomer] = useState(false);
     const [newCustomerName, setNewCustomerName] = useState('');
     const [newCustomerMobile, setNewCustomerMobile] = useState('');
+
+    // Quick Add Sale
+    const [saleCustomer, setSaleCustomer] = useState(null);
+    const [saleDate, setSaleDate] = useState(moment().format('YYYY-MM-DD'));
+    const [saleItems, setSaleItems] = useState([{ name: '', qty: '', price: '', total: 0 }]);
+    const [salePaid, setSalePaid] = useState(true);
+    const [saleNotes, setSaleNotes] = useState('');
+    const saleItemRef = useRef(null);
     
     // Expanded rows
     const [expandedOrder, setExpandedOrder] = useState(null);
