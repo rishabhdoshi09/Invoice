@@ -881,8 +881,8 @@ export const ListCustomers = () => {
                         </Box>
                     )}
 
-                    {/* Tab 2: Recent Activity */}
-                    {activeTab === 3 && (
+                    {/* Tab 4: Recent Activity */}
+                    {activeTab === 4 && (
                         <Box>
                             <Typography variant="subtitle2" sx={{ mb: 1 }}>Recent Customer Receipts</Typography>
                             {recentReceipts.length === 0 ? (
