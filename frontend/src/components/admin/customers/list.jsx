@@ -1062,13 +1062,14 @@ export const ListCustomers = () => {
                                         </TableCell>
                                         <TableCell align="center">
                                             <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-                                                <Tooltip title="Create Sale">
+                                                <Tooltip title="Quick Sale">
                                                     <Button
                                                         size="small"
                                                         variant="outlined"
                                                         color="primary"
-                                                        onClick={() => handleCreateSale(customer)}
+                                                        onClick={() => handleQuickSaleFromTable(customer)}
                                                         sx={{ minWidth: 40, px: 1 }}
+                                                        data-testid={`quick-sale-${customer.id}`}
                                                     >
                                                         <ShoppingCart fontSize="small" />
                                                     </Button>
