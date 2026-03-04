@@ -25,12 +25,13 @@ import {
 import { CreateProduct } from '../products/create';
 import pdfMake from 'pdfmake/build/pdfmake';
 import { generatePdfDefinition, generatePdfDefinition2 } from './helper';
-import { Delete, Sync, Info } from '@mui/icons-material';
+import { Delete, Sync, Info, WhatsApp } from '@mui/icons-material';
 import { fetchWeightsAction, createOrderAction } from '../../../store/orders';
 import { ProductType } from '../../../enums/product';
 import { useAuth } from '../../../context/AuthContext';
 import { api } from '../../../store/api'; // RTK Query API for cache invalidation
 import axios from 'axios';
+import { sendInvoiceViaWhatsApp } from '../../../utils/whatsapp';
 
 /* -------------------------
   Safe font loader for pdfMake
@@ -339,6 +340,9 @@ export const CreateOrder = () => {
   const [lastSubmitError, setLastSubmitError] = useState(null);
   const [lastSubmitResponse, setLastSubmitResponse] = useState(null);
   const [lastInvoiceTotal, setLastInvoiceTotal] = useState(null);
+  
+  // Post-submit WhatsApp dialog
+  const [whatsAppDialog, setWhatsAppDialog] = useState({ open: false, order: null });
 
   const [suppressAutoSuggest, setSuppressAutoSuggest] = useState(false);
 
@@ -1443,10 +1447,16 @@ export const CreateOrder = () => {
       // refresh history panel
       refreshHistory();
 
-      const paymentMsg = isCreditSale 
-        ? `\n⚠️ CREDIT SALE - Due: ₹${savedOrder.total}` 
-        : '';
-      alert(`✅ Order created successfully!\nOrder #: ${savedOrder.orderNumber}\nTotal: ₹${savedOrder.total}${paymentMsg}`);
+      // Show WhatsApp dialog instead of plain alert
+      setWhatsAppDialog({
+        open: true,
+        order: {
+          ...savedOrder,
+          orderItems: savedOrder.orderItems || orderProps.orderItems || [],
+          customerMobile: savedOrder.customerMobile || orderProps.customerMobile || '',
+          isCreditSale
+        }
+      });
 
       setOrderProps(initialOrderProps);
       formik.resetForm();
@@ -2486,6 +2496,76 @@ export const CreateOrder = () => {
             }
           >
             Add Product
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Post-Submit WhatsApp Dialog */}
+      <Dialog 
+        open={whatsAppDialog.open} 
+        onClose={() => setWhatsAppDialog({ open: false, order: null })}
+        maxWidth="xs" 
+        fullWidth
+        data-testid="whatsapp-success-dialog"
+      >
+        <DialogTitle sx={{ pb: 1 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: 'success.main' }}>
+            Invoice Created Successfully
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          {whatsAppDialog.order && (
+            <Box>
+              <Typography variant="body1" sx={{ mb: 0.5 }}>
+                <strong>Invoice #:</strong> {whatsAppDialog.order.orderNumber}
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 0.5 }}>
+                <strong>Total:</strong> ₹{(whatsAppDialog.order.total || 0).toLocaleString('en-IN')}
+              </Typography>
+              {whatsAppDialog.order.customerName && (
+                <Typography variant="body1" sx={{ mb: 0.5 }}>
+                  <strong>Customer:</strong> {whatsAppDialog.order.customerName}
+                </Typography>
+              )}
+              {whatsAppDialog.order.isCreditSale && (
+                <Alert severity="warning" sx={{ mt: 1, mb: 1, py: 0 }}>
+                  CREDIT SALE — Due: ₹{(whatsAppDialog.order.total || 0).toLocaleString('en-IN')}
+                </Alert>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button
+            onClick={() => setWhatsAppDialog({ open: false, order: null })}
+            variant="outlined"
+            data-testid="whatsapp-dialog-close"
+          >
+            Close
+          </Button>
+          <Button
+            onClick={() => {
+              printPdf();
+              setWhatsAppDialog({ open: false, order: null });
+            }}
+            variant="outlined"
+            color="secondary"
+            data-testid="whatsapp-dialog-print"
+          >
+            Print
+          </Button>
+          <Button
+            variant="contained"
+            sx={{ bgcolor: '#25D366', '&:hover': { bgcolor: '#128C7E' } }}
+            startIcon={<WhatsApp />}
+            onClick={() => {
+              const o = whatsAppDialog.order;
+              sendInvoiceViaWhatsApp(o?.customerMobile || '', o);
+              setWhatsAppDialog({ open: false, order: null });
+            }}
+            data-testid="whatsapp-dialog-send"
+          >
+            Send via WhatsApp
           </Button>
         </DialogActions>
       </Dialog>

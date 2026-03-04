@@ -413,7 +413,7 @@ export const ListCustomers = () => {
             }, { headers: { Authorization: `Bearer ${token}` } });
 
             showSuccess(`Sale ₹${total.toLocaleString('en-IN')} → ${saleCustomer.name} (${moment(saleDate).format('DD/MM/YY')})`);
-            // Open WhatsApp if customer has mobile
+            // Offer WhatsApp send if customer has mobile
             if (saleCustomer.mobile) {
                 const orderData = {
                     orderDate: moment(saleDate).format('DD-MM-YYYY'),
@@ -422,9 +422,11 @@ export const ListCustomers = () => {
                     paymentStatus: salePaid ? 'paid' : 'unpaid',
                     items: validItems
                 };
-                if (window.confirm('Send invoice to customer via WhatsApp?')) {
-                    sendInvoiceViaWhatsApp(saleCustomer.mobile, orderData);
-                }
+                setTimeout(() => {
+                    if (window.confirm(`Send invoice (₹${total.toLocaleString('en-IN')}) to ${saleCustomer.name} via WhatsApp?`)) {
+                        sendInvoiceViaWhatsApp(saleCustomer.mobile, orderData);
+                    }
+                }, 300);
             }
             // Batch mode: keep customer & date, clear items
             setSaleItems([{ name: '', qty: '', price: '', total: 0 }]);
