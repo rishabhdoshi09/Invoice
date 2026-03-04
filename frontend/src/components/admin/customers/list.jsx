@@ -12,12 +12,13 @@ import {
     Delete, Visibility, Refresh, Add, Receipt, People, Close, 
     ShoppingCart, Search, Download, CheckCircle,
     KeyboardArrowDown, KeyboardArrowUp, PersonAdd, Warning,
-    History, Phone, Email, AccountBalance, TipsAndUpdates, Print
+    History, Phone, Email, AccountBalance, TipsAndUpdates, Print, WhatsApp
 } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
 import pdfMake from 'pdfmake/build/pdfmake';
 import { generatePdfDefinition } from '../orders/helper';
+import { sendInvoiceViaWhatsApp } from '../../../utils/whatsapp';
 
 // Load pdfMake fonts safely
 try {
@@ -412,6 +413,19 @@ export const ListCustomers = () => {
             }, { headers: { Authorization: `Bearer ${token}` } });
 
             showSuccess(`Sale ₹${total.toLocaleString('en-IN')} → ${saleCustomer.name} (${moment(saleDate).format('DD/MM/YY')})`);
+            // Open WhatsApp if customer has mobile
+            if (saleCustomer.mobile) {
+                const orderData = {
+                    orderDate: moment(saleDate).format('DD-MM-YYYY'),
+                    customerName: saleCustomer.name,
+                    total, paidAmount: paid, dueAmount: total - paid,
+                    paymentStatus: salePaid ? 'paid' : 'unpaid',
+                    items: validItems
+                };
+                if (window.confirm('Send invoice to customer via WhatsApp?')) {
+                    sendInvoiceViaWhatsApp(saleCustomer.mobile, orderData);
+                }
+            }
             // Batch mode: keep customer & date, clear items
             setSaleItems([{ name: '', qty: '', price: '', total: 0 }]);
             setSaleNotes('');
@@ -1236,6 +1250,23 @@ export const ListCustomers = () => {
                                                                             data-testid={`print-invoice-${o.id}`}
                                                                         >
                                                                             {printingInvoice === o.id ? <CircularProgress size={18} /> : <Print fontSize="small" />}
+                                                                        </IconButton>
+                                                                    </Tooltip>
+                                                                    <Tooltip title="Send via WhatsApp">
+                                                                        <IconButton
+                                                                            size="small"
+                                                                            sx={{ color: '#25D366' }}
+                                                                            onClick={async () => {
+                                                                                try {
+                                                                                    const fullOrder = await fetchOrderAndGeneratePdf(o.id);
+                                                                                    sendInvoiceViaWhatsApp(detailsDialog.customer?.mobile || fullOrder.customerMobile, fullOrder);
+                                                                                } catch (err) {
+                                                                                    sendInvoiceViaWhatsApp(detailsDialog.customer?.mobile, o);
+                                                                                }
+                                                                            }}
+                                                                            data-testid={`whatsapp-invoice-${o.id}`}
+                                                                        >
+                                                                            <WhatsApp fontSize="small" />
                                                                         </IconButton>
                                                                     </Tooltip>
                                                                 </Box>

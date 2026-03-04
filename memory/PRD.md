@@ -75,6 +75,7 @@ frontend/src/
 - [x] Closing balance (Expected Cash in Drawer) in Telegram bill alerts
 - [x] Supplier auto-fill & batch mode in purchase bill / payment forms
 - [x] Quick Sale tab on Customers page for rapid date-wise bulk entry with batch mode
+- [x] WhatsApp invoice sharing via wa.me links (Orders page, Customer dialog, Quick Sale)
 - [x] IPv4 network fix for Telegram (dns.setDefaultResultOrder)
 - [x] Database migration system using sequelize-cli
 - [x] Historical data backfill for ledger drift

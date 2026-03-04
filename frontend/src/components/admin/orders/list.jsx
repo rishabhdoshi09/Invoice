@@ -5,10 +5,11 @@ import { useDispatch, useSelector } from 'react-redux';
 import { listOrdersAction, deleteOrderAction, getOrderAction } from '../../../store/orders';
 import { Pagination } from '../../common/pagination';
 import { useAuth } from '../../../context/AuthContext';
-import { Note, Warning, Clear, Refresh, SwapHoriz, PersonAdd, Person, Print, Visibility } from '@mui/icons-material';
+import { Note, Warning, Clear, Refresh, SwapHoriz, PersonAdd, Person, Print, Visibility, WhatsApp } from '@mui/icons-material';
 import axios from 'axios';
 import pdfMake from 'pdfmake/build/pdfmake';
 import { generatePdfDefinition } from './helper';
+import { sendInvoiceViaWhatsApp } from '../../../utils/whatsapp';
 
 // Load pdfMake fonts safely
 try {
@@ -544,6 +545,28 @@ export const ListOrders = () => {
                                                             data-testid={`print-invoice-${row.id}`}
                                                         >
                                                             Print
+                                                        </Button>
+                                                    </Tooltip>
+                                                    <Tooltip title="Send via WhatsApp">
+                                                        <Button
+                                                            size="small"
+                                                            variant="outlined"
+                                                            sx={{ color: '#25D366', borderColor: '#25D366', '&:hover': { borderColor: '#128C7E', bgcolor: '#e8f8f0' } }}
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                try {
+                                                                    const token = localStorage.getItem('token');
+                                                                    const { data } = await axios.get(`/api/orders/${row.id}`, { headers: { Authorization: `Bearer ${token}` } });
+                                                                    const fullOrder = data.data || data;
+                                                                    sendInvoiceViaWhatsApp(fullOrder.customerMobile || row.customerMobile, fullOrder);
+                                                                } catch (err) {
+                                                                    sendInvoiceViaWhatsApp(row.customerMobile, row);
+                                                                }
+                                                            }}
+                                                            startIcon={<WhatsApp fontSize="small" />}
+                                                            data-testid={`whatsapp-invoice-${row.id}`}
+                                                        >
+                                                            WhatsApp
                                                         </Button>
                                                     </Tooltip>
                                                     {isAdmin && (
