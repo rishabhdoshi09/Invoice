@@ -77,6 +77,7 @@ frontend/src/
 - [x] Quick Sale tab on Customers page for rapid date-wise bulk entry with batch mode
 - [x] WhatsApp invoice sharing via wa.me links (Orders page, Customer dialog, Quick Sale)
 - [x] WhatsApp success dialog after invoice creation on /orders/create page
+- [x] Customer name optional — orders can be created with just phone number, customer auto-saved by mobile
 - [x] IPv4 network fix for Telegram (dns.setDefaultResultOrder)
 - [x] Database migration system using sequelize-cli
 - [x] Historical data backfill for ledger drift
