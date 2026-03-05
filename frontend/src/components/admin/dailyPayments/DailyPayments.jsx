@@ -100,7 +100,7 @@ export const DailyPayments = () => {
     
     // Extract data from RTK Query
     const summary = summaryData || null;
-    const payments = summaryData?.payments || [];
+    const payments = (summaryData?.payments || []).filter(p => !p.isDeleted);
     const loading = loadingSummary || loadingReceivables || loadingPayables;
     
     // Expanded rows for viewing bills
