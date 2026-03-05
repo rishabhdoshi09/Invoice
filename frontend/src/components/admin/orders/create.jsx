@@ -2504,9 +2504,21 @@ export const CreateOrder = () => {
       {/* Floating Price Keypad */}
       <PriceKeypad
         value={localPriceValue}
-        onInput={(val) => {
-          setLocalPriceValue(val);
-          formik.setFieldValue('productPrice', val);
+        onDigit={(d) => {
+          const cur = String(localPriceValue || '').replace(/\D/g, '');
+          // Enforce 3-digit max for weighted products
+          if (isWeighted && cur.length >= 3) return;
+          applyDigitToPrice(d);
+        }}
+        onBackspace={() => {
+          const cur = String(localPriceValue || '');
+          if (cur.length > 0) {
+            const newVal = cur.slice(0, -1);
+            onPriceChange({ target: { value: newVal }, preventDefault: () => {} });
+          }
+        }}
+        onClear={() => {
+          onPriceChange({ target: { value: '' }, preventDefault: () => {} });
         }}
       />
 

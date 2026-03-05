@@ -4,31 +4,11 @@ import { Dialpad, Close, Backspace } from '@mui/icons-material';
 
 /**
  * Floating numeric keypad for price input.
- * Toggleable — opens/closes with a FAB button.
- * Calls onInput(value) whenever the value changes.
+ * Delegates all input to parent callbacks so existing validation
+ * (3-digit limit, hundredth-digit lock, restricted ranges) stays intact.
  */
-const PriceKeypad = ({ value, onInput, onSubmit }) => {
+const PriceKeypad = ({ value, onDigit, onBackspace, onClear }) => {
     const [open, setOpen] = useState(false);
-
-    const handleDigit = (d) => {
-        const next = (value || '') + d;
-        onInput(next);
-    };
-
-    const handleDot = () => {
-        const cur = value || '';
-        if (cur.includes('.')) return;
-        onInput(cur + '.');
-    };
-
-    const handleBackspace = () => {
-        const cur = value || '';
-        onInput(cur.slice(0, -1));
-    };
-
-    const handleClear = () => {
-        onInput('');
-    };
 
     const btnStyle = {
         minWidth: 0, width: 56, height: 48,
@@ -40,7 +20,7 @@ const PriceKeypad = ({ value, onInput, onSubmit }) => {
         <Button
             key={d}
             variant="outlined"
-            onClick={() => handleDigit(String(d))}
+            onClick={() => onDigit(d)}
             sx={{ ...btnStyle, color: '#1a1a2e', borderColor: '#e0e0e0', '&:hover': { bgcolor: '#f0f0f5', borderColor: '#90caf9' } }}
             data-testid={`keypad-${d}`}
         >
@@ -50,7 +30,7 @@ const PriceKeypad = ({ value, onInput, onSubmit }) => {
 
     return (
         <>
-            {/* Toggle button */}
+            {/* Toggle FAB */}
             <IconButton
                 onClick={() => setOpen(!open)}
                 sx={{
@@ -82,7 +62,7 @@ const PriceKeypad = ({ value, onInput, onSubmit }) => {
                     <Box sx={{ px: 2, py: 1.5, bgcolor: '#1a1a2e', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <Typography variant="caption" sx={{ opacity: 0.7, fontWeight: 500 }}>PRICE</Typography>
                         <Typography variant="h5" sx={{ fontWeight: 700, fontFamily: 'monospace', letterSpacing: 1 }}>
-                            ₹{value || '0'}
+                            {'\u20B9'}{value || '0'}
                         </Typography>
                     </Box>
 
@@ -99,43 +79,22 @@ const PriceKeypad = ({ value, onInput, onSubmit }) => {
                         </Box>
                         <Box sx={{ display: 'flex', gap: 0.75, justifyContent: 'center' }}>
                             <Button
-                                variant="outlined"
-                                onClick={handleDot}
-                                sx={{ ...btnStyle, borderColor: '#e0e0e0', '&:hover': { bgcolor: '#f0f0f5' } }}
-                                data-testid="keypad-dot"
+                                variant="text"
+                                onClick={onClear}
+                                sx={{ ...btnStyle, color: '#757575', fontSize: '0.8rem' }}
+                                data-testid="keypad-clear"
                             >
-                                .
+                                CLR
                             </Button>
                             {digitBtn(0)}
                             <Button
                                 variant="outlined"
-                                onClick={handleBackspace}
+                                onClick={onBackspace}
                                 sx={{ ...btnStyle, borderColor: '#e0e0e0', color: '#e53935', '&:hover': { bgcolor: '#fce4ec' } }}
                                 data-testid="keypad-backspace"
                             >
                                 <Backspace fontSize="small" />
                             </Button>
-                        </Box>
-                        <Box sx={{ display: 'flex', gap: 0.75, justifyContent: 'center' }}>
-                            <Button
-                                variant="text"
-                                onClick={handleClear}
-                                sx={{ ...btnStyle, flex: 1, color: '#757575', fontSize: '0.8rem' }}
-                                data-testid="keypad-clear"
-                            >
-                                CLR
-                            </Button>
-                            {onSubmit && (
-                                <Button
-                                    variant="contained"
-                                    color="success"
-                                    onClick={onSubmit}
-                                    sx={{ ...btnStyle, flex: 1.5, fontSize: '0.9rem' }}
-                                    data-testid="keypad-done"
-                                >
-                                    DONE
-                                </Button>
-                            )}
                         </Box>
                     </Box>
                 </Paper>
