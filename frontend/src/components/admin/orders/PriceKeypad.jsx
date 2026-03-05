@@ -54,7 +54,7 @@ const PriceKeypad = ({ value, onInput, onSubmit }) => {
             <IconButton
                 onClick={() => setOpen(!open)}
                 sx={{
-                    position: 'fixed', bottom: 24, right: 24, zIndex: 1200,
+                    position: 'fixed', bottom: 24, right: 24, zIndex: 1400,
                     width: 56, height: 56,
                     bgcolor: open ? '#ef5350' : '#1976d2',
                     color: '#fff',
@@ -72,7 +72,7 @@ const PriceKeypad = ({ value, onInput, onSubmit }) => {
                 <Paper
                     elevation={8}
                     sx={{
-                        position: 'fixed', bottom: 90, right: 16, zIndex: 1100,
+                        position: 'fixed', bottom: 90, right: 16, zIndex: 1400,
                         width: 220, borderRadius: 3, overflow: 'hidden',
                         bgcolor: '#fafafa',
                     }}
