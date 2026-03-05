@@ -166,7 +166,7 @@ export const api = createApi({
                 { type: 'Payments', id: 'LIST' },
                 { type: 'Receivables', id: 'LIST' },
                 { type: 'Payables', id: 'LIST' },
-                'Dashboard'
+                { type: 'Dashboard', id: 'TODAY' }
             ],
         }),
         
@@ -179,7 +179,7 @@ export const api = createApi({
                 { type: 'Payments', id: 'LIST' },
                 { type: 'Receivables', id: 'LIST' },
                 { type: 'Payables', id: 'LIST' },
-                'Dashboard'
+                { type: 'Dashboard', id: 'TODAY' }
             ],
         }),
         
