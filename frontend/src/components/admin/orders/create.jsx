@@ -32,6 +32,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { api } from '../../../store/api'; // RTK Query API for cache invalidation
 import axios from 'axios';
 import { sendInvoiceViaWhatsApp } from '../../../utils/whatsapp';
+import PriceKeypad from './PriceKeypad';
 
 /* -------------------------
   Safe font loader for pdfMake
@@ -2500,9 +2501,18 @@ export const CreateOrder = () => {
         </DialogActions>
       </Dialog>
 
+      {/* Floating Price Keypad */}
+      <PriceKeypad
+        value={localPriceValue}
+        onInput={(val) => {
+          setLocalPriceValue(val);
+          formik.setFieldValue('productPrice', val);
+        }}
+      />
+
       {/* Post-Submit WhatsApp Dialog */}
       <Dialog 
-        open={whatsAppDialog.open} 
+        open={whatsAppDialog.open}
         onClose={() => setWhatsAppDialog({ open: false, order: null })}
         maxWidth="xs" 
         fullWidth
