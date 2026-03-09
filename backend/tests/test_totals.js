@@ -4,7 +4,7 @@
 
 const axios = require('axios');
 
-const API_URL = process.env.API_URL || 'https://ledger-audit-1.preview.emergentagent.com/api';
+const API_URL = process.env.API_URL || 'https://quick-sale-entry.preview.emergentagent.com/api';
 const USERNAME = 'admin';
 const PASSWORD = 'admin123';
 
