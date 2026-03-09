@@ -154,12 +154,26 @@ module.exports = {
                         FROM orders 
                         WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
                         AND "isDeleted" = false
+                    ), 0) + COALESCE((
+                        SELECT SUM(amount) 
+                        FROM payments 
+                        WHERE "partyType" = 'customer'
+                        AND ("partyId" = c.id OR "partyName" = c.name)
+                        AND "isDeleted" = false
+                        AND ("referenceType" IS NULL OR "referenceType" != 'order')
                     ), 0) as "totalCredit",
                     COALESCE(c."openingBalance", 0) + COALESCE((
                         SELECT SUM("dueAmount") 
                         FROM orders 
                         WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
                         AND "isDeleted" = false
+                    ), 0) - COALESCE((
+                        SELECT SUM(amount) 
+                        FROM payments 
+                        WHERE "partyType" = 'customer'
+                        AND ("partyId" = c.id OR "partyName" = c.name)
+                        AND "isDeleted" = false
+                        AND ("referenceType" IS NULL OR "referenceType" != 'order')
                     ), 0) as balance
                 FROM customers c
                 ORDER BY c.name ASC
