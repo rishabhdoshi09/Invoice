@@ -109,6 +109,14 @@ frontend/src/
 - Old invoice module balance calculations are fragile (will be superseded by ledger)
 - PostgreSQL not available in preview pod by default (user tests locally)
 - User's local dev env has IPv6 connectivity issues (code workaround in place)
+- FIFO auto-apply in payment controller may not properly update order.paidAmount (needs investigation)
+
+## Critical Fix Applied (Mar 9, 2026)
+**Customer Balance Calculation in Dialog (`getCustomerWithTransactions`)**
+- **Bug:** Standalone payments (advance/receipt not linked to an order) were completely ignored in the dialog's balance and "Received" calculations. Only `sum(order.paidAmount)` was counted.
+- **Impact:** When a customer paid an advance BEFORE invoices were created, the opening balance was never offset. The dialog showed inflated balance.
+- **Fix:** Added `standalonePaymentTotal` calculation. `totalCredit = totalPaid + standalonePaymentTotal`. `balance = openingBalance + totalDue - standalonePaymentTotal`.
+- **Also fixed:** Added `isDeleted: false` filter and legacy name matching for payment queries.
 
 ## Test Credentials
 - Username: `Rishabh`, Password: `molybdenumR@99877`

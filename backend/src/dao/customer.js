@@ -84,29 +84,45 @@ module.exports = {
                 order: [['createdAt', 'ASC']]  // Oldest first for FIFO payment allocation
             });
 
-            // Get all payments from this customer by ID only
-            // Sort by createdAt ASC (oldest first for FIFO allocation)
+            // Get all non-deleted payments from this customer
+            // Match by partyId OR partyName (for legacy data without partyId)
             const payments = await db.payment.findAll({
                 where: { 
-                    partyId: customerId,
-                    partyType: 'customer'
+                    [db.Sequelize.Op.or]: [
+                        { partyId: customerId },
+                        {
+                            partyName: customer.name,
+                            partyId: null
+                        }
+                    ],
+                    partyType: 'customer',
+                    isDeleted: false
                 },
-                attributes: ['id', 'paymentNumber', 'paymentDate', 'amount', 'referenceType', 'notes', 'createdAt'],
-                order: [['createdAt', 'ASC']]  // Oldest first
+                attributes: ['id', 'paymentNumber', 'paymentDate', 'amount', 'referenceType', 'referenceId', 'notes', 'createdAt', 'isDeleted'],
+                order: [['createdAt', 'ASC']]
             });
 
-            // Calculate totals - use stored dueAmount as source of truth
+            // Calculate totals from orders
             const totalSales = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
             const totalPaid = orders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
             const totalDue = orders.reduce((sum, o) => sum + (Number(o.dueAmount) || 0), 0);
             
-            // For display purposes
-            const totalDebit = totalSales + (Number(customer.openingBalance) || 0);
-            const totalCredit = totalPaid;
+            // Standalone payments = receipts/advances NOT linked to a specific order
+            // These payments reduce the opening balance but aren't reflected in any order's dueAmount
+            const standalonePaymentTotal = payments
+                .filter(p => p.referenceType !== 'order')
+                .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
             
-            // Balance = Opening + Sum of all due amounts (stored on orders)
-            // This is the source of truth as it's maintained when orders are created/updated
-            const balance = (Number(customer.openingBalance) || 0) + totalDue;
+            // Total Debit = Opening Balance + All invoice totals
+            const totalDebit = totalSales + (Number(customer.openingBalance) || 0);
+            
+            // Total Credit = Order payments (from paidAmount) + Standalone receipts/advances
+            const totalCredit = Math.round((totalPaid + standalonePaymentTotal) * 100) / 100;
+            
+            // Balance = Opening + outstanding invoice dues - standalone payments
+            // Standalone payments offset the opening balance (or general account credit)
+            // Round to 2 decimal places to avoid floating-point display issues
+            const balance = Math.round(((Number(customer.openingBalance) || 0) + totalDue - standalonePaymentTotal) * 100) / 100;
 
             // Sort orders by date DESC for display (most recent first)
             orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
