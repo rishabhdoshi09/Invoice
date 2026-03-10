@@ -102,6 +102,87 @@ module.exports = {
                 order: [['createdAt', 'ASC']]
             });
 
+            // === Auto-reconcile: apply unallocated standalone payments to unpaid orders ===
+            // Fixes historical data where receipts exist but weren't linked to orders
+            const standalonePayments = payments.filter(p => p.referenceType !== 'order');
+            const unpaidOrders = orders.filter(o => (Number(o.dueAmount) || 0) > 0)
+                .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)); // FIFO
+
+            if (standalonePayments.length > 0 && unpaidOrders.length > 0) {
+                let reconciled = false;
+                const transaction = await db.sequelize.transaction();
+                try {
+                    let payIdx = 0;
+                    let orderIdx = 0;
+
+                    while (payIdx < standalonePayments.length && orderIdx < unpaidOrders.length) {
+                        const payment = standalonePayments[payIdx];
+                        const order = unpaidOrders[orderIdx];
+                        const orderDue = Number(order.dueAmount) || 0;
+                        const payAmt = Number(payment.amount) || 0;
+
+                        if (orderDue <= 0) { orderIdx++; continue; }
+                        if (payAmt <= 0) { payIdx++; continue; }
+
+                        const applyAmt = Math.min(payAmt, orderDue);
+
+                        if (applyAmt >= payAmt) {
+                            // Full payment consumed — link to order
+                            await payment.update({
+                                referenceType: 'order',
+                                referenceId: order.id,
+                                referenceNumber: order.orderNumber
+                            }, { transaction });
+                            payIdx++;
+                        } else {
+                            // Partial payment — reduce amount, create linked split
+                            await payment.update({
+                                amount: payAmt - applyAmt
+                            }, { transaction });
+                            await db.payment.create({
+                                id: require('uuid').v4(),
+                                paymentNumber: `PAY-${require('uuid').v4().split('-')[0].toUpperCase()}`,
+                                paymentDate: payment.paymentDate,
+                                partyId: payment.partyId || customerId,
+                                partyName: payment.partyName || customer.name,
+                                partyType: 'customer',
+                                amount: applyAmt,
+                                referenceType: 'order',
+                                referenceId: order.id,
+                                referenceNumber: order.orderNumber,
+                                notes: `Auto-reconciled from ${payment.paymentNumber}`
+                            }, { transaction });
+                            // Don't advance payIdx — remaining amount may cover next order
+                        }
+
+                        // Update order
+                        const newPaid = Math.round((Number(order.paidAmount) + applyAmt) * 100) / 100;
+                        const newDue = Math.round(Math.max(0, Number(order.total) - newPaid) * 100) / 100;
+                        const newStatus = newDue <= 0 ? 'paid' : (newPaid > 0 ? 'partial' : 'unpaid');
+                        await order.update({
+                            paidAmount: newPaid,
+                            dueAmount: newDue,
+                            paymentStatus: newStatus
+                        }, { transaction });
+
+                        reconciled = true;
+                        console.log(`[AUTO-RECONCILE] Applied ₹${applyAmt} from ${payment.paymentNumber} to ${order.orderNumber}`);
+
+                        if (newDue <= 0) orderIdx++;
+                    }
+
+                    await transaction.commit();
+                } catch (reconErr) {
+                    await transaction.rollback();
+                    console.error('[AUTO-RECONCILE] Failed:', reconErr.message);
+                }
+
+                // If data was fixed, re-fetch fresh values
+                if (reconciled) {
+                    return module.exports.getCustomerWithTransactions(customerId);
+                }
+            }
+
             // Calculate totals from orders
             const totalSales = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
             const totalPaid = orders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
