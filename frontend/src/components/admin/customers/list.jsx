@@ -1164,7 +1164,7 @@ export const ListCustomers = () => {
                                 <Grid item xs={3}>
                                     <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: '#e3f2fd' }}>
                                         <Typography variant="caption">Opening</Typography>
-                                        <Typography variant="h6">₹{(detailsDialog.customer.openingBalance || 0).toLocaleString('en-IN')}</Typography>
+                                        <Typography variant="h6">₹{(detailsDialog.customer.effectiveOpeningBalance !== undefined ? detailsDialog.customer.effectiveOpeningBalance : (detailsDialog.customer.openingBalance || 0)).toLocaleString('en-IN')}</Typography>
                                     </Paper>
                                 </Grid>
                                 <Grid item xs={3}>

@@ -130,8 +130,41 @@ module.exports = {
             // Balance = (Opening + Due) - standaloneOffset
             const balance = Math.round((openingBal + totalDue - standaloneOffset) * 100) / 100;
 
+            // === Virtual FIFO allocation of standalone receipts to open invoices ===
+            // This ensures per-invoice "Due" column reconciles with the header Balance.
+            // No DB mutation — display-time only.
+            const ordersForDisplay = orders.map(o => {
+                const obj = o.toJSON ? o.toJSON() : { ...o };
+                obj.originalDue = Number(obj.dueAmount) || 0;
+                obj.originalPaid = Number(obj.paidAmount) || 0;
+                return obj;
+            });
+
+            // Sort oldest-first for FIFO allocation
+            ordersForDisplay.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+            let allocRemaining = standaloneOffset;
+
+            // 1. First allocate to open invoices (FIFO — oldest first)
+            for (const order of ordersForDisplay) {
+                if (allocRemaining <= 0) break;
+                const due = Number(order.dueAmount) || 0;
+                if (due <= 0) continue;
+
+                const allocAmount = Math.min(due, allocRemaining);
+                order.paidAmount = Math.round(((Number(order.paidAmount) || 0) + allocAmount) * 100) / 100;
+                order.dueAmount = Math.round((due - allocAmount) * 100) / 100;
+                if (order.dueAmount <= 0) order.paymentStatus = 'paid';
+                else if (order.paidAmount > 0) order.paymentStatus = 'partial';
+
+                allocRemaining = Math.round((allocRemaining - allocAmount) * 100) / 100;
+            }
+
+            // 2. Remainder offsets opening balance (for header display)
+            const effectiveOpeningBalance = Math.round(Math.max(0, openingBal - allocRemaining) * 100) / 100;
+
             // Sort orders by date DESC for display (most recent first)
-            orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            ordersForDisplay.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             
             // Sort payments by date DESC for display
             payments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -141,7 +174,9 @@ module.exports = {
                 totalDebit,
                 totalCredit,
                 balance,
-                orders: orders.map(o => o.toJSON ? o.toJSON() : o),
+                effectiveOpeningBalance,
+                unallocatedAdvance: Math.round(Math.max(0, standalonePaymentTotal - standaloneOffset) * 100) / 100,
+                orders: ordersForDisplay,
                 payments: payments.map(p => p.toJSON ? p.toJSON() : p)
             };
         } catch (error) {
