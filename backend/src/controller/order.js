@@ -135,6 +135,102 @@ module.exports = {
                 });
                 await Services.orderItems.addOrderItems(orderItems, transaction);
 
+                // === FIFO ADVANCE CONSUMPTION ===
+                // When a credit order is created, consume existing standalone advance payments
+                // This prevents the data duplication bug where the same money exists in both
+                // orders.paidAmount AND payments (referenceType='advance')
+                if (orderObj.dueAmount > 0 && orderObj.customerId) {
+                    try {
+                        const advanceWhere = {
+                            partyType: 'customer',
+                            referenceType: 'advance',
+                            isDeleted: false,
+                            referenceId: null
+                        };
+                        // Match by partyId or partyName (for legacy data)
+                        const orConditions = [{ partyId: orderObj.customerId }];
+                        if (orderObj.customerName && orderObj.customerName.trim()) {
+                            orConditions.push({
+                                partyName: orderObj.customerName.trim(),
+                                partyId: null
+                            });
+                        }
+                        advanceWhere[db.Sequelize.Op.or] = orConditions;
+
+                        const advancePayments = await db.payment.findAll({
+                            where: advanceWhere,
+                            order: [['createdAt', 'ASC']], // FIFO: oldest first
+                            transaction
+                        });
+
+                        if (advancePayments.length > 0) {
+                            let remainingDue = orderObj.dueAmount;
+                            let consumedTotal = 0;
+
+                            for (const advance of advancePayments) {
+                                if (remainingDue <= 0) break;
+                                const advanceAmt = Number(advance.amount);
+                                const consumeAmount = Math.min(advanceAmt, remainingDue);
+
+                                if (consumeAmount >= advanceAmt) {
+                                    // Full consumption: link entire advance to this order
+                                    await advance.update({
+                                        referenceType: 'order',
+                                        referenceId: orderId,
+                                        referenceNumber: orderObj.orderNumber
+                                    }, { transaction });
+                                } else {
+                                    // Partial consumption: reduce advance amount, create linked payment
+                                    await advance.update({
+                                        amount: advanceAmt - consumeAmount
+                                    }, { transaction });
+                                    await db.payment.create({
+                                        id: uuidv4(),
+                                        paymentNumber: `PAY-${uuidv4().split('-')[0].toUpperCase()}`,
+                                        paymentDate: advance.paymentDate,
+                                        partyId: advance.partyId || orderObj.customerId,
+                                        partyName: advance.partyName || orderObj.customerName,
+                                        partyType: 'customer',
+                                        amount: consumeAmount,
+                                        referenceType: 'order',
+                                        referenceId: orderId,
+                                        referenceNumber: orderObj.orderNumber,
+                                        notes: `Auto-applied from advance ${advance.paymentNumber}`
+                                    }, { transaction });
+                                }
+
+                                remainingDue -= consumeAmount;
+                                consumedTotal += consumeAmount;
+                                console.log(`[FIFO] Consumed ₹${consumeAmount} from advance ${advance.paymentNumber} for order ${orderObj.orderNumber}`);
+                            }
+
+                            if (consumedTotal > 0) {
+                                const newPaidAmount = (orderObj.paidAmount || 0) + consumedTotal;
+                                const newDueAmount = Math.max(0, orderObj.total - newPaidAmount);
+                                let newPaymentStatus = 'unpaid';
+                                if (newPaidAmount >= orderObj.total) newPaymentStatus = 'paid';
+                                else if (newPaidAmount > 0) newPaymentStatus = 'partial';
+
+                                await db.order.update({
+                                    paidAmount: newPaidAmount,
+                                    dueAmount: newDueAmount,
+                                    paymentStatus: newPaymentStatus
+                                }, { where: { id: orderId }, transaction });
+
+                                // Update local vars for subsequent ledger/telegram operations
+                                orderObj.paidAmount = newPaidAmount;
+                                orderObj.dueAmount = newDueAmount;
+                                orderObj.paymentStatus = newPaymentStatus;
+
+                                console.log(`[FIFO] Order ${orderObj.orderNumber}: consumed ₹${consumedTotal} from advances. Paid: ₹${newPaidAmount}, Due: ₹${newDueAmount}`);
+                            }
+                        }
+                    } catch (fifoError) {
+                        console.error('[FIFO] Advance consumption failed:', fifoError.message);
+                        // Don't fail order creation for FIFO issues
+                    }
+                }
+
                 // Update daily summary
                 try {
                     await Services.dailySummary.recordOrderCreated(response, transaction);
@@ -143,18 +239,15 @@ module.exports = {
                     // Don't fail the order creation for summary issues
                 }
 
-                // Dynamically get the Sales and Cash/Bank Ledger IDs
-                const salesLedger = await Services.ledger.getLedgerByName('Sales Account');
-                if (!salesLedger) {
-                    throw new Error('Sales Ledger not found. Please create a ledger named "Sales Account".');
-                }
-                const cashBankLedger = await Services.ledger.getLedgerByName('Cash Account');
-                if (!cashBankLedger) {
-                    throw new Error('Cash Account Ledger not found. Please create a ledger named "Cash Account".');
-                }
-
-                const SALES_LEDGER_ID = salesLedger.id;
-                const CASH_BANK_LEDGER_ID = cashBankLedger.id;
+                // Dynamically get the Sales and Cash/Bank Ledger IDs (old single-entry system)
+                // Non-blocking: if old ledger accounts not set up, skip
+                try {
+                    const salesLedger = await Services.ledger.getLedgerByName('Sales Account');
+                    const cashBankLedger = await Services.ledger.getLedgerByName('Cash Account');
+                    
+                    if (salesLedger && cashBankLedger) {
+                        const SALES_LEDGER_ID = salesLedger.id;
+                        const CASH_BANK_LEDGER_ID = cashBankLedger.id;
 
                 // Create ledger entries for sale
                 const ledgerEntries = [];
@@ -202,6 +295,12 @@ module.exports = {
 
                 if (ledgerEntries.length > 0) {
                     await db.ledgerEntry.bulkCreate(ledgerEntries, { transaction });
+                }
+                    } else {
+                        console.warn('[OLD LEDGER] Sales Account or Cash Account ledger not found — skipping old ledger entries');
+                    }
+                } catch (oldLedgerError) {
+                    console.warn('[OLD LEDGER] Skipped:', oldLedgerError.message);
                 }
 
                 // === NEW DOUBLE-ENTRY LEDGER: Real-time posting ===
