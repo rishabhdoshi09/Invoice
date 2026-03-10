@@ -122,6 +122,41 @@ export const ListCustomers = () => {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setExpandedOrder(null);
+
+            // === Frontend FIFO reconciliation ===
+            // Allocate standalone receipts to open invoices so per-invoice dues
+            // match the header Balance. Display-only — no backend mutation.
+            const cust = data.data;
+            if (cust && cust.orders && cust.payments) {
+                const openingBal = Number(cust.openingBalance) || 0;
+                const totalDue = cust.orders.reduce((s, o) => s + (Number(o.dueAmount) || 0), 0);
+                const standaloneTotal = cust.payments
+                    .filter(p => p.referenceType !== 'order')
+                    .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+                const maxOffset = Math.max(0, openingBal + totalDue);
+                const standaloneOffset = Math.min(standaloneTotal, maxOffset);
+
+                if (standaloneOffset > 0) {
+                    // Sort oldest-first for FIFO
+                    const sorted = [...cust.orders].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                    let remaining = standaloneOffset;
+
+                    for (const order of sorted) {
+                        if (remaining <= 0) break;
+                        const due = Number(order.dueAmount) || 0;
+                        if (due <= 0) continue;
+                        const alloc = Math.min(due, remaining);
+                        order.paidAmount = Math.round(((Number(order.paidAmount) || 0) + alloc) * 100) / 100;
+                        order.dueAmount = Math.round((due - alloc) * 100) / 100;
+                        if (order.dueAmount <= 0) order.paymentStatus = 'paid';
+                        else if (order.paidAmount > 0) order.paymentStatus = 'partial';
+                        remaining = Math.round((remaining - alloc) * 100) / 100;
+                    }
+                    // Remaining offsets opening
+                    cust.effectiveOpeningBalance = Math.round(Math.max(0, openingBal - remaining) * 100) / 100;
+                }
+            }
+
             setDetailsDialog({ open: true, customer: data.data, tab: 0 });
         } catch (error) {
             alert('Error fetching details');
