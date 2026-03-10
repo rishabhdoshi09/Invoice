@@ -22,7 +22,8 @@ Additionally, the user suspects billing fraud and needs a comprehensive **Bill T
 backend/src/
   models/       → account.js, journalBatch.js, ledgerEntry.js, billAuditLog.js, weightLog.js
   services/     → ledgerService.js, ledgerMigrationService.js, realTimeLedger.js, telegramAlert.js
-  controller/   → ledger.js, audit.js, telegram.js, order.js
+  controller/   → ledger.js, audit.js, telegram.js, order.js, customer.js, payment.js
+  dao/          → customer.js (balance calculation queries)
   routes/       → ledger.js, audit.js
 frontend/src/
   components/admin/ledger/ → LedgerModule.jsx
@@ -44,6 +45,8 @@ frontend/src/
 - `POST /api/audit/weight-capture` — log weight fetch
 - `POST /api/telegram/full-audit-report` — send audit report to Telegram
 - `POST /api/migrations/backfill-cash-receipts` — fix historical ledger drift
+- `GET /api/customers/:id/transactions` — customer with full balance details
+- `GET /api/customers/with-balance` — all customers with computed balances
 
 ## What's Been Implemented
 
@@ -83,21 +86,36 @@ frontend/src/
 - [x] Database migration system using sequelize-cli
 - [x] Historical data backfill for ledger drift
 
+### Completed (Mar 10, 2026)
+- [x] **CRITICAL FIX: Customer Balance Calculation — FIFO Advance Consumption**
+  - Root cause: Same money existed in both `orders.paidAmount` AND `payments` (referenceType='advance'), causing double-counting
+  - Fix: When a credit order is created, existing advance payments are automatically consumed FIFO (oldest first) and linked to the order
+  - Advance splitting: If advance > order due, only needed portion consumed, rest stays as advance
+  - Cash sales (fully paid at creation) correctly do NOT consume advances
+  - Balance formula verified: `balance = openingBal + totalDue - min(standalonePayments, max(0, openingBal + totalDue))`
+  - SQL and JS balance calculations confirmed matching
+  - **44/44 automated tests passed** including edge cases
+  - Old single-entry ledger made non-blocking (no longer crashes order creation if Sales/Cash Account ledgers missing)
+  - Migration script created: `backend/scripts/fix_advance_payments.js` for retroactive historical data cleanup
+
 ## Prioritized Backlog
 
-### P0 — Critical Security (Next)
+### P0 — Critical
+- [ ] User's local frontend is broken ("only loading") after git pull — investigate missing files or import errors
+- [ ] Run historical data migration script on user's local DB to fix existing advance payment double-counting
+
+### P1 — Security & Features
 - [ ] Add rate limiting (`express-rate-limit`) to all API endpoints
 - [ ] Restrict CORS to specific frontend domain
 - [ ] Disable `/api/auth/setup` endpoint after first admin created
 - [ ] Add `FOR UPDATE` row locks in payment toggle, order create, payment create
-
-### P1 — Core Features
-- [ ] Present comprehensive code audit report to user
+- [ ] Retry mechanism for Telegram alerts
 - [ ] Frontend reports: Account Ledger, Trial Balance, P&L, Balance Sheet
-- [ ] Add input validation (Joi) to remaining 7 controllers
-- [ ] Set up automated database backup (pg_dump cron)
 
 ### P2 — Future
+- [ ] Present comprehensive code audit report to user
+- [ ] Add input validation (Joi) to remaining 7 controllers
+- [ ] Set up automated database backup (pg_dump cron)
 - [ ] Centralize error handling with middleware
 - [ ] Structured logging (winston/pino)
 - [ ] Split large controllers into smaller modules
@@ -106,19 +124,12 @@ frontend/src/
 - [ ] Frontend state management refactor (Redux/Zustand)
 
 ## Known Issues
-- Old invoice module balance calculations are fragile (will be superseded by ledger)
-- PostgreSQL not available in preview pod by default (user tests locally)
-- User's local dev env has IPv6 connectivity issues (code workaround in place)
-- FIFO auto-apply in payment controller may not properly update order.paidAmount (needs investigation)
-
-## Critical Fix Applied (Mar 9, 2026)
-**Customer Balance Calculation in Dialog (`getCustomerWithTransactions`)**
-- **Bug:** Standalone payments (advance/receipt not linked to an order) were completely ignored in the dialog's balance and "Received" calculations. Only `sum(order.paidAmount)` was counted.
-- **Impact:** When a customer paid an advance BEFORE invoices were created, the opening balance was never offset. The dialog showed inflated balance.
-- **Fix:** Added `standalonePaymentTotal` calculation. `totalCredit = totalPaid + standalonePaymentTotal`. `balance = openingBalance + totalDue - standalonePaymentTotal`.
-- **Also fixed:** Added `isDeleted: false` filter and legacy name matching for payment queries.
+- User's local frontend is broken ("only loading") — needs investigation
+- User's local machine has Git/DNS issues (intermittent)
+- Old invoice module's stored `currentBalance` on customer model is incrementally updated but not used for display (computed balance from orders/payments is used)
+- Telegram alerts may fail intermittently on user's local network (IPv4/IPv6)
 
 ## Test Credentials
-- Username: `Rishabh`, Password: `molybdenumR@99877`
+- Username: `Rishabh`, Password: `yttriumR`
 - Telegram Bot Token: `8336582297:AAF3EtRshWDu3p57L9SHaWd3RvALD2OIrc8`
 - Telegram Chat ID: `6016362708`
