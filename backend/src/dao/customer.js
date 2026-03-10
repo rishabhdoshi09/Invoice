@@ -107,28 +107,17 @@ module.exports = {
             const totalPaid = orders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
             const totalDue = orders.reduce((sum, o) => sum + (Number(o.dueAmount) || 0), 0);
             
-            // Standalone payments = receipts/advances NOT linked to a specific order
-            const standalonePaymentTotal = payments
-                .filter(p => p.referenceType !== 'order')
-                .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-            
             const openingBal = Number(customer.openingBalance) || 0;
-            
-            // Standalone payments can offset up to (opening balance + total remaining due).
-            // Cap prevents double-counting: if orders are fully paid (due=0) AND opening=0,
-            // the advance won't create a negative balance (receipt-first, paid-order-later workflow).
-            // But if there IS outstanding due, the advance correctly reduces it.
-            const maxOffset = Math.max(0, openingBal + totalDue);
-            const standaloneOffset = Math.min(standalonePaymentTotal, maxOffset);
             
             // Total Debit = Opening Balance + All invoice totals
             const totalDebit = totalSales + openingBal;
             
-            // Total Credit = Order payments (from paidAmount) + Standalone offset
-            const totalCredit = Math.round((totalPaid + standaloneOffset) * 100) / 100;
+            // Total Credit = sum of order paidAmounts (standalone receipts are already
+            // reflected in orders.paidAmount via payment controller FIFO — no separate offset)
+            const totalCredit = Math.round(totalPaid * 100) / 100;
             
-            // Balance = (Opening + Due) - standaloneOffset
-            const balance = Math.round((openingBal + totalDue - standaloneOffset) * 100) / 100;
+            // Balance = Opening + sum of invoice dues (what customer still owes)
+            const balance = Math.round((openingBal + totalDue) * 100) / 100;
 
             // Sort orders by date DESC for display (most recent first)
             orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -176,52 +165,13 @@ module.exports = {
                         FROM orders 
                         WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
                         AND "isDeleted" = false
-                    ), 0) + LEAST(
-                        GREATEST(
-                            COALESCE(c."openingBalance", 0) + COALESCE((
-                                SELECT SUM("dueAmount") 
-                                FROM orders 
-                                WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
-                                AND "isDeleted" = false
-                            ), 0),
-                            0
-                        ),
-                        COALESCE((
-                            SELECT SUM(amount) 
-                            FROM payments 
-                            WHERE "partyType" = 'customer'
-                            AND ("partyId" = c.id OR ("partyName" = c.name AND "partyId" IS NULL))
-                            AND "isDeleted" = false
-                            AND ("referenceType" IS NULL OR "referenceType" != 'order')
-                        ), 0)
-                    ) as "totalCredit",
-                    GREATEST(
-                        COALESCE(c."openingBalance", 0) + COALESCE((
-                            SELECT SUM("dueAmount") 
-                            FROM orders 
-                            WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
-                            AND "isDeleted" = false
-                        ), 0),
-                        0
-                    ) - LEAST(
-                        GREATEST(
-                            COALESCE(c."openingBalance", 0) + COALESCE((
-                                SELECT SUM("dueAmount") 
-                                FROM orders 
-                                WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
-                                AND "isDeleted" = false
-                            ), 0),
-                            0
-                        ),
-                        COALESCE((
-                            SELECT SUM(amount) 
-                            FROM payments 
-                            WHERE "partyType" = 'customer'
-                            AND ("partyId" = c.id OR ("partyName" = c.name AND "partyId" IS NULL))
-                            AND "isDeleted" = false
-                            AND ("referenceType" IS NULL OR "referenceType" != 'order')
-                        ), 0)
-                    ) as balance
+                    ), 0) as "totalCredit",
+                    COALESCE(c."openingBalance", 0) + COALESCE((
+                        SELECT SUM("dueAmount") 
+                        FROM orders 
+                        WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
+                        AND "isDeleted" = false
+                    ), 0) as balance
                 FROM customers c
                 ORDER BY c.name ASC
             `, { type: db.Sequelize.QueryTypes.SELECT });
