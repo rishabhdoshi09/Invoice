@@ -190,7 +190,7 @@ module.exports = {
                             SELECT SUM(amount) 
                             FROM payments 
                             WHERE "partyType" = 'customer'
-                            AND ("partyId" = c.id OR "partyName" = c.name)
+                            AND ("partyId" = c.id OR ("partyName" = c.name AND "partyId" IS NULL))
                             AND "isDeleted" = false
                             AND ("referenceType" IS NULL OR "referenceType" != 'order')
                         ), 0)
@@ -217,7 +217,7 @@ module.exports = {
                             SELECT SUM(amount) 
                             FROM payments 
                             WHERE "partyType" = 'customer'
-                            AND ("partyId" = c.id OR "partyName" = c.name)
+                            AND ("partyId" = c.id OR ("partyName" = c.name AND "partyId" IS NULL))
                             AND "isDeleted" = false
                             AND ("referenceType" IS NULL OR "referenceType" != 'order')
                         ), 0)
