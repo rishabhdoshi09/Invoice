@@ -108,21 +108,27 @@ module.exports = {
             const totalDue = orders.reduce((sum, o) => sum + (Number(o.dueAmount) || 0), 0);
             
             // Standalone payments = receipts/advances NOT linked to a specific order
-            // These payments reduce the opening balance but aren't reflected in any order's dueAmount
             const standalonePaymentTotal = payments
                 .filter(p => p.referenceType !== 'order')
                 .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
             
+            const openingBal = Number(customer.openingBalance) || 0;
+            
+            // Standalone payments can only offset the opening balance.
+            // They must NOT reduce the balance below what orders show, because
+            // when a user enters a receipt first and later creates a "paid" invoice,
+            // both the receipt and the order.paidAmount represent the SAME money.
+            // Subtracting the receipt without capping would double-count that payment.
+            const standaloneOffset = Math.min(standalonePaymentTotal, Math.max(0, openingBal));
+            
             // Total Debit = Opening Balance + All invoice totals
-            const totalDebit = totalSales + (Number(customer.openingBalance) || 0);
+            const totalDebit = totalSales + openingBal;
             
-            // Total Credit = Order payments (from paidAmount) + Standalone receipts/advances
-            const totalCredit = Math.round((totalPaid + standalonePaymentTotal) * 100) / 100;
+            // Total Credit = Order payments (from paidAmount) + Standalone offset (capped at opening)
+            const totalCredit = Math.round((totalPaid + standaloneOffset) * 100) / 100;
             
-            // Balance = Opening + outstanding invoice dues - standalone payments
-            // Standalone payments offset the opening balance (or general account credit)
-            // Round to 2 decimal places to avoid floating-point display issues
-            const balance = Math.round(((Number(customer.openingBalance) || 0) + totalDue - standalonePaymentTotal) * 100) / 100;
+            // Balance = Effective opening (after standalone offset) + outstanding invoice dues
+            const balance = Math.round((openingBal - standaloneOffset + totalDue) * 100) / 100;
 
             // Sort orders by date DESC for display (most recent first)
             orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -170,26 +176,32 @@ module.exports = {
                         FROM orders 
                         WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
                         AND "isDeleted" = false
-                    ), 0) + COALESCE((
-                        SELECT SUM(amount) 
-                        FROM payments 
-                        WHERE "partyType" = 'customer'
-                        AND ("partyId" = c.id OR "partyName" = c.name)
-                        AND "isDeleted" = false
-                        AND ("referenceType" IS NULL OR "referenceType" != 'order')
-                    ), 0) as "totalCredit",
-                    COALESCE(c."openingBalance", 0) + COALESCE((
+                    ), 0) + LEAST(
+                        GREATEST(COALESCE(c."openingBalance", 0), 0),
+                        COALESCE((
+                            SELECT SUM(amount) 
+                            FROM payments 
+                            WHERE "partyType" = 'customer'
+                            AND ("partyId" = c.id OR "partyName" = c.name)
+                            AND "isDeleted" = false
+                            AND ("referenceType" IS NULL OR "referenceType" != 'order')
+                        ), 0)
+                    ) as "totalCredit",
+                    GREATEST(COALESCE(c."openingBalance", 0), 0) - LEAST(
+                        GREATEST(COALESCE(c."openingBalance", 0), 0),
+                        COALESCE((
+                            SELECT SUM(amount) 
+                            FROM payments 
+                            WHERE "partyType" = 'customer'
+                            AND ("partyId" = c.id OR "partyName" = c.name)
+                            AND "isDeleted" = false
+                            AND ("referenceType" IS NULL OR "referenceType" != 'order')
+                        ), 0)
+                    ) + COALESCE((
                         SELECT SUM("dueAmount") 
                         FROM orders 
                         WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
                         AND "isDeleted" = false
-                    ), 0) - COALESCE((
-                        SELECT SUM(amount) 
-                        FROM payments 
-                        WHERE "partyType" = 'customer'
-                        AND ("partyId" = c.id OR "partyName" = c.name)
-                        AND "isDeleted" = false
-                        AND ("referenceType" IS NULL OR "referenceType" != 'order')
                     ), 0) as balance
                 FROM customers c
                 ORDER BY c.name ASC
