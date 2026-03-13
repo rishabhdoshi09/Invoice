@@ -293,5 +293,126 @@ module.exports = {
             console.error('Delete allocation error:', error);
             return res.status(400).json({ status: 400, message: error.message });
         }
+    },
+
+    /**
+     * Backfill receipt_allocations from existing payment-order data.
+     * Matches payments to orders using FIFO (oldest first) per customer.
+     * This creates allocation records for pre-existing data so the
+     * Receipts tab shows correct Allocated/Unallocated amounts.
+     */
+    backfillAllocations: async (req, res) => {
+        try {
+            // Get all customers
+            const customers = await db.customer.findAll();
+            let totalCreated = 0;
+            let customersProcessed = 0;
+            const details = [];
+
+            for (const customer of customers) {
+                // Get this customer's payments sorted by date (oldest first)
+                const payments = await db.payment.findAll({
+                    where: {
+                        [db.Sequelize.Op.or]: [
+                            { partyId: customer.id },
+                            { partyName: customer.name, partyId: null }
+                        ],
+                        partyType: 'customer',
+                        ...(db.payment.rawAttributes.isDeleted ? { isDeleted: false } : {})
+                    },
+                    order: [['createdAt', 'ASC']]
+                });
+
+                if (payments.length === 0) continue;
+
+                // Get this customer's orders sorted by date (oldest first)
+                const orders = await db.order.findAll({
+                    where: {
+                        [db.Sequelize.Op.or]: [
+                            { customerId: customer.id },
+                            { customerName: customer.name, customerId: null }
+                        ],
+                        isDeleted: false
+                    },
+                    order: [['orderDate', 'ASC'], ['createdAt', 'ASC']]
+                });
+
+                if (orders.length === 0) continue;
+
+                // Check existing allocations for this customer
+                const orderIds = orders.map(o => o.id);
+                const existingAllocations = await db.receiptAllocation.findAll({
+                    where: { orderId: { [db.Sequelize.Op.in]: orderIds }, isDeleted: false }
+                });
+
+                // Track how much is already allocated per payment and per order
+                const allocatedPerPayment = {};
+                const allocatedPerOrder = {};
+                for (const a of existingAllocations) {
+                    allocatedPerPayment[a.paymentId] = (allocatedPerPayment[a.paymentId] || 0) + Number(a.amount);
+                    allocatedPerOrder[a.orderId] = (allocatedPerOrder[a.orderId] || 0) + Number(a.amount);
+                }
+
+                // FIFO: walk through payments, allocate to orders
+                let orderIdx = 0;
+                let customerCreated = 0;
+
+                for (const payment of payments) {
+                    let remaining = Number(payment.amount) - (allocatedPerPayment[payment.id] || 0);
+                    if (remaining <= 0) continue;
+
+                    while (orderIdx < orders.length && remaining > 0) {
+                        const order = orders[orderIdx];
+                        const orderTotal = Number(order.total) || 0;
+                        const alreadyAllocated = allocatedPerOrder[order.id] || 0;
+                        const orderRemaining = orderTotal - alreadyAllocated;
+
+                        if (orderRemaining <= 0) {
+                            orderIdx++;
+                            continue;
+                        }
+
+                        const allocAmount = Math.min(remaining, orderRemaining);
+                        if (allocAmount <= 0) {
+                            orderIdx++;
+                            continue;
+                        }
+
+                        await db.receiptAllocation.create({
+                            paymentId: payment.id,
+                            orderId: order.id,
+                            amount: allocAmount,
+                            allocatedByName: 'system-backfill',
+                            notes: `Backfill FIFO: ${payment.paymentNumber} → ${order.orderNumber}`
+                        });
+
+                        allocatedPerPayment[payment.id] = (allocatedPerPayment[payment.id] || 0) + allocAmount;
+                        allocatedPerOrder[order.id] = (allocatedPerOrder[order.id] || 0) + allocAmount;
+                        remaining -= allocAmount;
+                        totalCreated++;
+                        customerCreated++;
+
+                        if (orderRemaining - allocAmount <= 0) {
+                            orderIdx++;
+                        }
+                    }
+                }
+
+                if (customerCreated > 0) {
+                    customersProcessed++;
+                    details.push({ customer: customer.name, allocations: customerCreated });
+                }
+            }
+
+            return res.status(200).json({
+                status: 200,
+                message: `Backfill complete: ${totalCreated} allocations created for ${customersProcessed} customers`,
+                data: { totalCreated, customersProcessed, details }
+            });
+
+        } catch (error) {
+            console.error('Backfill allocation error:', error);
+            return res.status(500).json({ status: 500, message: error.message });
+        }
     }
 };

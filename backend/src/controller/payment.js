@@ -271,10 +271,61 @@ module.exports = {
                         );
                     }
                 } else if (value.partyType === 'customer' && value.partyName && !value.referenceId) {
-                    // TALLY-CORRECT: Payment WITHOUT specific order reference stays as "On Account" (advance)
-                    // NO auto-FIFO allocation. User must explicitly allocate via receipt allocation UI.
-                    // The payment is recorded but invoices are NOT automatically modified.
-                    console.log(`[PAYMENT] On-Account receipt from ${value.partyName}: ₹${value.amount} — awaiting manual allocation`);
+                    // Auto-FIFO: Apply payment to oldest unpaid invoices, creating receipt_allocation records for tracking
+                    const unpaidOrders = await db.order.findAll({
+                        where: {
+                            customerName: value.partyName,
+                            paymentStatus: ['unpaid', 'partial'],
+                            isDeleted: false
+                        },
+                        order: [['orderDate', 'ASC']],
+                        lock: transaction.LOCK.UPDATE,
+                        transaction
+                    });
+
+                    let remainingAmount = value.amount;
+
+                    for (const order of unpaidOrders) {
+                        if (remainingAmount <= 0) break;
+
+                        const dueAmount = (order.dueAmount != null) ? Number(order.dueAmount) : (Number(order.total) - Number(order.paidAmount || 0));
+                        if (dueAmount <= 0) continue;
+
+                        const paymentForThisOrder = Math.min(remainingAmount, dueAmount);
+
+                        const newPaidAmount = (Number(order.paidAmount) || 0) + paymentForThisOrder;
+                        const newDueAmount = Number(order.total) - newPaidAmount;
+                        let paymentStatus = 'unpaid';
+                        if (newPaidAmount >= Number(order.total)) paymentStatus = 'paid';
+                        else if (newPaidAmount > 0) paymentStatus = 'partial';
+
+                        await order.update({
+                            paidAmount: newPaidAmount,
+                            dueAmount: newDueAmount,
+                            paymentStatus
+                        }, { transaction });
+
+                        // Create receipt_allocation record for tracking
+                        try {
+                            await db.receiptAllocation.create({
+                                paymentId: response.id,
+                                orderId: order.id,
+                                amount: paymentForThisOrder,
+                                allocatedBy: req.user?.id,
+                                allocatedByName: value.changedBy || req.user?.name || 'system',
+                                notes: `FIFO allocation from ${response.paymentNumber}`
+                            }, { transaction });
+                        } catch (allocErr) {
+                            console.warn('[ALLOCATION] Could not create:', allocErr.message);
+                        }
+
+                        console.log(`[PAYMENT-FIFO] ${order.orderNumber}: ₹${paymentForThisOrder} applied → due ₹${newDueAmount.toFixed(2)} (${paymentStatus})`);
+                        remainingAmount -= paymentForThisOrder;
+                    }
+
+                    if (remainingAmount > 0) {
+                        console.log(`[PAYMENT] ₹${remainingAmount.toFixed(2)} remains unallocated (On Account) for ${value.partyName}`);
+                    }
                 } else if (value.referenceType === 'purchase' && value.referenceId) {
                     const purchase = await Services.purchaseBill.getPurchaseBill({ id: value.referenceId });
                     if (purchase) {
