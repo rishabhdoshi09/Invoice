@@ -27,10 +27,19 @@ const LedgerModule = () => {
     const [reconciliation, setReconciliation] = useState(null);
     const [journalBatches, setJournalBatches] = useState([]);
 
+    // Account Ledger states
+    const [selectedAccount, setSelectedAccount] = useState(null);
+    const [accountLedger, setAccountLedger] = useState(null);
+
     // Filter states
-    const [dateRange, setDateRange] = useState({
-        fromDate: new Date(new Date().getFullYear(), 3, 1).toISOString().split('T')[0], // April 1st (FY start)
-        toDate: new Date().toISOString().split('T')[0]
+    const [dateRange, setDateRange] = useState(() => {
+        const now = new Date();
+        // Indian Financial Year: Apr 1 to Mar 31. If before April, FY started previous year.
+        const fyStartYear = now.getMonth() < 3 ? now.getFullYear() - 1 : now.getFullYear();
+        return {
+            fromDate: new Date(fyStartYear, 3, 1).toISOString().split('T')[0],
+            toDate: now.toISOString().split('T')[0]
+        };
     });
 
     // Migration states
@@ -148,6 +157,28 @@ const LedgerModule = () => {
         }
     };
 
+    // Fetch Account Ledger (transaction-by-transaction with running balance)
+    const fetchAccountLedger = async (accountId) => {
+        try {
+            setLoading(true);
+            setError(null);
+            const params = `?fromDate=${dateRange.fromDate}&toDate=${dateRange.toDate}`;
+            const { data } = await axios.get(`/api/ledger/accounts/${accountId}/ledger${params}`, getAuthHeader());
+            setAccountLedger(data.data);
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to fetch account ledger');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Open Account Ledger for a specific account
+    const openAccountLedger = (account) => {
+        setSelectedAccount(account);
+        setActiveTab(8); // Account Ledger tab index
+        fetchAccountLedger(account.id);
+    };
+
     // Initialize Chart of Accounts
     const initializeAccounts = async () => {
         try {
@@ -204,6 +235,9 @@ const LedgerModule = () => {
         if (activeTab === 4) fetchBalanceSheet();
         if (activeTab === 5) fetchReconciliation();
         if (activeTab === 6) fetchJournalBatches();
+        // Tab 7 = Posting Matrix (static, no fetch)
+        // Tab 8 = Account Ledger (fetched via openAccountLedger)
+        if (activeTab === 8 && selectedAccount) fetchAccountLedger(selectedAccount.id);
     }, [activeTab]);
 
     const formatCurrency = (amount) => {
@@ -251,11 +285,12 @@ const LedgerModule = () => {
                     <Tab label="Reconciliation" icon={<Sync />} iconPosition="start" data-testid="tab-reconciliation" />
                     <Tab label="Journal Entries" icon={<Receipt />} iconPosition="start" data-testid="tab-journal-entries" />
                     <Tab label="Posting Matrix" icon={<AccountBalance />} iconPosition="start" data-testid="tab-posting-matrix" />
+                    <Tab label={selectedAccount ? `Ledger: ${selectedAccount.name}` : 'Account Ledger'} icon={<Receipt />} iconPosition="start" data-testid="tab-account-ledger" />
                 </Tabs>
             </Paper>
 
             {/* Date Range Filter */}
-            {[2, 3, 4].includes(activeTab) && (
+            {[2, 3, 4, 8].includes(activeTab) && (
                 <Paper sx={{ p: 2, mb: 2 }}>
                     <Grid container spacing={2} alignItems="center">
                         <Grid item xs={12} sm={4}>
@@ -288,6 +323,7 @@ const LedgerModule = () => {
                                     if (activeTab === 2) fetchTrialBalance();
                                     if (activeTab === 3) fetchProfitLoss();
                                     if (activeTab === 4) fetchBalanceSheet();
+                                    if (activeTab === 8 && selectedAccount) fetchAccountLedger(selectedAccount.id);
                                 }}
                             >
                                 Refresh
@@ -568,7 +604,7 @@ const LedgerModule = () => {
                                 </TableRow>
                             ) : (
                                 accounts.map((acc) => (
-                                    <TableRow key={acc.id} hover>
+                                    <TableRow key={acc.id} hover sx={{ cursor: 'pointer' }} onClick={() => openAccountLedger(acc)} data-testid={`account-row-${acc.code}`}>
                                         <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{acc.code}</TableCell>
                                         <TableCell>{acc.name}</TableCell>
                                         <TableCell>
@@ -1204,6 +1240,185 @@ const LedgerModule = () => {
                             </Grid>
                         </Grid>
                     </Paper>
+                </Box>
+            )}
+
+            {/* Tab 8: Account Ledger (Tally-style transaction-by-transaction with running balance) */}
+            {activeTab === 8 && (
+                <Box data-testid="account-ledger-tab">
+                    {!selectedAccount ? (
+                        <Paper sx={{ p: 4, textAlign: 'center' }}>
+                            <AccountBalance sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
+                            <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
+                                Select an Account
+                            </Typography>
+                            <Typography variant="body2" color="text.disabled" sx={{ mb: 3 }}>
+                                Go to "Chart of Accounts" tab and click any account row to view its ledger.
+                            </Typography>
+                            <Button
+                                variant="outlined"
+                                onClick={() => { setActiveTab(1); }}
+                                data-testid="go-to-accounts-btn"
+                            >
+                                Open Chart of Accounts
+                            </Button>
+                        </Paper>
+                    ) : loading ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                            <CircularProgress />
+                        </Box>
+                    ) : accountLedger ? (
+                        <Box>
+                            {/* Account Header */}
+                            <Paper sx={{ p: 2, mb: 2, bgcolor: '#f5f5f5' }}>
+                                <Grid container spacing={2} alignItems="center">
+                                    <Grid item xs={12} md={6}>
+                                        <Typography variant="h6" data-testid="ledger-account-name">
+                                            {accountLedger.account?.name}
+                                        </Typography>
+                                        <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
+                                            <Chip label={accountLedger.account?.code} size="small" variant="outlined" sx={{ fontFamily: 'monospace' }} />
+                                            <Chip label={accountLedger.account?.type} size="small" color={
+                                                accountLedger.account?.type === 'ASSET' ? 'primary' :
+                                                accountLedger.account?.type === 'LIABILITY' ? 'error' :
+                                                accountLedger.account?.type === 'INCOME' ? 'success' :
+                                                accountLedger.account?.type === 'EXPENSE' ? 'warning' : 'default'
+                                            } />
+                                            {accountLedger.account?.subType && (
+                                                <Chip label={accountLedger.account.subType} size="small" variant="outlined" />
+                                            )}
+                                            {accountLedger.account?.partyType && (
+                                                <Chip label={`Party: ${accountLedger.account.partyType}`} size="small" color="info" variant="outlined" />
+                                            )}
+                                        </Box>
+                                    </Grid>
+                                    <Grid item xs={12} md={3}>
+                                        <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: '#e3f2fd' }}>
+                                            <Typography variant="caption" color="text.secondary">Transactions</Typography>
+                                            <Typography variant="h5" sx={{ fontWeight: 700 }} data-testid="ledger-entry-count">
+                                                {accountLedger.entries?.length || 0}
+                                            </Typography>
+                                        </Paper>
+                                    </Grid>
+                                    <Grid item xs={12} md={3}>
+                                        <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: accountLedger.closingBalance >= 0 ? '#e8f5e9' : '#ffebee' }}>
+                                            <Typography variant="caption" color="text.secondary">Closing Balance</Typography>
+                                            <Typography variant="h5" sx={{ fontWeight: 700, fontFamily: 'monospace', color: accountLedger.closingBalance >= 0 ? 'success.dark' : 'error.dark' }} data-testid="ledger-closing-balance">
+                                                {formatCurrency(Math.abs(accountLedger.closingBalance))}
+                                                {accountLedger.closingBalance >= 0 ? ' Dr' : ' Cr'}
+                                            </Typography>
+                                        </Paper>
+                                    </Grid>
+                                </Grid>
+                            </Paper>
+
+                            {/* Ledger Entries Table */}
+                            <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                                <Table size="small" stickyHeader>
+                                    <TableHead>
+                                        <TableRow sx={{ '& th': { bgcolor: '#1a237e', color: '#fff', fontWeight: 700 } }}>
+                                            <TableCell>Date</TableCell>
+                                            <TableCell>Voucher No.</TableCell>
+                                            <TableCell>Type</TableCell>
+                                            <TableCell>Particulars</TableCell>
+                                            <TableCell align="right">Debit (Dr)</TableCell>
+                                            <TableCell align="right">Credit (Cr)</TableCell>
+                                            <TableCell align="right" sx={{ borderLeft: '2px solid rgba(255,255,255,0.3)' }}>Running Balance</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {accountLedger.entries?.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                                                    No transactions found for this account in the selected date range.
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            accountLedger.entries?.map((entry, idx) => (
+                                                <TableRow
+                                                    key={entry.id}
+                                                    hover
+                                                    data-testid={`ledger-entry-${idx}`}
+                                                    sx={{
+                                                        bgcolor: idx % 2 === 0 ? '#fafafa' : '#fff',
+                                                        '&:hover': { bgcolor: '#e3f2fd' }
+                                                    }}
+                                                >
+                                                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                                                        {entry.transactionDate
+                                                            ? new Date(entry.transactionDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })
+                                                            : '-'}
+                                                    </TableCell>
+                                                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                                                        {entry.batchNumber || '-'}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Chip
+                                                            label={entry.referenceType || '-'}
+                                                            size="small"
+                                                            variant="outlined"
+                                                            color={
+                                                                entry.referenceType === 'INVOICE' ? 'primary' :
+                                                                entry.referenceType === 'PAYMENT' ? 'success' :
+                                                                entry.referenceType === 'PAYMENT_TOGGLE' ? 'warning' :
+                                                                entry.referenceType === 'CASH_RECEIPT' ? 'info' : 'default'
+                                                            }
+                                                            sx={{ fontSize: '0.7rem', height: 22 }}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell sx={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                        {entry.narration || entry.description || '-'}
+                                                    </TableCell>
+                                                    <TableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: Number(entry.debit) > 0 ? 700 : 400, color: Number(entry.debit) > 0 ? 'primary.main' : 'text.disabled' }}>
+                                                        {Number(entry.debit) > 0 ? formatCurrency(entry.debit) : '-'}
+                                                    </TableCell>
+                                                    <TableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: Number(entry.credit) > 0 ? 700 : 400, color: Number(entry.credit) > 0 ? 'error.main' : 'text.disabled' }}>
+                                                        {Number(entry.credit) > 0 ? formatCurrency(entry.credit) : '-'}
+                                                    </TableCell>
+                                                    <TableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700, borderLeft: '2px solid #e0e0e0', color: entry.runningBalance >= 0 ? '#1b5e20' : '#b71c1c' }}>
+                                                        {formatCurrency(Math.abs(entry.runningBalance))}
+                                                        <Typography component="span" variant="caption" sx={{ ml: 0.5, opacity: 0.7 }}>
+                                                            {entry.runningBalance >= 0 ? 'Dr' : 'Cr'}
+                                                        </Typography>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        )}
+
+                                        {/* Closing Balance Row */}
+                                        {accountLedger.entries?.length > 0 && (
+                                            <TableRow sx={{ bgcolor: '#1a237e' }}>
+                                                <TableCell colSpan={4} sx={{ fontWeight: 700, color: '#fff' }}>
+                                                    Closing Balance
+                                                </TableCell>
+                                                <TableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700, color: '#fff' }}>
+                                                    {accountLedger.closingBalance >= 0 ? formatCurrency(accountLedger.closingBalance) : '-'}
+                                                </TableCell>
+                                                <TableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700, color: '#fff' }}>
+                                                    {accountLedger.closingBalance < 0 ? formatCurrency(Math.abs(accountLedger.closingBalance)) : '-'}
+                                                </TableCell>
+                                                <TableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700, color: '#fff', borderLeft: '2px solid rgba(255,255,255,0.3)' }}>
+                                                    {formatCurrency(Math.abs(accountLedger.closingBalance))} {accountLedger.closingBalance >= 0 ? 'Dr' : 'Cr'}
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+
+                            {/* Navigation hint */}
+                            <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
+                                <Button
+                                    variant="outlined"
+                                    size="small"
+                                    onClick={() => setActiveTab(1)}
+                                    data-testid="back-to-accounts-btn"
+                                >
+                                    Back to Chart of Accounts
+                                </Button>
+                            </Box>
+                        </Box>
+                    ) : null}
                 </Box>
             )}
         </Box>
