@@ -66,15 +66,31 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 - Tally-correct balance formulas displayed
 - File: `frontend/src/components/admin/ledger/LedgerModule.jsx` (tab 7)
 
-#### 9. Ledger Module (8 tabs)
+#### 9. Ledger Module (9 tabs)
 - Dashboard (health check, drift monitor, migration control)
-- Chart of Accounts (19 system accounts)
+- Chart of Accounts (19+ accounts, clickable rows)
 - Trial Balance
 - Profit & Loss
 - Balance Sheet
 - Reconciliation
 - Journal Entries
-- Posting Matrix (NEW)
+- Posting Matrix (voucher type reference)
+- **Account Ledger** (Tally's core feature - transaction-by-transaction with running balance)
+
+#### 10. Account Ledger Page (Tally-style) — NEW
+- Click any account in Chart of Accounts to open its full ledger
+- Transaction table with: Date, Voucher No., Type, Particulars, Debit (Dr), Credit (Cr), Running Balance
+- Account header with name, code, type/subtype chips, party info
+- Summary cards: Transaction count + Closing Balance (Dr/Cr)
+- Closing Balance row at bottom
+- Date range filter (defaults to current Indian FY: Apr 1 to Mar 31)
+- Running balance computed server-side with correct debit-credit accumulation
+- Color-coded voucher types (INVOICE, PAYMENT, CASH_RECEIPT, PAYMENT_TOGGLE)
+- Alternating row colors for readability
+
+#### 11. Indian Financial Year Date Fix
+- FY date range now correctly defaults to Apr 1 of PREVIOUS year when before April
+- Affects: Trial Balance, P&L, Balance Sheet, Account Ledger
 
 ### Earlier Completed Work
 - Full-stack invoicing system with orders, payments, customers, suppliers
@@ -98,7 +114,6 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 ### P3 - Backlog
 - Credit Note / Debit Note / Write-off voucher types
 - Adjustment entry UI (journal entries instead of direct invoice mutation)
-- Account Ledger page (individual account transaction history)
 
 ## Test Credentials
 - Username: `admin`
