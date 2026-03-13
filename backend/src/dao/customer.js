@@ -265,7 +265,7 @@ module.exports = {
                     COALESCE(ledger.ledger_debit, 0) as "ledgerDebit",
                     COALESCE(ledger.ledger_credit, 0) as "ledgerCredit",
                     COALESCE(ledger.ledger_balance, 0) as "ledgerBalance",
-                    CASE WHEN ledger.ledger_debit IS NOT NULL OR ledger.ledger_credit IS NOT NULL 
+                    CASE WHEN ledger.ledger_debit > 0 OR ledger.ledger_credit > 0 
                          THEN true ELSE false END as "hasLedgerData",
                     -- Order-based totals (fallback)
                     COALESCE(c."openingBalance", 0) + COALESCE(order_totals.total_sales, 0) as "orderTotalDebit",
@@ -273,49 +273,43 @@ module.exports = {
                     COALESCE(c."openingBalance", 0) + COALESCE(order_totals.total_due, 0) as "orderBalance",
                     -- Final computed values (ledger-first, fallback to orders)
                     CASE 
-                        WHEN ledger.ledger_debit IS NOT NULL OR ledger.ledger_credit IS NOT NULL 
+                        WHEN ledger.ledger_debit > 0 OR ledger.ledger_credit > 0 
                         THEN COALESCE(c."openingBalance", 0) + COALESCE(ledger.ledger_debit, 0)
                         ELSE COALESCE(c."openingBalance", 0) + COALESCE(order_totals.total_sales, 0)
                     END as "totalDebit",
                     CASE 
-                        WHEN ledger.ledger_debit IS NOT NULL OR ledger.ledger_credit IS NOT NULL 
+                        WHEN ledger.ledger_debit > 0 OR ledger.ledger_credit > 0 
                         THEN COALESCE(ledger.ledger_credit, 0)
                         ELSE COALESCE(order_totals.total_paid, 0)
                     END as "totalCredit",
                     CASE 
-                        WHEN ledger.ledger_debit IS NOT NULL OR ledger.ledger_credit IS NOT NULL 
+                        WHEN ledger.ledger_debit > 0 OR ledger.ledger_credit > 0 
                         THEN COALESCE(c."openingBalance", 0) + COALESCE(ledger.ledger_balance, 0)
                         ELSE COALESCE(c."openingBalance", 0) + COALESCE(order_totals.total_due, 0)
                     END as balance
                 FROM customers c
-                LEFT JOIN (
+                LEFT JOIN LATERAL (
                     SELECT 
-                        SUM(total) as total_sales,
-                        SUM("paidAmount") as total_paid,
-                        SUM("dueAmount") as total_due,
-                        COALESCE("customerId", NULL) as cid,
-                        "customerName" as cname
+                        COALESCE(SUM(total), 0) as total_sales,
+                        COALESCE(SUM("paidAmount"), 0) as total_paid,
+                        COALESCE(SUM("dueAmount"), 0) as total_due
                     FROM orders
                     WHERE "isDeleted" = false
-                    GROUP BY "customerId", "customerName"
-                ) order_totals ON (
-                    order_totals.cid = c.id 
-                    OR (order_totals.cname = c.name AND order_totals.cid IS NULL)
-                )
-                LEFT JOIN (
+                    AND ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
+                ) order_totals ON true
+                LEFT JOIN LATERAL (
                     SELECT 
-                        a."partyId",
-                        SUM(le.debit) as ledger_debit,
-                        SUM(le.credit) as ledger_credit,
-                        SUM(le.debit) - SUM(le.credit) as ledger_balance
+                        COALESCE(SUM(le.debit), 0) as ledger_debit,
+                        COALESCE(SUM(le.credit), 0) as ledger_credit,
+                        COALESCE(SUM(le.debit) - SUM(le.credit), 0) as ledger_balance
                     FROM accounts a
                     INNER JOIN ledger_entries le ON le."accountId" = a.id
                     INNER JOIN journal_batches jb ON le."batchId" = jb.id
-                    WHERE a."partyType" = 'customer'
+                    WHERE a."partyId" = c.id 
+                        AND a."partyType" = 'customer'
                         AND jb."isPosted" = true 
                         AND jb."isReversed" = false
-                    GROUP BY a."partyId"
-                ) ledger ON ledger."partyId" = c.id
+                ) ledger ON true
                 ORDER BY c.name ASC
             `, { type: db.Sequelize.QueryTypes.SELECT });
 
