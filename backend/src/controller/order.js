@@ -371,6 +371,18 @@ module.exports = {
             }
             
             console.log(`Updating order ${orderId}...`);
+
+            // INVOICE IMMUTABILITY GUARD: Prevent direct mutation of financial fields
+            // These fields can only change through proper receipt/adjustment entries
+            const IMMUTABLE_FINANCIAL_FIELDS = ['paidAmount', 'dueAmount', 'paymentStatus'];
+            const attemptedFinancialChanges = IMMUTABLE_FINANCIAL_FIELDS.filter(f => orderData[f] !== undefined);
+            if (attemptedFinancialChanges.length > 0) {
+                console.warn(`[IMMUTABILITY] Blocked direct edit of financial fields: ${attemptedFinancialChanges.join(', ')} on order ${orderId}`);
+                return res.status(400).send({
+                    status: 400,
+                    message: `Cannot directly edit payment fields (${attemptedFinancialChanges.join(', ')}). Use "Record Payment" or adjustment entries instead.`
+                });
+            }
             
             // Update order in transaction
             const result = await db.sequelize.transaction(async (transaction) => {
@@ -791,14 +803,44 @@ module.exports = {
                     transaction 
                 });
 
-                // NOTE: We do NOT create a payment record when toggling to "paid"
-                // The order's paidAmount already tracks the cash received
-                // Creating a payment would cause DOUBLE COUNTING in daily summaries
-                // (cashSales counts paidAmount, customerReceipts would count payment)
+                // === RECEIPT ALLOCATION TRACKING (Tally-style bill-wise) ===
+                // When marking as PAID: Create a receipt allocation record for tracking
+                // Note: We still DON'T create a payment record to avoid daily summary double-counting
+                // The receipt_allocation ties to a virtual "toggle payment" for auditability
+                if (newStatus === 'paid' && oldStatus !== 'paid') {
+                    // Check if a payment record exists for this order
+                    let paymentForAllocation = await db.payment.findOne({
+                        where: { referenceId: orderId, referenceType: 'order' },
+                        transaction
+                    });
+                    // If a payment record exists (from "Receive Payment" flow), create allocation
+                    if (paymentForAllocation) {
+                        try {
+                            await db.receiptAllocation.create({
+                                paymentId: paymentForAllocation.id,
+                                orderId: orderId,
+                                amount: Number(order.total),
+                                allocatedBy: req.user?.id,
+                                allocatedByName: changedByTrimmed,
+                                notes: 'Auto-allocated via payment status toggle (user-authorized)'
+                            }, { transaction });
+                        } catch (allocErr) {
+                            console.warn('[ALLOCATION] Could not create allocation on toggle:', allocErr.message);
+                        }
+                    }
+                }
                 
-                // When marking as UNPAID (reversing a payment), delete any payment entries
-                // that might have been created by old code or "Receive Payment" flow
+                // When marking as UNPAID (reversing): Clean up allocations and payment entries
                 if (newStatus === 'unpaid' && oldStatus === 'paid') {
+                    // Remove receipt allocations for this order
+                    try {
+                        await db.receiptAllocation.update(
+                            { isDeleted: true },
+                            { where: { orderId: orderId, isDeleted: false }, transaction }
+                        );
+                    } catch (allocErr) {
+                        console.warn('[ALLOCATION] Could not clean up allocations on toggle:', allocErr.message);
+                    }
                     // Find and delete any payment entries linked to this order
                     await db.payment.destroy({
                         where: {

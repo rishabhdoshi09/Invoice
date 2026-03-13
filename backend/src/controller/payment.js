@@ -270,59 +270,10 @@ module.exports = {
                         );
                     }
                 } else if (value.partyType === 'customer' && value.partyName && !value.referenceId) {
-                    // Payment by customer name without specific order reference
-                    // Find unpaid orders for this customer and apply payment
-                    const unpaidOrders = await db.order.findAll({
-                        where: {
-                            customerName: value.partyName,
-                            paymentStatus: ['unpaid', 'partial'],
-                            isDeleted: false
-                        },
-                        order: [['orderDate', 'ASC']] // Pay oldest first
-                    });
-
-                    let remainingAmount = value.amount;
-                    let firstOrderId = null; // Track the first order this payment was applied to
-                    
-                    for (const order of unpaidOrders) {
-                        if (remainingAmount <= 0) break;
-                        
-                        const dueAmount = (order.dueAmount || order.total - (order.paidAmount || 0));
-                        const paymentForThisOrder = Math.min(remainingAmount, dueAmount);
-                        
-                        const newPaidAmount = (order.paidAmount || 0) + paymentForThisOrder;
-                        const newDueAmount = order.total - newPaidAmount;
-                        let paymentStatus = 'unpaid';
-                        
-                        if (newPaidAmount >= order.total) {
-                            paymentStatus = 'paid';
-                        } else if (newPaidAmount > 0) {
-                            paymentStatus = 'partial';
-                        }
-
-                        await order.update({ 
-                            paidAmount: newPaidAmount, 
-                            dueAmount: newDueAmount,
-                            paymentStatus: paymentStatus
-                        }, { transaction });
-
-                        // Track the first order for reference
-                        if (!firstOrderId) {
-                            firstOrderId = order.id;
-                        }
-
-                        remainingAmount -= paymentForThisOrder;
-                    }
-                    
-                    // CRITICAL: Update the payment record to link to the first order
-                    // This prevents double-counting in cash drawer calculations
-                    if (firstOrderId) {
-                        await response.update({ 
-                            referenceType: 'order',
-                            referenceId: firstOrderId,
-                            referenceNumber: unpaidOrders[0]?.orderNumber
-                        }, { transaction });
-                    }
+                    // TALLY-CORRECT: Payment WITHOUT specific order reference stays as "On Account" (advance)
+                    // NO auto-FIFO allocation. User must explicitly allocate via receipt allocation UI.
+                    // The payment is recorded but invoices are NOT automatically modified.
+                    console.log(`[PAYMENT] On-Account receipt from ${value.partyName}: ₹${value.amount} — awaiting manual allocation`);
                 } else if (value.referenceType === 'purchase' && value.referenceId) {
                     const purchase = await Services.purchaseBill.getPurchaseBill({ id: value.referenceId });
                     if (purchase) {

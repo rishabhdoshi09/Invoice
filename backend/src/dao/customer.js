@@ -60,32 +60,38 @@ module.exports = {
         }
     },
 
-    // Get customer with debit/credit details
-    // Match by customerId primarily, but also include legacy orders matched by customerName
+    /**
+     * Get customer with full transaction details.
+     * 
+     * TALLY-CORRECT BALANCE FORMULA:
+     * - Primary (ledger-authoritative): closing = opening + sum(debits) - sum(credits)
+     *   computed from double-entry ledger_entries for this customer's account
+     * - Fallback (if no ledger account): opening + sum(dueAmount) from orders
+     * 
+     * Invoice due is DERIVED: invoice_total - sum(receipt_allocations for that invoice)
+     */
     getCustomerWithTransactions: async (customerId) => {
         try {
             const customer = await db.customer.findByPk(customerId);
             if (!customer) return null;
 
             // Get all orders for this customer
-            // Match by customerId OR customerName (for legacy data without customerId)
             const orders = await db.order.findAll({
                 where: { 
                     [db.Sequelize.Op.or]: [
                         { customerId: customerId },
                         { 
                             customerName: customer.name,
-                            customerId: null  // Only match by name if customerId is not set
+                            customerId: null
                         }
                     ],
                     isDeleted: false
                 },
                 attributes: ['id', 'orderNumber', 'orderDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus', 'createdAt', 'customerId'],
-                order: [['createdAt', 'ASC']]  // Oldest first for FIFO payment allocation
+                order: [['createdAt', 'ASC']]
             });
 
             // Get all non-deleted payments from this customer
-            // Match by partyId OR partyName (for legacy data without partyId)
             const payments = await db.payment.findAll({
                 where: { 
                     [db.Sequelize.Op.or]: [
@@ -96,42 +102,139 @@ module.exports = {
                         }
                     ],
                     partyType: 'customer',
-                    isDeleted: false
+                    ...(db.payment.rawAttributes.isDeleted ? { isDeleted: false } : {})
                 },
-                attributes: ['id', 'paymentNumber', 'paymentDate', 'amount', 'referenceType', 'referenceId', 'notes', 'createdAt', 'isDeleted'],
+                attributes: ['id', 'paymentNumber', 'paymentDate', 'amount', 'referenceType', 'referenceId', 'notes', 'createdAt'],
                 order: [['createdAt', 'ASC']]
             });
 
-            // Calculate totals from orders
-            const totalSales = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
-            const totalPaid = orders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
-            const totalDue = orders.reduce((sum, o) => sum + (Number(o.dueAmount) || 0), 0);
-            
+            // Get receipt allocations for this customer's orders
+            const orderIds = orders.map(o => o.id);
+            let allocations = [];
+            if (orderIds.length > 0) {
+                try {
+                    allocations = await db.receiptAllocation.findAll({
+                        where: {
+                            orderId: { [db.Sequelize.Op.in]: orderIds },
+                            isDeleted: false
+                        }
+                    });
+                } catch (e) {
+                    // Table may not exist yet
+                }
+            }
+
+            // Build allocation map: orderId -> total allocated
+            const allocationByOrder = {};
+            const allocationByPayment = {};
+            for (const a of allocations) {
+                const amt = Number(a.amount) || 0;
+                allocationByOrder[a.orderId] = (allocationByOrder[a.orderId] || 0) + amt;
+                allocationByPayment[a.paymentId] = (allocationByPayment[a.paymentId] || 0) + amt;
+            }
+
             const openingBal = Number(customer.openingBalance) || 0;
-            
-            // Total Debit = Opening Balance + All invoice totals
-            const totalDebit = totalSales + openingBal;
-            
-            // Total Credit = sum of order paidAmounts (standalone receipts are already
-            // reflected in orders.paidAmount via payment controller FIFO — no separate offset)
-            const totalCredit = Math.round(totalPaid * 100) / 100;
-            
-            // Balance = Opening + sum of invoice dues (what customer still owes)
-            const balance = Math.round((openingBal + totalDue) * 100) / 100;
+
+            // === TALLY-CORRECT: Try ledger-authoritative balance first ===
+            let useLedger = false;
+            let ledgerBalance = 0;
+            let ledgerDebit = 0;
+            let ledgerCredit = 0;
+
+            try {
+                const ledgerResult = await db.sequelize.query(`
+                    SELECT 
+                        COALESCE(SUM(le.debit), 0) as "totalDebit",
+                        COALESCE(SUM(le.credit), 0) as "totalCredit",
+                        COALESCE(SUM(le.debit), 0) - COALESCE(SUM(le.credit), 0) as balance
+                    FROM accounts a
+                    INNER JOIN ledger_entries le ON le."accountId" = a.id
+                    INNER JOIN journal_batches jb ON le."batchId" = jb.id
+                    WHERE a."partyId" = :customerId 
+                        AND a."partyType" = 'customer'
+                        AND jb."isPosted" = true 
+                        AND jb."isReversed" = false
+                `, {
+                    replacements: { customerId },
+                    type: db.Sequelize.QueryTypes.SELECT
+                });
+
+                if (ledgerResult && ledgerResult[0] && (Number(ledgerResult[0].totalDebit) > 0 || Number(ledgerResult[0].totalCredit) > 0)) {
+                    useLedger = true;
+                    ledgerDebit = Number(ledgerResult[0].totalDebit) || 0;
+                    ledgerCredit = Number(ledgerResult[0].totalCredit) || 0;
+                    // Ledger balance = sum(debits) - sum(credits)
+                    // For customer (receivable/asset): positive = they owe us
+                    ledgerBalance = ledgerDebit - ledgerCredit;
+                }
+            } catch (e) {
+                // Ledger tables may not exist - fall back
+            }
+
+            // Calculate totals from orders (used for display + fallback)
+            const totalSales = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+
+            let totalDebit, totalCredit, balance;
+
+            if (useLedger) {
+                // LEDGER-AUTHORITATIVE: balance from double-entry ledger
+                totalDebit = openingBal + ledgerDebit;
+                totalCredit = ledgerCredit;
+                balance = Math.round((openingBal + ledgerBalance) * 100) / 100;
+            } else {
+                // FALLBACK: old formula (opening + dueAmount)
+                const totalPaid = orders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
+                const totalDue = orders.reduce((sum, o) => sum + (Number(o.dueAmount) || 0), 0);
+                totalDebit = totalSales + openingBal;
+                totalCredit = Math.round(totalPaid * 100) / 100;
+                balance = Math.round((openingBal + totalDue) * 100) / 100;
+            }
+
+            // Compute DERIVED invoice dues from receipt allocations
+            const ordersWithDerivedDue = orders.map(o => {
+                const oJSON = o.toJSON ? o.toJSON() : o;
+                const allocated = allocationByOrder[oJSON.id] || 0;
+                // Derived due = total - allocated receipts
+                // (uses allocation table when available, falls back to stored dueAmount)
+                const derivedDue = allocated > 0 
+                    ? Math.max(0, (Number(oJSON.total) || 0) - allocated)
+                    : Number(oJSON.dueAmount) || 0;
+                const derivedPaid = allocated > 0
+                    ? allocated
+                    : Number(oJSON.paidAmount) || 0;
+                return {
+                    ...oJSON,
+                    allocatedAmount: allocated,
+                    derivedDue,
+                    derivedPaid,
+                    derivedStatus: derivedDue <= 0 ? 'paid' : (derivedPaid > 0 ? 'partial' : 'unpaid')
+                };
+            });
+
+            // Compute unallocated payments (On Account / Advance)
+            const paymentsWithAllocation = payments.map(p => {
+                const pJSON = p.toJSON ? p.toJSON() : p;
+                const allocated = allocationByPayment[pJSON.id] || 0;
+                return {
+                    ...pJSON,
+                    allocatedAmount: allocated,
+                    unallocatedAmount: Math.max(0, (Number(pJSON.amount) || 0) - allocated)
+                };
+            });
 
             // Sort orders by date DESC for display (most recent first)
-            orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-            
-            // Sort payments by date DESC for display
-            payments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            ordersWithDerivedDue.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            paymentsWithAllocation.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
             return {
                 ...customer.toJSON(),
                 totalDebit,
                 totalCredit,
                 balance,
-                orders: orders.map(o => o.toJSON ? o.toJSON() : o),
-                payments: payments.map(p => p.toJSON ? p.toJSON() : p)
+                balanceSource: useLedger ? 'ledger' : 'orders',
+                orders: ordersWithDerivedDue,
+                payments: paymentsWithAllocation,
+                allocations
             };
         } catch (error) {
             console.log(error);
@@ -139,8 +242,12 @@ module.exports = {
         }
     },
 
-    // List customers with calculated balance
-    // Balance = Opening Balance + Sum of all order dueAmounts (source of truth)
+    /**
+     * List customers with calculated balance.
+     * 
+     * TALLY-CORRECT: Uses ledger entries as authoritative source when available.
+     * Fallback: Opening Balance + Sum of all order dueAmounts
+     */
     listCustomersWithBalance: async (params = {}) => {
         try {
             const customers = await db.sequelize.query(`
@@ -154,25 +261,61 @@ module.exports = {
                     c."openingBalance",
                     c."createdAt",
                     c."updatedAt",
-                    COALESCE(c."openingBalance", 0) + COALESCE((
-                        SELECT SUM(total) 
-                        FROM orders 
-                        WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
-                        AND "isDeleted" = false
-                    ), 0) as "totalDebit",
-                    COALESCE((
-                        SELECT SUM("paidAmount") 
-                        FROM orders 
-                        WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
-                        AND "isDeleted" = false
-                    ), 0) as "totalCredit",
-                    COALESCE(c."openingBalance", 0) + COALESCE((
-                        SELECT SUM("dueAmount") 
-                        FROM orders 
-                        WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
-                        AND "isDeleted" = false
-                    ), 0) as balance
+                    -- Ledger-based totals (authoritative when available)
+                    COALESCE(ledger.ledger_debit, 0) as "ledgerDebit",
+                    COALESCE(ledger.ledger_credit, 0) as "ledgerCredit",
+                    COALESCE(ledger.ledger_balance, 0) as "ledgerBalance",
+                    CASE WHEN ledger.ledger_debit IS NOT NULL OR ledger.ledger_credit IS NOT NULL 
+                         THEN true ELSE false END as "hasLedgerData",
+                    -- Order-based totals (fallback)
+                    COALESCE(c."openingBalance", 0) + COALESCE(order_totals.total_sales, 0) as "orderTotalDebit",
+                    COALESCE(order_totals.total_paid, 0) as "orderTotalCredit",
+                    COALESCE(c."openingBalance", 0) + COALESCE(order_totals.total_due, 0) as "orderBalance",
+                    -- Final computed values (ledger-first, fallback to orders)
+                    CASE 
+                        WHEN ledger.ledger_debit IS NOT NULL OR ledger.ledger_credit IS NOT NULL 
+                        THEN COALESCE(c."openingBalance", 0) + COALESCE(ledger.ledger_debit, 0)
+                        ELSE COALESCE(c."openingBalance", 0) + COALESCE(order_totals.total_sales, 0)
+                    END as "totalDebit",
+                    CASE 
+                        WHEN ledger.ledger_debit IS NOT NULL OR ledger.ledger_credit IS NOT NULL 
+                        THEN COALESCE(ledger.ledger_credit, 0)
+                        ELSE COALESCE(order_totals.total_paid, 0)
+                    END as "totalCredit",
+                    CASE 
+                        WHEN ledger.ledger_debit IS NOT NULL OR ledger.ledger_credit IS NOT NULL 
+                        THEN COALESCE(c."openingBalance", 0) + COALESCE(ledger.ledger_balance, 0)
+                        ELSE COALESCE(c."openingBalance", 0) + COALESCE(order_totals.total_due, 0)
+                    END as balance
                 FROM customers c
+                LEFT JOIN (
+                    SELECT 
+                        SUM(total) as total_sales,
+                        SUM("paidAmount") as total_paid,
+                        SUM("dueAmount") as total_due,
+                        COALESCE("customerId", NULL) as cid,
+                        "customerName" as cname
+                    FROM orders
+                    WHERE "isDeleted" = false
+                    GROUP BY "customerId", "customerName"
+                ) order_totals ON (
+                    order_totals.cid = c.id 
+                    OR (order_totals.cname = c.name AND order_totals.cid IS NULL)
+                )
+                LEFT JOIN (
+                    SELECT 
+                        a."partyId",
+                        SUM(le.debit) as ledger_debit,
+                        SUM(le.credit) as ledger_credit,
+                        SUM(le.debit) - SUM(le.credit) as ledger_balance
+                    FROM accounts a
+                    INNER JOIN ledger_entries le ON le."accountId" = a.id
+                    INNER JOIN journal_batches jb ON le."batchId" = jb.id
+                    WHERE a."partyType" = 'customer'
+                        AND jb."isPosted" = true 
+                        AND jb."isReversed" = false
+                    GROUP BY a."partyId"
+                ) ledger ON ledger."partyId" = c.id
                 ORDER BY c.name ASC
             `, { type: db.Sequelize.QueryTypes.SELECT });
 

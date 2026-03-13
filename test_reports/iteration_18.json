@@ -1,0 +1,94 @@
+{
+  "summary": "Tally-Style Receipt Allocation & Invoice Immutability Testing - 12/12 backend tests PASSED, Frontend verified working. All core features functional.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "N/A",
+        "issue": "Minor React warning: 'Each child in a list should have a unique key prop' in ListCustomers component - cosmetic, does not affect functionality"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_tally_receipt_allocation.py",
+    "/app/test_reports/pytest/tally_allocation_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Good: Ledger-authoritative balance calculation in customer.js (lines 138-191) correctly uses double-entry ledger when available",
+    "Good: Receipt allocation controller (receiptAllocation.js) correctly validates payment and invoice amounts before allocation",
+    "Good: Over-allocation prevention works for both payment limit and invoice limit scenarios",
+    "Good: Invoice immutability guard in order.js (line 377-385) correctly rejects direct paidAmount/dueAmount/paymentStatus changes",
+    "Good: On-Account payment behavior (payment.js lines 272-276) correctly stays unallocated without auto-FIFO",
+    "Good: Customer detail dialog shows derived invoice dues from receipt allocations",
+    "Good: Allocate tab in customer dialog correctly shows unallocated receipts and unpaid invoices for manual bill-wise reconciliation"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_tally_receipt_allocation.py"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 tests passed)",
+    "frontend": "100% (All UI flows verified)"
+  },
+  "test_credentials": {
+    "username": "admin",
+    "password": "yttriumR"
+  },
+  "seed_data_creation": "Multiple test customers created with prefix TEST_Alloc_, TEST_OverPay_, TEST_OverInv_, TEST_Immut_, TEST_OnAcc_, TEST_GetAlloc_, TEST_InvAlloc_ for testing receipt allocation scenarios",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Tally-style receipt allocation is fully working. Key behaviors verified: 1) Receipt allocation against specific invoices works (Against Ref), 2) Over-allocation prevention for both payment and invoice limits, 3) Invoice immutability guard blocks direct paidAmount/dueAmount/paymentStatus changes, 4) On-Account payments stay unallocated (no auto-FIFO), 5) Customer balances use ledger-authoritative source when available, 6) Frontend Customer Ledger page with detail dialog shows Invoices, Receipts, and Allocate tabs correctly.",
+  "features_verified": {
+    "PASSED": [
+      "Login flow with admin/yttriumR credentials",
+      "Customer list page loads with correct balances (GET /api/customers/with-balance)",
+      "Customer detail shows balance source (ledger vs orders fallback)",
+      "Customer detail Invoices tab shows derived paid/due amounts from receipt allocations",
+      "Customer detail Receipts tab shows allocated/unallocated amounts",
+      "Customer detail Allocate tab works (shows unallocated receipts and unpaid invoices)",
+      "POST /api/receipts/allocate - receipt allocation against invoices works",
+      "Receipt allocation over-allocation prevention (payment amount exceeded)",
+      "Receipt allocation over-allocation prevention (invoice amount exceeded)",
+      "Invoice immutability guard - PUT /api/orders/:id rejects paidAmount changes",
+      "Invoice immutability guard - PUT /api/orders/:id rejects dueAmount changes",
+      "Invoice immutability guard - PUT /api/orders/:id rejects paymentStatus changes",
+      "GET /api/customers/with-balance returns ledger-authoritative balances",
+      "GET /api/customers/:id/transactions returns derived invoice dues and payment allocation data",
+      "POST /api/payments with customer payment without referenceId stays as On Account (no auto-FIFO)",
+      "GET /api/receipts/:paymentId/allocations returns allocation data",
+      "GET /api/invoices/:orderId/allocations returns allocation data"
+    ],
+    "FAILED": [],
+    "NOT_TESTED": []
+  },
+  "detailed_test_results": {
+    "backend_tests": {
+      "file": "/app/backend/tests/test_tally_receipt_allocation.py",
+      "total_tests": 12,
+      "passed": 12,
+      "failed": 0,
+      "test_categories": [
+        "TestAuth: Login (1 test)",
+        "TestCustomerBalances: Balance endpoints (2 tests)",
+        "TestReceiptAllocation: Allocation flow (1 test)",
+        "TestOverAllocationPrevention: Payment/Invoice limits (2 tests)",
+        "TestInvoiceImmutability: Financial field guards (3 tests)",
+        "TestOnAccountPayment: No auto-FIFO (1 test)",
+        "TestGetPaymentAllocations: Fetch allocations (1 test)",
+        "TestInvoiceAllocations: Invoice allocation data (1 test)"
+      ]
+    },
+    "frontend_verification": {
+      "customer_ledger_page": "PASS - Shows Total Receivable, Advance Received, Total Customers, Net Position",
+      "customer_detail_dialog": "PASS - Opens with tabs: Invoices, Receipts, Allocate",
+      "invoices_tab": "PASS - Shows invoice with Total, Paid, Due, Status columns",
+      "receipts_tab": "PASS - Shows Receipt #, Date, Amount, Allocated, Unallocated columns",
+      "allocate_tab": "PASS - Shows message for manual bill-wise reconciliation"
+    }
+  }
+}

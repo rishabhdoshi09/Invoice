@@ -1186,6 +1186,9 @@ export const ListCustomers = () => {
                                             ₹{Math.abs(detailsDialog.customer.balance || 0).toLocaleString('en-IN')}
                                             {detailsDialog.customer.balance > 0 ? ' (Due)' : detailsDialog.customer.balance < 0 ? ' (Adv)' : ''}
                                         </Typography>
+                                        <Typography variant="caption" sx={{ fontSize: 9, color: 'text.disabled' }}>
+                                            {detailsDialog.customer.balanceSource === 'ledger' ? 'Ledger' : 'Orders'}
+                                        </Typography>
                                     </Paper>
                                 </Grid>
                             </Grid>
@@ -1193,6 +1196,7 @@ export const ListCustomers = () => {
                             <Tabs value={detailsDialog.tab} onChange={(e, v) => setDetailsDialog({ ...detailsDialog, tab: v })}>
                                 <Tab label={`Invoices (${detailsDialog.customer.orders?.length || 0})`} />
                                 <Tab label={`Receipts (${detailsDialog.customer.payments?.length || 0})`} />
+                                <Tab label="Allocate" />
                             </Tabs>
 
                             {detailsDialog.tab === 0 && (
@@ -1227,9 +1231,9 @@ export const ListCustomers = () => {
                                                             <TableCell sx={{ fontWeight: 500 }}>{o.orderNumber}</TableCell>
                                                             <TableCell>{o.orderDate ? moment(o.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('DD/MM/YY') : '-'}</TableCell>
                                                             <TableCell align="right" sx={{ fontWeight: 600 }}>₹{(o.total || 0).toLocaleString('en-IN')}</TableCell>
-                                                            <TableCell align="right" sx={{ color: 'success.main' }}>₹{(o.paidAmount || 0).toLocaleString('en-IN')}</TableCell>
-                                                            <TableCell align="right" sx={{ color: 'error.main' }}>₹{(o.dueAmount || 0).toLocaleString('en-IN')}</TableCell>
-                                                            <TableCell><Chip label={o.paymentStatus} size="small" color={o.paymentStatus === 'paid' ? 'success' : 'warning'} /></TableCell>
+                                                            <TableCell align="right" sx={{ color: 'success.main' }}>₹{(o.derivedPaid || o.paidAmount || 0).toLocaleString('en-IN')}</TableCell>
+                                                            <TableCell align="right" sx={{ color: 'error.main' }}>₹{(o.derivedDue !== undefined ? o.derivedDue : o.dueAmount || 0).toLocaleString('en-IN')}</TableCell>
+                                                            <TableCell><Chip label={o.derivedStatus || o.paymentStatus} size="small" color={(o.derivedStatus || o.paymentStatus) === 'paid' ? 'success' : 'warning'} /></TableCell>
                                                             <TableCell align="center">
                                                                 <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
                                                                     <Tooltip title="View Invoice">
@@ -1303,13 +1307,15 @@ export const ListCustomers = () => {
                                                 <TableCell>Receipt #</TableCell>
                                                 <TableCell>Date</TableCell>
                                                 <TableCell align="right">Amount</TableCell>
+                                                <TableCell align="right">Allocated</TableCell>
+                                                <TableCell align="right">Unallocated</TableCell>
                                                 <TableCell>Notes</TableCell>
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
                                             {detailsDialog.customer.payments?.length === 0 ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={4} align="center" sx={{ py: 2 }}>No receipts yet</TableCell>
+                                                    <TableCell colSpan={6} align="center" sx={{ py: 2 }}>No receipts yet</TableCell>
                                                 </TableRow>
                                             ) : (
                                                 detailsDialog.customer.payments?.map((p) => (
@@ -1317,6 +1323,13 @@ export const ListCustomers = () => {
                                                         <TableCell>{p.paymentNumber}</TableCell>
                                                         <TableCell>{p.paymentDate ? moment(p.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('DD/MM/YY') : '-'}</TableCell>
                                                         <TableCell align="right" sx={{ fontWeight: 600, color: 'success.main' }}>₹{(p.amount || 0).toLocaleString('en-IN')}</TableCell>
+                                                        <TableCell align="right" sx={{ color: 'text.secondary' }}>₹{(p.allocatedAmount || 0).toLocaleString('en-IN')}</TableCell>
+                                                        <TableCell align="right" sx={{ fontWeight: 600, color: (p.unallocatedAmount || 0) > 0 ? 'warning.main' : 'text.disabled' }}>
+                                                            ₹{(p.unallocatedAmount || 0).toLocaleString('en-IN')}
+                                                            {(p.unallocatedAmount || 0) > 0 && (
+                                                                <Chip label="On Account" size="small" variant="outlined" color="warning" sx={{ ml: 0.5, height: 18, fontSize: 10 }} />
+                                                            )}
+                                                        </TableCell>
                                                         <TableCell>{p.notes || '-'}</TableCell>
                                                     </TableRow>
                                                 ))
@@ -1324,6 +1337,94 @@ export const ListCustomers = () => {
                                         </TableBody>
                                     </Table>
                                 </TableContainer>
+                            )}
+
+                            {/* Tab 2: Receipt Allocation (Tally-style bill-wise reconciliation) */}
+                            {detailsDialog.tab === 2 && (
+                                <Box sx={{ mt: 1 }}>
+                                    {(() => {
+                                        const unallocatedPayments = (detailsDialog.customer.payments || []).filter(p => (p.unallocatedAmount || 0) > 0);
+                                        const unpaidOrders = (detailsDialog.customer.orders || []).filter(o => (o.derivedDue !== undefined ? o.derivedDue : o.dueAmount || 0) > 0);
+                                        
+                                        if (unallocatedPayments.length === 0) {
+                                            return (
+                                                <Box sx={{ textAlign: 'center', py: 3, color: 'text.secondary' }}>
+                                                    <Typography variant="body2">No unallocated receipts to allocate.</Typography>
+                                                    <Typography variant="caption">Record a payment first, then allocate it against invoices here.</Typography>
+                                                </Box>
+                                            );
+                                        }
+                                        if (unpaidOrders.length === 0) {
+                                            return (
+                                                <Box sx={{ textAlign: 'center', py: 3, color: 'text.secondary' }}>
+                                                    <Typography variant="body2">No unpaid invoices to allocate against.</Typography>
+                                                </Box>
+                                            );
+                                        }
+
+                                        return (
+                                            <Box>
+                                                <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary' }}>
+                                                    Select a receipt and allocate against invoice(s). This is a manual, user-authorized action.
+                                                </Typography>
+                                                {unallocatedPayments.map(p => (
+                                                    <Paper key={p.id} variant="outlined" sx={{ p: 1.5, mb: 1 }}>
+                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                                            <Typography variant="subtitle2">
+                                                                {p.paymentNumber} — ₹{Number(p.amount).toLocaleString('en-IN')}
+                                                            </Typography>
+                                                            <Chip 
+                                                                label={`₹${Number(p.unallocatedAmount).toLocaleString('en-IN')} available`} 
+                                                                size="small" 
+                                                                color="warning" 
+                                                                variant="outlined"
+                                                            />
+                                                        </Box>
+                                                        {unpaidOrders.map(o => {
+                                                            const due = o.derivedDue !== undefined ? o.derivedDue : o.dueAmount || 0;
+                                                            return (
+                                                                <Box key={o.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, pl: 1 }}>
+                                                                    <Typography variant="body2" sx={{ minWidth: 140 }}>{o.orderNumber}</Typography>
+                                                                    <Typography variant="caption" color="error">Due: ₹{Number(due).toLocaleString('en-IN')}</Typography>
+                                                                    <Button 
+                                                                        size="small" 
+                                                                        variant="outlined"
+                                                                        color="success"
+                                                                        data-testid={`allocate-${p.id}-${o.id}`}
+                                                                        onClick={async () => {
+                                                                            const allocAmt = Math.min(Number(p.unallocatedAmount), Number(due));
+                                                                            if (allocAmt <= 0) return;
+                                                                            if (!window.confirm(`Allocate ₹${allocAmt.toLocaleString('en-IN')} from ${p.paymentNumber} to ${o.orderNumber}?`)) return;
+                                                                            try {
+                                                                                const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/receipts/allocate`, {
+                                                                                    method: 'POST',
+                                                                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                                                                                    body: JSON.stringify({ paymentId: p.id, allocations: [{ orderId: o.id, amount: allocAmt }], changedBy: localStorage.getItem('username') || 'admin' })
+                                                                                });
+                                                                                const data = await res.json();
+                                                                                if (data.status === 200) {
+                                                                                    alert('Allocated successfully');
+                                                                                    fetchCustomerDetails(detailsDialog.customer.id);
+                                                                                } else {
+                                                                                    alert(data.message || 'Allocation failed');
+                                                                                }
+                                                                            } catch (err) {
+                                                                                alert('Error: ' + err.message);
+                                                                            }
+                                                                        }}
+                                                                        sx={{ minWidth: 80, fontSize: 11, py: 0.25 }}
+                                                                    >
+                                                                        Allocate ₹{Math.min(Number(p.unallocatedAmount), Number(due)).toLocaleString('en-IN')}
+                                                                    </Button>
+                                                                </Box>
+                                                            );
+                                                        })}
+                                                    </Paper>
+                                                ))}
+                                            </Box>
+                                        );
+                                    })()}
+                                </Box>
                             )}
                         </DialogContent>
                         <DialogActions>
