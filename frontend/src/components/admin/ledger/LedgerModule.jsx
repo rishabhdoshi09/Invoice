@@ -238,6 +238,7 @@ const LedgerModule = () => {
         // Tab 7 = Posting Matrix (static, no fetch)
         // Tab 8 = Account Ledger (fetched via openAccountLedger)
         if (activeTab === 8 && selectedAccount) fetchAccountLedger(selectedAccount.id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab]);
 
     const formatCurrency = (amount) => {
