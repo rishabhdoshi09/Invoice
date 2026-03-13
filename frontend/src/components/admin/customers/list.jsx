@@ -1187,7 +1187,7 @@ export const ListCustomers = () => {
                                             {detailsDialog.customer.balance > 0 ? ' (Due)' : detailsDialog.customer.balance < 0 ? ' (Adv)' : ''}
                                         </Typography>
                                         <Typography variant="caption" sx={{ fontSize: 9, color: 'text.disabled' }}>
-                                            {detailsDialog.customer.balanceSource === 'ledger' ? 'Ledger' : 'Orders'}
+                                            Opening + Invoices - Paid
                                         </Typography>
                                     </Paper>
                                 </Grid>
