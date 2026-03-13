@@ -1,135 +1,103 @@
-# Product Requirements Document — Accounting Ledger Module
+# Product Requirements Document — Customer Invoice System
 
 ## Original Problem Statement
-Build a production-grade, double-entry accounting ledger module on top of an existing invoicing application (React + Express + PostgreSQL). The module must be additive and reversible — no modifications to existing `orders` or `payments` tables.
+Build a production-grade, double-entry accounting ledger with a focus on fraud prevention and data integrity, similar in sophistication to Tally ERP. Key requirements include logging suspicious activities, providing an admin audit trail, improving UI/UX for financial entries, and ensuring ledger integrity.
 
-Additionally, the user suspects billing fraud and needs a comprehensive **Bill Tampering Audit Trail** to silently log item deletions, bill deletions, and weight scale usage.
+**Critical User Rule:** "I don't ever want to automatically update a ledger without me or biller authorizing it."
 
-## Core Requirements
-1. **Additive Architecture**: New tables (`accounts`, `journal_batches`, `ledger_entries`) without altering existing tables.
-2. **Double-Entry Principle**: Every financial event recorded as balanced debit/credit entries.
-3. **Calculated Balances**: No stored balances — always computed from ledger entries.
-4. **Data Migration**: Repeatable, reversible migration of historical data from `orders`/`payments`.
-5. **Safety & Production-Readiness**: DB transactions, validation, indexes, FK constraints.
-6. **UI Integration**: `/ledger` tab for reports and migration tools.
-7. **Fraud Detection**: Silent audit trail logging item deletions, bill deletions, weight scale usage.
-8. **Tally-style Supplier Ledger**: Date-sorted, debit/credit/running balance view.
-9. **Real-Time Alerts**: Telegram bot for instant fraud alerts and new bill notifications.
-10. **Alt Name Support**: Include product alternate names in Telegram bill alerts.
-
-## Architecture
-```
-backend/src/
-  models/       → account.js, journalBatch.js, ledgerEntry.js, billAuditLog.js, weightLog.js
-  services/     → ledgerService.js, ledgerMigrationService.js, realTimeLedger.js, telegramAlert.js
-  controller/   → ledger.js, audit.js, telegram.js, order.js, customer.js, payment.js
-  dao/          → customer.js (balance calculation queries)
-  routes/       → ledger.js, audit.js
-frontend/src/
-  components/admin/ledger/ → LedgerModule.jsx
-  components/admin/audit/ → BillAuditLogs.jsx
-  components/admin/suppliers/ → list.jsx (Tally-style ledger)
-```
-
-## Key API Endpoints
-- `POST /api/ledger/accounts/initialize` — seed chart of accounts
-- `GET /api/ledger/accounts` — list accounts
-- `POST /api/ledger/journal-batches` — create journal batch
-- `GET /api/ledger/health-check` — system-wide debit/credit balance check
-- `POST /api/ledger/migration/run` — run data migration
-- `GET /api/ledger/reports/trial-balance`
-- `GET /api/ledger/reports/profit-loss`
-- `GET /api/ledger/reports/balance-sheet`
-- `POST /api/audit/item-deleted` — log item deletion
-- `GET /api/audit/tampering-logs` — get audit logs
-- `POST /api/audit/weight-capture` — log weight fetch
-- `POST /api/telegram/full-audit-report` — send audit report to Telegram
-- `POST /api/migrations/backfill-cash-receipts` — fix historical ledger drift
-- `GET /api/customers/:id/transactions` — customer with full balance details
-- `GET /api/customers/with-balance` — all customers with computed balances
+## Core Architecture
+- **Frontend:** React + Material-UI (port 3000)
+- **Backend:** Node.js + Express + Sequelize ORM (port 8001)
+- **Database:** PostgreSQL (port 5432)
+- **3rd Party:** Telegram Bot API, WhatsApp Web, RS232 Weight Scale, node-cron
 
 ## What's Been Implemented
 
-### Completed (Feb 2026)
-- [x] Ledger module scaffolding: models, services, controller, routes
-- [x] Chart of accounts with 18 default accounts
-- [x] Double-entry journal batch creation with full validation
-- [x] Safe Verification Mode (17/17 tests passed)
-- [x] Safe Reconciliation Validator
-- [x] Real-Time Ledger Posting (SAFE PARALLEL MODE)
-- [x] Purchase Bill + Supplier Payment → Ledger Posting
-- [x] Daily Drift Check
-- [x] Ledger Admin Dashboard (frontend `/ledger`)
-- [x] Soft Delete + Ledger Reversal
-- [x] Journal batch reversal
-- [x] Report queries: Trial Balance, P&L, Balance Sheet, Account Ledger
-- [x] Migration service
-- [x] Fraud Detection & Audit Trail (bill_audit_logs, weight_logs)
-- [x] Admin-only Bill Audit Trail page (`/bill-audit`)
-- [x] Tally-style Supplier Ledger — Redesigned supplier detail dialog
-- [x] Smart Quick Entry Bar — Streamlined entry for suppliers, payments, purchases
-- [x] Payment Status Toggle ↔ Ledger Integration
-- [x] Invoice Cash Receipt Posting
-- [x] Telegram Fraud Alert Bot — Real-time alerts for all suspicious activities
-- [x] Daily fraud summary via Telegram (9:00 PM IST)
-- [x] Full audit report to Telegram (mirrors /bill-audit page)
-- [x] "Send Report to Telegram" button on bill-audit page
-- [x] Alt Name (altName) support in Telegram bill creation alerts
-- [x] Closing balance (Expected Cash in Drawer) in Telegram bill alerts
-- [x] Supplier auto-fill & batch mode in purchase bill / payment forms
-- [x] Quick Sale tab on Customers page for rapid date-wise bulk entry with batch mode
-- [x] WhatsApp invoice sharing via wa.me links (Orders page, Customer dialog, Quick Sale)
-- [x] WhatsApp success dialog after invoice creation on /orders/create page
-- [x] Customer name optional — orders can be created with just phone number, customer auto-saved by mobile
-- [x] Floating price keypad on invoice creation page (openable/closable)
-- [x] IPv4 network fix for Telegram (dns.setDefaultResultOrder)
-- [x] Database migration system using sequelize-cli
-- [x] Historical data backfill for ledger drift
+### Phase 1+2: Tally-Correct System Hardening (Completed - Mar 13 2026)
 
-### Completed (Mar 10, 2026)
-- [x] **CRITICAL FIX: Customer Balance Calculation — FIFO Advance Consumption**
-  - Root cause: Same money existed in both `orders.paidAmount` AND `payments` (referenceType='advance'), causing double-counting
-  - Fix: When a credit order is created, existing advance payments are automatically consumed FIFO (oldest first) and linked to the order
-  - Advance splitting: If advance > order due, only needed portion consumed, rest stays as advance
-  - Cash sales (fully paid at creation) correctly do NOT consume advances
-  - Balance formula verified: `balance = openingBal + totalDue - min(standalonePayments, max(0, openingBal + totalDue))`
-  - SQL and JS balance calculations confirmed matching
-  - **44/44 automated tests passed** including edge cases
-  - Old single-entry ledger made non-blocking (no longer crashes order creation if Sales/Cash Account ledgers missing)
-  - Migration script created: `backend/scripts/fix_advance_payments.js` for retroactive historical data cleanup
+#### 1. Ledger-Authoritative Balance (Tally Formula)
+- Customer balance = `opening + sum(ledger debits) - sum(ledger credits)`
+- Falls back to `opening + sum(dueAmount)` when no ledger entries exist
+- Balance source indicator (Ledger / Orders) shown in UI
+- File: `backend/src/dao/customer.js`
+
+#### 2. Receipt Allocation (Tally's Bill-Wise / Against Ref)
+- New `receipt_allocations` table tracks which payment is allocated against which invoice
+- "Against Ref" = payment allocated to specific invoice
+- "On Account" = unallocated payment (advance)
+- Invoice due is DERIVED: `invoice_total - sum(allocations)`
+- Over-allocation prevention for both payment and invoice limits
+- API: `POST /api/receipts/allocate`, `GET /api/receipts/:id/allocations`, `GET /api/invoices/:id/allocations`, `DELETE /api/receipts/allocations/:id`
+- Files: `backend/src/controller/receiptAllocation.js`, `backend/src/routes/receiptAllocation.js`, `backend/src/models/receiptAllocation.js`
+
+#### 3. Invoice Immutability Guard
+- Direct edits to `paidAmount`, `dueAmount`, `paymentStatus` are BLOCKED on orders
+- Changes must go through "Record Payment" → "Allocate" flow
+- Returns 400 error with user-friendly message
+- File: `backend/src/controller/order.js` (updateOrder method)
+
+#### 4. No Auto-FIFO Payment Allocation
+- Customer payments without specific order reference stay as "On Account"
+- No automatic application to oldest unpaid invoices
+- User must explicitly allocate via Allocate UI
+- File: `backend/src/controller/payment.js`
+
+#### 5. Frontend Updates
+- Customer dialog shows 3 tabs: Invoices, Receipts, Allocate
+- Invoices tab shows derived paid/due from receipt allocations
+- Receipts tab shows allocated/unallocated amounts per receipt
+- Allocate tab allows manual bill-wise reconciliation
+- Balance card shows source indicator (Ledger/Orders)
+- File: `frontend/src/components/admin/customers/list.jsx`
+
+#### 6. Chart of Accounts Initialized
+- 19 accounts created covering Assets, Liabilities, Equity, Revenue, Expenses
+- Double-entry ledger posting for: Invoices, Payments, Payment Toggle, Cash Receipts
+
+### Earlier Completed Work
+- Full-stack invoicing system with orders, payments, customers, suppliers
+- Double-entry ledger infrastructure (accounts, journal_batches, ledger_entries)
+- Audit logging system
+- PDF invoice generation
+- Telegram alerts
+- WhatsApp integration
+- Daily summary calculations
+- GST export
+- Tally export
 
 ## Prioritized Backlog
 
-### P0 — Critical
-- [ ] User's local frontend is broken ("only loading") after git pull — investigate missing files or import errors
-- [ ] Run historical data migration script on user's local DB to fix existing advance payment double-counting
+### P1 - In Progress / Next
+- Build frontend UI for core ledger reports (Account Ledger, Trial Balance, P&L, Balance Sheet)
+- Implement retry mechanism for Telegram alerts
+- Implement `FOR UPDATE` row-level locks for concurrency
 
-### P1 — Security & Features
-- [ ] Add rate limiting (`express-rate-limit`) to all API endpoints
-- [ ] Restrict CORS to specific frontend domain
-- [ ] Disable `/api/auth/setup` endpoint after first admin created
-- [ ] Add `FOR UPDATE` row locks in payment toggle, order create, payment create
-- [ ] Retry mechanism for Telegram alerts
-- [ ] Frontend reports: Account Ledger, Trial Balance, P&L, Balance Sheet
+### P2 - Future
+- Implement Role-Based Access Control (RBAC)
+- Financial period lock
+- Reconciliation dashboard (visual tool to match receipts against invoices)
+- Ledger recalculation utility (verify and recompute balances from ledger entries)
+- Backup/restore verification
 
-### P2 — Future
-- [ ] Present comprehensive code audit report to user
-- [ ] Add input validation (Joi) to remaining 7 controllers
-- [ ] Set up automated database backup (pg_dump cron)
-- [ ] Centralize error handling with middleware
-- [ ] Structured logging (winston/pino)
-- [ ] Split large controllers into smaller modules
-- [ ] Role-Based Access Control (RBAC)
-- [ ] Weekly biller activity summary report
-- [ ] Frontend state management refactor (Redux/Zustand)
-
-## Known Issues
-- User's local frontend is broken ("only loading") — needs investigation
-- User's local machine has Git/DNS issues (intermittent)
-- Old invoice module's stored `currentBalance` on customer model is incrementally updated but not used for display (computed balance from orders/payments is used)
-- Telegram alerts may fail intermittently on user's local network (IPv4/IPv6)
+### P3 - Backlog
+- Posting matrix for additional voucher types: Credit Note, Debit Note, Advance, Write-off
+- Adjustment entry UI (journal entries instead of direct invoice mutation)
 
 ## Test Credentials
-- Username: `Rishabh`, Password: `yttriumR`
+- Username: `admin`
+- Password: `yttriumR`
 - Telegram Bot Token: `8336582297:AAF3EtRshWDu3p57L9SHaWd3RvALD2OIrc8`
 - Telegram Chat ID: `6016362708`
+
+## Key API Endpoints
+- `POST /api/auth/login` — Login
+- `GET /api/customers/with-balance` — Customer list with ledger-authoritative balances
+- `GET /api/customers/:id/transactions` — Customer detail with derived invoice dues
+- `POST /api/receipts/allocate` — Allocate receipt against invoices
+- `GET /api/receipts/:paymentId/allocations` — Get allocations for a payment
+- `GET /api/invoices/:orderId/allocations` — Get allocations for an invoice
+- `DELETE /api/receipts/allocations/:allocationId` — Remove allocation
+- `POST /api/orders` — Create invoice
+- `PUT /api/orders/:id` — Update order (financial fields blocked)
+- `POST /api/payments` — Record payment
+- `POST /api/ledger/accounts/initialize` — Initialize Chart of Accounts

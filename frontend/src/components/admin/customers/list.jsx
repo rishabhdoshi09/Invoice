@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
     Box, Button, Card, CardContent, Table, TableBody, TableCell, TableContainer, 
@@ -1221,8 +1221,8 @@ export const ListCustomers = () => {
                                                 </TableRow>
                                             ) : (
                                                 detailsDialog.customer.orders?.map((o) => (
-                                                    <>
-                                                        <TableRow key={o.id} hover>
+                                                    <React.Fragment key={o.id}>
+                                                        <TableRow hover>
                                                             <TableCell onClick={() => setExpandedOrder(expandedOrder === o.id ? null : o.id)} sx={{ cursor: 'pointer' }}>
                                                                 <IconButton size="small">
                                                                     {expandedOrder === o.id ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
@@ -1291,7 +1291,7 @@ export const ListCustomers = () => {
                                                                 </TableCell>
                                                             </TableRow>
                                                         )}
-                                                    </>
+                                                    </React.Fragment>
                                                 ))
                                             )}
                                         </TableBody>
