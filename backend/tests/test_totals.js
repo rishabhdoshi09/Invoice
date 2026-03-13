@@ -4,7 +4,7 @@
 
 const axios = require('axios');
 
-const API_URL = process.env.API_URL || 'https://accounting-core-12.preview.emergentagent.com/api';
+const API_URL = process.env.API_URL || 'https://data-integrity-fix-39.preview.emergentagent.com/api';
 const USERNAME = 'admin';
 const PASSWORD = 'admin123';
 

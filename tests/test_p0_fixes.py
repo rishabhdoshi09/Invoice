@@ -13,7 +13,7 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://accounting-core-12.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://data-integrity-fix-39.preview.emergentagent.com')
 if BASE_URL.endswith('/'):
     BASE_URL = BASE_URL.rstrip('/')
 
