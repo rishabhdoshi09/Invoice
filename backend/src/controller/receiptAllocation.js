@@ -42,8 +42,8 @@ module.exports = {
             }
 
             const result = await db.sequelize.transaction(async (transaction) => {
-                // Fetch payment
-                const payment = await db.payment.findByPk(paymentId, { transaction });
+                // Fetch payment with row-level lock (FOR UPDATE) to prevent concurrent modifications
+                const payment = await db.payment.findByPk(paymentId, { transaction, lock: transaction.LOCK.UPDATE });
                 if (!payment) {
                     throw new Error('Payment not found');
                 }
@@ -74,8 +74,8 @@ module.exports = {
                         throw new Error('Each allocation must have orderId and positive amount');
                     }
 
-                    // Fetch invoice
-                    const order = await db.order.findByPk(alloc.orderId, { transaction });
+                    // Fetch invoice with row-level lock (FOR UPDATE) to prevent concurrent modifications
+                    const order = await db.order.findByPk(alloc.orderId, { transaction, lock: transaction.LOCK.UPDATE });
                     if (!order) {
                         throw new Error(`Invoice ${alloc.orderId} not found`);
                     }

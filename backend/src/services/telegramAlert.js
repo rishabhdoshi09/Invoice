@@ -16,43 +16,76 @@ dns.setDefaultResultOrder('ipv4first');
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-// ─── Send message via Telegram Bot API ───────────────────────────
-function sendTelegram(text, parseMode = 'HTML') {
+// ─── Send message via Telegram Bot API (with exponential backoff retry) ───
+function sendTelegram(text, parseMode = 'HTML', retries = 3) {
     return new Promise((resolve, reject) => {
         if (!BOT_TOKEN || !CHAT_ID) {
             console.warn('[TELEGRAM] Bot token or chat ID not configured — skipping alert');
             return resolve({ skipped: true });
         }
 
-        const payload = JSON.stringify({
-            chat_id: CHAT_ID,
-            text: text.substring(0, 4000),
-            parse_mode: parseMode,
-            disable_web_page_preview: true
-        });
-
-        const req = https.request({
-            hostname: 'api.telegram.org',
-            path: `/bot${BOT_TOKEN}/sendMessage`,
-            method: 'POST',
-            family: 4,
-            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
-        }, (res) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
-                try {
-                    const parsed = JSON.parse(data);
-                    if (parsed.ok) resolve(parsed);
-                    else reject(new Error(`Telegram API error: ${parsed.description}`));
-                } catch (e) { reject(e); }
+        const attempt = (attemptNum) => {
+            const payload = JSON.stringify({
+                chat_id: CHAT_ID,
+                text: text.substring(0, 4000),
+                parse_mode: parseMode,
+                disable_web_page_preview: true
             });
-        });
 
-        req.on('error', reject);
-        req.setTimeout(10000, () => { req.destroy(); reject(new Error('Telegram request timeout')); });
-        req.write(payload);
-        req.end();
+            const req = https.request({
+                hostname: 'api.telegram.org',
+                path: `/bot${BOT_TOKEN}/sendMessage`,
+                method: 'POST',
+                family: 4,
+                headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
+            }, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    try {
+                        const parsed = JSON.parse(data);
+                        if (parsed.ok) {
+                            resolve(parsed);
+                        } else if (parsed.error_code === 429 && attemptNum < retries) {
+                            // Rate limited — retry with backoff
+                            const retryAfter = (parsed.parameters?.retry_after || 1) * 1000;
+                            console.warn(`[TELEGRAM] Rate limited, retry ${attemptNum + 1}/${retries} after ${retryAfter}ms`);
+                            setTimeout(() => attempt(attemptNum + 1), retryAfter);
+                        } else if (attemptNum < retries) {
+                            const delay = Math.pow(2, attemptNum) * 1000;
+                            console.warn(`[TELEGRAM] API error (attempt ${attemptNum + 1}/${retries}): ${parsed.description}, retrying in ${delay}ms`);
+                            setTimeout(() => attempt(attemptNum + 1), delay);
+                        } else {
+                            reject(new Error(`Telegram API error after ${retries} attempts: ${parsed.description}`));
+                        }
+                    } catch (e) { reject(e); }
+                });
+            });
+
+            req.on('error', (err) => {
+                if (attemptNum < retries) {
+                    const delay = Math.pow(2, attemptNum) * 1000;
+                    console.warn(`[TELEGRAM] Network error (attempt ${attemptNum + 1}/${retries}): ${err.message}, retrying in ${delay}ms`);
+                    setTimeout(() => attempt(attemptNum + 1), delay);
+                } else {
+                    reject(new Error(`Telegram network error after ${retries} attempts: ${err.message}`));
+                }
+            });
+            req.setTimeout(10000, () => {
+                req.destroy();
+                if (attemptNum < retries) {
+                    const delay = Math.pow(2, attemptNum) * 1000;
+                    console.warn(`[TELEGRAM] Timeout (attempt ${attemptNum + 1}/${retries}), retrying in ${delay}ms`);
+                    setTimeout(() => attempt(attemptNum + 1), delay);
+                } else {
+                    reject(new Error(`Telegram timeout after ${retries} attempts`));
+                }
+            });
+            req.write(payload);
+            req.end();
+        };
+
+        attempt(0);
     });
 }
 

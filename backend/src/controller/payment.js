@@ -243,7 +243,8 @@ module.exports = {
 
                 // Update reference (order or purchase) payment status
                 if (value.referenceType === 'order' && value.referenceId) {
-                    const order = await Services.order.getOrder({ id: value.referenceId }, transaction);
+                    // Lock the order row to prevent concurrent payment modifications (FOR UPDATE)
+                    const order = await db.order.findOne({ where: { id: value.referenceId }, transaction, lock: transaction.LOCK.UPDATE });
                     if (order) {
                         // Check if order is already paid - prevent double payment
                         if (order.paymentStatus === 'paid') {

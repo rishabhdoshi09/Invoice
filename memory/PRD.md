@@ -28,60 +28,77 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 - Invoice due is DERIVED: `invoice_total - sum(allocations)`
 - Over-allocation prevention for both payment and invoice limits
 - API: `POST /api/receipts/allocate`, `GET /api/receipts/:id/allocations`, `GET /api/invoices/:id/allocations`, `DELETE /api/receipts/allocations/:id`
-- Files: `backend/src/controller/receiptAllocation.js`, `backend/src/routes/receiptAllocation.js`, `backend/src/models/receiptAllocation.js`
 
 #### 3. Invoice Immutability Guard
 - Direct edits to `paidAmount`, `dueAmount`, `paymentStatus` are BLOCKED on orders
 - Changes must go through "Record Payment" → "Allocate" flow
 - Returns 400 error with user-friendly message
-- File: `backend/src/controller/order.js` (updateOrder method)
 
 #### 4. No Auto-FIFO Payment Allocation
 - Customer payments without specific order reference stay as "On Account"
 - No automatic application to oldest unpaid invoices
 - User must explicitly allocate via Allocate UI
-- File: `backend/src/controller/payment.js`
 
-#### 5. Frontend Updates
+#### 5. Frontend — Customer Dialog with Allocate Tab
 - Customer dialog shows 3 tabs: Invoices, Receipts, Allocate
 - Invoices tab shows derived paid/due from receipt allocations
 - Receipts tab shows allocated/unallocated amounts per receipt
 - Allocate tab allows manual bill-wise reconciliation
-- Balance card shows source indicator (Ledger/Orders)
-- File: `frontend/src/components/admin/customers/list.jsx`
 
-#### 6. Chart of Accounts Initialized
-- 19 accounts created covering Assets, Liabilities, Equity, Revenue, Expenses
-- Double-entry ledger posting for: Invoices, Payments, Payment Toggle, Cash Receipts
+### Phase 3: System Hardening & Reporting (Completed - Mar 13 2026)
+
+#### 6. Telegram Alert Retry Mechanism
+- Exponential backoff with 3 retries
+- Handles rate limiting (HTTP 429), network errors, and timeouts
+- Each retry doubles the wait time (1s, 2s, 4s)
+- File: `backend/src/services/telegramAlert.js`
+
+#### 7. FOR UPDATE Row-Level Locks (Concurrency Protection)
+- Receipt allocation: locks payment and order rows during allocation
+- Payment toggle: locks order row to prevent concurrent status changes
+- Payment creation: locks order row when processing payment against invoice
+- Optimistic concurrency check: verifies status hasn't changed since initial read
+- Files: `controller/receiptAllocation.js`, `controller/order.js`, `controller/payment.js`
+
+#### 8. Posting Matrix Reference Page
+- New tab in Ledger Module showing voucher type reference
+- 7 voucher types documented: Sales Invoice, Cash Sale, Receipt Against Ref, Receipt On Account, Payment Toggle, Supplier Payment
+- Tally-correct balance formulas displayed
+- File: `frontend/src/components/admin/ledger/LedgerModule.jsx` (tab 7)
+
+#### 9. Ledger Module (8 tabs)
+- Dashboard (health check, drift monitor, migration control)
+- Chart of Accounts (19 system accounts)
+- Trial Balance
+- Profit & Loss
+- Balance Sheet
+- Reconciliation
+- Journal Entries
+- Posting Matrix (NEW)
 
 ### Earlier Completed Work
 - Full-stack invoicing system with orders, payments, customers, suppliers
 - Double-entry ledger infrastructure (accounts, journal_batches, ledger_entries)
 - Audit logging system
 - PDF invoice generation
-- Telegram alerts
+- Telegram alerts (daily summary, fraud detection)
 - WhatsApp integration
 - Daily summary calculations
-- GST export
-- Tally export
+- GST export, Tally export
 
 ## Prioritized Backlog
 
-### P1 - In Progress / Next
-- Build frontend UI for core ledger reports (Account Ledger, Trial Balance, P&L, Balance Sheet)
-- Implement retry mechanism for Telegram alerts
-- Implement `FOR UPDATE` row-level locks for concurrency
-
 ### P2 - Future
 - Implement Role-Based Access Control (RBAC)
-- Financial period lock
-- Reconciliation dashboard (visual tool to match receipts against invoices)
-- Ledger recalculation utility (verify and recompute balances from ledger entries)
+- Financial period lock (prevent changes to locked periods)
+- Reconciliation dashboard (visual tool)
+- Ledger recalculation utility
 - Backup/restore verification
 
 ### P3 - Backlog
-- Posting matrix for additional voucher types: Credit Note, Debit Note, Advance, Write-off
+- Credit Note / Debit Note / Write-off voucher types
 - Adjustment entry UI (journal entries instead of direct invoice mutation)
+- Account Ledger page (individual account transaction history)
 
 ## Test Credentials
 - Username: `admin`
@@ -90,14 +107,18 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 - Telegram Chat ID: `6016362708`
 
 ## Key API Endpoints
-- `POST /api/auth/login` — Login
-- `GET /api/customers/with-balance` — Customer list with ledger-authoritative balances
-- `GET /api/customers/:id/transactions` — Customer detail with derived invoice dues
+- `POST /api/auth/login`
+- `GET /api/customers/with-balance` — Ledger-authoritative balances
+- `GET /api/customers/:id/transactions` — Derived invoice dues
 - `POST /api/receipts/allocate` — Allocate receipt against invoices
-- `GET /api/receipts/:paymentId/allocations` — Get allocations for a payment
-- `GET /api/invoices/:orderId/allocations` — Get allocations for an invoice
-- `DELETE /api/receipts/allocations/:allocationId` — Remove allocation
+- `GET /api/receipts/:paymentId/allocations`
+- `GET /api/invoices/:orderId/allocations`
+- `DELETE /api/receipts/allocations/:allocationId`
 - `POST /api/orders` — Create invoice
-- `PUT /api/orders/:id` — Update order (financial fields blocked)
+- `PUT /api/orders/:id` — Update (financial fields blocked)
 - `POST /api/payments` — Record payment
-- `POST /api/ledger/accounts/initialize` — Initialize Chart of Accounts
+- `GET /api/ledger/reports/trial-balance`
+- `GET /api/ledger/reports/profit-loss`
+- `GET /api/ledger/reports/balance-sheet`
+- `POST /api/ledger/accounts/initialize`
+- `GET /api/ledger/migration/reconciliation`

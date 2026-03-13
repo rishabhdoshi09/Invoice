@@ -738,6 +738,16 @@ module.exports = {
             
             // Use transaction for all updates to ensure data integrity
             const result = await db.sequelize.transaction(async (transaction) => {
+                // Re-fetch order with row-level lock (FOR UPDATE) to prevent concurrent payment toggles
+                const lockedOrder = await db.order.findByPk(orderId, { transaction, lock: transaction.LOCK.UPDATE });
+                if (!lockedOrder) {
+                    throw new Error('Order not found');
+                }
+                // Verify status hasn't changed since initial check
+                if (lockedOrder.paymentStatus !== oldStatus) {
+                    throw new Error(`Payment status was already changed to "${lockedOrder.paymentStatus}" by another user. Please refresh and try again.`);
+                }
+
                 // Update order payment status and customer info
                 const updateData = {
                     paymentStatus: newStatus,

@@ -250,6 +250,7 @@ const LedgerModule = () => {
                     <Tab label="Balance Sheet" icon={<Receipt />} iconPosition="start" data-testid="tab-balance-sheet" />
                     <Tab label="Reconciliation" icon={<Sync />} iconPosition="start" data-testid="tab-reconciliation" />
                     <Tab label="Journal Entries" icon={<Receipt />} iconPosition="start" data-testid="tab-journal-entries" />
+                    <Tab label="Posting Matrix" icon={<AccountBalance />} iconPosition="start" data-testid="tab-posting-matrix" />
                 </Tabs>
             </Paper>
 
@@ -930,6 +931,280 @@ const LedgerModule = () => {
                         </Table>
                     </TableContainer>
                 </Paper>
+            )}
+
+            {/* Tab 7: Posting Matrix (Tally-style voucher type reference) */}
+            {activeTab === 7 && (
+                <Box data-testid="posting-matrix-tab">
+                    <Paper sx={{ p: 3, mb: 2 }}>
+                        <Typography variant="h6" sx={{ mb: 1 }}>
+                            Posting Matrix — Voucher Type Reference
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                            Shows exactly what ledger entries are created for each transaction type.
+                            Every transaction creates balanced double-entry postings (Debit = Credit).
+                        </Typography>
+                    </Paper>
+
+                    {/* Sales Invoice */}
+                    <Paper sx={{ p: 2, mb: 2, border: '1px solid #e3f2fd' }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1, color: 'primary.main' }}>
+                            Sales Invoice (Credit Sale)
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            When a credit invoice is created for a customer
+                        </Typography>
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#e3f2fd' }}>
+                                        <TableCell>Account</TableCell>
+                                        <TableCell align="right">Debit (Dr)</TableCell>
+                                        <TableCell align="right">Credit (Cr)</TableCell>
+                                        <TableCell>Effect</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 600 }}>Customer Receivable (1200)</TableCell>
+                                        <TableCell align="right" sx={{ color: 'primary.main', fontWeight: 600 }}>Invoice Total</TableCell>
+                                        <TableCell align="right">-</TableCell>
+                                        <TableCell>Customer owes you more</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 600 }}>Sales Revenue (4100)</TableCell>
+                                        <TableCell align="right">-</TableCell>
+                                        <TableCell align="right" sx={{ color: 'error.main', fontWeight: 600 }}>Invoice Total</TableCell>
+                                        <TableCell>Income recorded</TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </Paper>
+
+                    {/* Cash Sale */}
+                    <Paper sx={{ p: 2, mb: 2, border: '1px solid #e8f5e9' }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1, color: 'success.main' }}>
+                            Cash Sale (Paid at Counter)
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            When invoice is marked as paid during creation
+                        </Typography>
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#e8f5e9' }}>
+                                        <TableCell>Account</TableCell>
+                                        <TableCell align="right">Debit (Dr)</TableCell>
+                                        <TableCell align="right">Credit (Cr)</TableCell>
+                                        <TableCell>Effect</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 600 }}>Cash in Hand (1100)</TableCell>
+                                        <TableCell align="right" sx={{ color: 'primary.main', fontWeight: 600 }}>Invoice Total</TableCell>
+                                        <TableCell align="right">-</TableCell>
+                                        <TableCell>Cash received</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 600 }}>Sales Revenue (4100)</TableCell>
+                                        <TableCell align="right">-</TableCell>
+                                        <TableCell align="right" sx={{ color: 'error.main', fontWeight: 600 }}>Invoice Total</TableCell>
+                                        <TableCell>Income recorded</TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </Paper>
+
+                    {/* Receipt (Against Invoice) */}
+                    <Paper sx={{ p: 2, mb: 2, border: '1px solid #fff3e0' }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1, color: 'warning.dark' }}>
+                            Receipt — Against Ref (Payment Against Invoice)
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            When a customer payment is received and allocated against a specific invoice
+                        </Typography>
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#fff3e0' }}>
+                                        <TableCell>Account</TableCell>
+                                        <TableCell align="right">Debit (Dr)</TableCell>
+                                        <TableCell align="right">Credit (Cr)</TableCell>
+                                        <TableCell>Effect</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 600 }}>Cash in Hand (1100)</TableCell>
+                                        <TableCell align="right" sx={{ color: 'primary.main', fontWeight: 600 }}>Receipt Amount</TableCell>
+                                        <TableCell align="right">-</TableCell>
+                                        <TableCell>Cash received</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 600 }}>Customer Receivable (1200)</TableCell>
+                                        <TableCell align="right">-</TableCell>
+                                        <TableCell align="right" sx={{ color: 'error.main', fontWeight: 600 }}>Receipt Amount</TableCell>
+                                        <TableCell>Customer owes you less</TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </Paper>
+
+                    {/* Receipt On Account (Advance) */}
+                    <Paper sx={{ p: 2, mb: 2, border: '1px solid #f3e5f5' }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1, color: 'secondary.main' }}>
+                            Receipt — On Account (Advance/Unallocated)
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            Customer pays without specifying which invoice. Stays as advance until manually allocated.
+                        </Typography>
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#f3e5f5' }}>
+                                        <TableCell>Account</TableCell>
+                                        <TableCell align="right">Debit (Dr)</TableCell>
+                                        <TableCell align="right">Credit (Cr)</TableCell>
+                                        <TableCell>Effect</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 600 }}>Cash in Hand (1100)</TableCell>
+                                        <TableCell align="right" sx={{ color: 'primary.main', fontWeight: 600 }}>Payment Amount</TableCell>
+                                        <TableCell align="right">-</TableCell>
+                                        <TableCell>Cash received</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 600 }}>Customer Receivable (1200)</TableCell>
+                                        <TableCell align="right">-</TableCell>
+                                        <TableCell align="right" sx={{ color: 'error.main', fontWeight: 600 }}>Payment Amount</TableCell>
+                                        <TableCell>Advance recorded (reduces outstanding)</TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                        <Alert severity="info" sx={{ mt: 1 }}>
+                            Until allocated against a specific invoice, this shows as "On Account" in the customer's receipt tab.
+                            Use the Allocate tab to manually assign this payment to an invoice.
+                        </Alert>
+                    </Paper>
+
+                    {/* Payment Toggle */}
+                    <Paper sx={{ p: 2, mb: 2, border: '1px solid #ede7f6' }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+                            Payment Status Toggle (Unpaid → Paid)
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            When a user manually toggles an invoice from unpaid to paid
+                        </Typography>
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#ede7f6' }}>
+                                        <TableCell>Account</TableCell>
+                                        <TableCell align="right">Debit (Dr)</TableCell>
+                                        <TableCell align="right">Credit (Cr)</TableCell>
+                                        <TableCell>Effect</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 600 }}>Cash in Hand (1100)</TableCell>
+                                        <TableCell align="right" sx={{ color: 'primary.main', fontWeight: 600 }}>Invoice Total</TableCell>
+                                        <TableCell align="right">-</TableCell>
+                                        <TableCell>Cash received</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 600 }}>Customer Receivable (1200)</TableCell>
+                                        <TableCell align="right">-</TableCell>
+                                        <TableCell align="right" sx={{ color: 'error.main', fontWeight: 600 }}>Invoice Total</TableCell>
+                                        <TableCell>Customer receivable cleared</TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </Paper>
+
+                    {/* Supplier Payment */}
+                    <Paper sx={{ p: 2, mb: 2, border: '1px solid #fce4ec' }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1, color: 'error.main' }}>
+                            Supplier Payment
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            When you pay a supplier for purchases
+                        </Typography>
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#fce4ec' }}>
+                                        <TableCell>Account</TableCell>
+                                        <TableCell align="right">Debit (Dr)</TableCell>
+                                        <TableCell align="right">Credit (Cr)</TableCell>
+                                        <TableCell>Effect</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 600 }}>Supplier Payable (2100)</TableCell>
+                                        <TableCell align="right" sx={{ color: 'primary.main', fontWeight: 600 }}>Payment Amount</TableCell>
+                                        <TableCell align="right">-</TableCell>
+                                        <TableCell>You owe supplier less</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 600 }}>Cash in Hand (1100)</TableCell>
+                                        <TableCell align="right">-</TableCell>
+                                        <TableCell align="right" sx={{ color: 'error.main', fontWeight: 600 }}>Payment Amount</TableCell>
+                                        <TableCell>Cash goes out</TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </Paper>
+
+                    {/* Balance Formula Summary */}
+                    <Paper sx={{ p: 3, bgcolor: '#f5f5f5', border: '2px solid #1976d2' }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2, color: 'primary.main' }}>
+                            Tally-Correct Balance Formulas
+                        </Typography>
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} md={4}>
+                                <Card sx={{ bgcolor: '#e3f2fd', height: '100%' }}>
+                                    <CardContent>
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Ledger Balance (Authoritative)</Typography>
+                                        <Typography variant="body2" sx={{ fontFamily: 'monospace', bgcolor: '#fff', p: 1, borderRadius: 1 }}>
+                                            Closing = Opening + Debits - Credits
+                                        </Typography>
+                                    </CardContent>
+                                </Card>
+                            </Grid>
+                            <Grid item xs={12} md={4}>
+                                <Card sx={{ bgcolor: '#e8f5e9', height: '100%' }}>
+                                    <CardContent>
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Invoice Due (Derived)</Typography>
+                                        <Typography variant="body2" sx={{ fontFamily: 'monospace', bgcolor: '#fff', p: 1, borderRadius: 1 }}>
+                                            Due = Total - sum(Allocated Receipts)
+                                        </Typography>
+                                    </CardContent>
+                                </Card>
+                            </Grid>
+                            <Grid item xs={12} md={4}>
+                                <Card sx={{ bgcolor: '#fff3e0', height: '100%' }}>
+                                    <CardContent>
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Customer Outstanding</Typography>
+                                        <Typography variant="body2" sx={{ fontFamily: 'monospace', bgcolor: '#fff', p: 1, borderRadius: 1 }}>
+                                            sum(Open Invoice Due) - sum(Unadjusted Credits)
+                                        </Typography>
+                                    </CardContent>
+                                </Card>
+                            </Grid>
+                        </Grid>
+                    </Paper>
+                </Box>
             )}
         </Box>
     );
