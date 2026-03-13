@@ -414,5 +414,164 @@ module.exports = {
             console.error('Backfill allocation error:', error);
             return res.status(500).json({ status: 500, message: error.message });
         }
+    },
+
+    /**
+     * Full reconciliation: Backfill allocations + recalculate all order paidAmounts
+     * from actual payment records. This fixes corrupted paidAmount values
+     * by ensuring each order's paidAmount = sum(receipt_allocations for that order).
+     * 
+     * Steps:
+     * 1. Clear existing backfill allocations (keep manual ones)
+     * 2. FIFO match all payments to orders per customer
+     * 3. Recalculate every order's paidAmount/dueAmount/paymentStatus from allocations
+     */
+    reconcileAll: async (req, res) => {
+        try {
+            const customers = await db.customer.findAll();
+            let totalAllocations = 0;
+            let ordersUpdated = 0;
+            const report = [];
+
+            for (const customer of customers) {
+                // Get payments for this customer (oldest first)
+                const payments = await db.payment.findAll({
+                    where: {
+                        [db.Sequelize.Op.or]: [
+                            { partyId: customer.id },
+                            { partyName: customer.name, partyId: null }
+                        ],
+                        partyType: 'customer',
+                        ...(db.payment.rawAttributes.isDeleted ? { isDeleted: false } : {})
+                    },
+                    order: [['createdAt', 'ASC']]
+                });
+
+                // Get orders for this customer (oldest first)
+                const orders = await db.order.findAll({
+                    where: {
+                        [db.Sequelize.Op.or]: [
+                            { customerId: customer.id },
+                            { customerName: customer.name, customerId: null }
+                        ],
+                        isDeleted: false
+                    },
+                    order: [['orderDate', 'ASC'], ['createdAt', 'ASC']]
+                });
+
+                if (orders.length === 0) continue;
+
+                // Delete old backfill allocations for this customer's orders
+                const orderIds = orders.map(o => o.id);
+                await db.receiptAllocation.destroy({
+                    where: {
+                        orderId: { [db.Sequelize.Op.in]: orderIds },
+                        [db.Sequelize.Op.or]: [
+                            { allocatedByName: 'system-backfill' },
+                            { notes: { [db.Sequelize.Op.like]: 'Backfill FIFO:%' } }
+                        ]
+                    }
+                });
+
+                // Track allocation per order
+                const allocatedPerOrder = {};
+
+                if (payments.length > 0) {
+                    // FIFO: allocate payments to orders
+                    let orderIdx = 0;
+                    for (const payment of payments) {
+                        let remaining = Number(payment.amount);
+                        if (remaining <= 0) continue;
+
+                        // Check for non-backfill (manual) allocations for this payment
+                        const manualAllocs = await db.receiptAllocation.findAll({
+                            where: { paymentId: payment.id, isDeleted: false }
+                        });
+                        for (const ma of manualAllocs) {
+                            remaining -= Number(ma.amount);
+                            allocatedPerOrder[ma.orderId] = (allocatedPerOrder[ma.orderId] || 0) + Number(ma.amount);
+                        }
+                        if (remaining <= 0) continue;
+
+                        let tempIdx = orderIdx;
+                        while (tempIdx < orders.length && remaining > 0) {
+                            const order = orders[tempIdx];
+                            const orderTotal = Number(order.total) || 0;
+                            const alreadyAllocated = allocatedPerOrder[order.id] || 0;
+                            const orderRemaining = orderTotal - alreadyAllocated;
+
+                            if (orderRemaining <= 0) { tempIdx++; continue; }
+
+                            const allocAmount = Math.min(remaining, orderRemaining);
+                            if (allocAmount <= 0) { tempIdx++; continue; }
+
+                            await db.receiptAllocation.create({
+                                paymentId: payment.id,
+                                orderId: order.id,
+                                amount: allocAmount,
+                                allocatedByName: 'system-backfill',
+                                notes: `Backfill FIFO: ${payment.paymentNumber} → ${order.orderNumber}`
+                            });
+
+                            allocatedPerOrder[order.id] = (allocatedPerOrder[order.id] || 0) + allocAmount;
+                            remaining -= allocAmount;
+                            totalAllocations++;
+
+                            if (orderTotal - (allocatedPerOrder[order.id] || 0) <= 0) {
+                                if (tempIdx === orderIdx) orderIdx++;
+                                tempIdx++;
+                            }
+                        }
+                    }
+                }
+
+                // Now recalculate EVERY order's paidAmount from allocations
+                let customerChanges = [];
+                for (const order of orders) {
+                    const allocated = allocatedPerOrder[order.id] || 0;
+                    const total = Number(order.total) || 0;
+                    const newPaid = Math.min(allocated, total);
+                    const newDue = Math.max(0, total - newPaid);
+                    let newStatus = 'unpaid';
+                    if (newPaid >= total) newStatus = 'paid';
+                    else if (newPaid > 0) newStatus = 'partial';
+
+                    const oldPaid = Number(order.paidAmount) || 0;
+                    const changed = Math.abs(oldPaid - newPaid) > 0.01;
+
+                    if (changed) {
+                        await db.order.update({
+                            paidAmount: newPaid,
+                            dueAmount: newDue,
+                            paymentStatus: newStatus
+                        }, { where: { id: order.id } });
+                        ordersUpdated++;
+                        customerChanges.push({
+                            invoice: order.orderNumber,
+                            oldPaid: oldPaid,
+                            newPaid: newPaid,
+                            oldDue: Number(order.dueAmount),
+                            newDue: newDue,
+                            oldStatus: order.paymentStatus,
+                            newStatus: newStatus
+                        });
+                    }
+                }
+
+                if (customerChanges.length > 0) {
+                    report.push({ customer: customer.name, changes: customerChanges });
+                }
+            }
+
+            return res.status(200).json({
+                status: 200,
+                message: `Reconciliation complete: ${totalAllocations} allocations created, ${ordersUpdated} orders corrected`,
+                data: { totalAllocations, ordersUpdated, report }
+            });
+
+        } catch (error) {
+            console.error('Reconcile error:', error);
+            return res.status(500).json({ status: 500, message: error.message });
+        }
     }
 };
