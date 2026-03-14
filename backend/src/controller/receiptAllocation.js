@@ -288,5 +288,206 @@ module.exports = {
             console.error('Delete allocation error:', error);
             return res.status(400).json({ status: 400, message: error.message });
         }
+    },
+
+    /**
+     * PREVIEW what undoing the auto-reconciliation would change.
+     * This is READ-ONLY — no data is modified.
+     * Shows all system-backfill allocations and which orders would be affected.
+     */
+    previewUndoAutoReconciliation: async (req, res) => {
+        try {
+            // Find all system-backfill allocations
+            const backfillAllocations = await db.receiptAllocation.findAll({
+                where: {
+                    [db.Sequelize.Op.or]: [
+                        { allocatedByName: 'system-backfill' },
+                        { notes: { [db.Sequelize.Op.like]: 'Backfill FIFO:%' } }
+                    ],
+                    isDeleted: false
+                },
+                order: [['createdAt', 'ASC']]
+            });
+
+            if (backfillAllocations.length === 0) {
+                return res.status(200).json({
+                    status: 200,
+                    message: 'No auto-reconciliation records found. Nothing to undo.',
+                    data: { backfillCount: 0, affectedOrders: [] }
+                });
+            }
+
+            // Gather affected order IDs
+            const affectedOrderIds = [...new Set(backfillAllocations.map(a => a.orderId))];
+
+            const affectedOrders = [];
+            for (const orderId of affectedOrderIds) {
+                const order = await db.order.findByPk(orderId);
+                if (!order) continue;
+
+                // Current state
+                const currentPaid = Number(order.paidAmount) || 0;
+                const currentDue = Number(order.dueAmount);
+                const currentStatus = order.paymentStatus;
+                const orderTotal = Number(order.total) || 0;
+
+                // What would remain after removing backfill allocations
+                const allAllocations = await db.receiptAllocation.findAll({
+                    where: { orderId, isDeleted: false }
+                });
+                const backfillForThisOrder = allAllocations.filter(a =>
+                    a.allocatedByName === 'system-backfill' ||
+                    (a.notes && a.notes.startsWith('Backfill FIFO:'))
+                );
+                const legitimateAllocations = allAllocations.filter(a =>
+                    a.allocatedByName !== 'system-backfill' &&
+                    !(a.notes && a.notes.startsWith('Backfill FIFO:'))
+                );
+
+                const legitimateTotal = legitimateAllocations.reduce((s, a) => s + Number(a.amount), 0);
+                const newDue = Math.max(0, orderTotal - legitimateTotal);
+                let newStatus = 'unpaid';
+                if (legitimateTotal >= orderTotal) newStatus = 'paid';
+                else if (legitimateTotal > 0) newStatus = 'partial';
+
+                affectedOrders.push({
+                    orderId: order.id,
+                    orderNumber: order.orderNumber,
+                    customerName: order.customerName,
+                    orderTotal,
+                    current: { paidAmount: currentPaid, dueAmount: currentDue, paymentStatus: currentStatus },
+                    afterUndo: { paidAmount: legitimateTotal, dueAmount: newDue, paymentStatus: newStatus },
+                    backfillAllocationsToRemove: backfillForThisOrder.length,
+                    legitimateAllocationsKept: legitimateAllocations.length
+                });
+            }
+
+            return res.status(200).json({
+                status: 200,
+                message: `Found ${backfillAllocations.length} auto-reconciliation records affecting ${affectedOrders.length} orders. Review below, then call execute-undo to apply.`,
+                data: {
+                    backfillCount: backfillAllocations.length,
+                    affectedOrderCount: affectedOrders.length,
+                    affectedOrders
+                }
+            });
+
+        } catch (error) {
+            console.error('Preview undo error:', error);
+            return res.status(500).json({ status: 500, message: error.message });
+        }
+    },
+
+    /**
+     * EXECUTE the undo of auto-reconciliation.
+     * Requires explicit user action with changedBy for audit trail.
+     * 
+     * 1. Soft-deletes all system-backfill allocation records
+     * 2. Recalculates each affected order's paidAmount/dueAmount/paymentStatus
+     *    based ONLY on remaining legitimate (manual) allocations
+     */
+    executeUndoAutoReconciliation: async (req, res) => {
+        try {
+            const { changedBy } = req.body;
+            if (!changedBy || !changedBy.trim()) {
+                return res.status(400).json({ status: 400, message: 'changedBy (your name) is required for audit trail' });
+            }
+
+            const result = await db.sequelize.transaction(async (transaction) => {
+                // Find all system-backfill allocations
+                const backfillAllocations = await db.receiptAllocation.findAll({
+                    where: {
+                        [db.Sequelize.Op.or]: [
+                            { allocatedByName: 'system-backfill' },
+                            { notes: { [db.Sequelize.Op.like]: 'Backfill FIFO:%' } }
+                        ],
+                        isDeleted: false
+                    },
+                    transaction
+                });
+
+                if (backfillAllocations.length === 0) {
+                    return { removedCount: 0, ordersFixed: [] };
+                }
+
+                // Collect affected order IDs before deleting
+                const affectedOrderIds = [...new Set(backfillAllocations.map(a => a.orderId))];
+
+                // Soft-delete all backfill allocations
+                await db.receiptAllocation.update(
+                    { isDeleted: true },
+                    {
+                        where: {
+                            [db.Sequelize.Op.or]: [
+                                { allocatedByName: 'system-backfill' },
+                                { notes: { [db.Sequelize.Op.like]: 'Backfill FIFO:%' } }
+                            ],
+                            isDeleted: false
+                        },
+                        transaction
+                    }
+                );
+
+                // Recalculate each affected order
+                const ordersFixed = [];
+                for (const orderId of affectedOrderIds) {
+                    const order = await db.order.findByPk(orderId, { transaction, lock: transaction.LOCK.UPDATE });
+                    if (!order) continue;
+
+                    const oldPaid = Number(order.paidAmount) || 0;
+                    const oldStatus = order.paymentStatus;
+
+                    // Only count remaining legitimate allocations
+                    const remaining = await db.receiptAllocation.findAll({
+                        where: { orderId, isDeleted: false },
+                        transaction
+                    });
+                    const legitimateTotal = remaining.reduce((s, a) => s + Number(a.amount), 0);
+                    const orderTotal = Number(order.total) || 0;
+                    const newDue = Math.max(0, orderTotal - legitimateTotal);
+                    let newStatus = 'unpaid';
+                    if (legitimateTotal >= orderTotal) newStatus = 'paid';
+                    else if (legitimateTotal > 0) newStatus = 'partial';
+
+                    await db.order.update({
+                        paidAmount: legitimateTotal,
+                        dueAmount: newDue,
+                        paymentStatus: newStatus
+                    }, { where: { id: orderId }, transaction });
+
+                    ordersFixed.push({
+                        orderNumber: order.orderNumber,
+                        customerName: order.customerName,
+                        before: { paidAmount: oldPaid, paymentStatus: oldStatus },
+                        after: { paidAmount: legitimateTotal, dueAmount: newDue, paymentStatus: newStatus }
+                    });
+                }
+
+                return { removedCount: backfillAllocations.length, ordersFixed };
+            });
+
+            // Audit log
+            await createAuditLog({
+                userId: req.user?.id,
+                userName: changedBy.trim(),
+                userRole: req.user?.role || 'unknown',
+                action: 'UNDO_AUTO_RECONCILIATION',
+                entityType: 'RECEIPT_ALLOCATION',
+                entityId: 'bulk-undo',
+                description: `${changedBy.trim()} reversed ${result.removedCount} auto-reconciliation allocations, fixed ${result.ordersFixed.length} orders`,
+                ipAddress: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown',
+                userAgent: req.headers['user-agent']
+            });
+
+            return res.status(200).json({
+                status: 200,
+                message: `Undo complete: Removed ${result.removedCount} auto-reconciliation records, recalculated ${result.ordersFixed.length} orders`,
+                data: result
+            });
+
+        } catch (error) {
+            console.error('Execute undo error:', error);
+            return res.status(500).json({ status: 500, message: error.message });
+        }
     }
 };

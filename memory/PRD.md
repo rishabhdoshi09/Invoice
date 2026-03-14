@@ -116,6 +116,13 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 - Verified both endpoints return "Cannot POST" (404)
 - Only remaining allocation path: `POST /api/receipts/allocate` (explicit user action with `changedBy` audit trail)
 
+#### Undo Auto-Reconciliation Tool (User-Initiated)
+- **Preview endpoint:** `GET /api/receipts/undo-auto-reconciliation/preview` — READ-ONLY, shows what system-backfill records exist and what orders would be affected
+- **Execute endpoint:** `POST /api/receipts/undo-auto-reconciliation/execute` — Requires `changedBy` for audit trail, removes all `system-backfill` allocations, recalculates affected orders
+- **UI:** Added to Ledger Module Dashboard tab — orange warning card with Step 1 (Preview) and Step 2 (Execute) buttons
+- Preview shows table with before/after comparison for each affected invoice
+- All changes logged in audit trail
+
 ## Prioritized Backlog
 
 ### P0 — Data Corruption (User's Local DB)

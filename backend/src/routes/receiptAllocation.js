@@ -14,4 +14,10 @@ module.exports = (router) => {
     // Delete (reverse) an allocation
     router.delete('/receipts/allocations/:allocationId', authenticate, Controller.deleteAllocation);
 
+    // Preview what undoing auto-reconciliation would change (READ-ONLY)
+    router.get('/receipts/undo-auto-reconciliation/preview', authenticate, Controller.previewUndoAutoReconciliation);
+
+    // Execute the undo — requires explicit user action with changedBy
+    router.post('/receipts/undo-auto-reconciliation/execute', authenticate, Controller.executeUndoAutoReconciliation);
+
 };

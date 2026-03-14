@@ -45,6 +45,11 @@ const LedgerModule = () => {
     // Migration states
     const [migrationRunning, setMigrationRunning] = useState(false);
 
+    // Undo auto-reconciliation states
+    const [undoPreview, setUndoPreview] = useState(null);
+    const [undoRunning, setUndoRunning] = useState(false);
+    const [undoResult, setUndoResult] = useState(null);
+
     const getAuthHeader = () => ({
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     });
@@ -224,6 +229,43 @@ const LedgerModule = () => {
             setError(err.response?.data?.message || 'Failed to clear migration');
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Undo Auto-Reconciliation: Preview
+    const previewUndoAutoReconciliation = async () => {
+        try {
+            setUndoRunning(true);
+            setError(null);
+            const { data } = await axios.get('/api/receipts/undo-auto-reconciliation/preview', getAuthHeader());
+            setUndoPreview(data.data);
+            if (data.data.backfillCount === 0) {
+                setSuccess('No auto-reconciliation records found. Your data is clean.');
+            }
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to preview undo');
+        } finally {
+            setUndoRunning(false);
+        }
+    };
+
+    // Undo Auto-Reconciliation: Execute
+    const executeUndoAutoReconciliation = async () => {
+        const userName = prompt('Enter your name for the audit trail (required):');
+        if (!userName || !userName.trim()) return;
+        if (!window.confirm(`This will remove ${undoPreview?.backfillCount || 0} auto-reconciliation records and recalculate ${undoPreview?.affectedOrderCount || 0} orders. Proceed?`)) return;
+
+        try {
+            setUndoRunning(true);
+            setError(null);
+            const { data } = await axios.post('/api/receipts/undo-auto-reconciliation/execute', { changedBy: userName.trim() }, getAuthHeader());
+            setUndoResult(data.data);
+            setUndoPreview(null);
+            setSuccess(data.message);
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to undo auto-reconciliation');
+        } finally {
+            setUndoRunning(false);
         }
     };
 
@@ -508,6 +550,89 @@ const LedgerModule = () => {
                             </Card>
                         </Grid>
                     </Grid>
+
+                    {/* Undo Auto-Reconciliation Card */}
+                    <Paper data-testid="undo-auto-reconciliation-card" sx={{ p: 2, mt: 2, bgcolor: '#fff3e0', border: '1px solid #ffe0b2' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                            <Warning sx={{ color: '#e65100' }} />
+                            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#e65100', letterSpacing: 0.5 }}>
+                                Undo Auto-Reconciliation
+                            </Typography>
+                        </Box>
+                        <Typography variant="body2" sx={{ mb: 2, color: '#5d4037' }}>
+                            If the system previously ran automatic FIFO matching, this tool finds and removes those records, 
+                            then recalculates affected invoices. <strong>Step 1:</strong> Preview what will change. <strong>Step 2:</strong> Confirm and execute.
+                        </Typography>
+                        <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                            <Button
+                                data-testid="undo-preview-btn"
+                                variant="outlined"
+                                startIcon={undoRunning ? <CircularProgress size={16} /> : <Refresh />}
+                                onClick={previewUndoAutoReconciliation}
+                                disabled={undoRunning}
+                                sx={{ borderColor: '#e65100', color: '#e65100', '&:hover': { bgcolor: 'rgba(230,81,0,0.08)' } }}
+                            >
+                                Step 1: Preview
+                            </Button>
+                            {undoPreview && undoPreview.backfillCount > 0 && (
+                                <Button
+                                    data-testid="undo-execute-btn"
+                                    variant="contained"
+                                    startIcon={undoRunning ? <CircularProgress size={16} color="inherit" /> : <PlayArrow />}
+                                    onClick={executeUndoAutoReconciliation}
+                                    disabled={undoRunning}
+                                    sx={{ bgcolor: '#d84315', '&:hover': { bgcolor: '#bf360c' } }}
+                                >
+                                    Step 2: Undo ({undoPreview.backfillCount} records)
+                                </Button>
+                            )}
+                        </Box>
+
+                        {/* Preview results */}
+                        {undoPreview && undoPreview.backfillCount > 0 && (
+                            <TableContainer sx={{ maxHeight: 300, mb: 1 }}>
+                                <Table size="small" stickyHeader>
+                                    <TableHead>
+                                        <TableRow sx={{ bgcolor: '#fff8e1' }}>
+                                            <TableCell>Invoice</TableCell>
+                                            <TableCell>Customer</TableCell>
+                                            <TableCell align="right">Total</TableCell>
+                                            <TableCell align="right">Current Paid</TableCell>
+                                            <TableCell align="right">Current Status</TableCell>
+                                            <TableCell align="right">After Undo: Paid</TableCell>
+                                            <TableCell align="right">After Undo: Status</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {undoPreview.affectedOrders.map((o) => (
+                                            <TableRow key={o.orderId} data-testid={`undo-preview-row-${o.orderNumber}`}>
+                                                <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{o.orderNumber}</TableCell>
+                                                <TableCell>{o.customerName}</TableCell>
+                                                <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatCurrency(o.orderTotal)}</TableCell>
+                                                <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatCurrency(o.current.paidAmount)}</TableCell>
+                                                <TableCell align="right">
+                                                    <Chip size="small" label={o.current.paymentStatus}
+                                                        color={o.current.paymentStatus === 'paid' ? 'success' : o.current.paymentStatus === 'partial' ? 'warning' : 'default'} />
+                                                </TableCell>
+                                                <TableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>{formatCurrency(o.afterUndo.paidAmount)}</TableCell>
+                                                <TableCell align="right">
+                                                    <Chip size="small" label={o.afterUndo.paymentStatus}
+                                                        color={o.afterUndo.paymentStatus === 'paid' ? 'success' : o.afterUndo.paymentStatus === 'partial' ? 'warning' : 'default'} />
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                        )}
+
+                        {/* Undo result */}
+                        {undoResult && (
+                            <Alert severity="success" sx={{ mt: 1 }} data-testid="undo-result-alert">
+                                Removed {undoResult.removedCount} auto-reconciliation records. Fixed {undoResult.ordersFixed?.length || 0} orders.
+                            </Alert>
+                        )}
+                    </Paper>
 
                     {/* Drift detail table — only when drifted customers exist */}
                     {driftData?.customerDrift?.length > 0 && (
