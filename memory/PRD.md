@@ -3,7 +3,11 @@
 ## Original Problem Statement
 Build a production-grade, double-entry accounting ledger with a focus on fraud prevention and data integrity, similar in sophistication to Tally ERP. Key requirements include logging suspicious activities, providing an admin audit trail, improving UI/UX for financial entries, and ensuring ledger integrity.
 
-**Critical User Rule:** "I don't ever want to automatically update a ledger without me or biller authorizing it."
+**Critical User Rule (NON-NEGOTIABLE):** "This software won't without my (or biller's) authorisation or intervention do unpaid orders or credit sale orders to paid. This is serious."
+- NO automatic FIFO reconciliation
+- NO automatic payment-to-invoice matching
+- NO automatic status changes on orders/invoices
+- ALL payment allocation MUST be explicit user action via `POST /api/receipts/allocate`
 
 ## Core Architecture
 - **Frontend:** React + Material-UI (port 3000)
@@ -102,7 +106,25 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 - Daily summary calculations
 - GST export, Tally export
 
+### Phase 4: Automation Removal (Completed - Mar 14 2026)
+
+#### CRITICAL: Removed All Automatic Reconciliation
+- **DELETED** `backfillAllocations` method from `receiptAllocation.js` — was performing automatic FIFO matching
+- **DELETED** `reconcileAll` method from `receiptAllocation.js` — was performing full automatic reconciliation  
+- **DELETED** route `POST /api/receipts/backfill-allocations`
+- **DELETED** route `POST /api/receipts/reconcile`
+- Verified both endpoints return "Cannot POST" (404)
+- Only remaining allocation path: `POST /api/receipts/allocate` (explicit user action with `changedBy` audit trail)
+
 ## Prioritized Backlog
+
+### P0 — Data Corruption (User's Local DB)
+- User's local database has invoices incorrectly marked as "paid" without payment records
+- Fix approach: MANUAL collaborative cleanup — SELECT to investigate, user confirms, then UPDATE
+- Agent must NOT run any UPDATE without user's explicit approval
+
+### P1 — Customer Duplication Bug Verification
+- LATERAL join fix applied but user hasn't confirmed it works on their local DB
 
 ### P2 - Future
 - Implement Role-Based Access Control (RBAC)
@@ -137,3 +159,7 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 - `GET /api/ledger/reports/balance-sheet`
 - `POST /api/ledger/accounts/initialize`
 - `GET /api/ledger/migration/reconciliation`
+
+### REMOVED Endpoints (Mar 14 2026)
+- ~~`POST /api/receipts/reconcile`~~ — Automatic FIFO reconciliation (DELETED per user directive)
+- ~~`POST /api/receipts/backfill-allocations`~~ — Automatic FIFO backfill (DELETED per user directive)

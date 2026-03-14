@@ -14,9 +14,4 @@ module.exports = (router) => {
     // Delete (reverse) an allocation
     router.delete('/receipts/allocations/:allocationId', authenticate, Controller.deleteAllocation);
 
-    // Backfill receipt_allocations from existing payment-order data
-    router.post('/receipts/backfill-allocations', authenticate, Controller.backfillAllocations);
-
-    // Full reconciliation: backfill + recalculate all order paidAmounts from actual payments
-    router.post('/receipts/reconcile', authenticate, Controller.reconcileAll);
 };
