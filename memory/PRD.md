@@ -116,7 +116,16 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 - Verified both endpoints return "Cannot POST" (404)
 - Only remaining allocation path: `POST /api/receipts/allocate` (explicit user action with `changedBy` audit trail)
 
-#### Undo Auto-Reconciliation Tool (User-Initiated)
+#### Data Integrity Audit (Enhanced with Full Evidence Trail)
+- Checks 5 evidence sources for each "paid" order:
+  1. `journal_batches` INVOICE_CASH = cash sale at billing
+  2. `audit_logs` ORDER_PAYMENT_STATUS = human used toggle
+  3. `payments` table referenceId = receipt recorded
+  4. `receipt_allocations` with real user name = manual allocation
+  5. NONE = software corruption
+- "Changed By" column shows exactly who/what changed each order
+- "Fix ALL" preserves human-toggled orders, only resets corrupted ones
+- Filter: "Credit Sales Wrongly Paid" vs "All Mismatches"
 - **Preview endpoint:** `GET /api/receipts/undo-auto-reconciliation/preview` — READ-ONLY, shows what system-backfill records exist and what orders would be affected
 - **Execute endpoint:** `POST /api/receipts/undo-auto-reconciliation/execute` — Requires `changedBy` for audit trail, removes all `system-backfill` allocations, recalculates affected orders
 - **UI:** Added to Ledger Module Dashboard tab — orange warning card with Step 1 (Preview) and Step 2 (Execute) buttons

@@ -806,7 +806,7 @@ const LedgerModule = () => {
                                             <TableCell align="right">Stored Status</TableCell>
                                             <TableCell align="right">Actual Paid</TableCell>
                                             <TableCell align="right">Correct Status</TableCell>
-                                            <TableCell align="right">Payments</TableCell>
+                                            <TableCell>Changed By</TableCell>
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
@@ -827,15 +827,15 @@ const LedgerModule = () => {
                                                 <TableCell>{o.customerName}</TableCell>
                                                 <TableCell>
                                                     <Chip size="small"
-                                                        label={o.isCreditSaleCorrupted ? 'CREDIT (corrupted)' : o.wasCashSale ? 'Cash' : 'Credit'}
+                                                        label={o.isCreditSaleCorrupted ? 'CREDIT (corrupted)' : o.wasCashSale ? 'Cash' : o.wasToggledByHuman ? 'Toggled' : 'Credit'}
                                                         sx={{
-                                                            bgcolor: o.isCreditSaleCorrupted ? '#ffcdd2' : o.wasCashSale ? '#e8f5e9' : '#fff3e0',
-                                                            color: o.isCreditSaleCorrupted ? '#b71c1c' : o.wasCashSale ? '#2e7d32' : '#e65100',
+                                                            bgcolor: o.isCreditSaleCorrupted ? '#ffcdd2' : o.wasCashSale ? '#e8f5e9' : o.wasToggledByHuman ? '#e3f2fd' : '#fff3e0',
+                                                            color: o.isCreditSaleCorrupted ? '#b71c1c' : o.wasCashSale ? '#2e7d32' : o.wasToggledByHuman ? '#1565c0' : '#e65100',
                                                             fontWeight: 700
                                                         }} />
                                                 </TableCell>
                                                 <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatCurrency(o.orderTotal)}</TableCell>
-                                                <TableCell align="right" sx={{ fontFamily: 'monospace', color: o.hasMismatch ? '#c62828' : 'inherit', fontWeight: o.hasMismatch ? 700 : 400 }}>
+                                                <TableCell align="right" sx={{ fontFamily: 'monospace', color: o.hasMismatch || o.isCreditSaleCorrupted ? '#c62828' : 'inherit', fontWeight: o.hasMismatch || o.isCreditSaleCorrupted ? 700 : 400 }}>
                                                     {formatCurrency(o.stored.paidAmount)}
                                                 </TableCell>
                                                 <TableCell align="right">
@@ -850,7 +850,13 @@ const LedgerModule = () => {
                                                         sx={{ bgcolor: o.evidence.correctStatus === 'unpaid' ? '#ffcdd2' : o.evidence.correctStatus === 'partial' ? '#fff9c4' : '#c8e6c9',
                                                               fontWeight: 700 }} />
                                                 </TableCell>
-                                                <TableCell align="right">{o.directPaymentCount}</TableCell>
+                                                <TableCell sx={{
+                                                    fontSize: '0.75rem',
+                                                    color: o.isCreditSaleCorrupted || o.hasSystemBackfill ? '#c62828' : '#2e7d32',
+                                                    fontWeight: o.isCreditSaleCorrupted || o.hasSystemBackfill ? 700 : 400
+                                                }}>
+                                                    {o.changedBy}
+                                                </TableCell>
                                             </TableRow>
                                         ))}
                                     </TableBody>
@@ -861,7 +867,10 @@ const LedgerModule = () => {
                         {/* Fix result */}
                         {fixResult && (
                             <Alert severity="success" sx={{ mt: 1 }} data-testid="fix-result-alert">
-                                Fixed {fixResult.fixedCount} orders. Payment data now matches actual payment evidence.
+                                Fixed {fixResult.fixedCount} orders.
+                                {fixResult.skippedCount > 0 && (
+                                    <> Skipped {fixResult.skippedCount} orders toggled by human (preserved).</>
+                                )}
                             </Alert>
                         )}
                     </Paper>
