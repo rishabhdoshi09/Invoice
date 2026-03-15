@@ -452,15 +452,17 @@ module.exports = {
     /**
      * POST /api/data-audit/reconstruct-fifo
      * 
-     * Safe FIFO reconstruction that PRESERVES human-toggled orders:
-     *   1. Identify system-damaged orders (modifiedByName is NULL/empty)
-     *   2. Skip human-toggled orders (modifiedByName has a value) — DO NOT TOUCH
-     *   3. Clear receipt_allocations for system orders only
-     *   4. Reset system orders to unpaid
-     *   5. FIFO allocate payments to system orders (oldest first) per customer
-     *   6. Update paidAmount, dueAmount, paymentStatus from allocations
+     * Forensic + FIFO merged reconstruction:
+     *   1. Run forensic classification on ALL orders (same SQL as /classify)
+     *   2. Only touch SYSTEM_TOGGLED orders — skip HUMAN_TOGGLED, CASH_SALE, RECEIPT_PAID, etc.
+     *   3. Damage window filter (Jan 9 → Mar 15 2026) as extra safety
+     *   4. Clear receipt_allocations for targeted orders only
+     *   5. Reset targeted orders to unpaid
+     *   6. FIFO allocate ALL customer payments to targeted orders (oldest first)
+     *   7. Update paidAmount, dueAmount, paymentStatus from allocations
+     *   8. Recalculate customer.currentBalance from scratch
      * 
-     * Payments table = TRUTH. modifiedByName = HUMAN INDICATOR.
+     * Payments table = TRUTH. Classification = INTELLIGENCE.
      */
     reconstructFifo: async (req, res) => {
         try {
@@ -474,77 +476,69 @@ module.exports = {
 
             // Damage window: auto-reconciliation was active Jan 9 2026 → Mar 15 2026
             const DAMAGE_START = '2026-01-09';
-            const DAMAGE_END = '2026-03-16'; // day after removal, inclusive
+            const DAMAGE_END = '2026-03-16';
 
-            // Get ALL customers with orders
-            const [customers] = await db.sequelize.query(`
-                SELECT DISTINCT c.id, c.name
-                FROM customers c
-                JOIN orders o ON (o."customerId" = c.id OR o."customerName" = c.name) AND o."isDeleted" = false
-                WHERE o."customerName" IS NOT NULL AND TRIM(o."customerName") != ''
-            `);
+            // Step 1: Run forensic classification on ALL orders (reuse existing SQL)
+            await ensureIndexes();
+            const [classifiedOrders] = await db.sequelize.query(CLASSIFICATION_SQL);
+
+            // Step 2: Separate orders by classification
+            const systemToggled = [];
+            const preserved = { HUMAN_TOGGLED: 0, CASH_SALE: 0, RECEIPT_PAID: 0, PARTIAL_PAID: 0, CREDIT_UNPAID: 0, OTHER: 0, OUTSIDE_WINDOW: 0 };
+
+            for (const order of classifiedOrders) {
+                if (order.classification === 'SYSTEM_TOGGLED') {
+                    // Extra safety: only within damage window
+                    const updatedAt = new Date(order.updatedAt);
+                    if (updatedAt >= new Date(DAMAGE_START) && updatedAt < new Date(DAMAGE_END)) {
+                        systemToggled.push(order);
+                    } else {
+                        preserved.OUTSIDE_WINDOW++;
+                    }
+                } else {
+                    preserved[order.classification] = (preserved[order.classification] || 0) + 1;
+                }
+            }
+
+            // Group system-toggled orders by customer
+            const customerOrderMap = {};
+            for (const order of systemToggled) {
+                const key = order.customerName;
+                if (!customerOrderMap[key]) {
+                    customerOrderMap[key] = { customerId: order.customerId, orders: [] };
+                }
+                customerOrderMap[key].orders.push(order);
+            }
 
             const results = {
-                totalCustomers: customers.length,
+                totalClassified: classifiedOrders.length,
                 damageWindow: { from: DAMAGE_START, to: DAMAGE_END },
+                systemToggled: systemToggled.length,
+                preserved,
                 ordersReset: 0,
-                humanSkipped: 0,
-                outsideDamageWindow: 0,
                 allocationsCreated: 0,
                 totalAllocated: 0,
-                ordersUpdated: 0,
+                ordersChanged: 0,
+                customersRecalculated: 0,
                 customerDetails: []
             };
 
             if (!isDryRun) {
-                // Step 0: Clear receipt_allocations ONLY for system-damaged orders within damage window
-                await db.sequelize.query(`
-                    UPDATE receipt_allocations SET "isDeleted" = true
-                    WHERE "orderId" IN (
-                        SELECT id FROM orders
-                        WHERE "isDeleted" = false
-                          AND ("modifiedByName" IS NULL OR TRIM("modifiedByName") = '')
-                          AND "updatedAt" >= :damageStart AND "updatedAt" < :damageEnd
-                    )
-                `, { replacements: { damageStart: DAMAGE_START, damageEnd: DAMAGE_END } });
+                // Step 3: Clear receipt_allocations ONLY for system-toggled orders
+                const stOrderIds = systemToggled.map(o => o.id);
+                if (stOrderIds.length > 0) {
+                    await db.sequelize.query(`
+                        UPDATE receipt_allocations SET "isDeleted" = true
+                        WHERE "orderId" IN (:orderIds)
+                    `, { replacements: { orderIds: stOrderIds } });
+                }
             }
 
-            for (const cust of customers) {
-                // ONLY system-damaged orders within damage window — oldest first
-                const [systemOrders] = await db.sequelize.query(`
-                    SELECT id, "orderNumber", "orderDate", total, "paidAmount", "dueAmount", "paymentStatus", "createdAt", "updatedAt"
-                    FROM orders
-                    WHERE "isDeleted" = false
-                      AND ("customerId" = :custId OR "customerName" = :custName)
-                      AND "customerName" IS NOT NULL AND TRIM("customerName") != ''
-                      AND ("modifiedByName" IS NULL OR TRIM("modifiedByName") = '')
-                      AND "updatedAt" >= :damageStart AND "updatedAt" < :damageEnd
-                    ORDER BY "orderDate" ASC, "createdAt" ASC
-                `, { replacements: { custId: cust.id, custName: cust.name, damageStart: DAMAGE_START, damageEnd: DAMAGE_END } });
-
-                // Count human-toggled orders (for reporting only)
-                const [humanOrders] = await db.sequelize.query(`
-                    SELECT COUNT(*) as cnt
-                    FROM orders
-                    WHERE "isDeleted" = false
-                      AND ("customerId" = :custId OR "customerName" = :custName)
-                      AND "customerName" IS NOT NULL AND TRIM("customerName") != ''
-                      AND "modifiedByName" IS NOT NULL AND TRIM("modifiedByName") != ''
-                `, { replacements: { custId: cust.id, custName: cust.name } });
-
-                // Count orders outside damage window (safe, not touched)
-                const [outsideWindow] = await db.sequelize.query(`
-                    SELECT COUNT(*) as cnt
-                    FROM orders
-                    WHERE "isDeleted" = false
-                      AND ("customerId" = :custId OR "customerName" = :custName)
-                      AND "customerName" IS NOT NULL AND TRIM("customerName") != ''
-                      AND ("modifiedByName" IS NULL OR TRIM("modifiedByName") = '')
-                      AND ("updatedAt" < :damageStart OR "updatedAt" >= :damageEnd)
-                `, { replacements: { custId: cust.id, custName: cust.name, damageStart: DAMAGE_START, damageEnd: DAMAGE_END } });
-                results.outsideDamageWindow += Number(outsideWindow[0].cnt);
-                const humanCount = Number(humanOrders[0].cnt);
-                results.humanSkipped += humanCount;
+            // Step 4: Per-customer FIFO allocation on system-toggled orders
+            for (const [custName, custData] of Object.entries(customerOrderMap)) {
+                const custOrders = custData.orders.sort((a, b) => 
+                    new Date(a.orderDate) - new Date(b.orderDate) || new Date(a.createdAt) - new Date(b.createdAt)
+                );
 
                 // All payments for this customer (oldest first)
                 const [payments] = await db.sequelize.query(`
@@ -554,60 +548,47 @@ module.exports = {
                       AND "partyType" = 'customer'
                       AND ("partyId" = :custId OR "partyName" = :custName)
                     ORDER BY "paymentDate" ASC, "createdAt" ASC
-                `, { replacements: { custId: cust.id, custName: cust.name } });
+                `, { replacements: { custId: custData.customerId, custName: custName } });
 
-                // FIFO: allocate payments to system orders ONLY
+                // FIFO allocate
                 const allocations = [];
                 const paymentRemaining = {};
                 for (const p of payments) {
                     paymentRemaining[p.id] = Number(p.amount);
                 }
 
-                for (const order of systemOrders) {
+                for (const order of custOrders) {
                     let orderRemaining = Number(order.total);
                     if (orderRemaining <= 0) continue;
 
                     for (const payment of payments) {
                         const available = paymentRemaining[payment.id] || 0;
                         if (available <= 0.01) continue;
-
                         const allocAmount = Math.round(Math.min(available, orderRemaining) * 100) / 100;
                         if (allocAmount <= 0) continue;
-
-                        allocations.push({
-                            paymentId: payment.id,
-                            orderId: order.id,
-                            orderNumber: order.orderNumber,
-                            amount: allocAmount
-                        });
-
+                        allocations.push({ paymentId: payment.id, orderId: order.id, orderNumber: order.orderNumber, amount: allocAmount });
                         paymentRemaining[payment.id] -= allocAmount;
                         orderRemaining -= allocAmount;
                         if (orderRemaining <= 0.01) break;
                     }
                 }
 
-                // Calculate new order states from allocations
+                // Calculate new states
                 const allocPerOrder = {};
-                for (const a of allocations) {
-                    allocPerOrder[a.orderId] = (allocPerOrder[a.orderId] || 0) + a.amount;
-                }
+                for (const a of allocations) allocPerOrder[a.orderId] = (allocPerOrder[a.orderId] || 0) + a.amount;
 
                 const orderUpdates = [];
-                for (const order of systemOrders) {
+                for (const order of custOrders) {
                     const total = Number(order.total);
                     const allocated = allocPerOrder[order.id] || 0;
                     const newPaid = Math.round(Math.min(allocated, total) * 100) / 100;
                     const newDue = Math.round(Math.max(0, total - newPaid) * 100) / 100;
                     const newStatus = newPaid >= total - 0.5 ? 'paid' : (newPaid > 0.5 ? 'partial' : 'unpaid');
-
-                    const changed = Math.abs(Number(order.paidAmount) - newPaid) > 0.5 
-                                 || Math.abs(Number(order.dueAmount) - newDue) > 0.5 
+                    const changed = Math.abs(Number(order.paidAmount) - newPaid) > 0.5
+                                 || Math.abs(Number(order.dueAmount) - newDue) > 0.5
                                  || order.paymentStatus !== newStatus;
-
                     orderUpdates.push({
-                        orderId: order.id,
-                        orderNumber: order.orderNumber,
+                        orderId: order.id, orderNumber: order.orderNumber,
                         before: { paidAmount: Number(order.paidAmount), dueAmount: Number(order.dueAmount), paymentStatus: order.paymentStatus },
                         after: { paidAmount: newPaid, dueAmount: newDue, paymentStatus: newStatus },
                         changed
@@ -615,17 +596,15 @@ module.exports = {
                 }
 
                 const totalPaymentValue = payments.reduce((s, p) => s + Number(p.amount), 0);
-                const totalOrderValue = systemOrders.reduce((s, o) => s + Number(o.total), 0);
+                const totalOrderValue = custOrders.reduce((s, o) => s + Number(o.total), 0);
                 const changedOrders = orderUpdates.filter(u => u.changed);
-
                 results.allocationsCreated += allocations.length;
                 results.totalAllocated += allocations.reduce((s, a) => s + a.amount, 0);
-                results.ordersUpdated += changedOrders.length;
+                results.ordersChanged += changedOrders.length;
 
                 results.customerDetails.push({
-                    name: cust.name,
-                    systemOrders: systemOrders.length,
-                    humanSkipped: humanCount,
+                    name: custName,
+                    systemOrders: custOrders.length,
                     payments: payments.length,
                     totalOrderValue: Math.round(totalOrderValue * 100) / 100,
                     totalPaymentValue: Math.round(totalPaymentValue * 100) / 100,
@@ -634,29 +613,25 @@ module.exports = {
                     ordersChanged: changedOrders.length
                 });
 
-                // EXECUTE — only touches system orders
-                if (!isDryRun) {
+                // EXECUTE
+                if (!isDryRun && custOrders.length > 0) {
                     await db.sequelize.transaction(async (transaction) => {
-                        // Reset ONLY system orders to unpaid
-                        for (const order of systemOrders) {
+                        // Reset system-toggled orders to unpaid
+                        for (const order of custOrders) {
                             await db.order.update(
                                 { paidAmount: 0, dueAmount: Number(order.total), paymentStatus: 'unpaid' },
                                 { where: { id: order.id }, transaction }
                             );
                             results.ordersReset++;
                         }
-
                         // Create allocations
                         for (const alloc of allocations) {
                             await db.receiptAllocation.create({
-                                paymentId: alloc.paymentId,
-                                orderId: alloc.orderId,
-                                amount: alloc.amount,
-                                isDeleted: false
+                                paymentId: alloc.paymentId, orderId: alloc.orderId,
+                                amount: alloc.amount, isDeleted: false
                             }, { transaction });
                         }
-
-                        // Update system orders with correct values
+                        // Update orders with correct values
                         for (const upd of orderUpdates) {
                             await db.order.update(
                                 { paidAmount: upd.after.paidAmount, dueAmount: upd.after.dueAmount, paymentStatus: upd.after.paymentStatus },
@@ -664,6 +639,25 @@ module.exports = {
                             );
                         }
                     });
+                }
+            }
+
+            // Step 5: Recalculate customer.currentBalance from scratch
+            if (!isDryRun) {
+                const [balanceRows] = await db.sequelize.query(`
+                    SELECT c.id,
+                        COALESCE(c."openingBalance", 0)
+                        + COALESCE((SELECT SUM(total) FROM orders WHERE "isDeleted" = false AND ("customerId" = c.id OR "customerName" = c.name)), 0)
+                        - COALESCE((SELECT SUM(amount) FROM payments WHERE "isDeleted" = false AND "partyType" = 'customer' AND ("partyId" = c.id OR "partyName" = c.name)), 0)
+                        AS correct_balance
+                    FROM customers c
+                `);
+                for (const row of balanceRows) {
+                    await db.customer.update(
+                        { currentBalance: Math.max(0, Number(row.correct_balance) || 0) },
+                        { where: { id: row.id } }
+                    );
+                    results.customersRecalculated++;
                 }
             }
 
@@ -685,8 +679,8 @@ module.exports = {
             return res.status(200).json({
                 status: 200,
                 message: isDryRun
-                    ? `DRY RUN [${DAMAGE_START} → ${DAMAGE_END}]: ${results.ordersUpdated} system orders would change, ${results.humanSkipped} human-toggled PRESERVED, ${results.outsideDamageWindow} outside damage window PRESERVED, ${results.allocationsCreated} allocations (₹${results.totalAllocated}).`
-                    : `Done [${DAMAGE_START} → ${DAMAGE_END}]: ${results.ordersReset} system orders reset, ${results.humanSkipped} human-toggled PRESERVED, ${results.outsideDamageWindow} outside window PRESERVED, ${results.allocationsCreated} allocations (₹${results.totalAllocated}).`,
+                    ? `DRY RUN [Forensic+FIFO]: ${results.systemToggled} SYSTEM_TOGGLED found, ${results.ordersChanged} would change. Preserved: ${preserved.HUMAN_TOGGLED} human, ${preserved.CASH_SALE} cash sale, ${preserved.RECEIPT_PAID} receipt-backed, ${preserved.OUTSIDE_WINDOW} outside window.`
+                    : `DONE [Forensic+FIFO]: ${results.ordersReset} orders reset, ${results.allocationsCreated} allocations (₹${results.totalAllocated}), ${results.customersRecalculated} customer balances recalculated.`,
                 data: { isDryRun, ...results, validation }
             });
         } catch (error) {

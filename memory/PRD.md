@@ -54,14 +54,13 @@ Build a production-grade, double-entry accounting ledger with fraud prevention a
 - `frontend/src/components/admin/customers/list.jsx` — Customer dialog with Toggle History + Notes tabs
 - `backend/index.js` — Auto-migration for notes column
 
-### Phase 9: Safe FIFO Reconstruction Fix (Feb 2026)
-- **CRITICAL FIX**: `reconstructFifo` now PRESERVES human-toggled orders (non-empty `modifiedByName`)
-- **Damage window filter**: Only resets orders modified between Jan 9, 2026 and Mar 15, 2026 (when auto-reconciliation was active)
-- Triple safety: `modifiedByName` check + damage window + payments=truth
-- Response includes `humanSkipped`, `outsideDamageWindow` counts
-- Frontend updated: description, table columns, new counters
-- **DB Backup button**: One-click `pg_dump` download (GET `/api/data-audit/backup`) added to FIFO card
-- New file: `backend/src/controller/dbBackup.js`
+### Phase 9: Forensic + FIFO Merged Reconstruction (Feb 2026)
+- **Merged forensic classification with FIFO tool** — now classifies ALL orders first using existing `CLASSIFICATION_SQL`
+- Only resets `SYSTEM_TOGGLED` orders within damage window (Jan 9 → Mar 15, 2026)
+- Preserves: `HUMAN_TOGGLED`, `CASH_SALE`, `RECEIPT_PAID`, `PARTIAL_PAID`, `CREDIT_UNPAID`, outside-window orders
+- **Customer balance recalculation**: After FIFO, recalculates `customer.currentBalance` from scratch using formula: `openingBalance + SUM(orders.total) - SUM(payments.amount)`
+- Frontend shows classification breakdown chips (preserved counts per category)
+- DB Backup button: One-click `pg_dump` download before executing
 
 ## Prioritized Backlog
 ### P0 — User Action Required

@@ -943,7 +943,7 @@ const LedgerModule = () => {
                             </Typography>
                         </Box>
                         <Typography variant="body2" sx={{ mb: 2, color: '#37474f' }}>
-                            Payments table = truth. Damage window: <strong>Jan 9 2026 → Mar 15 2026</strong>. Resets ONLY system-damaged orders within this window (skips human-toggled + outside window) → FIFO allocates payments → recalculates status.
+                            <strong>Forensic + FIFO merged:</strong> Classifies all orders first → only resets <strong>SYSTEM_TOGGLED</strong> within damage window (Jan 9 → Mar 15) → FIFO allocates payments → recalculates customer balances. Cash sales, human toggles, receipt-backed orders = PRESERVED.
                         </Typography>
 
                         <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
@@ -1005,7 +1005,7 @@ const LedgerModule = () => {
                                 color="error"
                                 startIcon={fifoRunning ? <CircularProgress size={16} color="inherit" /> : <Assessment />}
                                 onClick={() => {
-                                    if (window.confirm('This will RESET system-damaged orders within damage window and recalculate from payments. Are you sure?')) {
+                                    if (window.confirm('This will RESET only SYSTEM_TOGGLED orders within damage window, recalculate from payments, and fix customer balances. Are you sure?')) {
                                         runFifoReconstruct(false);
                                     }
                                 }}
@@ -1022,6 +1022,25 @@ const LedgerModule = () => {
                                 </Typography>
                                 <Typography variant="body2">{fifoResult.message}</Typography>
                                 
+                                {fifoResult.data?.preserved && (
+                                    <Box sx={{ mt: 1, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                                        {Object.entries(fifoResult.data.preserved).filter(([, v]) => v > 0).map(([k, v]) => (
+                                            <Box key={k} sx={{ bgcolor: k === 'OUTSIDE_WINDOW' ? '#e3f2fd' : '#e8f5e9', px: 1.5, py: 0.5, borderRadius: 1 }}>
+                                                <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                                                    {k.replace(/_/g, ' ')}: {v}
+                                                </Typography>
+                                            </Box>
+                                        ))}
+                                        {fifoResult.data?.systemToggled > 0 && (
+                                            <Box sx={{ bgcolor: '#fff3e0', px: 1.5, py: 0.5, borderRadius: 1 }}>
+                                                <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                                                    SYSTEM TOGGLED: {fifoResult.data.systemToggled}
+                                                </Typography>
+                                            </Box>
+                                        )}
+                                    </Box>
+                                )}
+                                
                                 {fifoResult.data?.customerDetails && fifoResult.data.customerDetails.filter(c => c.ordersChanged > 0).length > 0 && (
                                     <Box sx={{ mt: 1, maxHeight: 300, overflow: 'auto' }}>
                                         <Typography variant="caption" sx={{ fontWeight: 600 }}>Customers with changes:</Typography>
@@ -1029,8 +1048,7 @@ const LedgerModule = () => {
                                             <thead>
                                                 <tr style={{ borderBottom: '1px solid #ccc' }}>
                                                     <th style={{ textAlign: 'left', padding: 4 }}>Customer</th>
-                                                    <th style={{ textAlign: 'right', padding: 4 }}>System Orders</th>
-                                                    <th style={{ textAlign: 'right', padding: 4 }}>Human Skipped</th>
+                                                    <th style={{ textAlign: 'right', padding: 4 }}>Targeted</th>
                                                     <th style={{ textAlign: 'right', padding: 4 }}>Payments</th>
                                                     <th style={{ textAlign: 'right', padding: 4 }}>Order Value</th>
                                                     <th style={{ textAlign: 'right', padding: 4 }}>Payment Value</th>
@@ -1043,7 +1061,6 @@ const LedgerModule = () => {
                                                     <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
                                                         <td style={{ padding: 4 }}>{c.name}</td>
                                                         <td style={{ textAlign: 'right', padding: 4 }}>{c.systemOrders ?? c.orders}</td>
-                                                        <td style={{ textAlign: 'right', padding: 4, color: '#4a148c', fontWeight: c.humanSkipped > 0 ? 700 : 400 }}>{c.humanSkipped ?? 0}</td>
                                                         <td style={{ textAlign: 'right', padding: 4 }}>{c.payments}</td>
                                                         <td style={{ textAlign: 'right', padding: 4 }}>₹{c.totalOrderValue?.toLocaleString('en-IN')}</td>
                                                         <td style={{ textAlign: 'right', padding: 4 }}>₹{c.totalPaymentValue?.toLocaleString('en-IN')}</td>
