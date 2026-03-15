@@ -241,39 +241,11 @@ module.exports = {
                     }
                 }
 
-                // Update reference (order or purchase) payment status
+                // Payment recorded. Order status is NOT auto-updated.
+                // Order status changes ONLY via explicit receipt allocation or manual toggle.
                 if (value.referenceType === 'order' && value.referenceId) {
-                    // Lock the order row to prevent concurrent payment modifications (FOR UPDATE)
-                    const order = await db.order.findOne({ where: { id: value.referenceId }, transaction, lock: transaction.LOCK.UPDATE });
-                    if (order) {
-                        // Check if order is already paid - prevent double payment
-                        if (order.paymentStatus === 'paid') {
-                            throw new Error(`Order ${order.orderNumber} is already marked as paid. Cannot accept additional payment.`);
-                        }
-                        
-                        const newPaidAmount = (order.paidAmount || 0) + value.amount;
-                        const newDueAmount = order.total - newPaidAmount;
-                        let paymentStatus = 'unpaid';
-                        
-                        if (newPaidAmount >= order.total) {
-                            paymentStatus = 'paid';
-                        } else if (newPaidAmount > 0) {
-                            paymentStatus = 'partial';
-                        }
-
-                        await db.order.update(
-                            { 
-                                paidAmount: newPaidAmount, 
-                                dueAmount: newDueAmount,
-                                paymentStatus: paymentStatus
-                            },
-                            { where: { id: value.referenceId }, transaction }
-                        );
-                    }
+                    console.log(`[PAYMENT] Payment against order ${value.referenceId}: ₹${value.amount} — order status NOT auto-updated. Use Allocate tab.`);
                 } else if (value.partyType === 'customer' && value.partyName && !value.referenceId) {
-                    // Payment stays as "On Account" (unallocated advance).
-                    // NO automatic application to invoices.
-                    // User must explicitly allocate via the Allocate tab.
                     console.log(`[PAYMENT] On-Account receipt from ${value.partyName}: ₹${value.amount} — requires manual allocation`);
                 } else if (value.referenceType === 'purchase' && value.referenceId) {
                     const purchase = await Services.purchaseBill.getPurchaseBill({ id: value.referenceId });
@@ -400,29 +372,10 @@ module.exports = {
 
             // Use transaction for all reversal operations
             await db.sequelize.transaction(async (transaction) => {
-                // Reverse the payment updates on the referenced order/purchase
+                // Payment deleted. Order status is NOT auto-reversed.
+                // Order status changes ONLY via explicit receipt allocation or manual toggle.
                 if (payment.referenceType === 'order' && payment.referenceId) {
-                    const order = await Services.order.getOrder({ id: payment.referenceId }, transaction);
-                    if (order) {
-                        const newPaidAmount = Math.max(0, (Number(order.paidAmount) || 0) - Number(payment.amount));
-                        const newDueAmount = Number(order.total) - newPaidAmount;
-                        let paymentStatus = 'unpaid';
-                        
-                        if (newPaidAmount >= Number(order.total)) {
-                            paymentStatus = 'paid';
-                        } else if (newPaidAmount > 0) {
-                            paymentStatus = 'partial';
-                        }
-
-                        await db.order.update(
-                            { 
-                                paidAmount: newPaidAmount, 
-                                dueAmount: newDueAmount,
-                                paymentStatus: paymentStatus
-                            },
-                            { where: { id: payment.referenceId }, transaction }
-                        );
-                    }
+                    console.log(`[PAYMENT DELETE] Payment against order ${payment.referenceId} deleted: ₹${payment.amount} — order status NOT auto-reversed.`);
                 } else if (payment.referenceType === 'purchase' && payment.referenceId) {
                     const purchase = await Services.purchaseBill.getPurchaseBill({ id: payment.referenceId });
                     if (purchase) {
