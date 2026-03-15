@@ -50,15 +50,9 @@ const LedgerModule = () => {
     const [undoRunning, setUndoRunning] = useState(false);
     const [undoResult, setUndoResult] = useState(null);
 
-    // Data Integrity Audit states
-    const [auditData, setAuditData] = useState(null);
-    const [auditRunning, setAuditRunning] = useState(false);
-    const [fixRunning, setFixRunning] = useState(false);
-    const [fixResult, setFixResult] = useState(null);
-    const [selectedFixIds, setSelectedFixIds] = useState([]);
-    const [creditSalesOnly, setCreditSalesOnly] = useState(true);
-    const [undoFixRunning, setUndoFixRunning] = useState(false);
-    const [undoFixResult, setUndoFixResult] = useState(null);
+    // Reconstruct states
+    const [reconstructData, setReconstructData] = useState(null);
+    const [reconstructRunning, setReconstructRunning] = useState(false);
 
     const getAuthHeader = () => ({
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
@@ -279,89 +273,39 @@ const LedgerModule = () => {
         }
     };
 
-    // Data Integrity Audit: Scan orders
-    const runDataAudit = async () => {
+    // Reconstruct: Preview
+    const previewReconstruct = async () => {
         try {
-            setAuditRunning(true);
+            setReconstructRunning(true);
             setError(null);
-            setFixResult(null);
-            setSelectedFixIds([]);
-            const { data } = await axios.get(`/api/data-audit/orders?onlyMismatches=true&creditSalesOnly=${creditSalesOnly}`, getAuthHeader());
-            setAuditData(data.data);
-            if (data.data.totalMismatched === 0) {
-                setSuccess('All orders have correct payment data. No mismatches found.');
+            const { data } = await axios.get('/api/data-audit/reconstruct', getAuthHeader());
+            setReconstructData(data.data);
+            if (data.data.totalChanged === 0) {
+                setSuccess('All orders already match their evidence. Nothing to change.');
             }
         } catch (err) {
-            setError(err.response?.data?.message || 'Failed to run data audit');
+            setError(err.response?.data?.message || 'Failed to preview');
         } finally {
-            setAuditRunning(false);
+            setReconstructRunning(false);
         }
     };
 
-    // Data Integrity Audit: Fix selected orders
-    const fixSelectedOrders = async (fixAll = false) => {
-        const userName = prompt('Enter your name for the audit trail (required):');
+    // Reconstruct: Apply
+    const applyReconstruct = async () => {
+        const userName = prompt('Enter your name for the audit trail:');
         if (!userName || !userName.trim()) return;
-
-        const ids = fixAll ? ['all'] : selectedFixIds;
-        const count = fixAll ? auditData?.totalMismatched : selectedFixIds.length;
-        if (!window.confirm(`This will correct payment data on ${count} order(s) based on actual payment evidence. Proceed?`)) return;
+        if (!window.confirm(`This will correct ${reconstructData?.totalChanged || 0} orders based on evidence. Proceed?`)) return;
 
         try {
-            setFixRunning(true);
+            setReconstructRunning(true);
             setError(null);
-            const { data } = await axios.post('/api/data-audit/orders/fix', {
-                orderIds: ids,
-                changedBy: userName.trim()
-            }, getAuthHeader());
-            setFixResult(data.data);
+            const { data } = await axios.post('/api/data-audit/reconstruct', { changedBy: userName.trim() }, getAuthHeader());
+            setReconstructData(data.data);
             setSuccess(data.message);
-            setAuditData(null);
-            setSelectedFixIds([]);
         } catch (err) {
-            setError(err.response?.data?.message || 'Failed to fix orders');
+            setError(err.response?.data?.message || 'Failed to reconstruct');
         } finally {
-            setFixRunning(false);
-        }
-    };
-
-    // Undo last audit fix
-    const undoLastAuditFix = async () => {
-        const userName = prompt('Enter your name for the audit trail (required):');
-        if (!userName || !userName.trim()) return;
-        if (!window.confirm('This will restore orders wrongly set to unpaid by the audit fix back to paid. Proceed?')) return;
-
-        try {
-            setUndoFixRunning(true);
-            setError(null);
-            const { data } = await axios.post('/api/data-audit/orders/undo-fix', {
-                changedBy: userName.trim()
-            }, getAuthHeader());
-            setUndoFixResult(data.data);
-            setSuccess(data.message);
-            setAuditData(null);
-            setFixResult(null);
-        } catch (err) {
-            setError(err.response?.data?.message || 'Failed to undo fix');
-        } finally {
-            setUndoFixRunning(false);
-        }
-    };
-
-    const toggleFixId = (orderId) => {
-        setSelectedFixIds(prev =>
-            prev.includes(orderId)
-                ? prev.filter(id => id !== orderId)
-                : [...prev, orderId]
-        );
-    };
-
-    const toggleAllFixIds = () => {
-        if (!auditData?.orders) return;
-        if (selectedFixIds.length === auditData.orders.length) {
-            setSelectedFixIds([]);
-        } else {
-            setSelectedFixIds(auditData.orders.map(o => o.orderId));
+            setReconstructRunning(false);
         }
     };
 
@@ -730,190 +674,87 @@ const LedgerModule = () => {
                         )}
                     </Paper>
 
-                    {/* Data Integrity Audit Card */}
-                    <Paper data-testid="data-integrity-audit-card" sx={{ p: 2, mt: 2, bgcolor: '#fce4ec', border: '1px solid #ef9a9a' }}>
+                    {/* Reconstruct Orders Card */}
+                    <Paper data-testid="reconstruct-card" sx={{ p: 2, mt: 2, bgcolor: '#e8eaf6', border: '1px solid #9fa8da' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                            <Error sx={{ color: '#c62828' }} />
-                            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#c62828', letterSpacing: 0.5 }}>
-                                Data Integrity Audit — Order Payment Verification
+                            <Error sx={{ color: '#283593' }} />
+                            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#283593', letterSpacing: 0.5 }}>
+                                Reconstruct Order States — Evidence-Based
                             </Typography>
                         </Box>
-                        <Typography variant="body2" sx={{ mb: 2, color: '#4e342e' }}>
-                            Scans every order and compares stored paidAmount/status against <strong>actual payment records</strong>.
-                            Shows orders where the stored data doesn't match reality. You choose which to fix.
+                        <Typography variant="body2" sx={{ mb: 1, color: '#37474f' }}>
+                            Sets each order's paid/unpaid status based on <strong>hard evidence only</strong>:
                         </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#4e342e' }}>Filter:</Typography>
-                            <Button
-                                data-testid="filter-credit-only"
-                                size="small"
-                                variant={creditSalesOnly ? 'contained' : 'outlined'}
-                                onClick={() => setCreditSalesOnly(true)}
-                                sx={creditSalesOnly ? { bgcolor: '#c62828', '&:hover': { bgcolor: '#b71c1c' } } : { borderColor: '#c62828', color: '#c62828' }}
-                            >
-                                Credit Sales Wrongly Paid
-                            </Button>
-                            <Button
-                                data-testid="filter-all-mismatches"
-                                size="small"
-                                variant={!creditSalesOnly ? 'contained' : 'outlined'}
-                                onClick={() => setCreditSalesOnly(false)}
-                                sx={!creditSalesOnly ? { bgcolor: '#c62828', '&:hover': { bgcolor: '#b71c1c' } } : { borderColor: '#c62828', color: '#c62828' }}
-                            >
-                                All Mismatches
-                            </Button>
-                        </Box>
+                        <Typography variant="body2" component="div" sx={{ mb: 2, color: '#37474f', pl: 2 }}>
+                            1. <strong>Your toggles</strong> (audit log) → highest priority, your action wins<br/>
+                            2. <strong>Cash sale journal</strong> → always paid<br/>
+                            3. <strong>Direct payment</strong> → paidAmount = payment amount<br/>
+                            4. <strong>No evidence</strong> → unpaid (credit sale default)
+                        </Typography>
                         <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
                             <Button
-                                data-testid="audit-scan-btn"
+                                data-testid="reconstruct-preview-btn"
                                 variant="outlined"
-                                startIcon={auditRunning ? <CircularProgress size={16} /> : <Refresh />}
-                                onClick={runDataAudit}
-                                disabled={auditRunning || fixRunning}
-                                sx={{ borderColor: '#c62828', color: '#c62828', '&:hover': { bgcolor: 'rgba(198,40,40,0.08)' } }}
+                                startIcon={reconstructRunning ? <CircularProgress size={16} /> : <Refresh />}
+                                onClick={previewReconstruct}
+                                disabled={reconstructRunning}
+                                sx={{ borderColor: '#283593', color: '#283593', '&:hover': { bgcolor: 'rgba(40,53,147,0.08)' } }}
                             >
-                                {auditRunning ? 'Scanning...' : 'Step 1: Scan Orders'}
+                                {reconstructRunning ? 'Scanning...' : 'Step 1: Preview'}
                             </Button>
-                            {auditData && auditData.totalMismatched > 0 && (
-                                <>
-                                    <Button
-                                        data-testid="audit-fix-selected-btn"
-                                        variant="contained"
-                                        startIcon={fixRunning ? <CircularProgress size={16} color="inherit" /> : <PlayArrow />}
-                                        onClick={() => fixSelectedOrders(false)}
-                                        disabled={fixRunning || selectedFixIds.length === 0}
-                                        sx={{ bgcolor: '#c62828', '&:hover': { bgcolor: '#b71c1c' } }}
-                                    >
-                                        Fix Selected ({selectedFixIds.length})
-                                    </Button>
-                                    <Button
-                                        data-testid="audit-fix-all-btn"
-                                        variant="contained"
-                                        startIcon={fixRunning ? <CircularProgress size={16} color="inherit" /> : <PlayArrow />}
-                                        onClick={() => fixSelectedOrders(true)}
-                                        disabled={fixRunning}
-                                        sx={{ bgcolor: '#d84315', '&:hover': { bgcolor: '#bf360c' } }}
-                                    >
-                                        Fix ALL Mismatches ({auditData.totalMismatched})
-                                    </Button>
-                                </>
+                            {reconstructData && reconstructData.totalChanged > 0 && (
+                                <Button
+                                    data-testid="reconstruct-apply-btn"
+                                    variant="contained"
+                                    startIcon={reconstructRunning ? <CircularProgress size={16} color="inherit" /> : <PlayArrow />}
+                                    onClick={applyReconstruct}
+                                    disabled={reconstructRunning}
+                                    sx={{ bgcolor: '#283593', '&:hover': { bgcolor: '#1a237e' } }}
+                                >
+                                    Step 2: Apply ({reconstructData.totalChanged} orders)
+                                </Button>
                             )}
-                            <Button
-                                data-testid="audit-undo-btn"
-                                variant="outlined"
-                                startIcon={undoFixRunning ? <CircularProgress size={16} /> : <Refresh />}
-                                onClick={undoLastAuditFix}
-                                disabled={undoFixRunning}
-                                sx={{ borderColor: '#6a1b9a', color: '#6a1b9a', '&:hover': { bgcolor: 'rgba(106,27,154,0.08)' } }}
-                            >
-                                {undoFixRunning ? 'Undoing...' : 'Undo Last Fix'}
-                            </Button>
                         </Box>
 
-                        {/* Undo result */}
-                        {undoFixResult && (
-                            <Alert severity="info" sx={{ mb: 2 }} data-testid="undo-fix-result">
-                                Restored {undoFixResult.restoredCount} orders back to paid.
+                        {reconstructData && (
+                            <Alert severity={reconstructData.totalChanged > 0 ? 'info' : 'success'} sx={{ mb: 2 }} data-testid="reconstruct-summary">
+                                Scanned {reconstructData.totalScanned} orders. <strong>{reconstructData.totalChanged}</strong> need correction.
                             </Alert>
                         )}
 
-                        {auditData && (
-                            <Alert severity={auditData.totalMismatched > 0 ? 'warning' : 'success'} sx={{ mb: 2 }} data-testid="audit-summary">
-                                Scanned {auditData.totalScanned} orders. <strong>{auditData.totalMismatched} mismatches</strong> found.
-                                {auditData.creditSalesCorrupted > 0 && (
-                                    <> — <strong style={{ color: '#c62828' }}>{auditData.creditSalesCorrupted} credit sales wrongly marked as paid</strong> (no receipt recorded by you or biller).</>
-                                )}
-                            </Alert>
-                        )}
-
-                        {/* Audit results table */}
-                        {auditData && auditData.orders?.length > 0 && (
+                        {reconstructData && reconstructData.orders?.length > 0 && (
                             <TableContainer sx={{ maxHeight: 400 }}>
                                 <Table size="small" stickyHeader>
                                     <TableHead>
-                                        <TableRow sx={{ bgcolor: '#fce4ec' }}>
-                                            <TableCell padding="checkbox">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedFixIds.length === auditData.orders.length}
-                                                    onChange={toggleAllFixIds}
-                                                    data-testid="audit-select-all"
-                                                />
-                                            </TableCell>
+                                        <TableRow sx={{ bgcolor: '#e8eaf6' }}>
                                             <TableCell>Invoice</TableCell>
                                             <TableCell>Customer</TableCell>
-                                            <TableCell>Type</TableCell>
                                             <TableCell align="right">Total</TableCell>
-                                            <TableCell align="right">Stored Paid</TableCell>
-                                            <TableCell align="right">Stored Status</TableCell>
-                                            <TableCell align="right">Actual Paid</TableCell>
-                                            <TableCell align="right">Correct Status</TableCell>
-                                            <TableCell>Changed By</TableCell>
+                                            <TableCell align="right">Current</TableCell>
+                                            <TableCell align="right">Correct</TableCell>
+                                            <TableCell>Evidence</TableCell>
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                        {auditData.orders.map((o) => (
-                                            <TableRow
-                                                key={o.orderId}
-                                                data-testid={`audit-row-${o.orderNumber}`}
-                                                sx={{ bgcolor: selectedFixIds.includes(o.orderId) ? 'rgba(198,40,40,0.08)' : 'inherit' }}
-                                            >
-                                                <TableCell padding="checkbox">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={selectedFixIds.includes(o.orderId)}
-                                                        onChange={() => toggleFixId(o.orderId)}
-                                                    />
-                                                </TableCell>
+                                        {reconstructData.orders.map((o) => (
+                                            <TableRow key={o.orderId} data-testid={`reconstruct-row-${o.orderNumber}`}>
                                                 <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{o.orderNumber}</TableCell>
                                                 <TableCell>{o.customerName}</TableCell>
-                                                <TableCell>
-                                                    <Chip size="small"
-                                                        label={o.isCreditSaleCorrupted ? 'CREDIT (corrupted)' : o.wasCashSale ? 'Cash' : o.wasToggledByHuman ? 'Toggled' : 'Credit'}
-                                                        sx={{
-                                                            bgcolor: o.isCreditSaleCorrupted ? '#ffcdd2' : o.wasCashSale ? '#e8f5e9' : o.wasToggledByHuman ? '#e3f2fd' : '#fff3e0',
-                                                            color: o.isCreditSaleCorrupted ? '#b71c1c' : o.wasCashSale ? '#2e7d32' : o.wasToggledByHuman ? '#1565c0' : '#e65100',
-                                                            fontWeight: 700
-                                                        }} />
-                                                </TableCell>
                                                 <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatCurrency(o.orderTotal)}</TableCell>
-                                                <TableCell align="right" sx={{ fontFamily: 'monospace', color: o.hasMismatch || o.isCreditSaleCorrupted ? '#c62828' : 'inherit', fontWeight: o.hasMismatch || o.isCreditSaleCorrupted ? 700 : 400 }}>
-                                                    {formatCurrency(o.stored.paidAmount)}
+                                                <TableCell align="right">
+                                                    <Chip size="small" label={`${o.current.paymentStatus} (₹${Number(o.current.paidAmount).toLocaleString('en-IN')})`}
+                                                        color={o.current.paymentStatus === 'paid' ? 'success' : o.current.paymentStatus === 'partial' ? 'warning' : 'default'} />
                                                 </TableCell>
                                                 <TableCell align="right">
-                                                    <Chip size="small" label={o.stored.paymentStatus}
-                                                        color={o.stored.paymentStatus === 'paid' ? 'success' : o.stored.paymentStatus === 'partial' ? 'warning' : 'default'} />
+                                                    <Chip size="small" label={`${o.correct.paymentStatus} (₹${Number(o.correct.paidAmount).toLocaleString('en-IN')})`}
+                                                        sx={{ bgcolor: '#c5cae9', color: '#1a237e', fontWeight: 700 }} />
                                                 </TableCell>
-                                                <TableCell align="right" sx={{ fontFamily: 'monospace', color: '#2e7d32', fontWeight: 700 }}>
-                                                    {formatCurrency(o.evidence.evidencePaid)}
-                                                </TableCell>
-                                                <TableCell align="right">
-                                                    <Chip size="small" label={o.evidence.correctStatus}
-                                                        sx={{ bgcolor: o.evidence.correctStatus === 'unpaid' ? '#ffcdd2' : o.evidence.correctStatus === 'partial' ? '#fff9c4' : '#c8e6c9',
-                                                              fontWeight: 700 }} />
-                                                </TableCell>
-                                                <TableCell sx={{
-                                                    fontSize: '0.75rem',
-                                                    color: o.isCreditSaleCorrupted || o.hasSystemBackfill ? '#c62828' : '#2e7d32',
-                                                    fontWeight: o.isCreditSaleCorrupted || o.hasSystemBackfill ? 700 : 400
-                                                }}>
-                                                    {o.changedBy}
-                                                </TableCell>
+                                                <TableCell sx={{ fontSize: '0.75rem', maxWidth: 250 }}>{o.reason}</TableCell>
                                             </TableRow>
                                         ))}
                                     </TableBody>
                                 </Table>
                             </TableContainer>
-                        )}
-
-                        {/* Fix result */}
-                        {fixResult && (
-                            <Alert severity="success" sx={{ mt: 1 }} data-testid="fix-result-alert">
-                                Fixed {fixResult.fixedCount} orders.
-                                {fixResult.skippedCount > 0 && (
-                                    <> Skipped {fixResult.skippedCount} orders toggled by human (preserved).</>
-                                )}
-                            </Alert>
                         )}
                     </Paper>
 

@@ -1,32 +1,41 @@
 /**
- * Data Integrity Audit Controller
+ * Data Integrity Audit Controller — SURGICAL VERSION
  * 
- * Diagnoses and fixes corrupted order payment data.
+ * Reconstructs each order's correct paidAmount/paymentStatus from hard evidence.
  * 
- * An order's "paid" status is LEGITIMATE if ANY of these traces exist:
- *   1. Cash sale at creation (journal_batches has INVOICE_CASH)
- *   2. Human toggled it — audit_logs has ORDER_PAYMENT_STATUS entry
- *   3. Human toggled it — order.modifiedByName is set (for toggles before audit logging)
- *   4. Receipt recorded (payments table has referenceId = orderId)
- *   5. Manual allocation (receipt_allocations with real user name)
+ * Priority (highest first):
+ *   1. Most recent audit_log toggle (entityType = ORDER_PAYMENT_STATUS)
+ *      → the user's deliberate action wins over everything
+ *   2. Cash sale at creation (journal_batches INVOICE_CASH)
+ *      → it was always paid, set paidAmount = total
+ *   3. Direct payment (payments table with referenceId = orderId)
+ *      → paidAmount = sum of those payments
+ *   4. Default → unpaid (credit sale with no evidence of payment)
  * 
- * If NONE of these exist → the software changed it without authorization = CORRUPTION.
- * 
- * ALL fixes require explicit user authorization — no automatic corrections.
+ * PREVIEW first, then APPLY only with user authorization.
  */
 const db = require('../models');
 const { createAuditLog } = require('../middleware/auditLogger');
 
 module.exports = {
     /**
-     * AUDIT: Scan orders for payment data corruption.
-     * READ-ONLY — no data is modified.
+     * RECONSTRUCT: Compute each order's correct state from evidence.
+     * 
+     * If preview=true (GET request), shows what would change without modifying.
+     * If preview=false (POST with changedBy), applies the reconstruction.
+     * 
+     * Query params (GET):
+     *   - customerId (optional): filter to specific customer
      */
-    auditOrders: async (req, res) => {
+    reconstructOrders: async (req, res) => {
         try {
-            const { customerId, onlyMismatches = 'true', creditSalesOnly = 'false' } = req.query;
-            const showOnlyMismatches = onlyMismatches !== 'false';
-            const showCreditSalesOnly = creditSalesOnly === 'true';
+            const isPreview = req.method === 'GET';
+            const customerId = req.query?.customerId;
+            const changedBy = req.body?.changedBy;
+
+            if (!isPreview && (!changedBy || !changedBy.trim())) {
+                return res.status(400).json({ status: 400, message: 'changedBy is required' });
+            }
 
             const orderWhere = { isDeleted: false };
             if (customerId) orderWhere.customerId = customerId;
@@ -41,52 +50,25 @@ module.exports = {
                 return res.status(200).json({
                     status: 200,
                     message: 'No orders found.',
-                    data: { totalScanned: 0, totalMismatched: 0, creditSalesCorrupted: 0, orders: [] }
+                    data: { totalScanned: 0, totalChanged: 0, orders: [] }
                 });
             }
 
             const orderIds = orders.map(o => o.id);
 
-            // Batch 2: Direct payments
-            const paymentWhere = {
-                referenceType: 'order',
-                referenceId: { [db.Sequelize.Op.in]: orderIds },
-                partyType: 'customer'
-            };
-            if (db.payment.rawAttributes.isDeleted) paymentWhere.isDeleted = false;
-            const allPayments = await db.payment.findAll({ where: paymentWhere, raw: true });
-            const paymentsByOrder = {};
-            for (const p of allPayments) {
-                if (!paymentsByOrder[p.referenceId]) paymentsByOrder[p.referenceId] = [];
-                paymentsByOrder[p.referenceId].push(p);
-            }
+            // === BATCH LOAD ALL EVIDENCE ===
 
-            // Batch 3: Receipt allocations
-            let allocationsByOrder = {};
-            try {
-                const allAllocations = await db.receiptAllocation.findAll({
-                    where: { orderId: { [db.Sequelize.Op.in]: orderIds }, isDeleted: false },
-                    raw: true
-                });
-                for (const a of allAllocations) {
-                    if (!allocationsByOrder[a.orderId]) allocationsByOrder[a.orderId] = [];
-                    allocationsByOrder[a.orderId].push(a);
-                }
-            } catch (e) { /* table might not exist */ }
-
-            // Batch 4: Cash sale journals
+            // Evidence 1: Cash sale journals
             let cashSaleOrderIds = new Set();
             try {
                 const cashJournals = await db.journalBatch.findAll({
-                    where: {
-                        referenceType: 'INVOICE_CASH',
-                        referenceId: { [db.Sequelize.Op.in]: orderIds }
-                    },
+                    where: { referenceType: 'INVOICE_CASH', referenceId: { [db.Sequelize.Op.in]: orderIds } },
                     attributes: ['referenceId'],
                     raw: true
                 });
                 cashSaleOrderIds = new Set(cashJournals.map(j => j.referenceId));
             } catch (e) {
+                // Fallback: check old ledger entries
                 try {
                     const cashLedger = await db.ledger.findOne({ where: { name: 'Cash Account' }, raw: true });
                     if (cashLedger) {
@@ -105,8 +87,9 @@ module.exports = {
                 } catch (e2) { /* no fallback */ }
             }
 
-            // Batch 5: Audit logs for toggle evidence
-            let toggledOrderIds = new Map();
+            // Evidence 2: Most recent toggle per order from audit_logs
+            // We want the LAST toggle action for each order
+            let togglesByOrder = new Map(); // orderId -> { newStatus, userName, date }
             try {
                 const toggleLogs = await db.auditLog.findAll({
                     where: {
@@ -117,384 +100,33 @@ module.exports = {
                     raw: true
                 });
                 for (const log of toggleLogs) {
-                    if (!toggledOrderIds.has(log.entityId)) {
-                        toggledOrderIds.set(log.entityId, {
-                            userName: log.userName,
-                            action: log.description,
-                            date: log.createdAt
-                        });
+                    // Keep only the MOST RECENT toggle per order
+                    if (!togglesByOrder.has(log.entityId)) {
+                        let newStatus = null;
+                        // Extract the status from newValues
+                        try {
+                            const nv = typeof log.newValues === 'string' ? JSON.parse(log.newValues) : log.newValues;
+                            newStatus = nv?.paymentStatus || null;
+                        } catch (e) { /* parse error */ }
+
+                        // Fallback: parse from description like "toggled INV/xxx from unpaid to paid"
+                        if (!newStatus && log.description) {
+                            const match = log.description.match(/to\s+(paid|unpaid|partial)/i);
+                            if (match) newStatus = match[1].toLowerCase();
+                        }
+
+                        if (newStatus) {
+                            togglesByOrder.set(log.entityId, {
+                                newStatus,
+                                userName: log.userName,
+                                date: log.createdAt
+                            });
+                        }
                     }
                 }
             } catch (e) { /* audit_logs might not exist */ }
 
-            const results = [];
-            let totalScanned = 0;
-            let totalMismatched = 0;
-            let creditSalesCorrupted = 0;
-
-            for (const order of orders) {
-                totalScanned++;
-
-                const directPayments = paymentsByOrder[order.id] || [];
-                const directPaymentTotal = directPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
-
-                const allocations = allocationsByOrder[order.id] || [];
-                const allocationTotal = allocations.reduce((s, a) => s + Number(a.amount || 0), 0);
-                const hasSystemBackfill = allocations.some(a =>
-                    a.allocatedByName === 'system-backfill' ||
-                    (a.notes && a.notes.startsWith('Backfill FIFO:'))
-                );
-
-                const evidencePaid = Math.max(directPaymentTotal, allocationTotal);
-                const orderTotal = Number(order.total) || 0;
-                const storedPaid = Number(order.paidAmount) || 0;
-
-                let correctStatus = 'unpaid';
-                if (evidencePaid >= orderTotal && orderTotal > 0) correctStatus = 'paid';
-                else if (evidencePaid > 0) correctStatus = 'partial';
-
-                const correctDue = Math.max(0, orderTotal - evidencePaid);
-
-                // === EVIDENCE SOURCES (5 checks) ===
-                const wasCashSale = cashSaleOrderIds.has(order.id);
-                const wasToggledByHuman = toggledOrderIds.has(order.id);
-                // CHECK: modifiedByName on the order itself (for toggles before audit logging)
-                const hasModifiedByName = !!(order.modifiedByName && order.modifiedByName.trim());
-                const hasPaymentRecord = directPayments.length > 0;
-                const hasManualAllocation = allocations.some(a =>
-                    a.allocatedByName && a.allocatedByName !== 'system-backfill'
-                );
-
-                // An order is LEGITIMATELY paid if ANY human trace exists
-                const hasLegitimateEvidence = wasCashSale || wasToggledByHuman || hasModifiedByName || hasPaymentRecord || hasManualAllocation;
-
-                const paidMismatch = Math.abs(storedPaid - evidencePaid) > 0.01;
-                const statusMismatch = order.paymentStatus !== correctStatus;
-
-                // Don't flag as mismatch if there's legitimate human evidence
-                const hasMismatch = (paidMismatch || statusMismatch) && !hasLegitimateEvidence;
-
-                // Credit sale corrupted = marked paid, NO human evidence at all
-                const isCreditSaleCorrupted = !hasLegitimateEvidence
-                    && order.paymentStatus === 'paid'
-                    && evidencePaid < orderTotal;
-
-                if (isCreditSaleCorrupted) creditSalesCorrupted++;
-                if (hasMismatch) totalMismatched++;
-
-                // Determine "changed by" trail
-                let changedBy = '—';
-                if (wasCashSale) {
-                    changedBy = 'Cash sale (at billing)';
-                } else if (wasToggledByHuman) {
-                    const toggle = toggledOrderIds.get(order.id);
-                    changedBy = `Toggled by ${toggle.userName} on ${new Date(toggle.date).toLocaleDateString('en-IN')}`;
-                } else if (hasModifiedByName) {
-                    changedBy = `Modified by ${order.modifiedByName}`;
-                } else if (hasPaymentRecord) {
-                    const lastPayment = directPayments[directPayments.length - 1];
-                    changedBy = `Receipt ${lastPayment.paymentNumber} (${new Date(lastPayment.createdAt).toLocaleDateString('en-IN')})`;
-                } else if (hasManualAllocation) {
-                    const manual = allocations.find(a => a.allocatedByName && a.allocatedByName !== 'system-backfill');
-                    changedBy = `Allocated by ${manual.allocatedByName}`;
-                } else if (hasSystemBackfill) {
-                    changedBy = 'SOFTWARE (auto-FIFO) — unauthorized';
-                } else if (order.paymentStatus === 'paid') {
-                    changedBy = 'NO EVIDENCE — corrupted';
-                }
-
-                // Apply filters
-                if (showCreditSalesOnly && !isCreditSaleCorrupted) continue;
-                if (!showCreditSalesOnly && showOnlyMismatches && !hasMismatch && !isCreditSaleCorrupted) continue;
-
-                results.push({
-                    orderId: order.id,
-                    orderNumber: order.orderNumber,
-                    orderDate: order.orderDate,
-                    customerName: order.customerName,
-                    customerId: order.customerId,
-                    orderTotal,
-                    stored: {
-                        paidAmount: storedPaid,
-                        dueAmount: Number(order.dueAmount),
-                        paymentStatus: order.paymentStatus
-                    },
-                    evidence: {
-                        directPaymentTotal,
-                        allocationTotal,
-                        evidencePaid,
-                        correctDue,
-                        correctStatus
-                    },
-                    directPaymentCount: directPayments.length,
-                    hasMismatch,
-                    wasCashSale,
-                    wasToggledByHuman,
-                    hasModifiedByName,
-                    modifiedByName: order.modifiedByName || null,
-                    hasPaymentRecord,
-                    hasManualAllocation,
-                    hasSystemBackfill,
-                    isCreditSaleCorrupted,
-                    changedBy
-                });
-            }
-
-            return res.status(200).json({
-                status: 200,
-                message: showCreditSalesOnly
-                    ? `Found ${creditSalesCorrupted} credit sale orders wrongly marked as paid without human authorization (out of ${totalScanned} total).`
-                    : `Scanned ${totalScanned} orders. Found ${totalMismatched} mismatches + ${creditSalesCorrupted} corrupted credit sales.`,
-                data: {
-                    totalScanned,
-                    totalMismatched,
-                    creditSalesCorrupted,
-                    orders: results
-                }
-            });
-
-        } catch (error) {
-            console.error('Audit orders error:', error);
-            return res.status(500).json({ status: 500, message: error.message });
-        }
-    },
-
-    /**
-     * FIX selected orders: Reset paidAmount/dueAmount/paymentStatus
-     * to match actual payment evidence.
-     * 
-     * SKIPS orders with ANY human evidence:
-     *   - audit_log toggle entry
-     *   - modifiedByName set on order
-     *   - cash sale journal
-     *   - payment record
-     *   - manual allocation
-     */
-    fixOrders: async (req, res) => {
-        try {
-            const { orderIds, changedBy } = req.body;
-
-            if (!changedBy || !changedBy.trim()) {
-                return res.status(400).json({ status: 400, message: 'changedBy (your name) is required for audit trail' });
-            }
-
-            const fixAll = !orderIds || orderIds.length === 0 || (orderIds.length === 1 && orderIds[0] === 'all');
-
-            const orderWhere = { isDeleted: false };
-            if (!fixAll) {
-                orderWhere.id = { [db.Sequelize.Op.in]: orderIds };
-            }
-
-            const result = await db.sequelize.transaction(async (transaction) => {
-                const orders = await db.order.findAll({
-                    where: orderWhere,
-                    transaction,
-                    lock: transaction.LOCK.UPDATE
-                });
-
-                const allOrderIds = orders.map(o => o.id);
-
-                // Batch payments
-                const paymentWhere = {
-                    referenceType: 'order',
-                    referenceId: { [db.Sequelize.Op.in]: allOrderIds },
-                    partyType: 'customer'
-                };
-                if (db.payment.rawAttributes.isDeleted) paymentWhere.isDeleted = false;
-                const allPayments = await db.payment.findAll({ where: paymentWhere, transaction, raw: true });
-                const paymentsByOrder = {};
-                for (const p of allPayments) {
-                    if (!paymentsByOrder[p.referenceId]) paymentsByOrder[p.referenceId] = [];
-                    paymentsByOrder[p.referenceId].push(p);
-                }
-
-                // Batch allocations
-                let allocationsByOrder = {};
-                try {
-                    const allAllocations = await db.receiptAllocation.findAll({
-                        where: { orderId: { [db.Sequelize.Op.in]: allOrderIds }, isDeleted: false },
-                        transaction, raw: true
-                    });
-                    for (const a of allAllocations) {
-                        if (!allocationsByOrder[a.orderId]) allocationsByOrder[a.orderId] = [];
-                        allocationsByOrder[a.orderId].push(a);
-                    }
-                } catch (e) { /* table might not exist */ }
-
-                // Batch: audit logs for toggle evidence
-                let toggledOrderIds = new Set();
-                try {
-                    const toggleLogs = await db.auditLog.findAll({
-                        where: {
-                            entityType: 'ORDER_PAYMENT_STATUS',
-                            entityId: { [db.Sequelize.Op.in]: allOrderIds }
-                        },
-                        attributes: ['entityId'],
-                        transaction,
-                        raw: true
-                    });
-                    toggledOrderIds = new Set(toggleLogs.map(l => l.entityId));
-                } catch (e) { /* audit_logs might not exist */ }
-
-                // Batch: cash sale journals
-                let cashSaleOrderIds = new Set();
-                try {
-                    const cashJournals = await db.journalBatch.findAll({
-                        where: {
-                            referenceType: 'INVOICE_CASH',
-                            referenceId: { [db.Sequelize.Op.in]: allOrderIds }
-                        },
-                        attributes: ['referenceId'],
-                        transaction,
-                        raw: true
-                    });
-                    cashSaleOrderIds = new Set(cashJournals.map(j => j.referenceId));
-                } catch (e) { /* no fallback */ }
-
-                const fixed = [];
-                const skipped = [];
-
-                for (const order of orders) {
-                    const directPayments = paymentsByOrder[order.id] || [];
-                    const allocations = allocationsByOrder[order.id] || [];
-
-                    // === CHECK ALL 5 EVIDENCE SOURCES ===
-                    const wasCashSale = cashSaleOrderIds.has(order.id);
-                    const wasToggledByHuman = toggledOrderIds.has(order.id);
-                    const hasModifiedByName = !!(order.modifiedByName && order.modifiedByName.trim());
-                    const hasPaymentRecord = directPayments.length > 0;
-                    const hasManualAllocation = allocations.some(a =>
-                        a.allocatedByName && a.allocatedByName !== 'system-backfill'
-                    );
-
-                    const hasLegitimateEvidence = wasCashSale || wasToggledByHuman || hasModifiedByName || hasPaymentRecord || hasManualAllocation;
-
-                    // SKIP if any human evidence exists
-                    if (hasLegitimateEvidence) {
-                        let reason = wasCashSale ? 'Cash sale' :
-                            wasToggledByHuman ? 'Toggle audit log exists' :
-                            hasModifiedByName ? `modifiedBy: ${order.modifiedByName}` :
-                            hasPaymentRecord ? 'Has payment record' :
-                            'Has manual allocation';
-                        skipped.push({ orderNumber: order.orderNumber, reason });
-                        continue;
-                    }
-
-                    const directPaymentTotal = directPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
-                    const allocationTotal = allocations.reduce((s, a) => s + Number(a.amount || 0), 0);
-                    const evidencePaid = Math.max(directPaymentTotal, allocationTotal);
-                    const orderTotal = Number(order.total) || 0;
-                    const storedPaid = Number(order.paidAmount) || 0;
-
-                    let correctStatus = 'unpaid';
-                    if (evidencePaid >= orderTotal && orderTotal > 0) correctStatus = 'paid';
-                    else if (evidencePaid > 0) correctStatus = 'partial';
-
-                    const correctDue = Math.max(0, orderTotal - evidencePaid);
-
-                    const paidMismatch = Math.abs(storedPaid - evidencePaid) > 0.01;
-                    const statusMismatch = order.paymentStatus !== correctStatus;
-
-                    if (paidMismatch || statusMismatch) {
-                        await db.order.update({
-                            paidAmount: evidencePaid,
-                            dueAmount: correctDue,
-                            paymentStatus: correctStatus
-                        }, { where: { id: order.id }, transaction });
-
-                        fixed.push({
-                            orderNumber: order.orderNumber,
-                            customerName: order.customerName,
-                            before: {
-                                paidAmount: storedPaid,
-                                dueAmount: Number(order.dueAmount),
-                                paymentStatus: order.paymentStatus
-                            },
-                            after: {
-                                paidAmount: evidencePaid,
-                                dueAmount: correctDue,
-                                paymentStatus: correctStatus
-                            }
-                        });
-                    }
-                }
-
-                return { fixed, skipped };
-            });
-
-            await createAuditLog({
-                userId: req.user?.id,
-                userName: changedBy.trim(),
-                userRole: req.user?.role || 'unknown',
-                action: 'DATA_INTEGRITY_FIX',
-                entityType: 'ORDER',
-                entityId: fixAll ? 'all-mismatched' : orderIds.join(','),
-                description: `${changedBy.trim()} fixed ${result.fixed.length} orders, skipped ${result.skipped.length} with human evidence`,
-                newValues: { fixedCount: result.fixed.length, skippedCount: result.skipped.length },
-                ipAddress: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown',
-                userAgent: req.headers['user-agent']
-            });
-
-            return res.status(200).json({
-                status: 200,
-                message: `Fixed ${result.fixed.length} orders. Skipped ${result.skipped.length} with human evidence (preserved).`,
-                data: {
-                    fixedCount: result.fixed.length,
-                    skippedCount: result.skipped.length,
-                    orders: result.fixed,
-                    skipped: result.skipped
-                }
-            });
-
-        } catch (error) {
-            console.error('Fix orders error:', error);
-            return res.status(500).json({ status: 500, message: error.message });
-        }
-    },
-
-    /**
-     * UNDO the last audit fix.
-     * 
-     * Finds orders that were changed by the fix (currently unpaid/partial 
-     * with no human evidence) and restores them to "paid" status.
-     * 
-     * Logic: If an order has paymentStatus != 'paid' AND has no payment evidence
-     * AND no human evidence (modifiedByName, toggle audit log, etc.),
-     * it was likely changed by the fix from its previous "paid" state.
-     * 
-     * This sets them back to paid (paidAmount = total, dueAmount = 0).
-     */
-    undoLastFix: async (req, res) => {
-        try {
-            const { changedBy, preview = false } = req.body;
-
-            if (!preview && (!changedBy || !changedBy.trim())) {
-                return res.status(400).json({ status: 400, message: 'changedBy (your name) is required for audit trail' });
-            }
-
-            // Find orders that look like they were affected by the fix:
-            // - Currently NOT paid (fix set them to unpaid/partial)
-            // - Have paidAmount = 0 or very low relative to total
-            // We restore ALL non-paid orders back to paid since the fix was the one that changed them
-            const orders = await db.order.findAll({
-                where: {
-                    isDeleted: false,
-                    paymentStatus: { [db.Sequelize.Op.in]: ['unpaid', 'partial'] }
-                },
-                raw: true
-            });
-
-            if (orders.length === 0) {
-                return res.status(200).json({
-                    status: 200,
-                    message: 'No unpaid/partial orders found to undo.',
-                    data: { restoredCount: 0, orders: [] }
-                });
-            }
-
-            const orderIds = orders.map(o => o.id);
-
-            // Check which ones have NO payment evidence (these are the fix victims)
+            // Evidence 3: Direct payments per order
             const paymentWhere = {
                 referenceType: 'order',
                 referenceId: { [db.Sequelize.Op.in]: orderIds },
@@ -508,74 +140,132 @@ module.exports = {
                 paymentsByOrder[p.referenceId].push(p);
             }
 
-            // Filter to orders with zero payment evidence (these were likely changed by the fix)
-            const fixVictims = orders.filter(o => {
-                const payments = paymentsByOrder[o.id] || [];
-                return payments.length === 0 && Number(o.paidAmount || 0) === 0;
-            });
+            // === RECONSTRUCT EACH ORDER ===
+            const results = [];
+            let totalChanged = 0;
 
-            if (preview) {
+            for (const order of orders) {
+                const orderTotal = Number(order.total) || 0;
+                const currentPaid = Number(order.paidAmount) || 0;
+                const currentStatus = order.paymentStatus;
+
+                let correctPaid = 0;
+                let correctStatus = 'unpaid';
+                let correctDue = orderTotal;
+                let reason = 'Default: credit sale, no payment evidence';
+
+                // Priority 4 (lowest): Default = unpaid
+                // Already set above
+
+                // Priority 3: Direct payments
+                const directPayments = paymentsByOrder[order.id] || [];
+                if (directPayments.length > 0) {
+                    const paymentTotal = directPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
+                    correctPaid = Math.min(paymentTotal, orderTotal);
+                    correctDue = Math.max(0, orderTotal - correctPaid);
+                    if (correctPaid >= orderTotal) correctStatus = 'paid';
+                    else if (correctPaid > 0) correctStatus = 'partial';
+                    else correctStatus = 'unpaid';
+                    const payNums = directPayments.map(p => p.paymentNumber).join(', ');
+                    reason = `Direct payment(s): ${payNums} = ₹${correctPaid.toFixed(2)}`;
+                }
+
+                // Priority 2: Cash sale
+                if (cashSaleOrderIds.has(order.id)) {
+                    correctPaid = orderTotal;
+                    correctDue = 0;
+                    correctStatus = 'paid';
+                    reason = 'Cash sale (INVOICE_CASH journal)';
+                }
+
+                // Priority 1 (highest): User toggle from audit_log
+                if (togglesByOrder.has(order.id)) {
+                    const toggle = togglesByOrder.get(order.id);
+                    correctStatus = toggle.newStatus;
+                    if (toggle.newStatus === 'paid') {
+                        correctPaid = orderTotal;
+                        correctDue = 0;
+                    } else if (toggle.newStatus === 'unpaid') {
+                        correctPaid = 0;
+                        correctDue = orderTotal;
+                    }
+                    // partial stays as computed from payments
+                    reason = `Toggled to "${toggle.newStatus}" by ${toggle.userName} on ${new Date(toggle.date).toLocaleDateString('en-IN')}`;
+                }
+
+                // Check if anything changed
+                const paidChanged = Math.abs(currentPaid - correctPaid) > 0.01;
+                const statusChanged = currentStatus !== correctStatus;
+                const hasChange = paidChanged || statusChanged;
+
+                if (hasChange) totalChanged++;
+
+                results.push({
+                    orderId: order.id,
+                    orderNumber: order.orderNumber,
+                    orderDate: order.orderDate,
+                    customerName: order.customerName,
+                    orderTotal,
+                    current: { paidAmount: currentPaid, paymentStatus: currentStatus },
+                    correct: { paidAmount: correctPaid, dueAmount: correctDue, paymentStatus: correctStatus },
+                    reason,
+                    hasChange
+                });
+            }
+
+            // Filter to only changed orders for display
+            const changedOrders = results.filter(r => r.hasChange);
+
+            if (isPreview) {
                 return res.status(200).json({
                     status: 200,
-                    message: `Found ${fixVictims.length} orders that appear to have been wrongly set to unpaid by the audit fix.`,
+                    message: `Scanned ${orders.length} orders. ${totalChanged} need correction.`,
                     data: {
-                        restoredCount: fixVictims.length,
-                        orders: fixVictims.map(o => ({
-                            orderNumber: o.orderNumber,
-                            customerName: o.customerName,
-                            total: Number(o.total),
-                            currentStatus: o.paymentStatus,
-                            currentPaid: Number(o.paidAmount),
-                            willBeRestoredTo: 'paid'
-                        }))
+                        totalScanned: orders.length,
+                        totalChanged,
+                        orders: changedOrders
                     }
                 });
             }
 
-            // Execute the undo
-            const restored = [];
-            await db.sequelize.transaction(async (transaction) => {
-                for (const order of fixVictims) {
-                    const orderTotal = Number(order.total) || 0;
-                    await db.order.update({
-                        paidAmount: orderTotal,
-                        dueAmount: 0,
-                        paymentStatus: 'paid'
-                    }, { where: { id: order.id }, transaction });
+            // === APPLY ===
+            if (!isPreview) {
+                await db.sequelize.transaction(async (transaction) => {
+                    for (const r of changedOrders) {
+                        await db.order.update({
+                            paidAmount: r.correct.paidAmount,
+                            dueAmount: r.correct.dueAmount,
+                            paymentStatus: r.correct.paymentStatus
+                        }, { where: { id: r.orderId }, transaction });
+                    }
+                });
 
-                    restored.push({
-                        orderNumber: order.orderNumber,
-                        customerName: order.customerName,
-                        total: orderTotal,
-                        restoredTo: 'paid'
-                    });
-                }
-            });
-
-            await createAuditLog({
-                userId: req.user?.id,
-                userName: changedBy.trim(),
-                userRole: req.user?.role || 'unknown',
-                action: 'UNDO_DATA_INTEGRITY_FIX',
-                entityType: 'ORDER',
-                entityId: 'undo-fix',
-                description: `${changedBy.trim()} undid audit fix on ${restored.length} orders — restored to paid`,
-                newValues: { restoredCount: restored.length },
-                ipAddress: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown',
-                userAgent: req.headers['user-agent']
-            });
+                await createAuditLog({
+                    userId: req.user?.id,
+                    userName: changedBy.trim(),
+                    userRole: req.user?.role || 'unknown',
+                    action: 'RECONSTRUCT_ORDER_STATES',
+                    entityType: 'ORDER',
+                    entityId: 'surgical-reconstruct',
+                    description: `${changedBy.trim()} reconstructed ${totalChanged} orders from evidence (cash journals + audit toggles + direct payments)`,
+                    newValues: { totalChanged },
+                    ipAddress: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown',
+                    userAgent: req.headers['user-agent']
+                });
+            }
 
             return res.status(200).json({
                 status: 200,
-                message: `Restored ${restored.length} orders back to paid.`,
+                message: `Reconstructed ${totalChanged} orders from evidence.`,
                 data: {
-                    restoredCount: restored.length,
-                    orders: restored
+                    totalScanned: orders.length,
+                    totalChanged,
+                    orders: changedOrders
                 }
             });
 
         } catch (error) {
-            console.error('Undo fix error:', error);
+            console.error('Reconstruct error:', error);
             return res.status(500).json({ status: 500, message: error.message });
         }
     }
