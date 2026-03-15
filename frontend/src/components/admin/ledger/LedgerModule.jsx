@@ -57,6 +57,13 @@ const LedgerModule = () => {
     const [recoveryResult, setRecoveryResult] = useState(null);
     const [validationResult, setValidationResult] = useState(null);
 
+    // Forensic Classification states
+    const [classifyData, setClassifyData] = useState(null);
+    const [classifyRunning, setClassifyRunning] = useState(false);
+    const [repairPreview, setRepairPreview] = useState(null);
+    const [repairRunning, setRepairRunning] = useState(false);
+    const [repairResult, setRepairResult] = useState(null);
+
     const getAuthHeader = () => ({
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     });
@@ -349,6 +356,61 @@ const LedgerModule = () => {
     };
 
 
+    // Forensic Classification: Classify
+    const runClassification = async () => {
+        try {
+            setClassifyRunning(true);
+            setError(null);
+            setRepairPreview(null);
+            setRepairResult(null);
+            const { data } = await axios.get('/api/data-audit/classify', getAuthHeader());
+            setClassifyData(data.data);
+        } catch (err) {
+            setError(err.response?.data?.message || 'Classification failed');
+        } finally {
+            setClassifyRunning(false);
+        }
+    };
+
+    // Forensic Classification: Repair Preview
+    const runRepairPreview = async () => {
+        try {
+            setRepairRunning(true);
+            setError(null);
+            const { data } = await axios.post('/api/data-audit/repair/preview', {}, getAuthHeader());
+            setRepairPreview(data.data);
+            if (data.data.totalRepairs === 0) {
+                setSuccess('All order fields are already consistent with evidence. Nothing to repair.');
+            }
+        } catch (err) {
+            setError(err.response?.data?.message || 'Repair preview failed');
+        } finally {
+            setRepairRunning(false);
+        }
+    };
+
+    // Forensic Classification: Execute Repair
+    const executeRepair = async () => {
+        const userName = prompt('Enter your name for the audit trail (MANDATORY):');
+        if (!userName || !userName.trim()) return;
+        if (!window.confirm(`FINAL CONFIRMATION:\n\nThis will repair ${repairPreview?.totalRepairs || 0} orders.\nEvery change is logged in audit_logs.\n\nProceed?`)) return;
+        try {
+            setRepairRunning(true);
+            setError(null);
+            const { data } = await axios.post('/api/data-audit/repair/execute', { changedBy: userName.trim() }, getAuthHeader());
+            setRepairResult(data.data);
+            setRepairPreview(null);
+            setSuccess(data.message);
+            // Refresh classification
+            await runClassification();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Repair failed');
+        } finally {
+            setRepairRunning(false);
+        }
+    };
+
+
     useEffect(() => {
         if (activeTab === 0) fetchDashboard();
         if (activeTab === 1) fetchAccounts();
@@ -630,6 +692,213 @@ const LedgerModule = () => {
                             </Card>
                         </Grid>
                     </Grid>
+
+
+                    {/* Forensic Classification Card */}
+                    <Paper data-testid="forensic-classification-card" sx={{ p: 2, mt: 2, bgcolor: '#e8eaf6', border: '2px solid #5c6bc0' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <Assessment sx={{ color: '#283593' }} />
+                            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#283593' }}>
+                                Forensic Classification
+                            </Typography>
+                        </Box>
+                        <Typography variant="body2" sx={{ mb: 2, color: '#37474f' }}>
+                            Classifies every order into 5 categories based on verified payment evidence.
+                            Read-only scan — does NOT modify data.
+                        </Typography>
+
+                        <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+                            <Button
+                                data-testid="classify-btn"
+                                variant="contained"
+                                startIcon={classifyRunning ? <CircularProgress size={16} color="inherit" /> : <Refresh />}
+                                onClick={runClassification}
+                                disabled={classifyRunning}
+                                sx={{ bgcolor: '#283593', '&:hover': { bgcolor: '#1a237e' } }}
+                            >
+                                {classifyRunning ? 'Classifying...' : 'Step 1: Classify All Orders'}
+                            </Button>
+                            {classifyData && classifyData.totalNeedsRepair > 0 && !repairPreview && !repairResult && (
+                                <Button
+                                    data-testid="repair-preview-btn"
+                                    variant="outlined"
+                                    startIcon={repairRunning ? <CircularProgress size={16} /> : <Refresh />}
+                                    onClick={runRepairPreview}
+                                    disabled={repairRunning}
+                                    sx={{ borderColor: '#c62828', color: '#c62828' }}
+                                >
+                                    Step 2: Preview Repair ({classifyData.totalNeedsRepair} orders)
+                                </Button>
+                            )}
+                            {repairPreview && repairPreview.totalRepairs > 0 && (
+                                <Button
+                                    data-testid="repair-execute-btn"
+                                    variant="contained"
+                                    startIcon={repairRunning ? <CircularProgress size={16} color="inherit" /> : <PlayArrow />}
+                                    onClick={executeRepair}
+                                    disabled={repairRunning}
+                                    sx={{ bgcolor: '#b71c1c', '&:hover': { bgcolor: '#7f0000' } }}
+                                >
+                                    Step 3: Execute Repair ({repairPreview.totalRepairs})
+                                </Button>
+                            )}
+                        </Box>
+
+                        {/* Classification Results */}
+                        {classifyData && (
+                            <Box>
+                                {/* Category Summary Cards */}
+                                <Grid container spacing={1} sx={{ mb: 2 }}>
+                                    {[
+                                        { key: 'RECEIPT_PAID', label: 'Receipt Paid', color: '#2e7d32', bg: '#e8f5e9' },
+                                        { key: 'PARTIAL_PAID', label: 'Partial Paid', color: '#e65100', bg: '#fff3e0' },
+                                        { key: 'CASH_SALE', label: 'Cash Sale', color: '#1565c0', bg: '#e3f2fd' },
+                                        { key: 'CREDIT_UNPAID', label: 'Credit Unpaid', color: '#546e7a', bg: '#eceff1' },
+                                        { key: 'SUSPICIOUS_PAID', label: 'Suspicious', color: '#b71c1c', bg: '#ffebee' }
+                                    ].map(cat => {
+                                        const s = classifyData.summary[cat.key] || { count: 0, totalValue: 0, needsRepair: 0 };
+                                        return (
+                                            <Grid item xs={6} sm={4} md key={cat.key}>
+                                                <Box sx={{ p: 1, bgcolor: cat.bg, borderRadius: 1, textAlign: 'center', border: s.needsRepair > 0 ? `2px solid ${cat.color}` : 'none' }}>
+                                                    <Typography variant="h6" data-testid={`classify-count-${cat.key}`} sx={{ color: cat.color, fontWeight: 700 }}>
+                                                        {s.count}
+                                                    </Typography>
+                                                    <Typography variant="caption" sx={{ fontWeight: 600 }}>{cat.label}</Typography>
+                                                    {s.needsRepair > 0 && (
+                                                        <Typography variant="caption" sx={{ display: 'block', color: '#b71c1c', fontWeight: 700 }}>
+                                                            {s.needsRepair} need repair
+                                                        </Typography>
+                                                    )}
+                                                    <Typography variant="caption" sx={{ display: 'block', color: '#78909c', fontSize: '0.7rem' }}>
+                                                        {formatCurrency(s.totalValue)}
+                                                    </Typography>
+                                                </Box>
+                                            </Grid>
+                                        );
+                                    })}
+                                </Grid>
+
+                                {/* Detail Tables per Category */}
+                                {['RECEIPT_PAID', 'PARTIAL_PAID', 'CASH_SALE', 'CREDIT_UNPAID', 'SUSPICIOUS_PAID'].map(catKey => {
+                                    const items = classifyData.categories[catKey] || [];
+                                    if (items.length === 0) return null;
+                                    const catColors = { RECEIPT_PAID: '#2e7d32', PARTIAL_PAID: '#e65100', CASH_SALE: '#1565c0', CREDIT_UNPAID: '#546e7a', SUSPICIOUS_PAID: '#b71c1c' };
+                                    const catBg = { RECEIPT_PAID: '#e8f5e9', PARTIAL_PAID: '#fff3e0', CASH_SALE: '#e3f2fd', CREDIT_UNPAID: '#eceff1', SUSPICIOUS_PAID: '#ffebee' };
+                                    return (
+                                        <Box key={catKey} sx={{ mb: 2 }}>
+                                            <Typography variant="subtitle2" sx={{ color: catColors[catKey], fontWeight: 700, mb: 0.5 }}>
+                                                {catKey.replace(/_/g, ' ')} ({items.length})
+                                            </Typography>
+                                            <TableContainer sx={{ maxHeight: 220 }}>
+                                                <Table size="small" stickyHeader>
+                                                    <TableHead>
+                                                        <TableRow sx={{ bgcolor: catBg[catKey] }}>
+                                                            <TableCell>Invoice</TableCell>
+                                                            <TableCell>Customer</TableCell>
+                                                            <TableCell align="right">Total</TableCell>
+                                                            <TableCell>Current Status</TableCell>
+                                                            <TableCell align="right">Alloc</TableCell>
+                                                            <TableCell>Fields OK?</TableCell>
+                                                        </TableRow>
+                                                    </TableHead>
+                                                    <TableBody>
+                                                        {items.map(o => (
+                                                            <TableRow key={o.orderId} data-testid={`classify-row-${o.orderNumber}`}
+                                                                sx={{ bgcolor: o.needsRepair ? '#fff8e1' : 'inherit' }}>
+                                                                <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.8rem' }}>{o.orderNumber}</TableCell>
+                                                                <TableCell sx={{ fontSize: '0.8rem' }}>{o.customerName}</TableCell>
+                                                                <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{formatCurrency(o.total)}</TableCell>
+                                                                <TableCell>
+                                                                    <Chip size="small" label={`${o.current.paymentStatus} (${formatCurrency(o.current.paidAmount)})`}
+                                                                        color={o.current.paymentStatus === 'paid' ? 'success' : o.current.paymentStatus === 'partial' ? 'warning' : 'default'}
+                                                                        sx={{ fontSize: '0.7rem' }} />
+                                                                </TableCell>
+                                                                <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{formatCurrency(o.evidence.allocTotal)}</TableCell>
+                                                                <TableCell>
+                                                                    {o.fieldCorrect
+                                                                        ? <Typography variant="caption" sx={{ color: '#2e7d32', fontWeight: 700 }}>OK</Typography>
+                                                                        : <Typography variant="caption" sx={{ color: '#b71c1c', fontWeight: 700 }}>
+                                                                            MISMATCH → {o.expected.paymentStatus} ({formatCurrency(o.expected.paidAmount)})
+                                                                          </Typography>
+                                                                    }
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                    </TableBody>
+                                                </Table>
+                                            </TableContainer>
+                                        </Box>
+                                    );
+                                })}
+                            </Box>
+                        )}
+
+                        {/* Repair Preview */}
+                        {repairPreview && repairPreview.totalRepairs > 0 && (
+                            <Box sx={{ mt: 2 }}>
+                                <Alert severity="warning" sx={{ mb: 1 }}>
+                                    <strong>Repair Preview:</strong> {repairPreview.totalRepairs} orders will be changed.
+                                    {repairPreview.byAction && (
+                                        <span> ({Object.entries(repairPreview.byAction).filter(([,v]) => v > 0).map(([k,v]) => `${k}: ${v}`).join(', ')})</span>
+                                    )}
+                                </Alert>
+                                <TableContainer sx={{ maxHeight: 300 }}>
+                                    <Table size="small" stickyHeader>
+                                        <TableHead>
+                                            <TableRow sx={{ bgcolor: '#ffecb3' }}>
+                                                <TableCell>Invoice</TableCell>
+                                                <TableCell>Customer</TableCell>
+                                                <TableCell>Before</TableCell>
+                                                <TableCell>After</TableCell>
+                                                <TableCell>Action</TableCell>
+                                                <TableCell>Source</TableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {repairPreview.repairs.map(r => (
+                                                <TableRow key={r.orderId} data-testid={`repair-row-${r.orderNumber}`}>
+                                                    <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.8rem' }}>{r.orderNumber}</TableCell>
+                                                    <TableCell sx={{ fontSize: '0.8rem' }}>{r.customerName}</TableCell>
+                                                    <TableCell>
+                                                        <Chip size="small" label={`${r.current.paymentStatus} (${formatCurrency(r.current.paidAmount)})`}
+                                                            color={r.current.paymentStatus === 'paid' ? 'success' : r.current.paymentStatus === 'partial' ? 'warning' : 'default'}
+                                                            sx={{ fontSize: '0.7rem' }} />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Chip size="small" label={`${r.expected.paymentStatus} (${formatCurrency(r.expected.paidAmount)})`}
+                                                            sx={{ bgcolor: '#bbdefb', fontWeight: 700, fontSize: '0.7rem' }} />
+                                                    </TableCell>
+                                                    <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600 }}>{r.repairAction}</TableCell>
+                                                    <TableCell sx={{ fontSize: '0.72rem', color: '#546e7a' }}>{r.repairSource}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
+                            </Box>
+                        )}
+
+                        {/* Repair Result */}
+                        {repairResult && (
+                            <Box sx={{ mt: 2 }}>
+                                <Alert severity="success" data-testid="repair-result">
+                                    Repaired {repairResult.totalRepaired} orders. Audit log created for each.
+                                </Alert>
+                                {repairResult.validation && (
+                                    <Box sx={{ mt: 1 }}>
+                                        <Typography variant="subtitle2" sx={{ color: repairResult.validation.allPassed ? '#2e7d32' : '#c62828', fontWeight: 700 }}>
+                                            Post-Repair Validation: {repairResult.validation.allPassed ? 'ALL PASSED' : 'ISSUES FOUND'}
+                                        </Typography>
+                                        {repairResult.validation.checks?.map((c, i) => (
+                                            <Typography key={i} variant="body2" sx={{ fontSize: '0.8rem', color: c.passed ? '#2e7d32' : '#c62828' }}>
+                                                {c.passed ? 'PASS' : 'FAIL'}: {c.name} {c.violations > 0 ? `(${c.violations} violations)` : ''}
+                                            </Typography>
+                                        ))}
+                                    </Box>
+                                )}
+                            </Box>
+                        )}
+                    </Paper>
 
                     {/* Forensic Audit Card */}
                     <Paper data-testid="forensic-audit-card" sx={{ p: 2, mt: 2, bgcolor: '#f5f5f5', border: '1px solid #bdbdbd' }}>
