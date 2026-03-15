@@ -113,6 +113,36 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 - Backward compat: old /data-audit/reconstruct endpoints still work
 - Files: `backend/src/controller/dataIntegrityAudit.js`, `frontend/src/components/admin/ledger/LedgerModule.jsx`
 
+### Phase 6: Payment Recovery Script (Completed - Mar 15 2026)
+
+#### 8-Step Payment Status Recovery
+Implements the user's complete recovery specification:
+1. **Step 1 (Backup):** UI shows pg_dump reminder before any execution
+2. **Steps 2-4 (Recalculate):** Rebuild paidAmount/dueAmount/paymentStatus from `receipt_allocations` (authoritative source)
+3. **Step 5 (No-allocation resets):** Paid orders without allocations → reset to unpaid, **cash sales automatically excluded** (no change evidence = legitimate cash sale)
+4. **Step 6 (Audit logging):** Every recovery change creates `DATA_RECOVERY` / `PAYMENT_STATUS_REBUILD` audit log
+5. **Step 7 (Post-repair validation):** 4 checks: no paid+zero, no negative due, sum=total, status matches amounts
+6. **Step 8 (Prevention):** Toggle `unpaid→paid` now ALWAYS creates payment record (`PAY-TOGGLE-xxx`) + receipt allocation. No more "phantom paid" orders without payment trail.
+
+#### API Endpoints
+- `GET /api/data-audit/recovery/preview` — Dry run showing all changes
+- `POST /api/data-audit/recovery/execute` — Execute with audit trail (requires changedBy)
+- `GET /api/data-audit/recovery/validate` — Post-repair validation (4 checks)
+
+#### Toggle Endpoint Modified (Step 8 Prevention)
+- `PATCH /api/orders/:orderId/payment-status` (unpaid→paid):
+  - Creates payment record (`PAY-TOGGLE-xxx`, referenceType: 'order')
+  - Creates receipt_allocation linking payment to order
+  - Updates order fields
+  - Creates audit log + ledger journal
+- `PATCH /api/orders/:orderId/payment-status` (paid→unpaid):
+  - Soft-deletes receipt allocations
+  - Hard-deletes linked payment
+  - Updates order fields
+  - Creates audit log + ledger journal
+
+Files: `backend/src/controller/paymentRecovery.js`, `backend/src/controller/order.js`, `frontend/src/components/admin/ledger/LedgerModule.jsx`
+
 ### Earlier Completed Work
 - Full-stack invoicing system with orders, payments, customers, suppliers
 - Double-entry ledger infrastructure (accounts, journal_batches, ledger_entries)
@@ -128,9 +158,9 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 ### P0 — Data Corruption (User's Local DB)
 - User's local database has invoices incorrectly marked as "paid" without payment records
 - **Forensic Audit tool built** — scans all orders for evidence mismatches
-- Tool shows 3 categories: contradictions, paid-without-evidence, change attribution
-- User reviews findings and selects which orders to fix
-- Evidence-based: no auto-fixing, user must approve every change
+- **Payment Recovery Script built** — rebuilds paidAmount/dueAmount/paymentStatus from receipt_allocations
+- **Toggle endpoint hardened (Step 8)** — unpaid→paid now creates payment + allocation. No more phantom status changes.
+- User needs to run recovery on their local DB after backup
 
 ### P1 — Customer Duplication Bug Verification
 - LATERAL join fix applied but user hasn't confirmed it works on their local DB
@@ -170,6 +200,10 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 - `GET /api/ledger/migration/reconciliation`
 - **NEW** `GET /api/data-audit/forensic` — Forensic scan (read-only, 3 categories)
 - **NEW** `POST /api/data-audit/fix` — Fix selected orders (requires orderIds, action, changedBy)
+- **NEW** `GET /api/data-audit/recovery/preview` — Recovery dry run (Steps 2-5)
+- **NEW** `POST /api/data-audit/recovery/execute` — Execute recovery (requires changedBy)
+- **NEW** `GET /api/data-audit/recovery/validate` — Post-repair validation (Step 7, 4 checks)
+- **MODIFIED** `PATCH /api/orders/:orderId/payment-status` — Toggle now creates payment+allocation on unpaid→paid (Step 8)
 
 ### REMOVED Endpoints
 - ~~`POST /api/receipts/reconcile`~~ — Automatic FIFO reconciliation (DELETED)
