@@ -942,7 +942,7 @@ const LedgerModule = () => {
                             </Typography>
                         </Box>
                         <Typography variant="body2" sx={{ mb: 2, color: '#37474f' }}>
-                            Payments table = truth. Resets ALL orders → FIFO allocates payments (oldest first) → recalculates paidAmount/dueAmount/status.
+                            Payments table = truth. Resets ONLY system-damaged orders (skips human-toggled ones) → FIFO allocates payments (oldest first) → recalculates paidAmount/dueAmount/status.
                         </Typography>
 
                         <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
@@ -986,7 +986,8 @@ const LedgerModule = () => {
                                             <thead>
                                                 <tr style={{ borderBottom: '1px solid #ccc' }}>
                                                     <th style={{ textAlign: 'left', padding: 4 }}>Customer</th>
-                                                    <th style={{ textAlign: 'right', padding: 4 }}>Orders</th>
+                                                    <th style={{ textAlign: 'right', padding: 4 }}>System Orders</th>
+                                                    <th style={{ textAlign: 'right', padding: 4 }}>Human Skipped</th>
                                                     <th style={{ textAlign: 'right', padding: 4 }}>Payments</th>
                                                     <th style={{ textAlign: 'right', padding: 4 }}>Order Value</th>
                                                     <th style={{ textAlign: 'right', padding: 4 }}>Payment Value</th>
@@ -998,7 +999,8 @@ const LedgerModule = () => {
                                                 {fifoResult.data.customerDetails.filter(c => c.ordersChanged > 0).map((c, i) => (
                                                     <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
                                                         <td style={{ padding: 4 }}>{c.name}</td>
-                                                        <td style={{ textAlign: 'right', padding: 4 }}>{c.orders}</td>
+                                                        <td style={{ textAlign: 'right', padding: 4 }}>{c.systemOrders ?? c.orders}</td>
+                                                        <td style={{ textAlign: 'right', padding: 4, color: '#4a148c', fontWeight: c.humanSkipped > 0 ? 700 : 400 }}>{c.humanSkipped ?? 0}</td>
                                                         <td style={{ textAlign: 'right', padding: 4 }}>{c.payments}</td>
                                                         <td style={{ textAlign: 'right', padding: 4 }}>₹{c.totalOrderValue?.toLocaleString('en-IN')}</td>
                                                         <td style={{ textAlign: 'right', padding: 4 }}>₹{c.totalPaymentValue?.toLocaleString('en-IN')}</td>

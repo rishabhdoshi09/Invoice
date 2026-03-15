@@ -22,10 +22,11 @@ Build a production-grade, double-entry accounting ledger with fraud prevention a
 - Removed ADVANCE_PAID, PAYMENT_PAID, SUSPICIOUS_PAID categories
 - All paid orders without receipt_allocations go through modifiedByName check
 - **FIFO Reconstruction endpoint** (`POST /api/data-audit/reconstruct-fifo`):
-  - Step 1: Reset system-toggled orders to unpaid (skip human toggles + cash sales)
-  - Step 2: FIFO allocate existing payments against orders
+  - Step 1: Reset ONLY system-damaged orders to unpaid (modifiedByName NULL/empty)
+  - Step 2: FIFO allocate existing payments against system orders only
   - Step 3: Update order statuses from allocations
-  - Supports dry run
+  - Human-toggled orders (non-empty modifiedByName) are NEVER touched
+  - Supports dry run — returns `humanSkipped` count
 - **Toggle History tab** in customer dialog (audit_logs for ORDER_PAYMENT_STATUS)
 - **Customer Notes tab** with save (notes TEXT column on customers)
 - Auto-migration for notes column on startup
@@ -53,9 +54,17 @@ Build a production-grade, double-entry accounting ledger with fraud prevention a
 - `frontend/src/components/admin/customers/list.jsx` — Customer dialog with Toggle History + Notes tabs
 - `backend/index.js` — Auto-migration for notes column
 
+### Phase 9: Safe FIFO Reconstruction Fix (Feb 2026)
+- **CRITICAL FIX**: `reconstructFifo` now PRESERVES human-toggled orders (non-empty `modifiedByName`)
+- Only resets/recalculates orders where `modifiedByName` IS NULL or empty
+- receipt_allocations cleanup scoped to system-damaged orders only
+- Response now includes `humanSkipped` count for transparency
+- Frontend updated: description text, table columns show "System Orders" + "Human Skipped"
+
 ## Prioritized Backlog
 ### P0 — User Action Required
-- Run classification on local DB, verify counts, execute reconstruct-fifo
+- Pull latest code, restart backend, run `reconstruct-fifo` dry run to verify human orders are preserved
+- Then execute with confidence
 
 ### P1 — Upcoming
 - Toggle paid → auto-allocate from On Account payments

@@ -452,13 +452,15 @@ module.exports = {
     /**
      * POST /api/data-audit/reconstruct-fifo
      * 
-     * Simple, clean reconstruction:
-     *   1. Delete all existing receipt_allocations (start fresh)
-     *   2. Reset ALL credit orders to unpaid
-     *   3. FIFO allocate payments to orders (oldest first) per customer
-     *   4. Update paidAmount, dueAmount, paymentStatus from allocations
+     * Safe FIFO reconstruction that PRESERVES human-toggled orders:
+     *   1. Identify system-damaged orders (modifiedByName is NULL/empty)
+     *   2. Skip human-toggled orders (modifiedByName has a value) — DO NOT TOUCH
+     *   3. Clear receipt_allocations for system orders only
+     *   4. Reset system orders to unpaid
+     *   5. FIFO allocate payments to system orders (oldest first) per customer
+     *   6. Update paidAmount, dueAmount, paymentStatus from allocations
      * 
-     * Payments table = TRUTH. Everything else is derived.
+     * Payments table = TRUTH. modifiedByName = HUMAN INDICATOR.
      */
     reconstructFifo: async (req, res) => {
         try {
@@ -481,6 +483,7 @@ module.exports = {
             const results = {
                 totalCustomers: customers.length,
                 ordersReset: 0,
+                humanSkipped: 0,
                 allocationsCreated: 0,
                 totalAllocated: 0,
                 ordersUpdated: 0,
@@ -488,20 +491,40 @@ module.exports = {
             };
 
             if (!isDryRun) {
-                // Step 0: Clear ALL existing receipt_allocations (start fresh)
-                await db.sequelize.query(`UPDATE receipt_allocations SET "isDeleted" = true`);
+                // Step 0: Clear receipt_allocations ONLY for system-damaged orders (not human-toggled)
+                await db.sequelize.query(`
+                    UPDATE receipt_allocations SET "isDeleted" = true
+                    WHERE "orderId" IN (
+                        SELECT id FROM orders
+                        WHERE "isDeleted" = false
+                          AND ("modifiedByName" IS NULL OR TRIM("modifiedByName") = '')
+                    )
+                `);
             }
 
             for (const cust of customers) {
-                // All orders for this customer (oldest first)
-                const [orders] = await db.sequelize.query(`
+                // ONLY system-damaged orders (modifiedByName is NULL or empty) — oldest first
+                const [systemOrders] = await db.sequelize.query(`
                     SELECT id, "orderNumber", "orderDate", total, "paidAmount", "dueAmount", "paymentStatus", "createdAt"
                     FROM orders
                     WHERE "isDeleted" = false
                       AND ("customerId" = :custId OR "customerName" = :custName)
                       AND "customerName" IS NOT NULL AND TRIM("customerName") != ''
+                      AND ("modifiedByName" IS NULL OR TRIM("modifiedByName") = '')
                     ORDER BY "orderDate" ASC, "createdAt" ASC
                 `, { replacements: { custId: cust.id, custName: cust.name } });
+
+                // Count human-toggled orders (for reporting only)
+                const [humanOrders] = await db.sequelize.query(`
+                    SELECT COUNT(*) as cnt
+                    FROM orders
+                    WHERE "isDeleted" = false
+                      AND ("customerId" = :custId OR "customerName" = :custName)
+                      AND "customerName" IS NOT NULL AND TRIM("customerName") != ''
+                      AND "modifiedByName" IS NOT NULL AND TRIM("modifiedByName") != ''
+                `, { replacements: { custId: cust.id, custName: cust.name } });
+                const humanCount = Number(humanOrders[0].cnt);
+                results.humanSkipped += humanCount;
 
                 // All payments for this customer (oldest first)
                 const [payments] = await db.sequelize.query(`
@@ -513,14 +536,14 @@ module.exports = {
                     ORDER BY "paymentDate" ASC, "createdAt" ASC
                 `, { replacements: { custId: cust.id, custName: cust.name } });
 
-                // FIFO: allocate payments to orders
+                // FIFO: allocate payments to system orders ONLY
                 const allocations = [];
                 const paymentRemaining = {};
                 for (const p of payments) {
                     paymentRemaining[p.id] = Number(p.amount);
                 }
 
-                for (const order of orders) {
+                for (const order of systemOrders) {
                     let orderRemaining = Number(order.total);
                     if (orderRemaining <= 0) continue;
 
@@ -551,7 +574,7 @@ module.exports = {
                 }
 
                 const orderUpdates = [];
-                for (const order of orders) {
+                for (const order of systemOrders) {
                     const total = Number(order.total);
                     const allocated = allocPerOrder[order.id] || 0;
                     const newPaid = Math.round(Math.min(allocated, total) * 100) / 100;
@@ -572,7 +595,7 @@ module.exports = {
                 }
 
                 const totalPaymentValue = payments.reduce((s, p) => s + Number(p.amount), 0);
-                const totalOrderValue = orders.reduce((s, o) => s + Number(o.total), 0);
+                const totalOrderValue = systemOrders.reduce((s, o) => s + Number(o.total), 0);
                 const changedOrders = orderUpdates.filter(u => u.changed);
 
                 results.allocationsCreated += allocations.length;
@@ -581,7 +604,8 @@ module.exports = {
 
                 results.customerDetails.push({
                     name: cust.name,
-                    orders: orders.length,
+                    systemOrders: systemOrders.length,
+                    humanSkipped: humanCount,
                     payments: payments.length,
                     totalOrderValue: Math.round(totalOrderValue * 100) / 100,
                     totalPaymentValue: Math.round(totalPaymentValue * 100) / 100,
@@ -590,11 +614,11 @@ module.exports = {
                     ordersChanged: changedOrders.length
                 });
 
-                // EXECUTE
+                // EXECUTE — only touches system orders
                 if (!isDryRun) {
                     await db.sequelize.transaction(async (transaction) => {
-                        // Reset ALL orders to unpaid first
-                        for (const order of orders) {
+                        // Reset ONLY system orders to unpaid
+                        for (const order of systemOrders) {
                             await db.order.update(
                                 { paidAmount: 0, dueAmount: Number(order.total), paymentStatus: 'unpaid' },
                                 { where: { id: order.id }, transaction }
@@ -612,7 +636,7 @@ module.exports = {
                             }, { transaction });
                         }
 
-                        // Update orders with correct values
+                        // Update system orders with correct values
                         for (const upd of orderUpdates) {
                             await db.order.update(
                                 { paidAmount: upd.after.paidAmount, dueAmount: upd.after.dueAmount, paymentStatus: upd.after.paymentStatus },
@@ -641,8 +665,8 @@ module.exports = {
             return res.status(200).json({
                 status: 200,
                 message: isDryRun
-                    ? `DRY RUN: ${results.totalCustomers} customers, ${results.allocationsCreated} allocations (₹${results.totalAllocated}), ${results.ordersUpdated} orders would change.`
-                    : `Done. ${results.ordersReset} orders reset, ${results.allocationsCreated} allocations created (₹${results.totalAllocated}), all orders recalculated.`,
+                    ? `DRY RUN: ${results.totalCustomers} customers, ${results.humanSkipped} human-toggled orders PRESERVED, ${results.allocationsCreated} allocations (₹${results.totalAllocated}), ${results.ordersUpdated} system orders would change.`
+                    : `Done. ${results.ordersReset} system orders reset (${results.humanSkipped} human-toggled PRESERVED), ${results.allocationsCreated} allocations created (₹${results.totalAllocated}).`,
                 data: { isDryRun, ...results, validation }
             });
         } catch (error) {
