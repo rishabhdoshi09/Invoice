@@ -20,136 +20,122 @@ module.exports = {
      */
     classifyOrders: async (req, res) => {
         try {
+            // First ensure indexes exist for fast lookups
+            await db.sequelize.query(`
+                CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_type ON audit_logs ("entityId", "entityType");
+                CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_action ON audit_logs ("entityId", "entityType", "action");
+                CREATE INDEX IF NOT EXISTS idx_receipt_alloc_order ON receipt_allocations ("orderId") WHERE ("isDeleted" IS NULL OR "isDeleted" = false);
+                CREATE INDEX IF NOT EXISTS idx_payments_ref ON payments ("referenceId") WHERE ("isDeleted" = false AND "referenceType" = 'order');
+                CREATE INDEX IF NOT EXISTS idx_journal_batches_ref ON journal_batches ("referenceId", "referenceType");
+            `).catch(() => {});
+
             const [orders] = await db.sequelize.query(`
-                WITH order_evidence AS (
+                WITH alloc_agg AS (
+                    SELECT "orderId", SUM(amount) AS alloc_total, COUNT(*) AS alloc_count
+                    FROM receipt_allocations
+                    WHERE "isDeleted" IS NULL OR "isDeleted" = false
+                    GROUP BY "orderId"
+                ),
+                pay_agg AS (
+                    SELECT "referenceId", SUM(amount) AS pay_total, COUNT(*) AS pay_count
+                    FROM payments
+                    WHERE "isDeleted" = false AND "referenceType" = 'order'
+                    GROUP BY "referenceId"
+                ),
+                inv_journal_agg AS (
+                    SELECT "referenceId"::uuid AS ref_id, COUNT(*) AS inv_journal_count
+                    FROM journal_batches
+                    WHERE "referenceType" = 'INVOICE'
+                    GROUP BY "referenceId"
+                ),
+                toggle_journal_agg AS (
+                    SELECT "referenceId"::uuid AS ref_id, COUNT(*) AS toggle_journal_count
+                    FROM journal_batches
+                    WHERE "referenceType" = 'PAYMENT_TOGGLE'
+                    GROUP BY "referenceId"
+                ),
+                toggle_logs AS (
                     SELECT
-                        o.id,
-                        o."orderNumber",
-                        o."orderDate",
-                        o."customerName",
-                        o."customerId",
-                        o.total,
-                        o."paidAmount",
-                        o."dueAmount",
-                        o."paymentStatus",
-                        o."modifiedByName",
-                        o."createdAt",
-                        o."updatedAt",
-
-                        COALESCE(alloc.alloc_total, 0)            AS alloc_total,
-                        COALESCE(alloc.alloc_count, 0)            AS alloc_count,
-                        COALESCE(pay.pay_total, 0)                AS pay_total,
-                        COALESCE(pay.pay_count, 0)                AS pay_count,
-                        COALESCE(jb.inv_journal_count, 0)         AS inv_journal_count,
-                        COALESCE(tj.toggle_journal_count, 0)      AS toggle_journal_count,
-                        COALESCE(al.toggle_log_count, 0)          AS toggle_log_count,
-                        al.last_toggle_to,
-                        al.last_toggle_by,
-                        al.last_toggle_at,
-                        cr.created_as_status
-
-                    FROM orders o
-
-                    LEFT JOIN (
-                        SELECT "orderId", SUM(amount) AS alloc_total, COUNT(*) AS alloc_count
-                        FROM receipt_allocations
-                        WHERE "isDeleted" IS NULL OR "isDeleted" = false
-                        GROUP BY "orderId"
-                    ) alloc ON alloc."orderId" = o.id
-
-                    LEFT JOIN (
-                        SELECT "referenceId", SUM(amount) AS pay_total, COUNT(*) AS pay_count
-                        FROM payments
-                        WHERE "isDeleted" = false AND "referenceType" = 'order'
-                        GROUP BY "referenceId"
-                    ) pay ON pay."referenceId" = o.id
-
-                    LEFT JOIN (
-                        SELECT "referenceId"::uuid, COUNT(*) AS inv_journal_count
-                        FROM "journal_batches"
-                        WHERE "referenceType" = 'INVOICE'
-                        GROUP BY "referenceId"
-                    ) jb ON jb."referenceId" = o.id
-
-                    LEFT JOIN (
-                        SELECT "referenceId"::uuid, COUNT(*) AS toggle_journal_count
-                        FROM "journal_batches"
-                        WHERE "referenceType" = 'PAYMENT_TOGGLE'
-                        GROUP BY "referenceId"
-                    ) tj ON tj."referenceId" = o.id
-
-                    LEFT JOIN LATERAL (
-                        SELECT
-                            COUNT(*) AS toggle_log_count,
-                            (SELECT "newValues"->>'paymentStatus'
-                             FROM audit_logs WHERE "entityId" = o.id::text
-                             AND "entityType" = 'ORDER_PAYMENT_STATUS'
-                             ORDER BY "createdAt" DESC LIMIT 1) AS last_toggle_to,
-                            (SELECT "userName"
-                             FROM audit_logs WHERE "entityId" = o.id::text
-                             AND "entityType" = 'ORDER_PAYMENT_STATUS'
-                             ORDER BY "createdAt" DESC LIMIT 1) AS last_toggle_by,
-                            (SELECT "createdAt"
-                             FROM audit_logs WHERE "entityId" = o.id::text
-                             AND "entityType" = 'ORDER_PAYMENT_STATUS'
-                             ORDER BY "createdAt" DESC LIMIT 1) AS last_toggle_at
-                        FROM audit_logs
-                        WHERE "entityId" = o.id::text AND "entityType" = 'ORDER_PAYMENT_STATUS'
-                    ) al ON true
-
-                    -- Evidence 6: ORDER CREATE audit log → proves original creation status
-                    LEFT JOIN LATERAL (
-                        SELECT "newValues"->>'paymentStatus' AS created_as_status
-                        FROM audit_logs
-                        WHERE "entityId" = o.id::text
-                          AND "entityType" = 'ORDER'
-                          AND "action" = 'CREATE'
-                          AND "newValues"->>'paymentStatus' IS NOT NULL
-                        ORDER BY "createdAt" ASC LIMIT 1
-                    ) cr ON true
-
-                    WHERE o."isDeleted" = false
+                        "entityId",
+                        COUNT(*) AS toggle_log_count,
+                        (array_agg("newValues"->>'paymentStatus' ORDER BY "createdAt" DESC))[1] AS last_toggle_to,
+                        (array_agg("userName" ORDER BY "createdAt" DESC))[1] AS last_toggle_by,
+                        (array_agg("createdAt" ORDER BY "createdAt" DESC))[1] AS last_toggle_at
+                    FROM audit_logs
+                    WHERE "entityType" = 'ORDER_PAYMENT_STATUS'
+                    GROUP BY "entityId"
+                ),
+                create_logs AS (
+                    SELECT DISTINCT ON ("entityId")
+                        "entityId",
+                        "newValues"->>'paymentStatus' AS created_as_status
+                    FROM audit_logs
+                    WHERE "entityType" = 'ORDER'
+                      AND "action" = 'CREATE'
+                      AND "newValues"->>'paymentStatus' IS NOT NULL
+                    ORDER BY "entityId", "createdAt" ASC
                 )
-                SELECT *,
+                SELECT
+                    o.id,
+                    o."orderNumber",
+                    o."orderDate",
+                    o."customerName",
+                    o."customerId",
+                    o.total,
+                    o."paidAmount",
+                    o."dueAmount",
+                    o."paymentStatus",
+                    o."modifiedByName",
+                    o."createdAt",
+                    o."updatedAt",
+
+                    COALESCE(aa.alloc_total, 0)              AS alloc_total,
+                    COALESCE(aa.alloc_count, 0)              AS alloc_count,
+                    COALESCE(pa.pay_total, 0)                AS pay_total,
+                    COALESCE(pa.pay_count, 0)                AS pay_count,
+                    COALESCE(ij.inv_journal_count, 0)        AS inv_journal_count,
+                    COALESCE(tj.toggle_journal_count, 0)     AS toggle_journal_count,
+                    COALESCE(tl.toggle_log_count, 0)         AS toggle_log_count,
+                    tl.last_toggle_to,
+                    tl.last_toggle_by,
+                    tl.last_toggle_at,
+                    cl.created_as_status,
+
                     CASE
-                        -- Rule 1: receipt allocations exist → valid paid / partial
-                        WHEN alloc_total >= total AND total > 0
+                        WHEN COALESCE(aa.alloc_total, 0) >= o.total AND o.total > 0
                             THEN 'RECEIPT_PAID'
-                        WHEN alloc_total > 0 AND alloc_total < total AND total > 0
+                        WHEN COALESCE(aa.alloc_total, 0) > 0 AND COALESCE(aa.alloc_total, 0) < o.total AND o.total > 0
                             THEN 'PARTIAL_PAID'
-
-                        -- Rule 2: audit log shows manual toggle to paid → valid paid
-                        WHEN "paymentStatus" = 'paid' AND toggle_log_count > 0
+                        WHEN o."paymentStatus" = 'paid' AND COALESCE(tl.toggle_log_count, 0) > 0
                             THEN 'TOGGLED_PAID'
-
-                        -- Rule 3: ORDER CREATE log proves it was created as paid → cash sale
-                        WHEN "paymentStatus" = 'paid' AND created_as_status = 'paid'
+                        WHEN o."paymentStatus" = 'paid' AND cl.created_as_status = 'paid'
                             THEN 'CASH_SALE'
-
-                        -- Rule 4: paid but NO receipt, NO payment, NO toggle log → suspicious
-                        -- Sub-case A: creation log proves it was UNPAID at birth → definitely suspicious
-                        -- Sub-case B: no creation log at all → suspicious (can't prove it was cash sale)
-                        WHEN "paymentStatus" = 'paid'
-                             AND alloc_total = 0 AND pay_total = 0
-                             AND toggle_log_count = 0
-                             AND total > 0
+                        WHEN o."paymentStatus" = 'paid'
+                             AND COALESCE(aa.alloc_total, 0) = 0 AND COALESCE(pa.pay_total, 0) = 0
+                             AND COALESCE(tl.toggle_log_count, 0) = 0
+                             AND o.total > 0
                             THEN 'SUSPICIOUS_PAID'
-
-                        -- Unpaid / partial with no receipts → credit sale
-                        WHEN "paymentStatus" IN ('unpaid','partial')
-                             AND alloc_total = 0 AND pay_total = 0
+                        WHEN o."paymentStatus" IN ('unpaid','partial')
+                             AND COALESCE(aa.alloc_total, 0) = 0 AND COALESCE(pa.pay_total, 0) = 0
                             THEN 'CREDIT_UNPAID'
-
                         ELSE 'OTHER'
                     END AS classification
-                FROM order_evidence
+
+                FROM orders o
+                LEFT JOIN alloc_agg aa ON aa."orderId" = o.id
+                LEFT JOIN pay_agg pa ON pa."referenceId" = o.id
+                LEFT JOIN inv_journal_agg ij ON ij.ref_id = o.id
+                LEFT JOIN toggle_journal_agg tj ON tj.ref_id = o.id
+                LEFT JOIN toggle_logs tl ON tl."entityId" = o.id::text
+                LEFT JOIN create_logs cl ON cl."entityId" = o.id::text
+                WHERE o."isDeleted" = false
                 ORDER BY
                     CASE
-                        WHEN alloc_total >= total AND total > 0 THEN 1
-                        WHEN alloc_total > 0 AND alloc_total < total THEN 2
+                        WHEN COALESCE(aa.alloc_total, 0) >= o.total AND o.total > 0 THEN 1
+                        WHEN COALESCE(aa.alloc_total, 0) > 0 AND COALESCE(aa.alloc_total, 0) < o.total THEN 2
                         ELSE 5
                     END,
-                    "orderNumber"
+                    o."orderNumber"
             `);
 
             // Group into categories
