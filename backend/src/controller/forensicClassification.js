@@ -71,6 +71,7 @@ const CLASSIFICATION_SQL = `
         LEFT JOIN alloc_agg aa ON aa."orderId" = o.id
         LEFT JOIN pay_agg pa ON pa."referenceId" = o.id
         WHERE o."isDeleted" = false
+          AND o."customerName" IS NOT NULL AND TRIM(o."customerName") != ''
     ),
     needs_check AS (
         SELECT id AS uid, id::text AS eid FROM base WHERE pre_class = 'NEEDS_AUDIT_CHECK'
