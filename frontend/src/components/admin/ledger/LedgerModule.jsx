@@ -51,6 +51,12 @@ const LedgerModule = () => {
     const [selectedFixes, setSelectedFixes] = useState(new Set());
     const [fixRunning, setFixRunning] = useState(false);
 
+    // Recovery Script states
+    const [recoveryPreview, setRecoveryPreview] = useState(null);
+    const [recoveryRunning, setRecoveryRunning] = useState(false);
+    const [recoveryResult, setRecoveryResult] = useState(null);
+    const [validationResult, setValidationResult] = useState(null);
+
     const getAuthHeader = () => ({
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     });
@@ -286,6 +292,62 @@ const LedgerModule = () => {
             return next;
         });
     };
+
+    // Recovery Script: Preview
+    const runRecoveryPreview = async () => {
+        try {
+            setRecoveryRunning(true);
+            setError(null);
+            setRecoveryResult(null);
+            setValidationResult(null);
+            const { data } = await axios.get('/api/data-audit/recovery/preview', getAuthHeader());
+            setRecoveryPreview(data.data);
+            if (data.data.totalChanges === 0) {
+                setSuccess('No changes needed. All orders already match their receipt allocations.');
+            }
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to run recovery preview');
+        } finally {
+            setRecoveryRunning(false);
+        }
+    };
+
+    // Recovery Script: Execute
+    const executeRecovery = async (includeExcluded = false) => {
+        const userName = prompt('Enter your name for the audit trail (MANDATORY):');
+        if (!userName || !userName.trim()) return;
+        const totalChanges = (recoveryPreview?.step2_4?.count || 0) + (includeExcluded ? recoveryPreview?.step5?.totalFound : recoveryPreview?.step5?.includedCount || 0);
+        if (!window.confirm(`FINAL CONFIRMATION:\n\nThis will modify ${totalChanges} orders.\nEvery change will be logged in audit_logs.\n\nProceed?`)) return;
+
+        try {
+            setRecoveryRunning(true);
+            setError(null);
+            const { data } = await axios.post('/api/data-audit/recovery/execute', {
+                changedBy: userName.trim(),
+                includeExcluded
+            }, getAuthHeader());
+            setRecoveryResult(data.data);
+            setRecoveryPreview(null);
+            setSuccess(data.message);
+            // Auto-run validation
+            await runValidation();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to execute recovery');
+        } finally {
+            setRecoveryRunning(false);
+        }
+    };
+
+    // Recovery Script: Validate
+    const runValidation = async () => {
+        try {
+            const { data } = await axios.get('/api/data-audit/recovery/validate', getAuthHeader());
+            setValidationResult(data.data);
+        } catch (err) {
+            console.error('Validation failed:', err);
+        }
+    };
+
 
     useEffect(() => {
         if (activeTab === 0) fetchDashboard();
@@ -770,6 +832,183 @@ const LedgerModule = () => {
                                         </TableContainer>
                                     </Box>
                                 )}
+                            </Box>
+                        )}
+                    </Paper>
+
+
+                    {/* Payment Recovery Script Card */}
+                    <Paper data-testid="recovery-script-card" sx={{ p: 2, mt: 2, bgcolor: '#fce4ec', border: '1px solid #ef9a9a' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <Warning sx={{ color: '#b71c1c' }} />
+                            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#b71c1c' }}>
+                                Payment Recovery Script
+                            </Typography>
+                        </Box>
+                        <Typography variant="body2" sx={{ mb: 0.5, color: '#4e342e' }}>
+                            Rebuilds <code>paidAmount</code>, <code>dueAmount</code>, <code>paymentStatus</code> from <strong>receipt_allocations</strong>.
+                        </Typography>
+                        <Typography variant="body2" sx={{ mb: 2, color: '#4e342e', fontSize: '0.8rem' }}>
+                            Step 1: Backup DB. Step 2-4: Recalculate from allocations. Step 5: Reset paid-without-allocations to unpaid (cash sales excluded). Step 6: Audit log every change. Step 7: Validate.
+                        </Typography>
+
+                        <Alert severity="warning" sx={{ mb: 2 }} data-testid="backup-reminder">
+                            <strong>BACKUP REQUIRED:</strong> Run <code>pg_dump database_name &gt; backup_before_payment_recovery.sql</code> before executing.
+                        </Alert>
+
+                        <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+                            <Button
+                                data-testid="recovery-preview-btn"
+                                variant="outlined"
+                                startIcon={recoveryRunning ? <CircularProgress size={16} /> : <Refresh />}
+                                onClick={runRecoveryPreview}
+                                disabled={recoveryRunning}
+                                sx={{ borderColor: '#b71c1c', color: '#b71c1c', '&:hover': { bgcolor: 'rgba(183,28,28,0.08)' } }}
+                            >
+                                {recoveryRunning ? 'Scanning...' : 'Step 1: Preview Changes'}
+                            </Button>
+                            {recoveryPreview && recoveryPreview.totalChanges > 0 && (
+                                <Button
+                                    data-testid="recovery-execute-btn"
+                                    variant="contained"
+                                    startIcon={recoveryRunning ? <CircularProgress size={16} color="inherit" /> : <PlayArrow />}
+                                    onClick={() => executeRecovery(false)}
+                                    disabled={recoveryRunning}
+                                    sx={{ bgcolor: '#b71c1c', '&:hover': { bgcolor: '#7f0000' } }}
+                                >
+                                    Step 2: Execute ({recoveryPreview.totalChanges} changes)
+                                </Button>
+                            )}
+                            {!recoveryPreview && !recoveryResult && (
+                                <Button
+                                    data-testid="validate-btn"
+                                    variant="outlined"
+                                    onClick={runValidation}
+                                    sx={{ borderColor: '#2e7d32', color: '#2e7d32' }}
+                                >
+                                    Run Validation Only
+                                </Button>
+                            )}
+                        </Box>
+
+                        {/* Preview Results */}
+                        {recoveryPreview && (
+                            <Box>
+                                {/* Step 2-4: Allocation-based corrections */}
+                                <Typography variant="subtitle2" sx={{ color: '#1565c0', fontWeight: 700, mb: 1 }}>
+                                    Step 2-4: From Receipt Allocations ({recoveryPreview.step2_4?.count || 0} changes)
+                                </Typography>
+                                {recoveryPreview.step2_4?.orders?.length > 0 ? (
+                                    <TableContainer sx={{ maxHeight: 250, mb: 2 }}>
+                                        <Table size="small" stickyHeader>
+                                            <TableHead>
+                                                <TableRow sx={{ bgcolor: '#e3f2fd' }}>
+                                                    <TableCell>Invoice</TableCell>
+                                                    <TableCell>Customer</TableCell>
+                                                    <TableCell align="right">Total</TableCell>
+                                                    <TableCell>Current</TableCell>
+                                                    <TableCell>Corrected</TableCell>
+                                                    <TableCell align="right">Alloc Total</TableCell>
+                                                </TableRow>
+                                            </TableHead>
+                                            <TableBody>
+                                                {recoveryPreview.step2_4.orders.map((o) => (
+                                                    <TableRow key={o.orderId} data-testid={`recovery-step24-${o.orderNumber}`}>
+                                                        <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{o.orderNumber}</TableCell>
+                                                        <TableCell>{o.customerName}</TableCell>
+                                                        <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatCurrency(o.total)}</TableCell>
+                                                        <TableCell>
+                                                            <Chip size="small" label={`${o.current.paymentStatus} (${formatCurrency(o.current.paidAmount)})`}
+                                                                color={o.current.paymentStatus === 'paid' ? 'success' : o.current.paymentStatus === 'partial' ? 'warning' : 'default'} />
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Chip size="small" label={`${o.corrected.paymentStatus} (${formatCurrency(o.corrected.paidAmount)})`}
+                                                                sx={{ bgcolor: '#bbdefb', fontWeight: 700 }} />
+                                                        </TableCell>
+                                                        <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatCurrency(o.allocationTotal)}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </TableContainer>
+                                ) : (
+                                    <Alert severity="success" sx={{ mb: 2 }}>All allocated orders already match. No changes needed.</Alert>
+                                )}
+
+                                {/* Step 5: No-allocation resets */}
+                                <Typography variant="subtitle2" sx={{ color: '#e65100', fontWeight: 700, mb: 1 }}>
+                                    Step 5: Paid Without Allocations ({recoveryPreview.step5?.includedCount || 0} to reset, {recoveryPreview.step5?.excludedCount || 0} cash sales excluded)
+                                </Typography>
+                                {recoveryPreview.step5?.included?.length > 0 && (
+                                    <TableContainer sx={{ maxHeight: 200, mb: 1 }}>
+                                        <Table size="small" stickyHeader>
+                                            <TableHead>
+                                                <TableRow sx={{ bgcolor: '#fff3e0' }}>
+                                                    <TableCell>Invoice</TableCell>
+                                                    <TableCell>Customer</TableCell>
+                                                    <TableCell align="right">Total</TableCell>
+                                                    <TableCell>Evidence</TableCell>
+                                                    <TableCell>Action</TableCell>
+                                                </TableRow>
+                                            </TableHead>
+                                            <TableBody>
+                                                {recoveryPreview.step5.included.map((o) => (
+                                                    <TableRow key={o.orderId} data-testid={`recovery-step5-included-${o.orderNumber}`}>
+                                                        <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{o.orderNumber}</TableCell>
+                                                        <TableCell>{o.customerName}</TableCell>
+                                                        <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatCurrency(o.total)}</TableCell>
+                                                        <TableCell sx={{ fontSize: '0.75rem' }}>
+                                                            {o.evidence.hasToggleLog && <span>Toggle log (by {o.evidence.toggledBy})</span>}
+                                                            {o.evidence.hasToggleJournal && <span>Toggle journal</span>}
+                                                            {o.evidence.hasDirectPayment && <span>Direct payment</span>}
+                                                        </TableCell>
+                                                        <TableCell sx={{ color: '#c62828', fontWeight: 700, fontSize: '0.8rem' }}>→ UNPAID</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </TableContainer>
+                                )}
+                                {recoveryPreview.step5?.excluded?.length > 0 && (
+                                    <Box sx={{ mb: 2 }}>
+                                        <Typography variant="body2" sx={{ color: '#2e7d32', fontWeight: 600, mb: 0.5 }}>
+                                            Excluded (Cash Sales — {recoveryPreview.step5.excludedCount}):
+                                        </Typography>
+                                        <Box sx={{ pl: 1 }}>
+                                            {recoveryPreview.step5.excluded.map((o) => (
+                                                <Typography key={o.orderId} variant="body2" sx={{ fontSize: '0.8rem', color: '#546e7a' }}>
+                                                    {o.orderNumber} — {o.customerName} — {formatCurrency(o.total)} (no change evidence, likely cash sale)
+                                                </Typography>
+                                            ))}
+                                        </Box>
+                                    </Box>
+                                )}
+                            </Box>
+                        )}
+
+                        {/* Execution Result */}
+                        {recoveryResult && (
+                            <Alert severity="success" sx={{ mb: 2 }} data-testid="recovery-result">
+                                Recovery complete: {recoveryResult.step2_4?.count || 0} from allocations + {recoveryResult.step5?.count || 0} reset to unpaid. {recoveryResult.auditLogsCreated} audit logs created.
+                            </Alert>
+                        )}
+
+                        {/* Step 7: Validation */}
+                        {validationResult && (
+                            <Box sx={{ mt: 1 }}>
+                                <Typography variant="subtitle2" sx={{ color: validationResult.allPassed ? '#2e7d32' : '#c62828', fontWeight: 700, mb: 0.5 }}>
+                                    Step 7: Validation {validationResult.allPassed ? 'PASSED' : 'FAILED'}
+                                </Typography>
+                                {validationResult.checks?.map((check, i) => (
+                                    <Box key={i} sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 0.25 }}>
+                                        <Typography variant="body2" sx={{ color: check.passed ? '#2e7d32' : '#c62828', fontWeight: 600 }}>
+                                            {check.passed ? 'PASS' : 'FAIL'}
+                                        </Typography>
+                                        <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                                            {check.name} {check.violations > 0 ? `(${check.violations} violations)` : ''}
+                                        </Typography>
+                                    </Box>
+                                ))}
                             </Box>
                         )}
                     </Paper>

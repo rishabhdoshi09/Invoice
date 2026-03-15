@@ -813,31 +813,39 @@ module.exports = {
                     transaction 
                 });
 
-                // === RECEIPT ALLOCATION TRACKING (Tally-style bill-wise) ===
-                // When marking as PAID: Create a receipt allocation record for tracking
-                // Note: We still DON'T create a payment record to avoid daily summary double-counting
-                // The receipt_allocation ties to a virtual "toggle payment" for auditability
+                // === STEP 8 ENFORCEMENT: Payment toggle must create payment + allocation ===
+                // When marking as PAID: ALWAYS create payment record + receipt allocation
                 if (newStatus === 'paid' && oldStatus !== 'paid') {
-                    // Check if a payment record exists for this order
-                    let paymentForAllocation = await db.payment.findOne({
-                        where: { referenceId: orderId, referenceType: 'order' },
-                        transaction
-                    });
-                    // If a payment record exists (from "Receive Payment" flow), create allocation
-                    if (paymentForAllocation) {
-                        try {
-                            await db.receiptAllocation.create({
-                                paymentId: paymentForAllocation.id,
-                                orderId: orderId,
-                                amount: Number(order.total),
-                                allocatedBy: req.user?.id,
-                                allocatedByName: changedByTrimmed,
-                                notes: 'Auto-allocated via payment status toggle (user-authorized)'
-                            }, { transaction });
-                        } catch (allocErr) {
-                            console.warn('[ALLOCATION] Could not create allocation on toggle:', allocErr.message);
-                        }
-                    }
+                    const uuidv4Inline = require('uuid/v4');
+                    const paymentId = uuidv4Inline();
+                    const paymentNumber = `PAY-TOGGLE-${Date.now().toString(36).toUpperCase()}`;
+                    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+                    // Create payment record
+                    await db.payment.create({
+                        id: paymentId,
+                        paymentNumber,
+                        paymentDate: today,
+                        partyType: 'customer',
+                        partyId: customerIdToUpdate || null,
+                        partyName: order.customerName || 'Walk-in Customer',
+                        amount: Number(order.total),
+                        referenceType: 'order',
+                        referenceId: orderId,
+                        referenceNumber: order.orderNumber,
+                        notes: `Payment via status toggle by ${changedByTrimmed}`,
+                        isDeleted: false
+                    }, { transaction });
+
+                    // Create receipt allocation linking payment to order
+                    await db.receiptAllocation.create({
+                        paymentId: paymentId,
+                        orderId: orderId,
+                        amount: Number(order.total),
+                        allocatedBy: req.user?.id,
+                        allocatedByName: changedByTrimmed,
+                        notes: `Allocated via payment status toggle by ${changedByTrimmed}`
+                    }, { transaction });
                 }
                 
                 // When marking as UNPAID (reversing): Clean up allocations and payment entries
