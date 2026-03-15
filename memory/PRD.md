@@ -21,149 +21,46 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 ## What's Been Implemented
 
 ### Phase 1+2: Tally-Correct System Hardening (Completed - Mar 13 2026)
-
-#### 1. Ledger-Authoritative Balance (Tally Formula)
-- Customer balance = `opening + sum(ledger debits) - sum(ledger credits)`
-- Falls back to `opening + sum(dueAmount)` when no ledger entries exist
-- Balance source indicator (Ledger / Orders) shown in UI
-- File: `backend/src/dao/customer.js`
-
-#### 2. Receipt Allocation (Tally's Bill-Wise / Against Ref)
-- New `receipt_allocations` table tracks which payment is allocated against which invoice
-- "Against Ref" = payment allocated to specific invoice
-- "On Account" = unallocated payment (advance)
-- Invoice due is DERIVED: `invoice_total - sum(allocations)`
-- Over-allocation prevention for both payment and invoice limits
-- API: `POST /api/receipts/allocate`, `GET /api/receipts/:id/allocations`, `GET /api/invoices/:id/allocations`, `DELETE /api/receipts/allocations/:id`
-
-#### 3. Invoice Immutability Guard
-- Direct edits to `paidAmount`, `dueAmount`, `paymentStatus` are BLOCKED on orders
-- Changes must go through "Record Payment" → "Allocate" flow
-- Returns 400 error with user-friendly message
-
-#### 4. No Auto-FIFO Payment Allocation
-- Customer payments without specific order reference stay as "On Account"
-- No automatic application to oldest unpaid invoices
-- User must explicitly allocate via Allocate UI
-
-#### 5. Frontend — Customer Dialog with Allocate Tab
-- Customer dialog shows 3 tabs: Invoices, Receipts, Allocate
-- Invoices tab shows derived paid/due from receipt allocations
-- Receipts tab shows allocated/unallocated amounts per receipt
-- Allocate tab allows manual bill-wise reconciliation
+- Ledger-Authoritative Balance (Tally Formula)
+- Receipt Allocation (Tally's Bill-Wise / Against Ref)
+- Invoice Immutability Guard
+- No Auto-FIFO Payment Allocation
+- Frontend — Customer Dialog with Allocate Tab
 
 ### Phase 3: System Hardening & Reporting (Completed - Mar 13 2026)
-
-#### 6. Telegram Alert Retry Mechanism
-- Exponential backoff with 3 retries
-- Handles rate limiting (HTTP 429), network errors, and timeouts
-- Each retry doubles the wait time (1s, 2s, 4s)
-- File: `backend/src/services/telegramAlert.js`
-
-#### 7. FOR UPDATE Row-Level Locks (Concurrency Protection)
-- Receipt allocation: locks payment and order rows during allocation
-- Payment toggle: locks order row to prevent concurrent status changes
-- Payment creation: locks order row when processing payment against invoice
-- Optimistic concurrency check: verifies status hasn't changed since initial read
-- Files: `controller/receiptAllocation.js`, `controller/order.js`, `controller/payment.js`
-
-#### 8. Posting Matrix Reference Page
-- New tab in Ledger Module showing voucher type reference
-- 7 voucher types documented
-- File: `frontend/src/components/admin/ledger/LedgerModule.jsx` (tab 7)
-
-#### 9. Ledger Module (9 tabs)
-- Dashboard (health check, drift monitor, migration control, **Forensic Audit**)
-- Chart of Accounts (19+ accounts, clickable rows)
-- Trial Balance
-- Profit & Loss
-- Balance Sheet
-- Reconciliation
-- Journal Entries
-- Posting Matrix (voucher type reference)
-- Account Ledger (Tally's core feature)
-
-#### 10. Account Ledger Page (Tally-style)
-- Click any account in Chart of Accounts to open its full ledger
-- Transaction table with running balance
-- Date range filter (defaults to Indian FY)
-
-#### 11. Indian Financial Year Date Fix
-- FY date range now correctly defaults to Apr 1 of PREVIOUS year when before April
+- Telegram Alert Retry Mechanism
+- FOR UPDATE Row-Level Locks (Concurrency Protection)
+- Posting Matrix Reference Page
+- Ledger Module (9 tabs)
+- Account Ledger Page (Tally-style)
+- Indian Financial Year Date Fix
 
 ### Phase 4: Automation Removal (Completed - Mar 14 2026)
-
-#### CRITICAL: Removed All Automatic Reconciliation
-- **DELETED** `backfillAllocations`, `reconcileAll` methods
-- **DELETED** routes `POST /api/receipts/backfill-allocations`, `POST /api/receipts/reconcile`
-- Only remaining allocation path: `POST /api/receipts/allocate` (explicit user action)
+- DELETED backfillAllocations, reconcileAll methods
+- Only remaining allocation path: POST /api/receipts/allocate
 
 ### Phase 5: Forensic Audit Tool (Completed - Mar 15 2026)
-
-#### Forensic Audit Tool — Replaces All Previous Data Integrity Tools
-- **REMOVED** old "Undo Auto-Reconciliation" card from Dashboard
-- **REMOVED** old "Reconstruct Order States" card from Dashboard
-- **NEW** single "Forensic Audit" card with 3 diagnostic categories:
-  1. **Financial Contradictions** — status vs paidAmount/dueAmount mismatch
-  2. **Paid Without Evidence** — status='paid' but no cash journal, no toggle log, no payment
-  3. **Change Attribution** — who toggled what (from audit logs)
-- Read-only scan: `GET /api/data-audit/forensic`
-- User-driven fix: `POST /api/data-audit/fix` with orderIds, action, changedBy
-- Every fix creates audit log (satisfies user's golden rule)
-- Backward compat: old /data-audit/reconstruct endpoints still work
-- Files: `backend/src/controller/dataIntegrityAudit.js`, `frontend/src/components/admin/ledger/LedgerModule.jsx`
+- Forensic Audit card with 3 diagnostic categories
+- Read-only scan + user-driven fix
 
 ### Phase 6: Payment Recovery Script (Completed - Mar 15 2026)
-
-#### 8-Step Payment Status Recovery
-Implements the user's complete recovery specification:
-1. **Step 1 (Backup):** UI shows pg_dump reminder before any execution
-2. **Steps 2-4 (Recalculate):** Rebuild paidAmount/dueAmount/paymentStatus from `receipt_allocations` (authoritative source)
-3. **Step 5 (No-allocation resets):** Paid orders without allocations → reset to unpaid, **cash sales automatically excluded** (no change evidence = legitimate cash sale)
-4. **Step 6 (Audit logging):** Every recovery change creates `DATA_RECOVERY` / `PAYMENT_STATUS_REBUILD` audit log
-5. **Step 7 (Post-repair validation):** 4 checks: no paid+zero, no negative due, sum=total, status matches amounts
-6. **Step 8 (Prevention):** Toggle `unpaid→paid` now ALWAYS creates payment record (`PAY-TOGGLE-xxx`) + receipt allocation. No more "phantom paid" orders without payment trail.
-
-#### API Endpoints
-- `GET /api/data-audit/recovery/preview` — Dry run showing all changes
-- `POST /api/data-audit/recovery/execute` — Execute with audit trail (requires changedBy)
-- `GET /api/data-audit/recovery/validate` — Post-repair validation (4 checks)
-
-#### Toggle Endpoint Modified (Step 8 Prevention)
-- `PATCH /api/orders/:orderId/payment-status` (unpaid→paid):
-  - Creates payment record (`PAY-TOGGLE-xxx`, referenceType: 'order')
-  - Creates receipt_allocation linking payment to order
-  - Updates order fields
-  - Creates audit log + ledger journal
-- `PATCH /api/orders/:orderId/payment-status` (paid→unpaid):
-  - Soft-deletes receipt allocations
-  - Hard-deletes linked payment
-  - Updates order fields
-  - Creates audit log + ledger journal
+- 8-Step Payment Status Recovery
+- Toggle endpoint hardened (Step 8)
 
 ### Phase 7: Forensic Classification (Completed - Mar 15 2026)
+- 5-Category Order Classification Based on Payment Evidence
+- Repair with Dry-Run
 
-#### 5-Category Order Classification Based on Payment Evidence
-Classifies every order into one of:
-1. **RECEIPT_PAID** — `receipt_allocations >= order.total`
-2. **PARTIAL_PAID** — `0 < receipt_allocations < order.total`
-3. **CASH_SALE** — created as paid, has invoice journal, no toggle history
-4. **CREDIT_UNPAID** — created unpaid, no receipt exists
-5. **SUSPICIOUS_PAID** — marked paid but zero evidence (no allocation, no payment, no journal, no toggle)
-
-Each order shows: current values, expected values, evidence sources, fieldCorrect flag, needsRepair flag.
-
-#### Repair with Dry-Run
-- `GET /api/data-audit/classify` — Read-only classification report
-- `POST /api/data-audit/repair/preview` — Dry-run showing exact changes per category
-- `POST /api/data-audit/repair/execute` — Execute with audit trail (requires changedBy)
-- Post-repair validation: 4 integrity checks (paid+zero, negative due, sum=total, status consistency)
-
-Files: `backend/src/controller/forensicClassification.js`, `frontend/src/components/admin/ledger/LedgerModule.jsx`
+### Phase 8: Classification Bug Fix (Completed - Mar 15 2026)
+- **FIXED:** Changed advance payment matching from UUID-based to name-based
+- `pay_advance` CTE now joins on `LOWER(TRIM(customerName)) = LOWER(TRIM(partyName))`
+- Added `pay_any_by_name` CTE as fallback for ALL payment types by customer name
+- Added performance index on `LOWER(TRIM(partyName))`
+- This resolves the false-positive SUSPICIOUS_PAID issue for customers with On Account payments
 
 ### Earlier Completed Work
 - Full-stack invoicing system with orders, payments, customers, suppliers
-- Double-entry ledger infrastructure (accounts, journal_batches, ledger_entries)
+- Double-entry ledger infrastructure
 - Audit logging system
 - PDF invoice generation
 - Telegram alerts (daily summary, fraud detection)
@@ -173,26 +70,24 @@ Files: `backend/src/controller/forensicClassification.js`, `frontend/src/compone
 
 ## Prioritized Backlog
 
-### P0 — Data Corruption (User's Local DB)
-- User's local database has invoices incorrectly marked as "paid" without payment records
-- **Forensic Audit tool built** — scans all orders for evidence mismatches
-- **Payment Recovery Script built** — rebuilds paidAmount/dueAmount/paymentStatus from receipt_allocations
-- **Toggle endpoint hardened (Step 8)** — unpaid→paid now creates payment + allocation. No more phantom status changes.
-- User needs to run recovery on their local DB after backup
+### P0 — Data Corruption Fix (RESOLVED)
+- Forensic classification now correctly uses name-based matching for advance payments
+- User needs to verify on local DB
 
-### P1 — Customer Duplication Bug Verification
-- LATERAL join fix applied but user hasn't confirmed it works on their local DB
+### P1 — Upcoming
+- Build frontend UI for core ledger reports (Account Ledger, Trial Balance, P&L, Balance Sheet)
+- Implement Telegram alert retry mechanism
+- Review FOR UPDATE row-level locks for concurrency
 
-### P2 - Future
-- Implement Role-Based Access Control (RBAC)
-- Financial period lock (prevent changes to locked periods)
+### P2 — Future
+- Role-Based Access Control (RBAC)
+- Financial period lock
 - Reconciliation dashboard (visual tool)
 - Ledger recalculation utility
-- Backup/restore verification
 
-### P3 - Backlog
+### P3 — Backlog
 - Credit Note / Debit Note / Write-off voucher types
-- Adjustment entry UI (journal entries instead of direct invoice mutation)
+- Adjustment entry UI
 
 ## Test Credentials
 - Username: `admin`
@@ -202,27 +97,18 @@ Files: `backend/src/controller/forensicClassification.js`, `frontend/src/compone
 
 ## Key API Endpoints
 - `POST /api/auth/login`
-- `GET /api/customers/with-balance` — Ledger-authoritative balances
-- `GET /api/customers/:id/transactions` — Derived invoice dues
-- `POST /api/receipts/allocate` — Allocate receipt against invoices
-- `GET /api/receipts/:paymentId/allocations`
-- `GET /api/invoices/:orderId/allocations`
-- `DELETE /api/receipts/allocations/:allocationId`
-- `POST /api/orders` — Create invoice
-- `PUT /api/orders/:id` — Update (financial fields blocked)
-- `POST /api/payments` — Record payment
-- `GET /api/ledger/reports/trial-balance`
-- `GET /api/ledger/reports/profit-loss`
-- `GET /api/ledger/reports/balance-sheet`
-- `POST /api/ledger/accounts/initialize`
-- `GET /api/ledger/migration/reconciliation`
-- **NEW** `GET /api/data-audit/forensic` — Forensic scan (read-only, 3 categories)
-- **NEW** `POST /api/data-audit/fix` — Fix selected orders (requires orderIds, action, changedBy)
-- **NEW** `GET /api/data-audit/recovery/preview` — Recovery dry run (Steps 2-5)
-- **NEW** `POST /api/data-audit/recovery/execute` — Execute recovery (requires changedBy)
-- **NEW** `GET /api/data-audit/recovery/validate` — Post-repair validation (Step 7, 4 checks)
-- **MODIFIED** `PATCH /api/orders/:orderId/payment-status` — Toggle now creates payment+allocation on unpaid→paid (Step 8)
+- `GET /api/data-audit/classify` — Forensic classification (name-based matching)
+- `POST /api/data-audit/repair/preview` — Dry-run repair
+- `POST /api/data-audit/repair/execute` — Execute repair with audit trail
+- `GET /api/data-audit/diagnose` — Diagnostic endpoint
+- `GET /api/data-audit/forensic` — Forensic scan (read-only)
+- `POST /api/data-audit/fix` — Fix selected orders
+- `GET /api/data-audit/recovery/preview` — Recovery dry run
+- `POST /api/data-audit/recovery/execute` — Execute recovery
+- `GET /api/data-audit/recovery/validate` — Post-repair validation
+- `PATCH /api/orders/:orderId/payment-status` — Toggle (creates payment+allocation)
 
-### REMOVED Endpoints
-- ~~`POST /api/receipts/reconcile`~~ — Automatic FIFO reconciliation (DELETED)
-- ~~`POST /api/receipts/backfill-allocations`~~ — Automatic FIFO backfill (DELETED)
+## Key Files
+- `backend/src/controller/forensicClassification.js` — Classification SQL with name-based matching
+- `backend/src/routes/dataIntegrityAudit.js` — Route definitions
+- `frontend/src/components/admin/ledger/LedgerModule.jsx` — Forensic tool UI
