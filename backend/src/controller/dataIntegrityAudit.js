@@ -5,6 +5,9 @@
  * Compares each order's stored paidAmount/paymentStatus against
  * actual evidence (direct payments + receipt allocations).
  * 
+ * Can specifically identify CREDIT SALE orders that were wrongly marked "paid"
+ * without any biller intervention, by cross-referencing journal_batches.
+ * 
  * ALL fixes require explicit user authorization — no automatic corrections.
  */
 const db = require('../models');
@@ -17,16 +20,16 @@ module.exports = {
      * 
      * READ-ONLY — no data is modified.
      * 
-     * Uses batch queries for performance (handles thousands of orders).
-     * 
      * Query params:
      *   - customerId (optional): filter to a specific customer
      *   - onlyMismatches (optional, default true): only show orders where stored != actual
+     *   - creditSalesOnly (optional, default false): only show credit sales that were wrongly marked paid
      */
     auditOrders: async (req, res) => {
         try {
-            const { customerId, onlyMismatches = 'true' } = req.query;
+            const { customerId, onlyMismatches = 'true', creditSalesOnly = 'false' } = req.query;
             const showOnlyMismatches = onlyMismatches !== 'false';
+            const showCreditSalesOnly = creditSalesOnly === 'true';
 
             // Build order filter
             const orderWhere = { isDeleted: false };
@@ -45,13 +48,13 @@ module.exports = {
                 return res.status(200).json({
                     status: 200,
                     message: 'No orders found.',
-                    data: { totalScanned: 0, totalMismatched: 0, orders: [] }
+                    data: { totalScanned: 0, totalMismatched: 0, creditSalesCorrupted: 0, orders: [] }
                 });
             }
 
             const orderIds = orders.map(o => o.id);
 
-            // Batch 2: Get ALL direct payments referencing orders, in one query
+            // Batch 2: Get ALL direct payments referencing orders
             const paymentWhere = {
                 referenceType: 'order',
                 referenceId: { [db.Sequelize.Op.in]: orderIds },
@@ -61,15 +64,13 @@ module.exports = {
                 paymentWhere.isDeleted = false;
             }
             const allPayments = await db.payment.findAll({ where: paymentWhere, raw: true });
-
-            // Index payments by referenceId (orderId)
             const paymentsByOrder = {};
             for (const p of allPayments) {
                 if (!paymentsByOrder[p.referenceId]) paymentsByOrder[p.referenceId] = [];
                 paymentsByOrder[p.referenceId].push(p);
             }
 
-            // Batch 3: Get ALL receipt allocations for these orders, in one query
+            // Batch 3: Get ALL receipt allocations
             let allocationsByOrder = {};
             try {
                 const allAllocations = await db.receiptAllocation.findAll({
@@ -80,14 +81,48 @@ module.exports = {
                     if (!allocationsByOrder[a.orderId]) allocationsByOrder[a.orderId] = [];
                     allocationsByOrder[a.orderId].push(a);
                 }
+            } catch (e) { /* table might not exist */ }
+
+            // Batch 4: Get journal_batches to identify cash sales vs credit sales
+            // INVOICE_CASH = was created with paidAmount > 0 (cash/partial sale at billing)
+            // INVOICE = could be cash or credit, but if combined with no INVOICE_CASH, it's pure credit
+            let cashSaleOrderIds = new Set();
+            try {
+                const cashJournals = await db.journalBatch.findAll({
+                    where: {
+                        referenceType: 'INVOICE_CASH',
+                        referenceId: { [db.Sequelize.Op.in]: orderIds }
+                    },
+                    attributes: ['referenceId'],
+                    raw: true
+                });
+                cashSaleOrderIds = new Set(cashJournals.map(j => j.referenceId));
             } catch (e) {
-                // receipt_allocations table might not exist
+                // journal_batches might not exist or INVOICE_CASH type might not be present
+                // Fallback: check old ledger entries for Cash Account debits
+                try {
+                    const cashLedger = await db.ledger.findOne({ where: { name: 'Cash Account' }, raw: true });
+                    if (cashLedger) {
+                        const cashEntries = await db.ledgerEntry.findAll({
+                            where: {
+                                ledgerId: cashLedger.id,
+                                referenceType: 'order',
+                                referenceId: { [db.Sequelize.Op.in]: orderIds },
+                                debit: { [db.Sequelize.Op.gt]: 0 }
+                            },
+                            attributes: ['referenceId'],
+                            raw: true
+                        });
+                        cashSaleOrderIds = new Set(cashEntries.map(e => e.referenceId));
+                    }
+                } catch (e2) { /* no fallback available */ }
             }
 
-            // Now process in memory — no more DB calls
+            // Process in memory
             const mismatches = [];
             let totalScanned = 0;
             let totalMismatched = 0;
+            let creditSalesCorrupted = 0;
 
             for (const order of orders) {
                 totalScanned++;
@@ -98,57 +133,69 @@ module.exports = {
                 const allocations = allocationsByOrder[order.id] || [];
                 const allocationTotal = allocations.reduce((s, a) => s + Number(a.amount || 0), 0);
 
-                // Actual evidence-based paid amount (take the higher of the two sources)
                 const evidencePaid = Math.max(directPaymentTotal, allocationTotal);
                 const orderTotal = Number(order.total) || 0;
                 const storedPaid = Number(order.paidAmount) || 0;
 
-                // Compute what status SHOULD be
                 let correctStatus = 'unpaid';
                 if (evidencePaid >= orderTotal && orderTotal > 0) correctStatus = 'paid';
                 else if (evidencePaid > 0) correctStatus = 'partial';
 
                 const correctDue = Math.max(0, orderTotal - evidencePaid);
 
-                // Check if there's a mismatch
                 const paidMismatch = Math.abs(storedPaid - evidencePaid) > 0.01;
                 const statusMismatch = order.paymentStatus !== correctStatus;
                 const hasMismatch = paidMismatch || statusMismatch;
 
+                // Determine if this was a cash sale or credit sale
+                const wasCashSale = cashSaleOrderIds.has(order.id);
+                const isCreditSaleCorrupted = !wasCashSale
+                    && order.paymentStatus === 'paid'
+                    && evidencePaid < orderTotal
+                    && hasMismatch;
+
+                if (isCreditSaleCorrupted) creditSalesCorrupted++;
                 if (hasMismatch) totalMismatched++;
 
-                if (!showOnlyMismatches || hasMismatch) {
-                    mismatches.push({
-                        orderId: order.id,
-                        orderNumber: order.orderNumber,
-                        orderDate: order.orderDate,
-                        customerName: order.customerName,
-                        customerId: order.customerId,
-                        orderTotal,
-                        stored: {
-                            paidAmount: storedPaid,
-                            dueAmount: Number(order.dueAmount),
-                            paymentStatus: order.paymentStatus
-                        },
-                        evidence: {
-                            directPaymentTotal,
-                            allocationTotal,
-                            evidencePaid,
-                            correctDue,
-                            correctStatus
-                        },
-                        directPaymentCount: directPayments.length,
-                        hasMismatch
-                    });
-                }
+                // Filter logic
+                if (showCreditSalesOnly && !isCreditSaleCorrupted) continue;
+                if (!showCreditSalesOnly && showOnlyMismatches && !hasMismatch) continue;
+
+                mismatches.push({
+                    orderId: order.id,
+                    orderNumber: order.orderNumber,
+                    orderDate: order.orderDate,
+                    customerName: order.customerName,
+                    customerId: order.customerId,
+                    orderTotal,
+                    stored: {
+                        paidAmount: storedPaid,
+                        dueAmount: Number(order.dueAmount),
+                        paymentStatus: order.paymentStatus
+                    },
+                    evidence: {
+                        directPaymentTotal,
+                        allocationTotal,
+                        evidencePaid,
+                        correctDue,
+                        correctStatus
+                    },
+                    directPaymentCount: directPayments.length,
+                    hasMismatch,
+                    wasCashSale,
+                    isCreditSaleCorrupted
+                });
             }
 
             return res.status(200).json({
                 status: 200,
-                message: `Scanned ${totalScanned} orders. Found ${totalMismatched} with mismatched payment data.`,
+                message: showCreditSalesOnly
+                    ? `Found ${creditSalesCorrupted} credit sale orders wrongly marked as paid (out of ${totalScanned} total).`
+                    : `Scanned ${totalScanned} orders. Found ${totalMismatched} mismatches (${creditSalesCorrupted} are corrupted credit sales).`,
                 data: {
                     totalScanned,
                     totalMismatched,
+                    creditSalesCorrupted,
                     orders: mismatches
                 }
             });
@@ -180,7 +227,6 @@ module.exports = {
 
             const fixAll = !orderIds || orderIds.length === 0 || (orderIds.length === 1 && orderIds[0] === 'all');
 
-            // Build order filter
             const orderWhere = { isDeleted: false };
             if (!fixAll) {
                 orderWhere.id = { [db.Sequelize.Op.in]: orderIds };
@@ -195,7 +241,7 @@ module.exports = {
 
                 const allOrderIds = orders.map(o => o.id);
 
-                // Batch: Get all direct payments for these orders
+                // Batch payments
                 const paymentWhere = {
                     referenceType: 'order',
                     referenceId: { [db.Sequelize.Op.in]: allOrderIds },
@@ -211,7 +257,7 @@ module.exports = {
                     paymentsByOrder[p.referenceId].push(p);
                 }
 
-                // Batch: Get all allocations
+                // Batch allocations
                 let allocationsByOrder = {};
                 try {
                     const allAllocations = await db.receiptAllocation.findAll({

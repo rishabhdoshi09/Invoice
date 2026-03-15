@@ -56,6 +56,7 @@ const LedgerModule = () => {
     const [fixRunning, setFixRunning] = useState(false);
     const [fixResult, setFixResult] = useState(null);
     const [selectedFixIds, setSelectedFixIds] = useState([]);
+    const [creditSalesOnly, setCreditSalesOnly] = useState(true);
 
     const getAuthHeader = () => ({
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
@@ -283,7 +284,7 @@ const LedgerModule = () => {
             setError(null);
             setFixResult(null);
             setSelectedFixIds([]);
-            const { data } = await axios.get('/api/data-audit/orders?onlyMismatches=true', getAuthHeader());
+            const { data } = await axios.get(`/api/data-audit/orders?onlyMismatches=true&creditSalesOnly=${creditSalesOnly}`, getAuthHeader());
             setAuditData(data.data);
             if (data.data.totalMismatched === 0) {
                 setSuccess('All orders have correct payment data. No mismatches found.');
@@ -716,6 +717,27 @@ const LedgerModule = () => {
                             Scans every order and compares stored paidAmount/status against <strong>actual payment records</strong>.
                             Shows orders where the stored data doesn't match reality. You choose which to fix.
                         </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#4e342e' }}>Filter:</Typography>
+                            <Button
+                                data-testid="filter-credit-only"
+                                size="small"
+                                variant={creditSalesOnly ? 'contained' : 'outlined'}
+                                onClick={() => setCreditSalesOnly(true)}
+                                sx={creditSalesOnly ? { bgcolor: '#c62828', '&:hover': { bgcolor: '#b71c1c' } } : { borderColor: '#c62828', color: '#c62828' }}
+                            >
+                                Credit Sales Wrongly Paid
+                            </Button>
+                            <Button
+                                data-testid="filter-all-mismatches"
+                                size="small"
+                                variant={!creditSalesOnly ? 'contained' : 'outlined'}
+                                onClick={() => setCreditSalesOnly(false)}
+                                sx={!creditSalesOnly ? { bgcolor: '#c62828', '&:hover': { bgcolor: '#b71c1c' } } : { borderColor: '#c62828', color: '#c62828' }}
+                            >
+                                All Mismatches
+                            </Button>
+                        </Box>
                         <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
                             <Button
                                 data-testid="audit-scan-btn"
@@ -753,10 +775,12 @@ const LedgerModule = () => {
                             )}
                         </Box>
 
-                        {/* Audit summary */}
                         {auditData && (
                             <Alert severity={auditData.totalMismatched > 0 ? 'warning' : 'success'} sx={{ mb: 2 }} data-testid="audit-summary">
                                 Scanned {auditData.totalScanned} orders. <strong>{auditData.totalMismatched} mismatches</strong> found.
+                                {auditData.creditSalesCorrupted > 0 && (
+                                    <> — <strong style={{ color: '#c62828' }}>{auditData.creditSalesCorrupted} credit sales wrongly marked as paid</strong> (no receipt recorded by you or biller).</>
+                                )}
                             </Alert>
                         )}
 
@@ -776,6 +800,7 @@ const LedgerModule = () => {
                                             </TableCell>
                                             <TableCell>Invoice</TableCell>
                                             <TableCell>Customer</TableCell>
+                                            <TableCell>Type</TableCell>
                                             <TableCell align="right">Total</TableCell>
                                             <TableCell align="right">Stored Paid</TableCell>
                                             <TableCell align="right">Stored Status</TableCell>
@@ -800,6 +825,15 @@ const LedgerModule = () => {
                                                 </TableCell>
                                                 <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{o.orderNumber}</TableCell>
                                                 <TableCell>{o.customerName}</TableCell>
+                                                <TableCell>
+                                                    <Chip size="small"
+                                                        label={o.isCreditSaleCorrupted ? 'CREDIT (corrupted)' : o.wasCashSale ? 'Cash' : 'Credit'}
+                                                        sx={{
+                                                            bgcolor: o.isCreditSaleCorrupted ? '#ffcdd2' : o.wasCashSale ? '#e8f5e9' : '#fff3e0',
+                                                            color: o.isCreditSaleCorrupted ? '#b71c1c' : o.wasCashSale ? '#2e7d32' : '#e65100',
+                                                            fontWeight: 700
+                                                        }} />
+                                                </TableCell>
                                                 <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatCurrency(o.orderTotal)}</TableCell>
                                                 <TableCell align="right" sx={{ fontFamily: 'monospace', color: o.hasMismatch ? '#c62828' : 'inherit', fontWeight: o.hasMismatch ? 700 : 400 }}>
                                                     {formatCurrency(o.stored.paidAmount)}
