@@ -102,11 +102,20 @@ const CLASSIFICATION_SQL = `
     SELECT
         b.*,
         COALESCE(tc.cnt, 0) AS toggle_log_count,
+        -- Time between creation and last update (seconds)
+        EXTRACT(EPOCH FROM (b."updatedAt" - b."createdAt")) AS age_diff_seconds,
         CASE
             WHEN b.pre_class != 'NEEDS_AUDIT_CHECK' THEN b.pre_class
+            -- Rule 2: audit log shows manual toggle to paid
             WHEN COALESCE(tc.cnt, 0) > 0 THEN 'TOGGLED_PAID'
+            -- Rule 3: ORDER CREATE log proves it was created as paid
             WHEN cs.created_as = 'paid' THEN 'CASH_SALE'
+            -- Rule 3b: Invoice journal exists
             WHEN COALESCE(je.jb_count, 0) > 0 THEN 'CASH_SALE'
+            -- Rule 3c: Order was never modified after creation (updatedAt ≈ createdAt within 5 min)
+            -- These are old cash sales from before evidence systems existed
+            WHEN EXTRACT(EPOCH FROM (b."updatedAt" - b."createdAt")) < 300 THEN 'CASH_SALE'
+            -- Rule 4: Paid, modified AFTER creation, but zero evidence = suspicious
             WHEN b.total > 0 THEN 'SUSPICIOUS_PAID'
             ELSE 'OTHER'
         END AS classification
