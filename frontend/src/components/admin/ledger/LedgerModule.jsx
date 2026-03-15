@@ -67,6 +67,7 @@ const LedgerModule = () => {
     // FIFO Reconstruct states
     const [fifoResult, setFifoResult] = useState(null);
     const [fifoRunning, setFifoRunning] = useState(false);
+    const [backupRunning, setBackupRunning] = useState(false);
 
     const getAuthHeader = () => ({
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
@@ -949,14 +950,17 @@ const LedgerModule = () => {
                             <Button
                                 data-testid="db-backup-btn"
                                 variant="contained"
-                                startIcon={<AccountBalance />}
+                                startIcon={backupRunning ? <CircularProgress size={16} color="inherit" /> : <AccountBalance />}
+                                disabled={backupRunning}
                                 onClick={async () => {
                                     try {
+                                        setBackupRunning(true);
                                         setSuccess(null);
                                         setError(null);
                                         const response = await axios.get('/api/data-audit/backup', {
                                             ...getAuthHeader(),
-                                            responseType: 'blob'
+                                            responseType: 'blob',
+                                            timeout: 120000
                                         });
                                         const url = window.URL.createObjectURL(new Blob([response.data]));
                                         const link = document.createElement('a');
@@ -970,12 +974,20 @@ const LedgerModule = () => {
                                         window.URL.revokeObjectURL(url);
                                         setSuccess('Backup downloaded successfully.');
                                     } catch (err) {
-                                        setError('Backup failed: ' + (err.response?.data?.message || err.message));
+                                        let msg = 'Backup failed.';
+                                        if (err.response?.data instanceof Blob) {
+                                            try { msg = await err.response.data.text(); } catch (_) {}
+                                        } else {
+                                            msg = err.response?.data?.message || err.message;
+                                        }
+                                        setError('Backup failed: ' + msg);
+                                    } finally {
+                                        setBackupRunning(false);
                                     }
                                 }}
                                 sx={{ bgcolor: '#1565c0', '&:hover': { bgcolor: '#0d47a1' } }}
                             >
-                                Download DB Backup
+                                {backupRunning ? 'Downloading...' : 'Download DB Backup'}
                             </Button>
                             <Button
                                 data-testid="fifo-dry-run-btn"
