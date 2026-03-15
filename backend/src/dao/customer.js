@@ -180,6 +180,31 @@ module.exports = {
             ordersWithDerivedDue.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             paymentsWithAllocation.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
+            // Get toggle history (payment status changes) for this customer's orders
+            let toggleHistory = [];
+            if (orderIds.length > 0) {
+                try {
+                    const orderIdStrs = orderIds.map(String);
+                    const [toggles] = await db.sequelize.query(`
+                        SELECT 
+                            al."entityId" AS "orderId",
+                            al."entityName" AS "orderNumber",
+                            al."userName",
+                            al."userRole",
+                            al."oldValues"->>'paymentStatus' AS "fromStatus",
+                            al."newValues"->>'paymentStatus' AS "toStatus",
+                            al."description",
+                            al."createdAt"
+                        FROM audit_logs al
+                        WHERE al."entityType" IN ('ORDER_PAYMENT_STATUS', 'DATA_RECOVERY')
+                          AND al."entityId" IN (:orderIdStrs)
+                        ORDER BY al."createdAt" DESC
+                        LIMIT 100
+                    `, { replacements: { orderIdStrs } });
+                    toggleHistory = toggles;
+                } catch (e) { /* audit_logs may not exist */ }
+            }
+
             return {
                 ...customer.toJSON(),
                 totalDebit,
@@ -187,7 +212,8 @@ module.exports = {
                 balance,
                 orders: ordersWithDerivedDue,
                 payments: paymentsWithAllocation,
-                allocations
+                allocations,
+                toggleHistory
             };
         } catch (error) {
             console.log(error);

@@ -1202,6 +1202,7 @@ export const ListCustomers = () => {
                                 <Tab label={`Invoices (${detailsDialog.customer.orders?.length || 0})`} />
                                 <Tab label={`Receipts (${detailsDialog.customer.payments?.length || 0})`} />
                                 <Tab label="Allocate" />
+                                <Tab label={`Toggle History (${detailsDialog.customer.toggleHistory?.length || 0})`} data-testid="customer-toggle-history-tab" />
                                 <Tab label="Notes" data-testid="customer-notes-tab" />
                             </Tabs>
 
@@ -1433,8 +1434,68 @@ export const ListCustomers = () => {
                                 </Box>
                             )}
 
-                            {/* Tab 3: Customer Notes */}
+                            {/* Tab 3: Toggle History */}
                             {detailsDialog.tab === 3 && (
+                                <TableContainer sx={{ maxHeight: 350, mt: 1 }}>
+                                    <Table size="small" stickyHeader>
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableCell sx={{ fontWeight: 'bold', fontSize: 12 }}>Date</TableCell>
+                                                <TableCell sx={{ fontWeight: 'bold', fontSize: 12 }}>Order #</TableCell>
+                                                <TableCell sx={{ fontWeight: 'bold', fontSize: 12 }}>Changed By</TableCell>
+                                                <TableCell sx={{ fontWeight: 'bold', fontSize: 12 }}>From</TableCell>
+                                                <TableCell sx={{ fontWeight: 'bold', fontSize: 12 }}>To</TableCell>
+                                                <TableCell sx={{ fontWeight: 'bold', fontSize: 12 }}>Details</TableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {(detailsDialog.customer.toggleHistory || []).length === 0 ? (
+                                                <TableRow>
+                                                    <TableCell colSpan={6} align="center" sx={{ color: 'text.secondary', py: 4 }}>
+                                                        No toggle history found for this customer's orders
+                                                    </TableCell>
+                                                </TableRow>
+                                            ) : (
+                                                detailsDialog.customer.toggleHistory.map((t, idx) => (
+                                                    <TableRow key={idx} sx={{ 
+                                                        bgcolor: (!t.userName || t.userName.trim() === '') ? '#fff3e0' : '#e8f5e9'
+                                                    }}>
+                                                        <TableCell sx={{ fontSize: 11 }}>
+                                                            {new Date(t.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
+                                                            <br/>
+                                                            <span style={{ color: '#999', fontSize: 10 }}>
+                                                                {new Date(t.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                                            </span>
+                                                        </TableCell>
+                                                        <TableCell sx={{ fontSize: 11, fontFamily: 'monospace' }}>{t.orderNumber || '—'}</TableCell>
+                                                        <TableCell sx={{ fontSize: 11 }}>
+                                                            <span style={{ 
+                                                                fontWeight: 600,
+                                                                color: (!t.userName || t.userName.trim() === '') ? '#e65100' : '#2e7d32'
+                                                            }}>
+                                                                {t.userName && t.userName.trim() ? t.userName : 'SYSTEM (auto)'}
+                                                            </span>
+                                                            {t.userRole && <span style={{ fontSize: 9, color: '#999', display: 'block' }}>{t.userRole}</span>}
+                                                        </TableCell>
+                                                        <TableCell sx={{ fontSize: 11 }}>
+                                                            <span style={{ color: '#d32f2f' }}>{t.fromStatus || '—'}</span>
+                                                        </TableCell>
+                                                        <TableCell sx={{ fontSize: 11 }}>
+                                                            <span style={{ color: '#2e7d32' }}>{t.toStatus || '—'}</span>
+                                                        </TableCell>
+                                                        <TableCell sx={{ fontSize: 10, color: 'text.secondary', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                            {t.description || '—'}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
+                            )}
+
+                            {/* Tab 4: Customer Notes */}
+                            {detailsDialog.tab === 4 && (
                                 <Box sx={{ mt: 2 }}>
                                     <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary' }}>
                                         Track dues, payment promises, or any notes for this customer.
