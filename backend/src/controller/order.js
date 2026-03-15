@@ -848,7 +848,7 @@ module.exports = {
                     }, { transaction });
                 }
                 
-                // When marking as UNPAID (reversing): Clean up allocations and payment entries
+                // When marking as UNPAID (reversing): Clean up ONLY toggle-created allocations and payments
                 if (newStatus === 'unpaid' && oldStatus === 'paid') {
                     // Remove receipt allocations for this order
                     try {
@@ -859,14 +859,18 @@ module.exports = {
                     } catch (allocErr) {
                         console.warn('[ALLOCATION] Could not clean up allocations on toggle:', allocErr.message);
                     }
-                    // Find and delete any payment entries linked to this order
-                    await db.payment.destroy({
-                        where: {
-                            referenceId: orderId,
-                            referenceType: 'order'
-                        },
-                        transaction
-                    });
+                    // Soft-delete ONLY toggle-created payments (PAY-TOGGLE-*), not legitimate payments
+                    await db.payment.update(
+                        { isDeleted: true, deletedAt: new Date(), deletedBy: req.user?.id, deletedByName: changedByTrimmed },
+                        {
+                            where: {
+                                referenceId: orderId,
+                                referenceType: 'order',
+                                paymentNumber: { [db.Sequelize.Op.like]: 'PAY-TOGGLE-%' }
+                            },
+                            transaction
+                        }
+                    );
                 }
 
                 // Update daily summary when payment status changes
