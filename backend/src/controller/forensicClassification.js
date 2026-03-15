@@ -45,7 +45,8 @@ module.exports = {
                         COALESCE(al.toggle_log_count, 0)          AS toggle_log_count,
                         al.last_toggle_to,
                         al.last_toggle_by,
-                        al.last_toggle_at
+                        al.last_toggle_at,
+                        cr.created_as_status
 
                     FROM orders o
 
@@ -96,29 +97,49 @@ module.exports = {
                         WHERE "entityId" = o.id::text AND "entityType" = 'ORDER_PAYMENT_STATUS'
                     ) al ON true
 
+                    -- Evidence 6: ORDER CREATE audit log → proves original creation status
+                    LEFT JOIN LATERAL (
+                        SELECT "newValues"->>'paymentStatus' AS created_as_status
+                        FROM audit_logs
+                        WHERE "entityId" = o.id::text
+                          AND "entityType" = 'ORDER'
+                          AND "action" = 'CREATE'
+                          AND "newValues"->>'paymentStatus' IS NOT NULL
+                        ORDER BY "createdAt" ASC LIMIT 1
+                    ) cr ON true
+
                     WHERE o."isDeleted" = false
                 )
                 SELECT *,
                     CASE
+                        -- Rule 1: receipt allocations exist → valid paid / partial
                         WHEN alloc_total >= total AND total > 0
                             THEN 'RECEIPT_PAID'
                         WHEN alloc_total > 0 AND alloc_total < total AND total > 0
                             THEN 'PARTIAL_PAID'
+
+                        -- Rule 2: audit log shows manual toggle to paid → valid paid
+                        WHEN "paymentStatus" = 'paid' AND toggle_log_count > 0
+                            THEN 'TOGGLED_PAID'
+
+                        -- Rule 3: ORDER CREATE log proves it was created as paid → cash sale
+                        WHEN "paymentStatus" = 'paid' AND created_as_status = 'paid'
+                            THEN 'CASH_SALE'
+
+                        -- Rule 4: paid but NO receipt, NO payment, NO toggle log → suspicious
+                        -- Sub-case A: creation log proves it was UNPAID at birth → definitely suspicious
+                        -- Sub-case B: no creation log at all → suspicious (can't prove it was cash sale)
                         WHEN "paymentStatus" = 'paid'
                              AND alloc_total = 0 AND pay_total = 0
-                             AND toggle_log_count = 0 AND toggle_journal_count = 0
+                             AND toggle_log_count = 0
                              AND total > 0
-                            THEN CASE
-                                WHEN inv_journal_count > 0 THEN 'CASH_SALE'
-                                ELSE 'SUSPICIOUS_PAID'
-                            END
+                            THEN 'SUSPICIOUS_PAID'
+
+                        -- Unpaid / partial with no receipts → credit sale
                         WHEN "paymentStatus" IN ('unpaid','partial')
                              AND alloc_total = 0 AND pay_total = 0
                             THEN 'CREDIT_UNPAID'
-                        WHEN toggle_log_count > 0 AND "paymentStatus" = 'paid' AND alloc_total = 0
-                            THEN 'TOGGLED_PAID'
-                        WHEN toggle_log_count > 0 AND "paymentStatus" = 'unpaid'
-                            THEN 'CREDIT_UNPAID'
+
                         ELSE 'OTHER'
                     END AS classification
                 FROM order_evidence
@@ -149,7 +170,9 @@ module.exports = {
                 const currentPaid = Number(row.paidAmount);
                 const currentDue = Number(row.dueAmount);
 
-                // Check if current fields are consistent with evidence
+                // Determine expected values.
+                // ONLY suspicious_paid should be repaired.
+                // All others trust their current state.
                 let fieldCorrect = true;
                 let expectedPaid, expectedDue, expectedStatus;
 
@@ -161,23 +184,27 @@ module.exports = {
                     expectedPaid = Math.min(allocTotal, total);
                     expectedDue = total - expectedPaid;
                     expectedStatus = 'partial';
+                } else if (cat === 'TOGGLED_PAID') {
+                    // User deliberately toggled → TRUST IT, no repair
+                    expectedPaid = currentPaid;
+                    expectedDue = currentDue;
+                    expectedStatus = row.paymentStatus;
                 } else if (cat === 'CASH_SALE') {
-                    expectedPaid = total;
-                    expectedDue = 0;
-                    expectedStatus = 'paid';
+                    // Created as paid → TRUST IT, no repair
+                    expectedPaid = currentPaid;
+                    expectedDue = currentDue;
+                    expectedStatus = row.paymentStatus;
                 } else if (cat === 'CREDIT_UNPAID') {
+                    // No receipts, currently unpaid → TRUST IT, no repair
+                    expectedPaid = currentPaid;
+                    expectedDue = currentDue;
+                    expectedStatus = row.paymentStatus;
+                } else if (cat === 'SUSPICIOUS_PAID') {
+                    // THE ONLY CATEGORY THAT GETS REPAIRED
+                    // Paid with zero evidence → reset to unpaid
                     expectedPaid = 0;
                     expectedDue = total;
                     expectedStatus = 'unpaid';
-                } else if (cat === 'SUSPICIOUS_PAID') {
-                    expectedPaid = 0;
-                    expectedDue = total;
-                    expectedStatus = 'unpaid'; // should be unpaid since no evidence of payment
-                } else if (cat === 'TOGGLED_PAID') {
-                    // User deliberately toggled — trust the toggle
-                    expectedPaid = total;
-                    expectedDue = 0;
-                    expectedStatus = 'paid';
                 } else {
                     expectedPaid = currentPaid;
                     expectedDue = currentDue;
@@ -279,70 +306,14 @@ module.exports = {
 
             const repairPlan = [];
 
-            // Category 1: RECEIPT_PAID — set from alloc_total
-            for (const o of classified.categories.RECEIPT_PAID) {
-                if (o.needsRepair) {
-                    repairPlan.push({
-                        ...o,
-                        repairAction: 'SET_FROM_ALLOCATIONS',
-                        repairSource: 'receipt_allocations'
-                    });
-                }
-            }
-
-            // Category 2: PARTIAL_PAID — set from alloc_total
-            for (const o of classified.categories.PARTIAL_PAID) {
-                if (o.needsRepair) {
-                    repairPlan.push({
-                        ...o,
-                        repairAction: 'SET_FROM_ALLOCATIONS',
-                        repairSource: 'receipt_allocations'
-                    });
-                }
-            }
-
-            // Category 3: CASH_SALE — should be paid, paidAmount=total
-            for (const o of classified.categories.CASH_SALE) {
-                if (o.needsRepair) {
-                    repairPlan.push({
-                        ...o,
-                        repairAction: 'SET_AS_CASH_SALE',
-                        repairSource: 'invoice_journal (cash sale at creation)'
-                    });
-                }
-            }
-
-            // Category 4: CREDIT_UNPAID — should be unpaid, paidAmount=0
-            for (const o of classified.categories.CREDIT_UNPAID) {
-                if (o.needsRepair) {
-                    repairPlan.push({
-                        ...o,
-                        repairAction: 'SET_AS_UNPAID',
-                        repairSource: 'no payment evidence found'
-                    });
-                }
-            }
-
-            // Category 5: SUSPICIOUS_PAID — should be unpaid (no evidence of payment)
+            // ONLY suspicious_paid orders get repaired.
+            // All other categories are trusted (receipt, toggle, cash sale, credit).
             for (const o of classified.categories.SUSPICIOUS_PAID) {
-                if (o.needsRepair) {
-                    repairPlan.push({
-                        ...o,
-                        repairAction: 'RESET_TO_UNPAID',
-                        repairSource: 'SUSPICIOUS — no allocation, no payment, no journal, no toggle'
-                    });
-                }
-            }
-
-            // Category 6: TOGGLED_PAID — user toggled, trust it, only fix field mismatches
-            for (const o of (classified.categories.TOGGLED_PAID || [])) {
-                if (o.needsRepair) {
-                    repairPlan.push({
-                        ...o,
-                        repairAction: 'FIX_FIELD_MISMATCH',
-                        repairSource: 'user toggle audit log'
-                    });
-                }
+                repairPlan.push({
+                    ...o,
+                    repairAction: 'RESET_TO_UNPAID',
+                    repairSource: 'SUSPICIOUS — no allocation, no payment, no toggle log, no journal'
+                });
             }
 
             return res.status(200).json({
