@@ -11,6 +11,9 @@ module.exports = (router) => {
     router.post('/data-audit/repair/preview', authenticate, authorize('admin'), ClassifyController.repairPreview);
     router.post('/data-audit/repair/execute', authenticate, authorize('admin'), ClassifyController.repairExecute);
 
+    // FIFO Reconstruction: Reset + FIFO allocate + Update (production-grade recovery)
+    router.post('/data-audit/reconstruct-fifo', authenticate, authorize('admin'), ClassifyController.reconstructFifo);
+
     // Forensic Scan: READ-ONLY diagnostic report
     router.get('/data-audit/forensic', authenticate, authorize('admin'), Controller.forensicScan);
 
