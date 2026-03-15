@@ -64,6 +64,10 @@ const LedgerModule = () => {
     const [repairRunning, setRepairRunning] = useState(false);
     const [repairResult, setRepairResult] = useState(null);
 
+    // FIFO Reconstruct states
+    const [fifoResult, setFifoResult] = useState(null);
+    const [fifoRunning, setFifoRunning] = useState(false);
+
     const getAuthHeader = () => ({
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     });
@@ -407,6 +411,27 @@ const LedgerModule = () => {
             setError(err.response?.data?.message || 'Repair failed');
         } finally {
             setRepairRunning(false);
+        }
+    };
+
+    // FIFO Reconstruct: Dry Run or Execute
+    const runFifoReconstruct = async (isDryRun) => {
+        try {
+            setFifoRunning(true);
+            setError(null);
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            const { data } = await axios.post('/api/data-audit/reconstruct-fifo', {
+                changedBy: user.name || user.username || 'admin',
+                dryRun: isDryRun
+            }, getAuthHeader());
+            setFifoResult(data);
+            if (!isDryRun) {
+                fetchDashboard();
+            }
+        } catch (err) {
+            setError(err.response?.data?.message || 'FIFO reconstruction failed');
+        } finally {
+            setFifoRunning(false);
         }
     };
 
@@ -900,6 +925,98 @@ const LedgerModule = () => {
                                         {repairResult.validation.checks?.map((c, i) => (
                                             <Typography key={i} variant="body2" sx={{ fontSize: '0.8rem', color: c.passed ? '#2e7d32' : '#c62828' }}>
                                                 {c.passed ? 'PASS' : 'FAIL'}: {c.name} {c.violations > 0 ? `(${c.violations} violations)` : ''}
+                                            </Typography>
+                                        ))}
+                                    </Box>
+                                )}
+                            </Box>
+                        )}
+                    </Paper>
+
+                    {/* FIFO Reconstruct Card */}
+                    <Paper data-testid="fifo-reconstruct-card" sx={{ p: 2, mt: 2, bgcolor: '#fff3e0', border: '2px solid #e65100' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <Assessment sx={{ color: '#e65100' }} />
+                            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#e65100' }}>
+                                Recalculate from Payments (FIFO)
+                            </Typography>
+                        </Box>
+                        <Typography variant="body2" sx={{ mb: 2, color: '#37474f' }}>
+                            Payments table = truth. Resets ALL orders → FIFO allocates payments (oldest first) → recalculates paidAmount/dueAmount/status.
+                        </Typography>
+
+                        <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+                            <Button
+                                data-testid="fifo-dry-run-btn"
+                                variant="outlined"
+                                color="warning"
+                                startIcon={fifoRunning ? <CircularProgress size={16} color="inherit" /> : <Refresh />}
+                                onClick={() => runFifoReconstruct(true)}
+                                disabled={fifoRunning}
+                            >
+                                {fifoRunning ? 'Running...' : 'Dry Run (Preview)'}
+                            </Button>
+                            <Button
+                                data-testid="fifo-execute-btn"
+                                variant="contained"
+                                color="error"
+                                startIcon={fifoRunning ? <CircularProgress size={16} color="inherit" /> : <Assessment />}
+                                onClick={() => {
+                                    if (window.confirm('This will RESET all orders and recalculate from payments. Are you sure? Take a DB backup first!')) {
+                                        runFifoReconstruct(false);
+                                    }
+                                }}
+                                disabled={fifoRunning}
+                            >
+                                {fifoRunning ? 'Executing...' : 'Execute Reconstruction'}
+                            </Button>
+                        </Box>
+
+                        {fifoResult && (
+                            <Box sx={{ bgcolor: 'rgba(0,0,0,0.04)', borderRadius: 1, p: 2, mt: 1 }}>
+                                <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, color: fifoResult.data?.isDryRun ? '#e65100' : '#2e7d32' }}>
+                                    {fifoResult.data?.isDryRun ? 'DRY RUN PREVIEW' : 'EXECUTED'}
+                                </Typography>
+                                <Typography variant="body2">{fifoResult.message}</Typography>
+                                
+                                {fifoResult.data?.customerDetails && fifoResult.data.customerDetails.filter(c => c.ordersChanged > 0).length > 0 && (
+                                    <Box sx={{ mt: 1, maxHeight: 300, overflow: 'auto' }}>
+                                        <Typography variant="caption" sx={{ fontWeight: 600 }}>Customers with changes:</Typography>
+                                        <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse', marginTop: 4 }}>
+                                            <thead>
+                                                <tr style={{ borderBottom: '1px solid #ccc' }}>
+                                                    <th style={{ textAlign: 'left', padding: 4 }}>Customer</th>
+                                                    <th style={{ textAlign: 'right', padding: 4 }}>Orders</th>
+                                                    <th style={{ textAlign: 'right', padding: 4 }}>Payments</th>
+                                                    <th style={{ textAlign: 'right', padding: 4 }}>Order Value</th>
+                                                    <th style={{ textAlign: 'right', padding: 4 }}>Payment Value</th>
+                                                    <th style={{ textAlign: 'right', padding: 4 }}>Balance</th>
+                                                    <th style={{ textAlign: 'right', padding: 4 }}>Changes</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {fifoResult.data.customerDetails.filter(c => c.ordersChanged > 0).map((c, i) => (
+                                                    <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
+                                                        <td style={{ padding: 4 }}>{c.name}</td>
+                                                        <td style={{ textAlign: 'right', padding: 4 }}>{c.orders}</td>
+                                                        <td style={{ textAlign: 'right', padding: 4 }}>{c.payments}</td>
+                                                        <td style={{ textAlign: 'right', padding: 4 }}>₹{c.totalOrderValue?.toLocaleString('en-IN')}</td>
+                                                        <td style={{ textAlign: 'right', padding: 4 }}>₹{c.totalPaymentValue?.toLocaleString('en-IN')}</td>
+                                                        <td style={{ textAlign: 'right', padding: 4, color: c.balance > 0 ? '#c62828' : '#2e7d32' }}>₹{c.balance?.toLocaleString('en-IN')}</td>
+                                                        <td style={{ textAlign: 'right', padding: 4, fontWeight: 700 }}>{c.ordersChanged}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </Box>
+                                )}
+
+                                {fifoResult.data?.validation && (
+                                    <Box sx={{ mt: 1 }}>
+                                        <Typography variant="caption" sx={{ fontWeight: 600 }}>Post-repair validation:</Typography>
+                                        {fifoResult.data.validation.checks?.map((check, i) => (
+                                            <Typography key={i} variant="body2" sx={{ color: check.passed ? '#2e7d32' : '#c62828' }}>
+                                                {check.passed ? '✓' : '✗'} {check.name} {!check.passed && `(${check.count} violations)`}
                                             </Typography>
                                         ))}
                                     </Box>
