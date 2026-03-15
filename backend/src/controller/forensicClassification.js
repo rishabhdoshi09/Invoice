@@ -472,6 +472,10 @@ module.exports = {
             const isDryRun = dryRun === true;
             const operator = changedBy.trim();
 
+            // Damage window: auto-reconciliation was active Jan 9 2026 → Mar 15 2026
+            const DAMAGE_START = '2026-01-09';
+            const DAMAGE_END = '2026-03-16'; // day after removal, inclusive
+
             // Get ALL customers with orders
             const [customers] = await db.sequelize.query(`
                 SELECT DISTINCT c.id, c.name
@@ -482,8 +486,10 @@ module.exports = {
 
             const results = {
                 totalCustomers: customers.length,
+                damageWindow: { from: DAMAGE_START, to: DAMAGE_END },
                 ordersReset: 0,
                 humanSkipped: 0,
+                outsideDamageWindow: 0,
                 allocationsCreated: 0,
                 totalAllocated: 0,
                 ordersUpdated: 0,
@@ -491,28 +497,30 @@ module.exports = {
             };
 
             if (!isDryRun) {
-                // Step 0: Clear receipt_allocations ONLY for system-damaged orders (not human-toggled)
+                // Step 0: Clear receipt_allocations ONLY for system-damaged orders within damage window
                 await db.sequelize.query(`
                     UPDATE receipt_allocations SET "isDeleted" = true
                     WHERE "orderId" IN (
                         SELECT id FROM orders
                         WHERE "isDeleted" = false
                           AND ("modifiedByName" IS NULL OR TRIM("modifiedByName") = '')
+                          AND "updatedAt" >= :damageStart AND "updatedAt" < :damageEnd
                     )
-                `);
+                `, { replacements: { damageStart: DAMAGE_START, damageEnd: DAMAGE_END } });
             }
 
             for (const cust of customers) {
-                // ONLY system-damaged orders (modifiedByName is NULL or empty) — oldest first
+                // ONLY system-damaged orders within damage window — oldest first
                 const [systemOrders] = await db.sequelize.query(`
-                    SELECT id, "orderNumber", "orderDate", total, "paidAmount", "dueAmount", "paymentStatus", "createdAt"
+                    SELECT id, "orderNumber", "orderDate", total, "paidAmount", "dueAmount", "paymentStatus", "createdAt", "updatedAt"
                     FROM orders
                     WHERE "isDeleted" = false
                       AND ("customerId" = :custId OR "customerName" = :custName)
                       AND "customerName" IS NOT NULL AND TRIM("customerName") != ''
                       AND ("modifiedByName" IS NULL OR TRIM("modifiedByName") = '')
+                      AND "updatedAt" >= :damageStart AND "updatedAt" < :damageEnd
                     ORDER BY "orderDate" ASC, "createdAt" ASC
-                `, { replacements: { custId: cust.id, custName: cust.name } });
+                `, { replacements: { custId: cust.id, custName: cust.name, damageStart: DAMAGE_START, damageEnd: DAMAGE_END } });
 
                 // Count human-toggled orders (for reporting only)
                 const [humanOrders] = await db.sequelize.query(`
@@ -523,6 +531,18 @@ module.exports = {
                       AND "customerName" IS NOT NULL AND TRIM("customerName") != ''
                       AND "modifiedByName" IS NOT NULL AND TRIM("modifiedByName") != ''
                 `, { replacements: { custId: cust.id, custName: cust.name } });
+
+                // Count orders outside damage window (safe, not touched)
+                const [outsideWindow] = await db.sequelize.query(`
+                    SELECT COUNT(*) as cnt
+                    FROM orders
+                    WHERE "isDeleted" = false
+                      AND ("customerId" = :custId OR "customerName" = :custName)
+                      AND "customerName" IS NOT NULL AND TRIM("customerName") != ''
+                      AND ("modifiedByName" IS NULL OR TRIM("modifiedByName") = '')
+                      AND ("updatedAt" < :damageStart OR "updatedAt" >= :damageEnd)
+                `, { replacements: { custId: cust.id, custName: cust.name, damageStart: DAMAGE_START, damageEnd: DAMAGE_END } });
+                results.outsideDamageWindow += Number(outsideWindow[0].cnt);
                 const humanCount = Number(humanOrders[0].cnt);
                 results.humanSkipped += humanCount;
 
@@ -665,8 +685,8 @@ module.exports = {
             return res.status(200).json({
                 status: 200,
                 message: isDryRun
-                    ? `DRY RUN: ${results.totalCustomers} customers, ${results.humanSkipped} human-toggled orders PRESERVED, ${results.allocationsCreated} allocations (₹${results.totalAllocated}), ${results.ordersUpdated} system orders would change.`
-                    : `Done. ${results.ordersReset} system orders reset (${results.humanSkipped} human-toggled PRESERVED), ${results.allocationsCreated} allocations created (₹${results.totalAllocated}).`,
+                    ? `DRY RUN [${DAMAGE_START} → ${DAMAGE_END}]: ${results.ordersUpdated} system orders would change, ${results.humanSkipped} human-toggled PRESERVED, ${results.outsideDamageWindow} outside damage window PRESERVED, ${results.allocationsCreated} allocations (₹${results.totalAllocated}).`
+                    : `Done [${DAMAGE_START} → ${DAMAGE_END}]: ${results.ordersReset} system orders reset, ${results.humanSkipped} human-toggled PRESERVED, ${results.outsideDamageWindow} outside window PRESERVED, ${results.allocationsCreated} allocations (₹${results.totalAllocated}).`,
                 data: { isDryRun, ...results, validation }
             });
         } catch (error) {

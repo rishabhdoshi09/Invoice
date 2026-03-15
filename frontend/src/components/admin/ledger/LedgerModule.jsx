@@ -942,7 +942,7 @@ const LedgerModule = () => {
                             </Typography>
                         </Box>
                         <Typography variant="body2" sx={{ mb: 2, color: '#37474f' }}>
-                            Payments table = truth. Resets ONLY system-damaged orders (skips human-toggled ones) → FIFO allocates payments (oldest first) → recalculates paidAmount/dueAmount/status.
+                            Payments table = truth. Damage window: <strong>Jan 9 2026 → Mar 15 2026</strong>. Resets ONLY system-damaged orders within this window (skips human-toggled + outside window) → FIFO allocates payments → recalculates status.
                         </Typography>
 
                         <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
