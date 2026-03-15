@@ -43,6 +43,11 @@ app.listen(PORT, async () => {
     await db.sequelize.sync({ force: false });
     console.log('Database Synced Successfully');
 
+    // Safe column migrations — adds missing columns without breaking existing ones
+    try {
+      await db.sequelize.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT NULL`);
+    } catch (e) { /* column may already exist */ }
+
     // Start scheduled jobs (async, non-blocking)
     try {
       require('./src/scheduler').init(db);
