@@ -22,6 +22,9 @@ module.exports = (router) => {
     router.post('/data-audit/recovery/execute', authenticate, authorize('admin'), RecoveryController.recoveryExecute);
     router.get('/data-audit/recovery/validate', authenticate, authorize('admin'), RecoveryController.recoveryValidate);
 
+    // Diagnostic: deep scan of DB state — helps debug classification issues
+    router.get('/data-audit/diagnose', authenticate, authorize('admin'), ClassifyController.diagnose);
+
     // Backward compat
     router.get('/data-audit/reconstruct', authenticate, authorize('admin'), Controller.reconstructOrders);
     router.post('/data-audit/reconstruct', authenticate, authorize('admin'), Controller.reconstructOrders);

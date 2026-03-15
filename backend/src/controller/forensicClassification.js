@@ -443,5 +443,151 @@ module.exports = {
             console.error('Repair execute error:', error);
             return res.status(500).json({ status: 500, message: error.message });
         }
+    },
+
+    /**
+     * GET /api/data-audit/diagnose
+     * Deep diagnostic scan — run this on local DB and share the output.
+     * Helps understand why classification might be wrong.
+     */
+    diagnose: async (req, res) => {
+        try {
+            const results = {};
+
+            // 1. Order summary
+            const [orderSummary] = await db.sequelize.query(`
+                SELECT 
+                    COUNT(*) AS total_orders,
+                    SUM(CASE WHEN "paymentStatus" = 'paid' THEN 1 ELSE 0 END) AS paid,
+                    SUM(CASE WHEN "paymentStatus" = 'unpaid' THEN 1 ELSE 0 END) AS unpaid,
+                    SUM(CASE WHEN "paymentStatus" = 'partial' THEN 1 ELSE 0 END) AS partial,
+                    SUM(CASE WHEN "customerName" IS NOT NULL AND TRIM("customerName") != '' THEN 1 ELSE 0 END) AS with_customer_name,
+                    SUM(CASE WHEN "customerName" IS NULL OR TRIM("customerName") = '' THEN 1 ELSE 0 END) AS without_customer_name,
+                    SUM(CASE WHEN "paymentStatus" = 'paid' AND "customerName" IS NOT NULL AND TRIM("customerName") != '' THEN 1 ELSE 0 END) AS paid_with_name,
+                    SUM(CASE WHEN "paymentStatus" IN ('unpaid','partial') AND "customerName" IS NOT NULL AND TRIM("customerName") != '' THEN 1 ELSE 0 END) AS credit_with_name
+                FROM orders WHERE "isDeleted" = false
+            `);
+            results.orders = orderSummary[0];
+
+            // 2. Receipt allocations
+            const [allocSummary] = await db.sequelize.query(`
+                SELECT 
+                    COUNT(*) AS total_allocations,
+                    SUM(CASE WHEN "isDeleted" = true THEN 1 ELSE 0 END) AS deleted,
+                    SUM(CASE WHEN "isDeleted" = false OR "isDeleted" IS NULL THEN 1 ELSE 0 END) AS active,
+                    COUNT(DISTINCT "orderId") AS distinct_orders_with_alloc
+                FROM receipt_allocations
+            `);
+            results.receipt_allocations = allocSummary[0];
+
+            // 3. Do allocations actually JOIN to orders?
+            const [allocJoinCheck] = await db.sequelize.query(`
+                SELECT COUNT(DISTINCT ra."orderId") AS matching_orders
+                FROM receipt_allocations ra
+                JOIN orders o ON o.id = ra."orderId" AND o."isDeleted" = false
+                WHERE ra."isDeleted" IS NULL OR ra."isDeleted" = false
+            `);
+            results.alloc_join_to_orders = allocJoinCheck[0];
+
+            // 4. Payments summary
+            const [paySummary] = await db.sequelize.query(`
+                SELECT 
+                    "referenceType", 
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN "isDeleted" = false THEN 1 ELSE 0 END) AS active,
+                    SUM(CASE WHEN "isDeleted" = false THEN amount ELSE 0 END) AS active_amount
+                FROM payments 
+                GROUP BY "referenceType"
+            `);
+            results.payments_by_type = paySummary;
+
+            // 5. Do payments JOIN to orders?
+            const [payJoinCheck] = await db.sequelize.query(`
+                SELECT COUNT(DISTINCT p."referenceId") AS matching_orders
+                FROM payments p
+                JOIN orders o ON o.id = p."referenceId" AND o."isDeleted" = false
+                WHERE p."isDeleted" = false
+            `);
+            results.pay_join_to_orders = payJoinCheck[0];
+
+            // 6. Journal batches
+            const [journalSummary] = await db.sequelize.query(`
+                SELECT "referenceType", COUNT(*) AS total
+                FROM journal_batches
+                GROUP BY "referenceType"
+            `);
+            results.journal_batches_by_type = journalSummary;
+
+            // 7. Do journals JOIN to orders?
+            const [journalJoinCheck] = await db.sequelize.query(`
+                SELECT COUNT(DISTINCT jb."referenceId") AS matching_orders
+                FROM journal_batches jb
+                JOIN orders o ON o.id = jb."referenceId" AND o."isDeleted" = false
+                WHERE jb."referenceType" IN ('INVOICE', 'INVOICE_CASH')
+            `);
+            results.journal_join_to_orders = journalJoinCheck[0];
+
+            // 8. Audit logs summary
+            const [auditSummary] = await db.sequelize.query(`
+                SELECT "entityType", "action", COUNT(*) AS total
+                FROM audit_logs
+                GROUP BY "entityType", "action"
+                ORDER BY COUNT(*) DESC
+                LIMIT 20
+            `);
+            results.audit_logs_summary = auditSummary;
+
+            // 9. modifiedByName distribution for paid orders with customer names
+            const [modifiedByCheck] = await db.sequelize.query(`
+                SELECT 
+                    SUM(CASE WHEN "modifiedByName" IS NULL OR TRIM("modifiedByName") = '' THEN 1 ELSE 0 END) AS no_modifier,
+                    SUM(CASE WHEN "modifiedByName" IS NOT NULL AND TRIM("modifiedByName") != '' THEN 1 ELSE 0 END) AS has_modifier
+                FROM orders 
+                WHERE "isDeleted" = false AND "paymentStatus" = 'paid'
+                  AND "customerName" IS NOT NULL AND TRIM("customerName") != ''
+            `);
+            results.paid_orders_modifier = modifiedByCheck[0];
+
+            // 10. updatedAt vs createdAt for paid orders with customer names
+            const [timestampCheck] = await db.sequelize.query(`
+                SELECT 
+                    SUM(CASE WHEN EXTRACT(EPOCH FROM ("updatedAt" - "createdAt")) < 300 THEN 1 ELSE 0 END) AS never_modified,
+                    SUM(CASE WHEN EXTRACT(EPOCH FROM ("updatedAt" - "createdAt")) >= 300 AND EXTRACT(EPOCH FROM ("updatedAt" - "createdAt")) < 86400 THEN 1 ELSE 0 END) AS modified_within_day,
+                    SUM(CASE WHEN EXTRACT(EPOCH FROM ("updatedAt" - "createdAt")) >= 86400 THEN 1 ELSE 0 END) AS modified_after_day,
+                    MIN(EXTRACT(EPOCH FROM ("updatedAt" - "createdAt"))) AS min_age_diff,
+                    MAX(EXTRACT(EPOCH FROM ("updatedAt" - "createdAt"))) AS max_age_diff,
+                    AVG(EXTRACT(EPOCH FROM ("updatedAt" - "createdAt"))) AS avg_age_diff
+                FROM orders 
+                WHERE "isDeleted" = false AND "paymentStatus" = 'paid'
+                  AND "customerName" IS NOT NULL AND TRIM("customerName") != ''
+            `);
+            results.paid_timestamp_analysis = timestampCheck[0];
+
+            // 11. Sample of paid orders with no evidence (first 5)
+            const [sampleNoEvidence] = await db.sequelize.query(`
+                SELECT o."orderNumber", o."customerName", o.total, o."paidAmount", o."dueAmount",
+                       o."paymentStatus", o."modifiedByName",
+                       o."createdAt", o."updatedAt",
+                       EXTRACT(EPOCH FROM (o."updatedAt" - o."createdAt")) AS age_diff_sec
+                FROM orders o
+                LEFT JOIN receipt_allocations ra ON ra."orderId" = o.id AND (ra."isDeleted" IS NULL OR ra."isDeleted" = false)
+                LEFT JOIN payments p ON p."referenceId" = o.id AND p."isDeleted" = false
+                WHERE o."isDeleted" = false AND o."paymentStatus" = 'paid'
+                  AND o."customerName" IS NOT NULL AND TRIM(o."customerName") != ''
+                  AND ra.id IS NULL AND p.id IS NULL
+                ORDER BY o."createdAt" DESC
+                LIMIT 5
+            `);
+            results.sample_paid_no_evidence = sampleNoEvidence;
+
+            return res.status(200).json({
+                status: 200,
+                message: 'Diagnostic scan complete',
+                data: results
+            });
+        } catch (error) {
+            console.error('Diagnose error:', error);
+            return res.status(500).json({ status: 500, message: error.message });
+        }
     }
 };
