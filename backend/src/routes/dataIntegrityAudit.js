@@ -1,6 +1,7 @@
 const Controller = require('../controller/dataIntegrityAudit');
 const RecoveryController = require('../controller/paymentRecovery');
 const ClassifyController = require('../controller/forensicClassification');
+const { backupDatabase } = require('../controller/dbBackup');
 const { authenticate, authorize } = require('../middleware/auth');
 
 module.exports = (router) => {
@@ -27,6 +28,9 @@ module.exports = (router) => {
 
     // Diagnostic: deep scan of DB state — helps debug classification issues
     router.get('/data-audit/diagnose', authenticate, authorize('admin'), ClassifyController.diagnose);
+
+    // Database Backup: download full pg_dump
+    router.get('/data-audit/backup', authenticate, authorize('admin'), backupDatabase);
 
     // Backward compat
     router.get('/data-audit/reconstruct', authenticate, authorize('admin'), Controller.reconstructOrders);

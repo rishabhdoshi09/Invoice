@@ -56,14 +56,18 @@ Build a production-grade, double-entry accounting ledger with fraud prevention a
 
 ### Phase 9: Safe FIFO Reconstruction Fix (Feb 2026)
 - **CRITICAL FIX**: `reconstructFifo` now PRESERVES human-toggled orders (non-empty `modifiedByName`)
-- Only resets/recalculates orders where `modifiedByName` IS NULL or empty
-- receipt_allocations cleanup scoped to system-damaged orders only
-- Response now includes `humanSkipped` count for transparency
-- Frontend updated: description text, table columns show "System Orders" + "Human Skipped"
+- **Damage window filter**: Only resets orders modified between Jan 9, 2026 and Mar 15, 2026 (when auto-reconciliation was active)
+- Triple safety: `modifiedByName` check + damage window + payments=truth
+- Response includes `humanSkipped`, `outsideDamageWindow` counts
+- Frontend updated: description, table columns, new counters
+- **DB Backup button**: One-click `pg_dump` download (GET `/api/data-audit/backup`) added to FIFO card
+- New file: `backend/src/controller/dbBackup.js`
 
 ## Prioritized Backlog
 ### P0 — User Action Required
-- Pull latest code, restart backend, run `reconstruct-fifo` dry run to verify human orders are preserved
+- Pull latest code, restart backend
+- Click "Download DB Backup" first
+- Run `reconstruct-fifo` dry run to verify human orders + outside-window orders are preserved
 - Then execute with confidence
 
 ### P1 — Upcoming

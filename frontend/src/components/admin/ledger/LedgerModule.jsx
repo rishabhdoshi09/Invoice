@@ -947,6 +947,37 @@ const LedgerModule = () => {
 
                         <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
                             <Button
+                                data-testid="db-backup-btn"
+                                variant="contained"
+                                startIcon={<AccountBalance />}
+                                onClick={async () => {
+                                    try {
+                                        setSuccess(null);
+                                        setError(null);
+                                        const response = await axios.get('/api/data-audit/backup', {
+                                            ...getAuthHeader(),
+                                            responseType: 'blob'
+                                        });
+                                        const url = window.URL.createObjectURL(new Blob([response.data]));
+                                        const link = document.createElement('a');
+                                        link.href = url;
+                                        const disposition = response.headers['content-disposition'];
+                                        const filename = disposition ? disposition.split('filename=')[1]?.replace(/"/g, '') : 'backup.sql';
+                                        link.setAttribute('download', filename);
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        link.remove();
+                                        window.URL.revokeObjectURL(url);
+                                        setSuccess('Backup downloaded successfully.');
+                                    } catch (err) {
+                                        setError('Backup failed: ' + (err.response?.data?.message || err.message));
+                                    }
+                                }}
+                                sx={{ bgcolor: '#1565c0', '&:hover': { bgcolor: '#0d47a1' } }}
+                            >
+                                Download DB Backup
+                            </Button>
+                            <Button
                                 data-testid="fifo-dry-run-btn"
                                 variant="outlined"
                                 color="warning"
@@ -962,7 +993,7 @@ const LedgerModule = () => {
                                 color="error"
                                 startIcon={fifoRunning ? <CircularProgress size={16} color="inherit" /> : <Assessment />}
                                 onClick={() => {
-                                    if (window.confirm('This will RESET all orders and recalculate from payments. Are you sure? Take a DB backup first!')) {
+                                    if (window.confirm('This will RESET system-damaged orders within damage window and recalculate from payments. Are you sure?')) {
                                         runFifoReconstruct(false);
                                     }
                                 }}
