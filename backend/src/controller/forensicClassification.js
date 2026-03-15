@@ -156,13 +156,19 @@ const CLASSIFICATION_SQL = `
 
 /**
  * For each order, determine what the correct values SHOULD be based on evidence.
- * Then compare to stored values. Any mismatch = needs repair.
+ * 
+ * RULE: receipt_allocations is the ONLY source of truth for paid amounts.
+ * If an order has no receipt_allocation, it should be unpaid — UNLESS it's a
+ * genuine cash sale (created as paid at POS, no credit involved).
+ * 
+ * Orders toggled paid by old auto-reconciliation (FIFO) are UNDONE here:
+ * the payments/receipts still exist at customer level, but the order-level
+ * status must reflect actual allocations only.
  */
 function computeExpectedValues(row) {
     const cat = row.classification;
     const total = Number(row.total);
     const allocTotal = Number(row.alloc_total);
-    const payTotal = Number(row.pay_total);
     const storedPaid = Number(row.paidAmount);
     const storedDue = Number(row.dueAmount);
     const storedStatus = row.paymentStatus;
@@ -181,26 +187,27 @@ function computeExpectedValues(row) {
         expectedDue = Math.max(0, total - expectedPaid);
         expectedStatus = 'partial';
         repairAction = 'FIX_FROM_RECEIPTS';
-    } else if (cat === 'PAYMENT_PAID') {
-        // Has payment records — recalculate from payment total
-        expectedPaid = Math.min(payTotal, total);
-        expectedDue = Math.max(0, total - expectedPaid);
-        if (expectedPaid >= total) expectedStatus = 'paid';
-        else if (expectedPaid > 0) expectedStatus = 'partial';
-        else expectedStatus = 'unpaid';
-        repairAction = 'FIX_FROM_PAYMENTS';
-    } else if (cat === 'SUSPICIOUS_PAID') {
-        // Paid with ZERO evidence — reset to unpaid
-        expectedPaid = 0;
-        expectedDue = total;
-        expectedStatus = 'unpaid';
-        repairAction = 'RESET_TO_UNPAID';
-    } else {
-        // TOGGLED_PAID, CASH_SALE, ADVANCE_PAID, CREDIT_UNPAID, OTHER — trust current values
+    } else if (cat === 'CASH_SALE') {
+        // Legitimate cash sale — trust current values
         expectedPaid = storedPaid;
         expectedDue = storedDue;
         expectedStatus = storedStatus;
         repairAction = null;
+    } else if (cat === 'CREDIT_UNPAID' || cat === 'OTHER') {
+        // Already unpaid or other — trust current values
+        expectedPaid = storedPaid;
+        expectedDue = storedDue;
+        expectedStatus = storedStatus;
+        repairAction = null;
+    } else {
+        // ADVANCE_PAID, TOGGLED_PAID, PAYMENT_PAID, SUSPICIOUS_PAID
+        // All these have NO receipt_allocation → reset to unpaid
+        // The customer-level payments (On Account) still exist in receipts,
+        // but this specific order was wrongly toggled by auto-reconciliation.
+        expectedPaid = 0;
+        expectedDue = total;
+        expectedStatus = 'unpaid';
+        repairAction = 'UNDO_AUTO_RECONCILIATION';
     }
 
     // Check for discrepancy
