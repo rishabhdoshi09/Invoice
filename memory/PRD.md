@@ -127,8 +127,11 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 
 ### P0 — Data Corruption (User's Local DB)
 - User's local database has invoices incorrectly marked as "paid" without payment records
-- Fix approach: MANUAL collaborative cleanup — SELECT to investigate, user confirms, then UPDATE
-- Agent must NOT run any UPDATE without user's explicit approval
+- **Data Integrity Audit tool built** — scans all orders, compares stored paidAmount vs actual payment evidence
+- User workflow: Scan → Review → Fix ALL (or selected)
+- Optimized with batch queries for performance on large datasets
+- Evidence-based: orders with no payment records → unpaid, orders with payments → correct paidAmount
+- User's business model: payments are at customer level (not 1-to-1 with invoices), so customer-level due = total invoices - total receipts
 
 ### P1 — Customer Duplication Bug Verification
 - LATERAL join fix applied but user hasn't confirmed it works on their local DB
@@ -166,6 +169,8 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 - `GET /api/ledger/reports/balance-sheet`
 - `POST /api/ledger/accounts/initialize`
 - `GET /api/ledger/migration/reconciliation`
+- `GET /api/data-audit/orders` — Scan orders for payment data mismatches (admin only, READ-ONLY)
+- `POST /api/data-audit/orders/fix` — Fix selected orders' payment data (admin only, requires changedBy)
 
 ### REMOVED Endpoints (Mar 14 2026)
 - ~~`POST /api/receipts/reconcile`~~ — Automatic FIFO reconciliation (DELETED per user directive)
