@@ -57,6 +57,8 @@ const LedgerModule = () => {
     const [fixResult, setFixResult] = useState(null);
     const [selectedFixIds, setSelectedFixIds] = useState([]);
     const [creditSalesOnly, setCreditSalesOnly] = useState(true);
+    const [undoFixRunning, setUndoFixRunning] = useState(false);
+    const [undoFixResult, setUndoFixResult] = useState(null);
 
     const getAuthHeader = () => ({
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
@@ -320,6 +322,29 @@ const LedgerModule = () => {
             setError(err.response?.data?.message || 'Failed to fix orders');
         } finally {
             setFixRunning(false);
+        }
+    };
+
+    // Undo last audit fix
+    const undoLastAuditFix = async () => {
+        const userName = prompt('Enter your name for the audit trail (required):');
+        if (!userName || !userName.trim()) return;
+        if (!window.confirm('This will restore orders wrongly set to unpaid by the audit fix back to paid. Proceed?')) return;
+
+        try {
+            setUndoFixRunning(true);
+            setError(null);
+            const { data } = await axios.post('/api/data-audit/orders/undo-fix', {
+                changedBy: userName.trim()
+            }, getAuthHeader());
+            setUndoFixResult(data.data);
+            setSuccess(data.message);
+            setAuditData(null);
+            setFixResult(null);
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to undo fix');
+        } finally {
+            setUndoFixRunning(false);
         }
     };
 
@@ -773,7 +798,24 @@ const LedgerModule = () => {
                                     </Button>
                                 </>
                             )}
+                            <Button
+                                data-testid="audit-undo-btn"
+                                variant="outlined"
+                                startIcon={undoFixRunning ? <CircularProgress size={16} /> : <Refresh />}
+                                onClick={undoLastAuditFix}
+                                disabled={undoFixRunning}
+                                sx={{ borderColor: '#6a1b9a', color: '#6a1b9a', '&:hover': { bgcolor: 'rgba(106,27,154,0.08)' } }}
+                            >
+                                {undoFixRunning ? 'Undoing...' : 'Undo Last Fix'}
+                            </Button>
                         </Box>
+
+                        {/* Undo result */}
+                        {undoFixResult && (
+                            <Alert severity="info" sx={{ mb: 2 }} data-testid="undo-fix-result">
+                                Restored {undoFixResult.restoredCount} orders back to paid.
+                            </Alert>
+                        )}
 
                         {auditData && (
                             <Alert severity={auditData.totalMismatched > 0 ? 'warning' : 'success'} sx={{ mb: 2 }} data-testid="audit-summary">

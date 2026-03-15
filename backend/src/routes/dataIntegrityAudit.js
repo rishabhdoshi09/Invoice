@@ -7,4 +7,7 @@ module.exports = (router) => {
 
     // Fix: Correct selected orders' payment data (requires changedBy)
     router.post('/data-audit/orders/fix', authenticate, authorize('admin'), Controller.fixOrders);
+
+    // Undo: Restore orders wrongly changed by the fix back to paid
+    router.post('/data-audit/orders/undo-fix', authenticate, authorize('admin'), Controller.undoLastFix);
 };
