@@ -9,6 +9,9 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 - NO automatic status changes on orders/invoices
 - ALL payment allocation MUST be explicit user action via `POST /api/receipts/allocate`
 
+**Golden Forensic Rule:** "Agar status change hua hai, to log hona hi chahiye. Log nahi hai to change system bug hai."
+(If a status change happened, there must be a log. No log = system bug.)
+
 ## Core Architecture
 - **Frontend:** React + Material-UI (port 3000)
 - **Backend:** Node.js + Express + Sequelize ORM (port 8001)
@@ -66,12 +69,11 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 
 #### 8. Posting Matrix Reference Page
 - New tab in Ledger Module showing voucher type reference
-- 7 voucher types documented: Sales Invoice, Cash Sale, Receipt Against Ref, Receipt On Account, Payment Toggle, Supplier Payment
-- Tally-correct balance formulas displayed
+- 7 voucher types documented
 - File: `frontend/src/components/admin/ledger/LedgerModule.jsx` (tab 7)
 
 #### 9. Ledger Module (9 tabs)
-- Dashboard (health check, drift monitor, migration control)
+- Dashboard (health check, drift monitor, migration control, **Forensic Audit**)
 - Chart of Accounts (19+ accounts, clickable rows)
 - Trial Balance
 - Profit & Loss
@@ -79,22 +81,37 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 - Reconciliation
 - Journal Entries
 - Posting Matrix (voucher type reference)
-- **Account Ledger** (Tally's core feature - transaction-by-transaction with running balance)
+- Account Ledger (Tally's core feature)
 
-#### 10. Account Ledger Page (Tally-style) — NEW
+#### 10. Account Ledger Page (Tally-style)
 - Click any account in Chart of Accounts to open its full ledger
-- Transaction table with: Date, Voucher No., Type, Particulars, Debit (Dr), Credit (Cr), Running Balance
-- Account header with name, code, type/subtype chips, party info
-- Summary cards: Transaction count + Closing Balance (Dr/Cr)
-- Closing Balance row at bottom
-- Date range filter (defaults to current Indian FY: Apr 1 to Mar 31)
-- Running balance computed server-side with correct debit-credit accumulation
-- Color-coded voucher types (INVOICE, PAYMENT, CASH_RECEIPT, PAYMENT_TOGGLE)
-- Alternating row colors for readability
+- Transaction table with running balance
+- Date range filter (defaults to Indian FY)
 
 #### 11. Indian Financial Year Date Fix
 - FY date range now correctly defaults to Apr 1 of PREVIOUS year when before April
-- Affects: Trial Balance, P&L, Balance Sheet, Account Ledger
+
+### Phase 4: Automation Removal (Completed - Mar 14 2026)
+
+#### CRITICAL: Removed All Automatic Reconciliation
+- **DELETED** `backfillAllocations`, `reconcileAll` methods
+- **DELETED** routes `POST /api/receipts/backfill-allocations`, `POST /api/receipts/reconcile`
+- Only remaining allocation path: `POST /api/receipts/allocate` (explicit user action)
+
+### Phase 5: Forensic Audit Tool (Completed - Mar 15 2026)
+
+#### Forensic Audit Tool — Replaces All Previous Data Integrity Tools
+- **REMOVED** old "Undo Auto-Reconciliation" card from Dashboard
+- **REMOVED** old "Reconstruct Order States" card from Dashboard
+- **NEW** single "Forensic Audit" card with 3 diagnostic categories:
+  1. **Financial Contradictions** — status vs paidAmount/dueAmount mismatch
+  2. **Paid Without Evidence** — status='paid' but no cash journal, no toggle log, no payment
+  3. **Change Attribution** — who toggled what (from audit logs)
+- Read-only scan: `GET /api/data-audit/forensic`
+- User-driven fix: `POST /api/data-audit/fix` with orderIds, action, changedBy
+- Every fix creates audit log (satisfies user's golden rule)
+- Backward compat: old /data-audit/reconstruct endpoints still work
+- Files: `backend/src/controller/dataIntegrityAudit.js`, `frontend/src/components/admin/ledger/LedgerModule.jsx`
 
 ### Earlier Completed Work
 - Full-stack invoicing system with orders, payments, customers, suppliers
@@ -106,41 +123,14 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 - Daily summary calculations
 - GST export, Tally export
 
-### Phase 4: Automation Removal (Completed - Mar 14 2026)
-
-#### CRITICAL: Removed All Automatic Reconciliation
-- **DELETED** `backfillAllocations` method from `receiptAllocation.js` — was performing automatic FIFO matching
-- **DELETED** `reconcileAll` method from `receiptAllocation.js` — was performing full automatic reconciliation  
-- **DELETED** route `POST /api/receipts/backfill-allocations`
-- **DELETED** route `POST /api/receipts/reconcile`
-- Verified both endpoints return "Cannot POST" (404)
-- Only remaining allocation path: `POST /api/receipts/allocate` (explicit user action with `changedBy` audit trail)
-
-#### Data Integrity Audit (Enhanced with Full Evidence Trail)
-- Checks 5 evidence sources for each "paid" order:
-  1. `journal_batches` INVOICE_CASH = cash sale at billing
-  2. `audit_logs` ORDER_PAYMENT_STATUS = human used toggle
-  3. `payments` table referenceId = receipt recorded
-  4. `receipt_allocations` with real user name = manual allocation
-  5. NONE = software corruption
-- "Changed By" column shows exactly who/what changed each order
-- "Fix ALL" preserves human-toggled orders, only resets corrupted ones
-- Filter: "Credit Sales Wrongly Paid" vs "All Mismatches"
-- **Preview endpoint:** `GET /api/receipts/undo-auto-reconciliation/preview` — READ-ONLY, shows what system-backfill records exist and what orders would be affected
-- **Execute endpoint:** `POST /api/receipts/undo-auto-reconciliation/execute` — Requires `changedBy` for audit trail, removes all `system-backfill` allocations, recalculates affected orders
-- **UI:** Added to Ledger Module Dashboard tab — orange warning card with Step 1 (Preview) and Step 2 (Execute) buttons
-- Preview shows table with before/after comparison for each affected invoice
-- All changes logged in audit trail
-
 ## Prioritized Backlog
 
 ### P0 — Data Corruption (User's Local DB)
 - User's local database has invoices incorrectly marked as "paid" without payment records
-- **Data Integrity Audit tool built** — scans all orders, compares stored paidAmount vs actual payment evidence
-- User workflow: Scan → Review → Fix ALL (or selected)
-- Optimized with batch queries for performance on large datasets
-- Evidence-based: orders with no payment records → unpaid, orders with payments → correct paidAmount
-- User's business model: payments are at customer level (not 1-to-1 with invoices), so customer-level due = total invoices - total receipts
+- **Forensic Audit tool built** — scans all orders for evidence mismatches
+- Tool shows 3 categories: contradictions, paid-without-evidence, change attribution
+- User reviews findings and selects which orders to fix
+- Evidence-based: no auto-fixing, user must approve every change
 
 ### P1 — Customer Duplication Bug Verification
 - LATERAL join fix applied but user hasn't confirmed it works on their local DB
@@ -178,9 +168,9 @@ Build a production-grade, double-entry accounting ledger with a focus on fraud p
 - `GET /api/ledger/reports/balance-sheet`
 - `POST /api/ledger/accounts/initialize`
 - `GET /api/ledger/migration/reconciliation`
-- `GET /api/data-audit/orders` — Scan orders for payment data mismatches (admin only, READ-ONLY)
-- `POST /api/data-audit/orders/fix` — Fix selected orders' payment data (admin only, requires changedBy)
+- **NEW** `GET /api/data-audit/forensic` — Forensic scan (read-only, 3 categories)
+- **NEW** `POST /api/data-audit/fix` — Fix selected orders (requires orderIds, action, changedBy)
 
-### REMOVED Endpoints (Mar 14 2026)
-- ~~`POST /api/receipts/reconcile`~~ — Automatic FIFO reconciliation (DELETED per user directive)
-- ~~`POST /api/receipts/backfill-allocations`~~ — Automatic FIFO backfill (DELETED per user directive)
+### REMOVED Endpoints
+- ~~`POST /api/receipts/reconcile`~~ — Automatic FIFO reconciliation (DELETED)
+- ~~`POST /api/receipts/backfill-allocations`~~ — Automatic FIFO backfill (DELETED)
