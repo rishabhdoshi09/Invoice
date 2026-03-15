@@ -2,9 +2,13 @@ const Controller = require('../controller/dataIntegrityAudit');
 const { authenticate, authorize } = require('../middleware/auth');
 
 module.exports = (router) => {
-    // Preview: Show what reconstruction would change (READ-ONLY)
-    router.get('/data-audit/reconstruct', authenticate, authorize('admin'), Controller.reconstructOrders);
+    // Forensic Scan: READ-ONLY diagnostic report
+    router.get('/data-audit/forensic', authenticate, authorize('admin'), Controller.forensicScan);
 
-    // Apply: Reconstruct order states from evidence (requires changedBy)
+    // Fix Selected Orders: user picks which orders to fix
+    router.post('/data-audit/fix', authenticate, authorize('admin'), Controller.fixSelectedOrders);
+
+    // Backward compat: old reconstruct endpoints
+    router.get('/data-audit/reconstruct', authenticate, authorize('admin'), Controller.reconstructOrders);
     router.post('/data-audit/reconstruct', authenticate, authorize('admin'), Controller.reconstructOrders);
 };

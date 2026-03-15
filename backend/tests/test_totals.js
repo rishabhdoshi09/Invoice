@@ -4,7 +4,7 @@
 
 const axios = require('axios');
 
-const API_URL = process.env.API_URL || 'https://data-cleanup-14.preview.emergentagent.com/api';
+const API_URL = process.env.API_URL || 'https://order-state-audit.preview.emergentagent.com/api';
 const USERNAME = 'admin';
 const PASSWORD = 'admin123';
 

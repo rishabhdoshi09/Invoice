@@ -45,14 +45,11 @@ const LedgerModule = () => {
     // Migration states
     const [migrationRunning, setMigrationRunning] = useState(false);
 
-    // Undo auto-reconciliation states
-    const [undoPreview, setUndoPreview] = useState(null);
-    const [undoRunning, setUndoRunning] = useState(false);
-    const [undoResult, setUndoResult] = useState(null);
-
-    // Reconstruct states
-    const [reconstructData, setReconstructData] = useState(null);
-    const [reconstructRunning, setReconstructRunning] = useState(false);
+    // Forensic Audit states
+    const [forensicData, setForensicData] = useState(null);
+    const [forensicRunning, setForensicRunning] = useState(false);
+    const [selectedFixes, setSelectedFixes] = useState(new Set());
+    const [fixRunning, setFixRunning] = useState(false);
 
     const getAuthHeader = () => ({
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
@@ -236,77 +233,58 @@ const LedgerModule = () => {
         }
     };
 
-    // Undo Auto-Reconciliation: Preview
-    const previewUndoAutoReconciliation = async () => {
+    // Forensic Audit: Scan
+    const runForensicScan = async () => {
         try {
-            setUndoRunning(true);
+            setForensicRunning(true);
             setError(null);
-            const { data } = await axios.get('/api/receipts/undo-auto-reconciliation/preview', getAuthHeader());
-            setUndoPreview(data.data);
-            if (data.data.backfillCount === 0) {
-                setSuccess('No auto-reconciliation records found. Your data is clean.');
+            setSelectedFixes(new Set());
+            const { data } = await axios.get('/api/data-audit/forensic', getAuthHeader());
+            setForensicData(data.data);
+            if (data.data.contradictions.length === 0 && data.data.paidWithoutEvidence.length === 0) {
+                setSuccess('No issues found. All orders look clean.');
             }
         } catch (err) {
-            setError(err.response?.data?.message || 'Failed to preview undo');
+            setError(err.response?.data?.message || 'Failed to run forensic scan');
         } finally {
-            setUndoRunning(false);
+            setForensicRunning(false);
         }
     };
 
-    // Undo Auto-Reconciliation: Execute
-    const executeUndoAutoReconciliation = async () => {
+    // Forensic Audit: Fix selected orders
+    const fixSelectedOrders = async (action) => {
+        if (selectedFixes.size === 0) return;
         const userName = prompt('Enter your name for the audit trail (required):');
         if (!userName || !userName.trim()) return;
-        if (!window.confirm(`This will remove ${undoPreview?.backfillCount || 0} auto-reconciliation records and recalculate ${undoPreview?.affectedOrderCount || 0} orders. Proceed?`)) return;
+        const actionLabel = action === 'reset_to_unpaid' ? 'UNPAID' : 'PAID';
+        if (!window.confirm(`This will set ${selectedFixes.size} orders to ${actionLabel}. Every change will be logged. Proceed?`)) return;
 
         try {
-            setUndoRunning(true);
+            setFixRunning(true);
             setError(null);
-            const { data } = await axios.post('/api/receipts/undo-auto-reconciliation/execute', { changedBy: userName.trim() }, getAuthHeader());
-            setUndoResult(data.data);
-            setUndoPreview(null);
+            const { data } = await axios.post('/api/data-audit/fix', {
+                orderIds: Array.from(selectedFixes),
+                action,
+                changedBy: userName.trim()
+            }, getAuthHeader());
             setSuccess(data.message);
+            setSelectedFixes(new Set());
+            // Re-run scan to refresh
+            await runForensicScan();
         } catch (err) {
-            setError(err.response?.data?.message || 'Failed to undo auto-reconciliation');
+            setError(err.response?.data?.message || 'Failed to fix orders');
         } finally {
-            setUndoRunning(false);
+            setFixRunning(false);
         }
     };
 
-    // Reconstruct: Preview
-    const previewReconstruct = async () => {
-        try {
-            setReconstructRunning(true);
-            setError(null);
-            const { data } = await axios.get('/api/data-audit/reconstruct', getAuthHeader());
-            setReconstructData(data.data);
-            if (data.data.totalChanged === 0) {
-                setSuccess('All orders already match their evidence. Nothing to change.');
-            }
-        } catch (err) {
-            setError(err.response?.data?.message || 'Failed to preview');
-        } finally {
-            setReconstructRunning(false);
-        }
-    };
-
-    // Reconstruct: Apply
-    const applyReconstruct = async () => {
-        const userName = prompt('Enter your name for the audit trail:');
-        if (!userName || !userName.trim()) return;
-        if (!window.confirm(`This will correct ${reconstructData?.totalChanged || 0} orders based on evidence. Proceed?`)) return;
-
-        try {
-            setReconstructRunning(true);
-            setError(null);
-            const { data } = await axios.post('/api/data-audit/reconstruct', { changedBy: userName.trim() }, getAuthHeader());
-            setReconstructData(data.data);
-            setSuccess(data.message);
-        } catch (err) {
-            setError(err.response?.data?.message || 'Failed to reconstruct');
-        } finally {
-            setReconstructRunning(false);
-        }
+    const toggleFixSelection = (orderId) => {
+        setSelectedFixes(prev => {
+            const next = new Set(prev);
+            if (next.has(orderId)) next.delete(orderId);
+            else next.add(orderId);
+            return next;
+        });
     };
 
     useEffect(() => {
@@ -591,170 +569,208 @@ const LedgerModule = () => {
                         </Grid>
                     </Grid>
 
-                    {/* Undo Auto-Reconciliation Card */}
-                    <Paper data-testid="undo-auto-reconciliation-card" sx={{ p: 2, mt: 2, bgcolor: '#fff3e0', border: '1px solid #ffe0b2' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                            <Warning sx={{ color: '#e65100' }} />
-                            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#e65100', letterSpacing: 0.5 }}>
-                                Undo Auto-Reconciliation
+                    {/* Forensic Audit Card */}
+                    <Paper data-testid="forensic-audit-card" sx={{ p: 2, mt: 2, bgcolor: '#f5f5f5', border: '1px solid #bdbdbd' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <Assessment sx={{ color: '#37474f' }} />
+                            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#37474f' }}>
+                                Forensic Audit
                             </Typography>
                         </Box>
-                        <Typography variant="body2" sx={{ mb: 2, color: '#5d4037' }}>
-                            If the system previously ran automatic FIFO matching, this tool finds and removes those records, 
-                            then recalculates affected invoices. <strong>Step 1:</strong> Preview what will change. <strong>Step 2:</strong> Confirm and execute.
+                        <Typography variant="body2" sx={{ mb: 0.5, color: '#546e7a' }}>
+                            Rule: <strong>"Status change hua hai to log hona chahiye. Log nahi hai = system bug."</strong>
                         </Typography>
-                        <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                            <Button
-                                data-testid="undo-preview-btn"
-                                variant="outlined"
-                                startIcon={undoRunning ? <CircularProgress size={16} /> : <Refresh />}
-                                onClick={previewUndoAutoReconciliation}
-                                disabled={undoRunning}
-                                sx={{ borderColor: '#e65100', color: '#e65100', '&:hover': { bgcolor: 'rgba(230,81,0,0.08)' } }}
-                            >
-                                Step 1: Preview
-                            </Button>
-                            {undoPreview && undoPreview.backfillCount > 0 && (
-                                <Button
-                                    data-testid="undo-execute-btn"
-                                    variant="contained"
-                                    startIcon={undoRunning ? <CircularProgress size={16} color="inherit" /> : <PlayArrow />}
-                                    onClick={executeUndoAutoReconciliation}
-                                    disabled={undoRunning}
-                                    sx={{ bgcolor: '#d84315', '&:hover': { bgcolor: '#bf360c' } }}
-                                >
-                                    Step 2: Undo ({undoPreview.backfillCount} records)
-                                </Button>
-                            )}
-                        </Box>
-
-                        {/* Preview results */}
-                        {undoPreview && undoPreview.backfillCount > 0 && (
-                            <TableContainer sx={{ maxHeight: 300, mb: 1 }}>
-                                <Table size="small" stickyHeader>
-                                    <TableHead>
-                                        <TableRow sx={{ bgcolor: '#fff8e1' }}>
-                                            <TableCell>Invoice</TableCell>
-                                            <TableCell>Customer</TableCell>
-                                            <TableCell align="right">Total</TableCell>
-                                            <TableCell align="right">Current Paid</TableCell>
-                                            <TableCell align="right">Current Status</TableCell>
-                                            <TableCell align="right">After Undo: Paid</TableCell>
-                                            <TableCell align="right">After Undo: Status</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {undoPreview.affectedOrders.map((o) => (
-                                            <TableRow key={o.orderId} data-testid={`undo-preview-row-${o.orderNumber}`}>
-                                                <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{o.orderNumber}</TableCell>
-                                                <TableCell>{o.customerName}</TableCell>
-                                                <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatCurrency(o.orderTotal)}</TableCell>
-                                                <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatCurrency(o.current.paidAmount)}</TableCell>
-                                                <TableCell align="right">
-                                                    <Chip size="small" label={o.current.paymentStatus}
-                                                        color={o.current.paymentStatus === 'paid' ? 'success' : o.current.paymentStatus === 'partial' ? 'warning' : 'default'} />
-                                                </TableCell>
-                                                <TableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>{formatCurrency(o.afterUndo.paidAmount)}</TableCell>
-                                                <TableCell align="right">
-                                                    <Chip size="small" label={o.afterUndo.paymentStatus}
-                                                        color={o.afterUndo.paymentStatus === 'paid' ? 'success' : o.afterUndo.paymentStatus === 'partial' ? 'warning' : 'default'} />
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
-                        )}
-
-                        {/* Undo result */}
-                        {undoResult && (
-                            <Alert severity="success" sx={{ mt: 1 }} data-testid="undo-result-alert">
-                                Removed {undoResult.removedCount} auto-reconciliation records. Fixed {undoResult.ordersFixed?.length || 0} orders.
-                            </Alert>
-                        )}
-                    </Paper>
-
-                    {/* Reconstruct Orders Card */}
-                    <Paper data-testid="reconstruct-card" sx={{ p: 2, mt: 2, bgcolor: '#e8eaf6', border: '1px solid #9fa8da' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                            <Error sx={{ color: '#283593' }} />
-                            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#283593', letterSpacing: 0.5 }}>
-                                Reconstruct Order States — Evidence-Based
-                            </Typography>
-                        </Box>
-                        <Typography variant="body2" sx={{ mb: 1, color: '#37474f' }}>
-                            Sets each order's paid/unpaid status based on <strong>hard evidence only</strong>:
+                        <Typography variant="body2" sx={{ mb: 2, color: '#546e7a', fontSize: '0.8rem' }}>
+                            Scans all orders for: (1) Financial contradictions, (2) Paid without evidence, (3) Who changed what.
                         </Typography>
-                        <Typography variant="body2" component="div" sx={{ mb: 2, color: '#37474f', pl: 2 }}>
-                            1. <strong>Your toggles</strong> (audit log) → highest priority, your action wins<br/>
-                            2. <strong>Cash sale journal</strong> → always paid<br/>
-                            3. <strong>Direct payment</strong> → paidAmount = payment amount<br/>
-                            4. <strong>No evidence</strong> → unpaid (credit sale default)
-                        </Typography>
-                        <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
-                            <Button
-                                data-testid="reconstruct-preview-btn"
-                                variant="outlined"
-                                startIcon={reconstructRunning ? <CircularProgress size={16} /> : <Refresh />}
-                                onClick={previewReconstruct}
-                                disabled={reconstructRunning}
-                                sx={{ borderColor: '#283593', color: '#283593', '&:hover': { bgcolor: 'rgba(40,53,147,0.08)' } }}
-                            >
-                                {reconstructRunning ? 'Scanning...' : 'Step 1: Preview'}
-                            </Button>
-                            {reconstructData && reconstructData.totalChanged > 0 && (
-                                <Button
-                                    data-testid="reconstruct-apply-btn"
-                                    variant="contained"
-                                    startIcon={reconstructRunning ? <CircularProgress size={16} color="inherit" /> : <PlayArrow />}
-                                    onClick={applyReconstruct}
-                                    disabled={reconstructRunning}
-                                    sx={{ bgcolor: '#283593', '&:hover': { bgcolor: '#1a237e' } }}
-                                >
-                                    Step 2: Apply ({reconstructData.totalChanged} orders)
-                                </Button>
-                            )}
-                        </Box>
 
-                        {reconstructData && (
-                            <Alert severity={reconstructData.totalChanged > 0 ? 'info' : 'success'} sx={{ mb: 2 }} data-testid="reconstruct-summary">
-                                Scanned {reconstructData.totalScanned} orders. <strong>{reconstructData.totalChanged}</strong> need correction.
-                            </Alert>
-                        )}
+                        <Button
+                            data-testid="forensic-scan-btn"
+                            variant="contained"
+                            startIcon={forensicRunning ? <CircularProgress size={16} color="inherit" /> : <Refresh />}
+                            onClick={runForensicScan}
+                            disabled={forensicRunning}
+                            sx={{ mb: 2, bgcolor: '#37474f', '&:hover': { bgcolor: '#263238' } }}
+                        >
+                            {forensicRunning ? 'Scanning...' : 'Run Forensic Scan'}
+                        </Button>
 
-                        {reconstructData && reconstructData.orders?.length > 0 && (
-                            <TableContainer sx={{ maxHeight: 400 }}>
-                                <Table size="small" stickyHeader>
-                                    <TableHead>
-                                        <TableRow sx={{ bgcolor: '#e8eaf6' }}>
-                                            <TableCell>Invoice</TableCell>
-                                            <TableCell>Customer</TableCell>
-                                            <TableCell align="right">Total</TableCell>
-                                            <TableCell align="right">Current</TableCell>
-                                            <TableCell align="right">Correct</TableCell>
-                                            <TableCell>Evidence</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {reconstructData.orders.map((o) => (
-                                            <TableRow key={o.orderId} data-testid={`reconstruct-row-${o.orderNumber}`}>
-                                                <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{o.orderNumber}</TableCell>
-                                                <TableCell>{o.customerName}</TableCell>
-                                                <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatCurrency(o.orderTotal)}</TableCell>
-                                                <TableCell align="right">
-                                                    <Chip size="small" label={`${o.current.paymentStatus} (₹${Number(o.current.paidAmount).toLocaleString('en-IN')})`}
-                                                        color={o.current.paymentStatus === 'paid' ? 'success' : o.current.paymentStatus === 'partial' ? 'warning' : 'default'} />
-                                                </TableCell>
-                                                <TableCell align="right">
-                                                    <Chip size="small" label={`${o.correct.paymentStatus} (₹${Number(o.correct.paidAmount).toLocaleString('en-IN')})`}
-                                                        sx={{ bgcolor: '#c5cae9', color: '#1a237e', fontWeight: 700 }} />
-                                                </TableCell>
-                                                <TableCell sx={{ fontSize: '0.75rem', maxWidth: 250 }}>{o.reason}</TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
+                        {forensicData && (
+                            <Box>
+                                {/* Summary Row */}
+                                <Grid container spacing={1} sx={{ mb: 2 }}>
+                                    <Grid item xs={6} sm={3}>
+                                        <Box sx={{ p: 1, bgcolor: '#e3f2fd', borderRadius: 1, textAlign: 'center' }}>
+                                            <Typography variant="h6" data-testid="forensic-total-scanned">{forensicData.summary.totalScanned}</Typography>
+                                            <Typography variant="caption">Scanned</Typography>
+                                        </Box>
+                                    </Grid>
+                                    <Grid item xs={6} sm={3}>
+                                        <Box sx={{ p: 1, bgcolor: forensicData.summary.contradictionCount > 0 ? '#ffebee' : '#e8f5e9', borderRadius: 1, textAlign: 'center' }}>
+                                            <Typography variant="h6" data-testid="forensic-contradiction-count" sx={{ color: forensicData.summary.contradictionCount > 0 ? '#c62828' : '#2e7d32' }}>
+                                                {forensicData.summary.contradictionCount}
+                                            </Typography>
+                                            <Typography variant="caption">Contradictions</Typography>
+                                        </Box>
+                                    </Grid>
+                                    <Grid item xs={6} sm={3}>
+                                        <Box sx={{ p: 1, bgcolor: forensicData.summary.paidWithoutEvidenceCount > 0 ? '#fff3e0' : '#e8f5e9', borderRadius: 1, textAlign: 'center' }}>
+                                            <Typography variant="h6" data-testid="forensic-no-evidence-count" sx={{ color: forensicData.summary.paidWithoutEvidenceCount > 0 ? '#e65100' : '#2e7d32' }}>
+                                                {forensicData.summary.paidWithoutEvidenceCount}
+                                            </Typography>
+                                            <Typography variant="caption">Paid, No Evidence</Typography>
+                                        </Box>
+                                    </Grid>
+                                    <Grid item xs={6} sm={3}>
+                                        <Box sx={{ p: 1, bgcolor: '#e3f2fd', borderRadius: 1, textAlign: 'center' }}>
+                                            <Typography variant="h6">{forensicData.summary.ordersWithToggleLogs}</Typography>
+                                            <Typography variant="caption">Have Toggle Logs</Typography>
+                                        </Box>
+                                    </Grid>
+                                </Grid>
+
+                                {/* Category 1: Contradictions */}
+                                {forensicData.contradictions.length > 0 && (
+                                    <Box sx={{ mb: 2 }}>
+                                        <Typography variant="subtitle2" sx={{ color: '#c62828', fontWeight: 700, mb: 1 }}>
+                                            Financial Contradictions ({forensicData.contradictions.length})
+                                        </Typography>
+                                        <TableContainer sx={{ maxHeight: 300 }}>
+                                            <Table size="small" stickyHeader>
+                                                <TableHead>
+                                                    <TableRow sx={{ bgcolor: '#ffebee' }}>
+                                                        <TableCell padding="checkbox">
+                                                            <input type="checkbox" onChange={(e) => {
+                                                                if (e.target.checked) {
+                                                                    setSelectedFixes(new Set(forensicData.contradictions.map(c => c.orderId)));
+                                                                } else {
+                                                                    setSelectedFixes(new Set());
+                                                                }
+                                                            }} />
+                                                        </TableCell>
+                                                        <TableCell>Invoice</TableCell>
+                                                        <TableCell>Customer</TableCell>
+                                                        <TableCell align="right">Total</TableCell>
+                                                        <TableCell>Status</TableCell>
+                                                        <TableCell align="right">Paid Amt</TableCell>
+                                                        <TableCell>Issue</TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {forensicData.contradictions.map((c) => (
+                                                        <TableRow key={c.orderId} data-testid={`contradiction-row-${c.orderNumber}`}
+                                                            sx={{ bgcolor: selectedFixes.has(c.orderId) ? '#ffcdd2' : 'inherit' }}>
+                                                            <TableCell padding="checkbox">
+                                                                <input type="checkbox" checked={selectedFixes.has(c.orderId)}
+                                                                    onChange={() => toggleFixSelection(c.orderId)} />
+                                                            </TableCell>
+                                                            <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{c.orderNumber}</TableCell>
+                                                            <TableCell>{c.customerName}</TableCell>
+                                                            <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatCurrency(c.total)}</TableCell>
+                                                            <TableCell>
+                                                                <Chip size="small" label={c.paymentStatus}
+                                                                    color={c.paymentStatus === 'paid' ? 'success' : c.paymentStatus === 'partial' ? 'warning' : 'default'} />
+                                                            </TableCell>
+                                                            <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatCurrency(c.paidAmount)}</TableCell>
+                                                            <TableCell sx={{ fontSize: '0.75rem', maxWidth: 250, color: '#c62828' }}>{c.issue.detail}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </TableContainer>
+                                        {selectedFixes.size > 0 && (
+                                            <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                                                <Button variant="contained" size="small" color="warning"
+                                                    data-testid="fix-to-unpaid-btn"
+                                                    disabled={fixRunning}
+                                                    onClick={() => fixSelectedOrders('reset_to_unpaid')}>
+                                                    {fixRunning ? 'Fixing...' : `Reset ${selectedFixes.size} to UNPAID`}
+                                                </Button>
+                                                <Button variant="contained" size="small" color="success"
+                                                    data-testid="fix-to-paid-btn"
+                                                    disabled={fixRunning}
+                                                    onClick={() => fixSelectedOrders('reset_to_paid')}>
+                                                    {fixRunning ? 'Fixing...' : `Reset ${selectedFixes.size} to PAID`}
+                                                </Button>
+                                            </Box>
+                                        )}
+                                    </Box>
+                                )}
+
+                                {/* Category 2: Paid Without Evidence */}
+                                {forensicData.paidWithoutEvidence.length > 0 && (
+                                    <Box sx={{ mb: 2 }}>
+                                        <Typography variant="subtitle2" sx={{ color: '#e65100', fontWeight: 700, mb: 1 }}>
+                                            Paid Without Evidence ({forensicData.paidWithoutEvidence.length})
+                                        </Typography>
+                                        <Typography variant="body2" sx={{ color: '#795548', mb: 1, fontSize: '0.8rem' }}>
+                                            These orders are marked "paid" but have no cash journal, no toggle log, and no payment record.
+                                            They could be legitimate old cash sales OR corruption. Review manually.
+                                        </Typography>
+                                        <TableContainer sx={{ maxHeight: 300 }}>
+                                            <Table size="small" stickyHeader>
+                                                <TableHead>
+                                                    <TableRow sx={{ bgcolor: '#fff3e0' }}>
+                                                        <TableCell>Invoice</TableCell>
+                                                        <TableCell>Date</TableCell>
+                                                        <TableCell>Customer</TableCell>
+                                                        <TableCell align="right">Total</TableCell>
+                                                        <TableCell>Modified By</TableCell>
+                                                        <TableCell>Note</TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {forensicData.paidWithoutEvidence.map((p) => (
+                                                        <TableRow key={p.orderId} data-testid={`no-evidence-row-${p.orderNumber}`}>
+                                                            <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{p.orderNumber}</TableCell>
+                                                            <TableCell>{p.orderDate}</TableCell>
+                                                            <TableCell>{p.customerName}</TableCell>
+                                                            <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{formatCurrency(p.total)}</TableCell>
+                                                            <TableCell>{p.modifiedByName || '-'}</TableCell>
+                                                            <TableCell sx={{ fontSize: '0.72rem', color: '#795548', maxWidth: 200 }}>{p.note}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </TableContainer>
+                                    </Box>
+                                )}
+
+                                {/* Category 3: Change Attribution */}
+                                {forensicData.changeAttribution.length > 0 && (
+                                    <Box sx={{ mb: 2 }}>
+                                        <Typography variant="subtitle2" sx={{ color: '#1565c0', fontWeight: 700, mb: 1 }}>
+                                            Change Attribution — Who Toggled What
+                                        </Typography>
+                                        <TableContainer>
+                                            <Table size="small">
+                                                <TableHead>
+                                                    <TableRow sx={{ bgcolor: '#e3f2fd' }}>
+                                                        <TableCell>User</TableCell>
+                                                        <TableCell align="right">Total Changes</TableCell>
+                                                        <TableCell align="right">To Paid</TableCell>
+                                                        <TableCell align="right">To Unpaid</TableCell>
+                                                        <TableCell>First Change</TableCell>
+                                                        <TableCell>Last Change</TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {forensicData.changeAttribution.map((a) => (
+                                                        <TableRow key={a.userName} data-testid={`attribution-row-${a.userName}`}>
+                                                            <TableCell sx={{ fontWeight: 600 }}>{a.userName}</TableCell>
+                                                            <TableCell align="right" sx={{ fontWeight: 700 }}>{a.totalChanges}</TableCell>
+                                                            <TableCell align="right" sx={{ color: '#2e7d32' }}>{a.toPaid}</TableCell>
+                                                            <TableCell align="right" sx={{ color: '#c62828' }}>{a.toUnpaid}</TableCell>
+                                                            <TableCell sx={{ fontSize: '0.8rem' }}>{new Date(a.firstChange).toLocaleDateString('en-IN')}</TableCell>
+                                                            <TableCell sx={{ fontSize: '0.8rem' }}>{new Date(a.lastChange).toLocaleDateString('en-IN')}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </TableContainer>
+                                    </Box>
+                                )}
+                            </Box>
                         )}
                     </Paper>
 
