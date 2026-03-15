@@ -89,13 +89,12 @@ const CLASSIFICATION_SQL = `
     journal_evidence AS (
         SELECT "referenceId" AS ref_id, COUNT(*) AS jb_count
         FROM journal_batches
-        WHERE "referenceType" IN ('INVOICE', 'INVOICE_CASH')
+        WHERE "referenceType" = 'INVOICE_CASH'
           AND "referenceId" IN (SELECT uid FROM needs_check)
         GROUP BY "referenceId"
     )
     SELECT
         b.*,
-        -- Time between creation and last update (seconds)
         EXTRACT(EPOCH FROM (b."updatedAt" - b."createdAt")) AS age_diff_seconds,
         CASE
             WHEN b.pre_class != 'NEEDS_AUDIT_CHECK' THEN b.pre_class
@@ -103,13 +102,11 @@ const CLASSIFICATION_SQL = `
             WHEN b."modifiedByName" IS NOT NULL 
                  AND TRIM(b."modifiedByName") != '' 
                  THEN 'HUMAN_TOGGLED'
-            -- Rule 2: ORDER CREATE log proves it was created as paid (cash sale)
+            -- Rule 2: ORDER CREATE audit log proves it was created as paid (cash sale at counter)
             WHEN cs.created_as = 'paid' THEN 'CASH_SALE'
-            -- Rule 2b: Invoice journal exists (cash sale)
+            -- Rule 2b: INVOICE_CASH journal exists (cash collected at point of sale)
             WHEN COALESCE(je.jb_count, 0) > 0 THEN 'CASH_SALE'
-            -- Rule 2c: Never modified after creation (updatedAt ≈ createdAt within 5 min) = cash sale
-            WHEN EXTRACT(EPOCH FROM (b."updatedAt" - b."createdAt")) < 300 THEN 'CASH_SALE'
-            -- Rule 3: Paid, no human name, no cash sale evidence = SYSTEM toggled
+            -- Rule 3: Paid, no human name, no cash sale evidence = SYSTEM toggled by auto-reconciliation
             WHEN b.total > 0 THEN 'SYSTEM_TOGGLED'
             ELSE 'OTHER'
         END AS classification
