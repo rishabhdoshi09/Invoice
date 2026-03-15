@@ -136,15 +136,13 @@ module.exports = {
             const openingBal = Number(customer.openingBalance) || 0;
 
             // === BALANCE CALCULATION ===
-            // Primary: Order-based (trusted operational data)
-            // Formula: Balance = Opening + sum(dueAmount) from orders
-            // This matches the original Tally-style: Outstanding = Opening + Invoices - Receipts
+            // Balance = Opening + Total Sales - ALL Receipts (including On Account)
+            // This is the true Tally-style: Outstanding = Opening + Invoices - Receipts
             const totalSales = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
-            const totalPaid = orders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
-            const totalDue = orders.reduce((sum, o) => sum + (Number(o.dueAmount) || 0), 0);
+            const totalReceived = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
             const totalDebit = totalSales + openingBal;
-            const totalCredit = Math.round(totalPaid * 100) / 100;
-            const balance = Math.round((openingBal + totalDue) * 100) / 100;
+            const totalCredit = Math.round(totalReceived * 100) / 100;
+            const balance = Math.round((openingBal + totalSales - totalReceived) * 100) / 100;
 
             // Compute DERIVED invoice dues from receipt allocations
             const ordersWithDerivedDue = orders.map(o => {
@@ -216,10 +214,18 @@ module.exports = {
                     c."openingBalance",
                     c."createdAt",
                     c."updatedAt",
-                    -- Order-based totals (primary — trusted operational data)
+                    -- Total sales from orders
+                    COALESCE(order_totals.total_sales, 0) as total_sales,
+                    COALESCE(order_totals.total_paid, 0) as orders_paid,
+                    COALESCE(order_totals.total_due, 0) as orders_due,
+                    -- Total ALL receipts from payments table (includes On Account)
+                    COALESCE(payment_totals.total_received, 0) as total_received,
+                    -- Debit = Opening + Sales
                     COALESCE(c."openingBalance", 0) + COALESCE(order_totals.total_sales, 0) as "totalDebit",
-                    COALESCE(order_totals.total_paid, 0) as "totalCredit",
-                    COALESCE(c."openingBalance", 0) + COALESCE(order_totals.total_due, 0) as balance
+                    -- Credit = ALL receipts (not just per-invoice paidAmount)
+                    COALESCE(payment_totals.total_received, 0) as "totalCredit",
+                    -- Balance = Opening + Sales - ALL Receipts
+                    COALESCE(c."openingBalance", 0) + COALESCE(order_totals.total_sales, 0) - COALESCE(payment_totals.total_received, 0) as balance
                 FROM customers c
                 LEFT JOIN LATERAL (
                     SELECT 
@@ -230,6 +236,14 @@ module.exports = {
                     WHERE "isDeleted" = false
                     AND ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
                 ) order_totals ON true
+                LEFT JOIN LATERAL (
+                    SELECT 
+                        COALESCE(SUM(amount), 0) as total_received
+                    FROM payments
+                    WHERE "partyType" = 'customer'
+                    AND ("partyId" = c.id OR ("partyName" = c.name AND "partyId" IS NULL))
+                    ${db.payment.rawAttributes.isDeleted ? 'AND "isDeleted" = false' : ''}
+                ) payment_totals ON true
                 ORDER BY c.name ASC
             `, { type: db.Sequelize.QueryTypes.SELECT });
 
