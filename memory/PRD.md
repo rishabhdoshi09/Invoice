@@ -141,7 +141,25 @@ Implements the user's complete recovery specification:
   - Updates order fields
   - Creates audit log + ledger journal
 
-Files: `backend/src/controller/paymentRecovery.js`, `backend/src/controller/order.js`, `frontend/src/components/admin/ledger/LedgerModule.jsx`
+### Phase 7: Forensic Classification (Completed - Mar 15 2026)
+
+#### 5-Category Order Classification Based on Payment Evidence
+Classifies every order into one of:
+1. **RECEIPT_PAID** — `receipt_allocations >= order.total`
+2. **PARTIAL_PAID** — `0 < receipt_allocations < order.total`
+3. **CASH_SALE** — created as paid, has invoice journal, no toggle history
+4. **CREDIT_UNPAID** — created unpaid, no receipt exists
+5. **SUSPICIOUS_PAID** — marked paid but zero evidence (no allocation, no payment, no journal, no toggle)
+
+Each order shows: current values, expected values, evidence sources, fieldCorrect flag, needsRepair flag.
+
+#### Repair with Dry-Run
+- `GET /api/data-audit/classify` — Read-only classification report
+- `POST /api/data-audit/repair/preview` — Dry-run showing exact changes per category
+- `POST /api/data-audit/repair/execute` — Execute with audit trail (requires changedBy)
+- Post-repair validation: 4 integrity checks (paid+zero, negative due, sum=total, status consistency)
+
+Files: `backend/src/controller/forensicClassification.js`, `frontend/src/components/admin/ledger/LedgerModule.jsx`
 
 ### Earlier Completed Work
 - Full-stack invoicing system with orders, payments, customers, suppliers
