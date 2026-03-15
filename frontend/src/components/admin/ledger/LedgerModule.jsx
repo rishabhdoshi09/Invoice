@@ -752,7 +752,9 @@ const LedgerModule = () => {
                                     {[
                                         { key: 'RECEIPT_PAID', label: 'Receipt Paid', color: '#2e7d32', bg: '#e8f5e9' },
                                         { key: 'PARTIAL_PAID', label: 'Partial Paid', color: '#e65100', bg: '#fff3e0' },
+                                        { key: 'PAYMENT_PAID', label: 'Payment Paid', color: '#0d47a1', bg: '#e3f2fd' },
                                         { key: 'CASH_SALE', label: 'Cash Sale', color: '#1565c0', bg: '#e3f2fd' },
+                                        { key: 'TOGGLED_PAID', label: 'Toggled Paid', color: '#4a148c', bg: '#f3e5f5' },
                                         { key: 'CREDIT_UNPAID', label: 'Credit Unpaid', color: '#546e7a', bg: '#eceff1' },
                                         { key: 'SUSPICIOUS_PAID', label: 'Suspicious', color: '#b71c1c', bg: '#ffebee' }
                                     ].map(cat => {

@@ -1,14 +1,21 @@
 /**
  * Forensic Classification Controller
  * 
- * Two-pass classification for maximum performance:
- *   Pass 1: Classify orders using ONLY allocations + payments (fast, indexed).
- *           This resolves RECEIPT_PAID, PARTIAL_PAID, CREDIT_UNPAID instantly.
- *   Pass 2: Only for paid orders with no allocations → check audit_logs.
- *           This resolves TOGGLED_PAID, CASH_SALE, SUSPICIOUS_PAID.
+ * Two-pass classification:
+ *   Pass 1: Classify using allocations + payments (fast, indexed).
+ *           Resolves: RECEIPT_PAID, PARTIAL_PAID, CREDIT_UNPAID
+ *           Also: if paid order has payments → PAYMENT_PAID (valid, not suspicious)
+ *   Pass 2: Only for paid orders with NO allocations AND NO payments → check audit_logs + journals.
+ *           Resolves: TOGGLED_PAID, CASH_SALE, SUSPICIOUS_PAID
  *
- * audit_logs is the slowest table. This approach only scans it for the
- * small subset of orders that actually need evidence checking.
+ * Evidence hierarchy (your rules):
+ *   1. receipt_allocations exist → RECEIPT_PAID / PARTIAL_PAID
+ *   2. payment records exist → valid (has payment evidence)
+ *   3. audit_log shows manual toggle (ORDER_PAYMENT_STATUS) → TOGGLED_PAID
+ *   4. audit_log shows ORDER CREATE with paid status → CASH_SALE
+ *   5. journal_batch with INVOICE reference exists for a paid order → CASH_SALE
+ *      (covers old orders created before audit logging was added)
+ *   6. None of the above → SUSPICIOUS_PAID (only these get repaired)
  */
 const db = require('../models');
 
@@ -21,6 +28,7 @@ async function ensureIndexes() {
         CREATE INDEX IF NOT EXISTS idx_audit_entity_action ON audit_logs ("entityId", "entityType", "action");
         CREATE INDEX IF NOT EXISTS idx_alloc_order ON receipt_allocations ("orderId") WHERE ("isDeleted" IS NULL OR "isDeleted" = false);
         CREATE INDEX IF NOT EXISTS idx_pay_ref ON payments ("referenceId") WHERE ("isDeleted" = false AND "referenceType" = 'order');
+        CREATE INDEX IF NOT EXISTS idx_jb_ref_type ON journal_batches ("referenceId", "referenceType");
     `).catch(() => {});
     _indexesCreated = true;
 }
@@ -38,7 +46,7 @@ const CLASSIFICATION_SQL = `
         WHERE "isDeleted" = false AND "referenceType" = 'order'
         GROUP BY "referenceId"
     ),
-    -- Pass 1: classify without audit_logs
+    -- Pass 1: classify without audit_logs (handles ~95% of orders)
     base AS (
         SELECT
             o.id, o."orderNumber", o."orderDate", o."customerName", o."customerId",
@@ -49,10 +57,24 @@ const CLASSIFICATION_SQL = `
             COALESCE(pa.pay_total, 0)   AS pay_total,
             COALESCE(pa.pay_count, 0)   AS pay_count,
             CASE
-                WHEN COALESCE(aa.alloc_total, 0) >= o.total AND o.total > 0 THEN 'RECEIPT_PAID'
-                WHEN COALESCE(aa.alloc_total, 0) > 0 AND COALESCE(aa.alloc_total, 0) < o.total AND o.total > 0 THEN 'PARTIAL_PAID'
-                WHEN o."paymentStatus" IN ('unpaid','partial') AND COALESCE(aa.alloc_total, 0) = 0 AND COALESCE(pa.pay_total, 0) = 0 THEN 'CREDIT_UNPAID'
-                WHEN o."paymentStatus" = 'paid' AND COALESCE(aa.alloc_total, 0) = 0 THEN 'NEEDS_AUDIT_CHECK'
+                -- Rule 1: Has receipt allocations covering full amount
+                WHEN COALESCE(aa.alloc_total, 0) >= o.total AND o.total > 0
+                    THEN 'RECEIPT_PAID'
+                -- Rule 1b: Has partial allocations
+                WHEN COALESCE(aa.alloc_total, 0) > 0 AND COALESCE(aa.alloc_total, 0) < o.total AND o.total > 0
+                    THEN 'PARTIAL_PAID'
+                -- Unpaid/partial with no evidence → credit sale
+                WHEN o."paymentStatus" IN ('unpaid','partial')
+                     AND COALESCE(aa.alloc_total, 0) = 0 AND COALESCE(pa.pay_total, 0) = 0
+                    THEN 'CREDIT_UNPAID'
+                -- Paid with payment records → valid (has payment evidence, not suspicious)
+                WHEN o."paymentStatus" = 'paid' AND COALESCE(pa.pay_total, 0) > 0
+                    THEN 'PAYMENT_PAID'
+                -- Paid, no allocations, no payments → needs deeper check
+                WHEN o."paymentStatus" = 'paid'
+                     AND COALESCE(aa.alloc_total, 0) = 0
+                     AND COALESCE(pa.pay_total, 0) = 0
+                    THEN 'NEEDS_AUDIT_CHECK'
                 ELSE 'OTHER'
             END AS pre_class
         FROM orders o
@@ -60,9 +82,9 @@ const CLASSIFICATION_SQL = `
         LEFT JOIN pay_agg pa ON pa."referenceId" = o.id
         WHERE o."isDeleted" = false
     ),
-    -- Pass 2: only scan audit_logs for the few orders that need it
+    -- Pass 2: only scan audit_logs + journals for the few orders that need it
     needs_check AS (
-        SELECT id::text AS eid FROM base WHERE pre_class = 'NEEDS_AUDIT_CHECK'
+        SELECT id AS uid, id::text AS eid FROM base WHERE pre_class = 'NEEDS_AUDIT_CHECK'
     ),
     toggle_counts AS (
         SELECT "entityId", COUNT(*) AS cnt
@@ -79,6 +101,14 @@ const CLASSIFICATION_SQL = `
         WHERE "entityType" = 'ORDER' AND "action" = 'CREATE'
           AND "entityId" IN (SELECT eid FROM needs_check)
         ORDER BY "entityId", "createdAt" ASC
+    ),
+    -- Journal evidence: if an INVOICE journal exists, the order went through normal creation flow
+    journal_evidence AS (
+        SELECT "referenceId" AS ref_id, COUNT(*) AS jb_count
+        FROM journal_batches
+        WHERE "referenceType" IN ('INVOICE', 'INVOICE_CASH')
+          AND "referenceId" IN (SELECT uid FROM needs_check)
+        GROUP BY "referenceId"
     )
     SELECT
         b.*,
@@ -87,12 +117,14 @@ const CLASSIFICATION_SQL = `
             WHEN b.pre_class != 'NEEDS_AUDIT_CHECK' THEN b.pre_class
             WHEN COALESCE(tc.cnt, 0) > 0 THEN 'TOGGLED_PAID'
             WHEN cs.created_as = 'paid' THEN 'CASH_SALE'
+            WHEN COALESCE(je.jb_count, 0) > 0 THEN 'CASH_SALE'
             WHEN b.total > 0 THEN 'SUSPICIOUS_PAID'
             ELSE 'OTHER'
         END AS classification
     FROM base b
     LEFT JOIN toggle_counts tc ON tc."entityId" = b.id::text
     LEFT JOIN create_status cs ON cs."entityId" = b.id::text
+    LEFT JOIN journal_evidence je ON je.ref_id = b.id
 `;
 
 module.exports = {
@@ -108,6 +140,7 @@ module.exports = {
                 CREDIT_UNPAID: { count: 0, totalValue: 0, needsRepair: 0 },
                 SUSPICIOUS_PAID: { count: 0, totalValue: 0, needsRepair: 0 },
                 TOGGLED_PAID: { count: 0, totalValue: 0, needsRepair: 0 },
+                PAYMENT_PAID: { count: 0, totalValue: 0, needsRepair: 0 },
                 OTHER: { count: 0, totalValue: 0, needsRepair: 0 }
             };
             const suspiciousOrders = [];
@@ -180,7 +213,7 @@ module.exports = {
                     },
                     expected: { paidAmount: 0, dueAmount: Number(row.total), paymentStatus: 'unpaid' },
                     repairAction: 'RESET_TO_UNPAID',
-                    repairSource: 'SUSPICIOUS — no allocation, no payment, no toggle log'
+                    repairSource: 'SUSPICIOUS — no allocation, no payment, no toggle log, no journal'
                 }));
 
             return res.status(200).json({
