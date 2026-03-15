@@ -48,22 +48,6 @@ const CLASSIFICATION_SQL = `
         WHERE "isDeleted" = false AND "referenceType" = 'order'
         GROUP BY "referenceId"
     ),
-    -- Customer-level: total advance payments per customer (matched by name, not UUID)
-    pay_advance AS (
-        SELECT LOWER(TRIM("partyName")) AS customer_name_key, SUM(amount) AS advance_total, COUNT(*) AS advance_count
-        FROM payments
-        WHERE "isDeleted" = false AND "referenceType" = 'advance'
-          AND "partyName" IS NOT NULL AND TRIM("partyName") != ''
-        GROUP BY LOWER(TRIM("partyName"))
-    ),
-    -- Also check ALL payments (any referenceType) at customer name level as fallback
-    pay_any_by_name AS (
-        SELECT LOWER(TRIM("partyName")) AS customer_name_key, SUM(amount) AS any_pay_total, COUNT(*) AS any_pay_count
-        FROM payments
-        WHERE "isDeleted" = false
-          AND "partyName" IS NOT NULL AND TRIM("partyName") != ''
-        GROUP BY LOWER(TRIM("partyName"))
-    ),
     base AS (
         SELECT
             o.id, o."orderNumber", o."orderDate", o."customerName", o."customerId",
@@ -73,32 +57,20 @@ const CLASSIFICATION_SQL = `
             COALESCE(aa.alloc_count, 0) AS alloc_count,
             COALESCE(po.pay_total, 0)   AS pay_total,
             COALESCE(po.pay_count, 0)   AS pay_count,
-            COALESCE(pa.advance_total, 0) AS advance_total,
-            COALESCE(pa.advance_count, 0) AS advance_count,
-            COALESCE(pn.any_pay_total, 0) AS any_pay_by_name_total,
-            COALESCE(pn.any_pay_count, 0) AS any_pay_by_name_count,
             CASE
                 WHEN COALESCE(aa.alloc_total, 0) >= o.total AND o.total > 0 THEN 'RECEIPT_PAID'
                 WHEN COALESCE(aa.alloc_total, 0) > 0 AND COALESCE(aa.alloc_total, 0) < o.total AND o.total > 0 THEN 'PARTIAL_PAID'
                 WHEN o."paymentStatus" IN ('unpaid','partial')
                      AND COALESCE(aa.alloc_total, 0) = 0 AND COALESCE(po.pay_total, 0) = 0 THEN 'CREDIT_UNPAID'
-                WHEN o."paymentStatus" = 'paid' AND COALESCE(po.pay_total, 0) > 0 THEN 'PAYMENT_PAID'
-                -- Customer has advance payments (matched by name) → not suspicious
-                WHEN o."paymentStatus" = 'paid' AND COALESCE(pa.advance_total, 0) > 0 THEN 'ADVANCE_PAID'
-                -- Customer has ANY payment by name → not suspicious (receipts exist for this customer)
-                WHEN o."paymentStatus" = 'paid' AND COALESCE(pn.any_pay_total, 0) > 0 THEN 'ADVANCE_PAID'
+                -- ALL paid orders without receipt_allocations → go to audit check
+                -- modifiedByName will determine if human or system toggled
                 WHEN o."paymentStatus" = 'paid'
-                     AND COALESCE(aa.alloc_total, 0) = 0
-                     AND COALESCE(po.pay_total, 0) = 0
-                     AND COALESCE(pa.advance_total, 0) = 0
-                     AND COALESCE(pn.any_pay_total, 0) = 0 THEN 'NEEDS_AUDIT_CHECK'
+                     AND COALESCE(aa.alloc_total, 0) = 0 THEN 'NEEDS_AUDIT_CHECK'
                 ELSE 'OTHER'
             END AS pre_class
         FROM orders o
         LEFT JOIN alloc_agg aa ON aa."orderId" = o.id
         LEFT JOIN pay_order po ON po."referenceId" = o.id
-        LEFT JOIN pay_advance pa ON pa.customer_name_key = LOWER(TRIM(o."customerName"))
-        LEFT JOIN pay_any_by_name pn ON pn.customer_name_key = LOWER(TRIM(o."customerName"))
         WHERE o."isDeleted" = false
           AND o."customerName" IS NOT NULL AND TRIM(o."customerName") != ''
     ),
@@ -199,8 +171,7 @@ function computeExpectedValues(row) {
         expectedStatus = storedStatus;
         repairAction = null;
     } else {
-        // SYSTEM_TOGGLED, ADVANCE_PAID, PAYMENT_PAID
-        // System auto-toggled without human action → UNDO
+        // SYSTEM_TOGGLED — system auto-toggled without human action → UNDO
         // Reset to unpaid — actual payment tracking is via receipts/payments table
         expectedPaid = 0;
         expectedDue = total;
@@ -237,8 +208,6 @@ module.exports = {
                 CREDIT_UNPAID: { count: 0, totalValue: 0, needsRepair: 0 },
                 HUMAN_TOGGLED: { count: 0, totalValue: 0, needsRepair: 0 },
                 SYSTEM_TOGGLED: { count: 0, totalValue: 0, needsRepair: 0 },
-                PAYMENT_PAID: { count: 0, totalValue: 0, needsRepair: 0 },
-                ADVANCE_PAID: { count: 0, totalValue: 0, needsRepair: 0 },
                 OTHER: { count: 0, totalValue: 0, needsRepair: 0 }
             };
             const repairCandidates = [];
