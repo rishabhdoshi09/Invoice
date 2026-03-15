@@ -29,6 +29,11 @@ module.exports = (sequelize, Sequelize) => {
             },
             currentBalance: {
                 type: Sequelize.DOUBLE
+            },
+            notes: {
+                type: Sequelize.TEXT,
+                allowNull: true,
+                defaultValue: null
             }
         }
     );

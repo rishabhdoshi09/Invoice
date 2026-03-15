@@ -74,6 +74,10 @@ export const ListCustomers = () => {
     // Expanded rows
     const [expandedOrder, setExpandedOrder] = useState(null);
     
+    // Customer notes
+    const [customerNotes, setCustomerNotes] = useState('');
+    const [savingNotes, setSavingNotes] = useState(false);
+    
     // Recent activity
     const [recentReceipts, setRecentReceipts] = useState([]);
     
@@ -122,6 +126,7 @@ export const ListCustomers = () => {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setExpandedOrder(null);
+            setCustomerNotes(data.data?.notes || '');
             setDetailsDialog({ open: true, customer: data.data, tab: 0 });
         } catch (error) {
             alert('Error fetching details');
@@ -1197,6 +1202,7 @@ export const ListCustomers = () => {
                                 <Tab label={`Invoices (${detailsDialog.customer.orders?.length || 0})`} />
                                 <Tab label={`Receipts (${detailsDialog.customer.payments?.length || 0})`} />
                                 <Tab label="Allocate" />
+                                <Tab label="Notes" data-testid="customer-notes-tab" />
                             </Tabs>
 
                             {detailsDialog.tab === 0 && (
@@ -1424,6 +1430,55 @@ export const ListCustomers = () => {
                                             </Box>
                                         );
                                     })()}
+                                </Box>
+                            )}
+
+                            {/* Tab 3: Customer Notes */}
+                            {detailsDialog.tab === 3 && (
+                                <Box sx={{ mt: 2 }}>
+                                    <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary' }}>
+                                        Track dues, payment promises, or any notes for this customer.
+                                    </Typography>
+                                    <TextField
+                                        data-testid="customer-notes-input"
+                                        multiline
+                                        rows={8}
+                                        fullWidth
+                                        variant="outlined"
+                                        placeholder="e.g., 15 Mar - ₹40,000 due, promised to pay by 20 Mar&#10;10 Mar - Delivered 50 bags, partial payment received..."
+                                        value={customerNotes}
+                                        onChange={(e) => setCustomerNotes(e.target.value)}
+                                        sx={{ mb: 2, '& .MuiOutlinedInput-root': { fontSize: 14 } }}
+                                    />
+                                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                                        <Button
+                                            data-testid="save-customer-notes-btn"
+                                            variant="contained"
+                                            color="primary"
+                                            disabled={savingNotes}
+                                            onClick={async () => {
+                                                setSavingNotes(true);
+                                                try {
+                                                    const token = localStorage.getItem('token');
+                                                    await axios.put(`/api/customers/${detailsDialog.customer.id}`, 
+                                                        { notes: customerNotes },
+                                                        { headers: { Authorization: `Bearer ${token}` } }
+                                                    );
+                                                    setDetailsDialog(prev => ({
+                                                        ...prev,
+                                                        customer: { ...prev.customer, notes: customerNotes }
+                                                    }));
+                                                    alert('Notes saved!');
+                                                } catch (err) {
+                                                    alert('Failed to save notes: ' + (err.response?.data?.message || err.message));
+                                                } finally {
+                                                    setSavingNotes(false);
+                                                }
+                                            }}
+                                        >
+                                            {savingNotes ? 'Saving...' : 'Save Notes'}
+                                        </Button>
+                                    </Box>
                                 </Box>
                             )}
                         </DialogContent>

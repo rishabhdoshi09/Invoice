@@ -22,7 +22,8 @@ module.exports = {
             address: Joi.string().trim().allow("").optional(),
             gstin: Joi.string().trim().allow("").optional(),
             openingBalance: Joi.number().optional(),
-            currentBalance: Joi.number().optional()
+            currentBalance: Joi.number().optional(),
+            notes: Joi.string().trim().allow("", null).optional()
         });
         return Joi.validate(customerObj, schema);
     },
