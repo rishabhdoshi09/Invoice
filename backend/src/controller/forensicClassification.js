@@ -452,13 +452,13 @@ module.exports = {
     /**
      * POST /api/data-audit/reconstruct-fifo
      * 
-     * Production-grade 3-step reconstruction:
-     *   Step 1: Reset ALL non-cash-sale credit orders to unpaid (undo system damage)
-     *   Step 2: FIFO allocate each customer's payments against their orders (oldest first)
-     *   Step 3: Update order paidAmount/dueAmount/paymentStatus from new allocations
+     * Simple, clean reconstruction:
+     *   1. Delete all existing receipt_allocations (start fresh)
+     *   2. Reset ALL credit orders to unpaid
+     *   3. FIFO allocate payments to orders (oldest first) per customer
+     *   4. Update paidAmount, dueAmount, paymentStatus from allocations
      * 
-     * After this, receipt_allocations is the single source of truth.
-     * Trial balance, customer balance, order statuses — all correct.
+     * Payments table = TRUTH. Everything else is derived.
      */
     reconstructFifo: async (req, res) => {
         try {
@@ -469,324 +469,181 @@ module.exports = {
 
             const isDryRun = dryRun === true;
             const operator = changedBy.trim();
-            const { createAuditLog } = require('../middleware/auditLogger');
 
-            // ============================================================
-            // STEP 1: Get all customers who have credit orders (with name)
-            // ============================================================
+            // Get ALL customers with orders
             const [customers] = await db.sequelize.query(`
                 SELECT DISTINCT c.id, c.name
                 FROM customers c
-                JOIN orders o ON o."customerId" = c.id AND o."isDeleted" = false
-                WHERE o."customerName" IS NOT NULL AND TRIM(o."customerName") != ''
-                UNION
-                SELECT DISTINCT c.id, c.name
-                FROM customers c
-                JOIN orders o ON o."customerName" = c.name AND o."customerId" IS NULL AND o."isDeleted" = false
+                JOIN orders o ON (o."customerId" = c.id OR o."customerName" = c.name) AND o."isDeleted" = false
                 WHERE o."customerName" IS NOT NULL AND TRIM(o."customerName") != ''
             `);
 
-            const stepResults = {
-                step1_reset: { ordersReset: 0, details: [] },
-                step2_fifo: { allocationsCreated: 0, totalAllocated: 0, details: [] },
-                step3_update: { ordersUpdated: 0, details: [] },
-                customerSummary: []
+            const results = {
+                totalCustomers: customers.length,
+                ordersReset: 0,
+                allocationsCreated: 0,
+                totalAllocated: 0,
+                ordersUpdated: 0,
+                customerDetails: []
             };
 
+            if (!isDryRun) {
+                // Step 0: Clear ALL existing receipt_allocations (start fresh)
+                await db.sequelize.query(`UPDATE receipt_allocations SET "isDeleted" = true`);
+            }
+
             for (const cust of customers) {
-                // Get this customer's orders (oldest first)
+                // All orders for this customer (oldest first)
                 const [orders] = await db.sequelize.query(`
-                    SELECT id, "orderNumber", "orderDate", total, "paidAmount", "dueAmount", "paymentStatus", "modifiedByName", "createdAt"
+                    SELECT id, "orderNumber", "orderDate", total, "paidAmount", "dueAmount", "paymentStatus", "createdAt"
                     FROM orders
                     WHERE "isDeleted" = false
-                      AND ("customerId" = :custId OR ("customerName" = :custName AND "customerId" IS NULL))
+                      AND ("customerId" = :custId OR "customerName" = :custName)
                       AND "customerName" IS NOT NULL AND TRIM("customerName") != ''
                     ORDER BY "orderDate" ASC, "createdAt" ASC
                 `, { replacements: { custId: cust.id, custName: cust.name } });
 
-                // Get this customer's active payments (oldest first)
+                // All payments for this customer (oldest first)
                 const [payments] = await db.sequelize.query(`
-                    SELECT id, "paymentNumber", amount, "paymentDate", "referenceType", "createdAt"
+                    SELECT id, "paymentNumber", amount, "paymentDate", "createdAt"
                     FROM payments
                     WHERE "isDeleted" = false
                       AND "partyType" = 'customer'
-                      AND ("partyId" = :custId OR ("partyName" = :custName AND "partyId" IS NULL))
+                      AND ("partyId" = :custId OR "partyName" = :custName)
                     ORDER BY "paymentDate" ASC, "createdAt" ASC
                 `, { replacements: { custId: cust.id, custName: cust.name } });
 
-                // Get existing active allocations for this customer's orders
-                const orderIds = orders.map(o => o.id);
-                let existingAllocations = [];
-                if (orderIds.length > 0) {
-                    const [allocs] = await db.sequelize.query(`
-                        SELECT "paymentId", "orderId", amount
-                        FROM receipt_allocations
-                        WHERE "orderId" IN (:orderIds) AND "isDeleted" = false
-                    `, { replacements: { orderIds } });
-                    existingAllocations = allocs;
-                }
-
-                // Build map: how much is already allocated per payment
-                const allocatedPerPayment = {};
-                const allocatedPerOrder = {};
-                for (const a of existingAllocations) {
-                    allocatedPerPayment[a.paymentId] = (allocatedPerPayment[a.paymentId] || 0) + Number(a.amount);
-                    allocatedPerOrder[a.orderId] = (allocatedPerOrder[a.orderId] || 0) + Number(a.amount);
-                }
-
-                // Check which orders are cash sales (should not be touched)
-                const [cashSaleOrders] = orderIds.length > 0 ? await db.sequelize.query(`
-                    SELECT DISTINCT al."entityId"::uuid AS order_id
-                    FROM audit_logs al
-                    WHERE al."entityType" = 'ORDER' AND al."action" = 'CREATE'
-                      AND al."entityId" IN (:orderIdStrs)
-                      AND al."newValues"->>'paymentStatus' = 'paid'
-                    UNION
-                    SELECT DISTINCT jb."referenceId" AS order_id
-                    FROM journal_batches jb
-                    WHERE jb."referenceType" IN ('INVOICE', 'INVOICE_CASH')
-                      AND jb."referenceId" IN (:orderIds)
-                `, { replacements: { orderIds, orderIdStrs: orderIds.map(String) } }) : [[]];
-                
-                const cashSaleSet = new Set(cashSaleOrders.map(r => String(r.order_id)));
-
-                // Also check timestamp heuristic: created == updated within 5 min = cash sale
-                for (const o of orders) {
-                    if (!cashSaleSet.has(String(o.id))) {
-                        const [tsCheck] = await db.sequelize.query(`
-                            SELECT EXTRACT(EPOCH FROM ("updatedAt" - "createdAt")) AS diff
-                            FROM orders WHERE id = :oid
-                        `, { replacements: { oid: o.id } });
-                        if (tsCheck[0] && Number(tsCheck[0].diff) < 300 && o.paymentStatus === 'paid') {
-                            cashSaleSet.add(String(o.id));
-                        }
-                    }
-                }
-
-                // Check which orders were HUMAN-toggled (preserve these)
-                // modifiedByName having a real person name = human action
-                const humanToggledSet = new Set();
-                for (const o of orders) {
-                    if (o.modifiedByName && o.modifiedByName.trim() !== '') {
-                        humanToggledSet.add(String(o.id));
-                    }
-                }
-
-                // ============================================================
-                // STEP 1: Reset orders that were SYSTEM-toggled to unpaid
-                // Skip: cash sales, human toggles, already unpaid, has allocations
-                // ============================================================
-                const ordersToReset = orders.filter(o => 
-                    o.paymentStatus !== 'unpaid' && 
-                    !cashSaleSet.has(String(o.id)) &&
-                    !humanToggledSet.has(String(o.id)) &&
-                    (allocatedPerOrder[o.id] || 0) === 0  // no existing valid allocation
-                );
-
-                // ============================================================
-                // STEP 2: FIFO allocate payments against orders
-                // ============================================================
-                const newAllocations = [];
+                // FIFO: allocate payments to orders
+                const allocations = [];
                 const paymentRemaining = {};
                 for (const p of payments) {
-                    paymentRemaining[p.id] = Number(p.amount) - (allocatedPerPayment[p.id] || 0);
+                    paymentRemaining[p.id] = Number(p.amount);
                 }
 
-                // Filter orders for FIFO: skip cash sales AND human toggles
-                const ordersNeedingPayment = orders.filter(o => 
-                    !cashSaleSet.has(String(o.id)) && !humanToggledSet.has(String(o.id))
-                );
+                for (const order of orders) {
+                    let orderRemaining = Number(order.total);
+                    if (orderRemaining <= 0) continue;
 
-                for (const order of ordersNeedingPayment) {
-                    const orderTotal = Number(order.total);
-                    const alreadyAllocated = allocatedPerOrder[order.id] || 0;
-                    let orderRemaining = orderTotal - alreadyAllocated;
-
-                    if (orderRemaining <= 0.01) continue; // already fully allocated
-
-                    // FIFO: try each payment in date order
                     for (const payment of payments) {
                         const available = paymentRemaining[payment.id] || 0;
                         if (available <= 0.01) continue;
 
-                        const allocAmount = Math.min(available, orderRemaining);
-                        if (allocAmount <= 0.01) continue;
+                        const allocAmount = Math.round(Math.min(available, orderRemaining) * 100) / 100;
+                        if (allocAmount <= 0) continue;
 
-                        newAllocations.push({
+                        allocations.push({
                             paymentId: payment.id,
-                            paymentNumber: payment.paymentNumber,
                             orderId: order.id,
                             orderNumber: order.orderNumber,
-                            amount: Math.round(allocAmount * 100) / 100
+                            amount: allocAmount
                         });
 
                         paymentRemaining[payment.id] -= allocAmount;
                         orderRemaining -= allocAmount;
-
                         if (orderRemaining <= 0.01) break;
                     }
                 }
 
-                // ============================================================
-                // STEP 3: Calculate final order states from allocations
-                // ============================================================
-                // Merge existing allocations + new allocations
-                const finalAllocPerOrder = { ...allocatedPerOrder };
-                for (const a of newAllocations) {
-                    finalAllocPerOrder[a.orderId] = (finalAllocPerOrder[a.orderId] || 0) + a.amount;
+                // Calculate new order states from allocations
+                const allocPerOrder = {};
+                for (const a of allocations) {
+                    allocPerOrder[a.orderId] = (allocPerOrder[a.orderId] || 0) + a.amount;
                 }
 
                 const orderUpdates = [];
                 for (const order of orders) {
-                    // Skip cash sales and human toggles — these are preserved
-                    if (cashSaleSet.has(String(order.id))) continue;
-                    if (humanToggledSet.has(String(order.id))) continue;
-
                     const total = Number(order.total);
-                    const allocated = finalAllocPerOrder[order.id] || 0;
-                    const newPaid = Math.min(allocated, total);
-                    const newDue = Math.max(0, total - newPaid);
-                    let newStatus;
-                    if (newPaid >= total - 0.5) newStatus = 'paid';
-                    else if (newPaid > 0.5) newStatus = 'partial';
-                    else newStatus = 'unpaid';
+                    const allocated = allocPerOrder[order.id] || 0;
+                    const newPaid = Math.round(Math.min(allocated, total) * 100) / 100;
+                    const newDue = Math.round(Math.max(0, total - newPaid) * 100) / 100;
+                    const newStatus = newPaid >= total - 0.5 ? 'paid' : (newPaid > 0.5 ? 'partial' : 'unpaid');
 
-                    const oldPaid = Number(order.paidAmount);
-                    const oldDue = Number(order.dueAmount);
-                    const oldStatus = order.paymentStatus;
+                    const changed = Math.abs(Number(order.paidAmount) - newPaid) > 0.5 
+                                 || Math.abs(Number(order.dueAmount) - newDue) > 0.5 
+                                 || order.paymentStatus !== newStatus;
 
-                    if (Math.abs(oldPaid - newPaid) > 0.5 || Math.abs(oldDue - newDue) > 0.5 || oldStatus !== newStatus) {
-                        orderUpdates.push({
-                            orderId: order.id,
-                            orderNumber: order.orderNumber,
-                            before: { paidAmount: oldPaid, dueAmount: oldDue, paymentStatus: oldStatus },
-                            after: { paidAmount: newPaid, dueAmount: newDue, paymentStatus: newStatus },
-                            allocatedFromReceipts: allocated
-                        });
-                    }
+                    orderUpdates.push({
+                        orderId: order.id,
+                        orderNumber: order.orderNumber,
+                        before: { paidAmount: Number(order.paidAmount), dueAmount: Number(order.dueAmount), paymentStatus: order.paymentStatus },
+                        after: { paidAmount: newPaid, dueAmount: newDue, paymentStatus: newStatus },
+                        changed
+                    });
                 }
 
-                // Customer summary
-                const totalPayments = payments.reduce((s, p) => s + Number(p.amount), 0);
-                const totalOrders = orders.reduce((s, o) => s + Number(o.total), 0);
-                const totalAllocated = Object.values(finalAllocPerOrder).reduce((s, v) => s + v, 0);
+                const totalPaymentValue = payments.reduce((s, p) => s + Number(p.amount), 0);
+                const totalOrderValue = orders.reduce((s, o) => s + Number(o.total), 0);
+                const changedOrders = orderUpdates.filter(u => u.changed);
 
-                stepResults.customerSummary.push({
-                    customerId: cust.id,
-                    customerName: cust.name,
-                    totalOrders: orders.length,
-                    totalOrderValue: Math.round(totalOrders * 100) / 100,
-                    totalPayments: payments.length,
-                    totalPaymentValue: Math.round(totalPayments * 100) / 100,
-                    cashSales: cashSaleSet.size,
-                    humanToggled: humanToggledSet.size,
-                    ordersToReset: ordersToReset.length,
-                    newAllocations: newAllocations.filter(a => orders.some(o => o.id === a.orderId)).length,
-                    orderUpdates: orderUpdates.length,
-                    balance: Math.round((totalOrders - totalPayments) * 100) / 100
+                results.allocationsCreated += allocations.length;
+                results.totalAllocated += allocations.reduce((s, a) => s + a.amount, 0);
+                results.ordersUpdated += changedOrders.length;
+
+                results.customerDetails.push({
+                    name: cust.name,
+                    orders: orders.length,
+                    payments: payments.length,
+                    totalOrderValue: Math.round(totalOrderValue * 100) / 100,
+                    totalPaymentValue: Math.round(totalPaymentValue * 100) / 100,
+                    balance: Math.round((totalOrderValue - totalPaymentValue) * 100) / 100,
+                    allocationsCreated: allocations.length,
+                    ordersChanged: changedOrders.length
                 });
 
-                // ============================================================
-                // EXECUTE (unless dry run)
-                // ============================================================
+                // EXECUTE
                 if (!isDryRun) {
                     await db.sequelize.transaction(async (transaction) => {
-                        // Step 1: Reset orders
-                        for (const order of ordersToReset) {
+                        // Reset ALL orders to unpaid first
+                        for (const order of orders) {
                             await db.order.update(
                                 { paidAmount: 0, dueAmount: Number(order.total), paymentStatus: 'unpaid' },
                                 { where: { id: order.id }, transaction }
                             );
-                            stepResults.step1_reset.ordersReset++;
+                            results.ordersReset++;
                         }
 
-                        // Step 2: Create FIFO allocations
-                        for (const alloc of newAllocations) {
+                        // Create allocations
+                        for (const alloc of allocations) {
                             await db.receiptAllocation.create({
                                 paymentId: alloc.paymentId,
                                 orderId: alloc.orderId,
                                 amount: alloc.amount,
                                 isDeleted: false
                             }, { transaction });
-                            stepResults.step2_fifo.allocationsCreated++;
-                            stepResults.step2_fifo.totalAllocated += alloc.amount;
                         }
 
-                        // Step 3: Update orders from final allocations
+                        // Update orders with correct values
                         for (const upd of orderUpdates) {
                             await db.order.update(
-                                {
-                                    paidAmount: upd.after.paidAmount,
-                                    dueAmount: upd.after.dueAmount,
-                                    paymentStatus: upd.after.paymentStatus
-                                },
+                                { paidAmount: upd.after.paidAmount, dueAmount: upd.after.dueAmount, paymentStatus: upd.after.paymentStatus },
                                 { where: { id: upd.orderId }, transaction }
                             );
-                            stepResults.step3_update.ordersUpdated++;
-
-                            // Audit log
-                            try {
-                                await createAuditLog({
-                                    userId: req.user?.id,
-                                    userName: operator,
-                                    userRole: req.user?.role || 'admin',
-                                    action: 'UPDATE',
-                                    entityType: 'DATA_RECOVERY',
-                                    entityId: upd.orderId,
-                                    entityName: upd.orderNumber,
-                                    oldValues: upd.before,
-                                    newValues: { ...upd.after, source: 'fifo_reconstruction', allocatedFromReceipts: upd.allocatedFromReceipts },
-                                    description: `[FIFO RECONSTRUCT] ${upd.orderNumber}: ${upd.before.paymentStatus}→${upd.after.paymentStatus} | paid ₹${upd.after.paidAmount} from receipts`,
-                                    ipAddress: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown',
-                                    userAgent: req.headers['user-agent']
-                                });
-                            } catch (e) { /* audit log failure shouldn't break repair */ }
                         }
                     });
-                } else {
-                    // Dry run: just collect stats
-                    stepResults.step1_reset.ordersReset += ordersToReset.length;
-                    stepResults.step1_reset.details.push(...ordersToReset.map(o => ({
-                        orderNumber: o.orderNumber, customerName: cust.name,
-                        current: { paidAmount: Number(o.paidAmount), paymentStatus: o.paymentStatus }
-                    })));
-                    stepResults.step2_fifo.allocationsCreated += newAllocations.length;
-                    stepResults.step2_fifo.totalAllocated += newAllocations.reduce((s, a) => s + a.amount, 0);
-                    stepResults.step2_fifo.details.push(...newAllocations);
-                    stepResults.step3_update.ordersUpdated += orderUpdates.length;
-                    stepResults.step3_update.details.push(...orderUpdates);
                 }
             }
 
-            // Post-repair validation (only for execute)
+            // Post-repair validation
             let validation = null;
             if (!isDryRun) {
-                try {
-                    const checks = [];
-                    const [paidZero] = await db.sequelize.query(`SELECT COUNT(*) as c FROM orders WHERE "isDeleted" = false AND "paymentStatus" = 'paid' AND "paidAmount" = 0 AND total > 0`);
-                    checks.push({ name: 'No paid with zero paidAmount', passed: Number(paidZero[0].c) === 0, violations: Number(paidZero[0].c) });
-                    const [negDue] = await db.sequelize.query(`SELECT COUNT(*) as c FROM orders WHERE "isDeleted" = false AND "dueAmount" < 0`);
-                    checks.push({ name: 'No negative dueAmount', passed: Number(negDue[0].c) === 0, violations: Number(negDue[0].c) });
-                    const [sumBad] = await db.sequelize.query(`SELECT COUNT(*) as c FROM orders WHERE "isDeleted" = false AND ABS("paidAmount" + "dueAmount" - total) > 0.50`);
-                    checks.push({ name: 'paidAmount + dueAmount = total', passed: Number(sumBad[0].c) === 0, violations: Number(sumBad[0].c) });
-                    validation = { allPassed: checks.every(c => c.passed), checks };
-                } catch (e) { /* silent */ }
+                const checks = [];
+                const [paidZero] = await db.sequelize.query(`SELECT COUNT(*) as c FROM orders WHERE "isDeleted" = false AND "paymentStatus" = 'paid' AND "paidAmount" = 0 AND total > 0`);
+                checks.push({ name: 'No paid orders with zero paidAmount', passed: Number(paidZero[0].c) === 0, count: Number(paidZero[0].c) });
+                const [negDue] = await db.sequelize.query(`SELECT COUNT(*) as c FROM orders WHERE "isDeleted" = false AND "dueAmount" < 0`);
+                checks.push({ name: 'No negative dueAmount', passed: Number(negDue[0].c) === 0, count: Number(negDue[0].c) });
+                const [sumBad] = await db.sequelize.query(`SELECT COUNT(*) as c FROM orders WHERE "isDeleted" = false AND ABS("paidAmount" + "dueAmount" - total) > 0.50`);
+                checks.push({ name: 'paidAmount + dueAmount = total', passed: Number(sumBad[0].c) === 0, count: Number(sumBad[0].c) });
+                validation = { allPassed: checks.every(c => c.passed), checks };
             }
+
+            results.totalAllocated = Math.round(results.totalAllocated * 100) / 100;
 
             return res.status(200).json({
                 status: 200,
                 message: isDryRun
-                    ? `DRY RUN: Would reset ${stepResults.step1_reset.ordersReset} orders, create ${stepResults.step2_fifo.allocationsCreated} allocations, update ${stepResults.step3_update.ordersUpdated} orders.`
-                    : `Reconstruction complete. Reset ${stepResults.step1_reset.ordersReset}, allocated ${stepResults.step2_fifo.allocationsCreated} receipts (₹${Math.round(stepResults.step2_fifo.totalAllocated)}), updated ${stepResults.step3_update.ordersUpdated} orders.`,
-                data: {
-                    isDryRun,
-                    ...stepResults,
-                    validation,
-                    step2_fifo: {
-                        ...stepResults.step2_fifo,
-                        totalAllocated: Math.round(stepResults.step2_fifo.totalAllocated * 100) / 100
-                    }
-                }
+                    ? `DRY RUN: ${results.totalCustomers} customers, ${results.allocationsCreated} allocations (₹${results.totalAllocated}), ${results.ordersUpdated} orders would change.`
+                    : `Done. ${results.ordersReset} orders reset, ${results.allocationsCreated} allocations created (₹${results.totalAllocated}), all orders recalculated.`,
+                data: { isDryRun, ...results, validation }
             });
         } catch (error) {
             console.error('FIFO Reconstruction error:', error);
