@@ -105,20 +105,6 @@ const CLASSIFICATION_SQL = `
     needs_check AS (
         SELECT id AS uid, id::text AS eid FROM base WHERE pre_class = 'NEEDS_AUDIT_CHECK'
     ),
-    -- Get the LAST toggle log per order, including WHO did it
-    toggle_info AS (
-        SELECT DISTINCT ON ("entityId")
-            "entityId",
-            "userId",
-            "userName",
-            "userRole",
-            "description",
-            "createdAt" AS toggle_at
-        FROM audit_logs
-        WHERE "entityType" = 'ORDER_PAYMENT_STATUS'
-          AND "entityId" IN (SELECT eid FROM needs_check)
-        ORDER BY "entityId", "createdAt" DESC
-    ),
     create_status AS (
         SELECT DISTINCT ON ("entityId")
             "entityId",
@@ -137,35 +123,25 @@ const CLASSIFICATION_SQL = `
     )
     SELECT
         b.*,
-        CASE WHEN ti."entityId" IS NOT NULL THEN 1 ELSE 0 END AS toggle_log_count,
-        ti."userId" AS toggle_user_id,
-        ti."userName" AS toggle_user_name,
-        ti."userRole" AS toggle_user_role,
         -- Time between creation and last update (seconds)
         EXTRACT(EPOCH FROM (b."updatedAt" - b."createdAt")) AS age_diff_seconds,
         CASE
             WHEN b.pre_class != 'NEEDS_AUDIT_CHECK' THEN b.pre_class
-            -- Rule 2a: Human user explicitly toggled → preserve
-            WHEN ti."entityId" IS NOT NULL 
-                 AND ti."userId" IS NOT NULL 
-                 AND ti."userName" IS NOT NULL 
-                 AND TRIM(ti."userName") != ''
-                 AND LOWER(TRIM(ti."userName")) NOT IN ('system', 'auto', 'cron', 'scheduler', 'reconciliation', 'auto-reconciliation')
+            -- Rule 1: modifiedByName has a real person name → human toggled → preserve
+            WHEN b."modifiedByName" IS NOT NULL 
+                 AND TRIM(b."modifiedByName") != '' 
                  THEN 'HUMAN_TOGGLED'
-            -- Rule 2b: Toggle log exists but by system/unknown → system did it
-            WHEN ti."entityId" IS NOT NULL THEN 'SYSTEM_TOGGLED'
-            -- Rule 3: ORDER CREATE log proves it was created as paid (cash sale)
+            -- Rule 2: ORDER CREATE log proves it was created as paid (cash sale)
             WHEN cs.created_as = 'paid' THEN 'CASH_SALE'
-            -- Rule 3b: Invoice journal exists (cash sale)
+            -- Rule 2b: Invoice journal exists (cash sale)
             WHEN COALESCE(je.jb_count, 0) > 0 THEN 'CASH_SALE'
-            -- Rule 3c: Order was never modified after creation (updatedAt ≈ createdAt within 5 min)
+            -- Rule 2c: Never modified after creation (updatedAt ≈ createdAt within 5 min) = cash sale
             WHEN EXTRACT(EPOCH FROM (b."updatedAt" - b."createdAt")) < 300 THEN 'CASH_SALE'
-            -- Rule 4: Paid, modified AFTER creation, zero evidence, no log = system bug
+            -- Rule 3: Paid, no human name, no cash sale evidence = SYSTEM toggled
             WHEN b.total > 0 THEN 'SYSTEM_TOGGLED'
             ELSE 'OTHER'
         END AS classification
     FROM base b
-    LEFT JOIN toggle_info ti ON ti."entityId" = b.id::text
     LEFT JOIN create_status cs ON cs."entityId" = b.id::text
     LEFT JOIN journal_evidence je ON je.ref_id = b.id
 `;
@@ -551,7 +527,7 @@ module.exports = {
             for (const cust of customers) {
                 // Get this customer's orders (oldest first)
                 const [orders] = await db.sequelize.query(`
-                    SELECT id, "orderNumber", "orderDate", total, "paidAmount", "dueAmount", "paymentStatus", "createdAt"
+                    SELECT id, "orderNumber", "orderDate", total, "paidAmount", "dueAmount", "paymentStatus", "modifiedByName", "createdAt"
                     FROM orders
                     WHERE "isDeleted" = false
                       AND ("customerId" = :custId OR ("customerName" = :custName AND "customerId" IS NULL))
@@ -619,21 +595,11 @@ module.exports = {
                 }
 
                 // Check which orders were HUMAN-toggled (preserve these)
+                // modifiedByName having a real person name = human action
                 const humanToggledSet = new Set();
-                if (orderIds.length > 0) {
-                    const [humanToggles] = await db.sequelize.query(`
-                        SELECT DISTINCT ON ("entityId") "entityId"
-                        FROM audit_logs
-                        WHERE "entityType" = 'ORDER_PAYMENT_STATUS'
-                          AND "entityId" IN (:orderIdStrs)
-                          AND "userId" IS NOT NULL
-                          AND "userName" IS NOT NULL
-                          AND TRIM("userName") != ''
-                          AND LOWER(TRIM("userName")) NOT IN ('system', 'auto', 'cron', 'scheduler', 'reconciliation', 'auto-reconciliation')
-                        ORDER BY "entityId", "createdAt" DESC
-                    `, { replacements: { orderIdStrs: orderIds.map(String) } });
-                    for (const ht of humanToggles) {
-                        humanToggledSet.add(ht.entityId);
+                for (const o of orders) {
+                    if (o.modifiedByName && o.modifiedByName.trim() !== '') {
+                        humanToggledSet.add(String(o.id));
                     }
                 }
 
