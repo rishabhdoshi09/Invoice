@@ -780,58 +780,63 @@ const LedgerModule = () => {
                                     })}
                                 </Grid>
 
-                                {/* Detail Tables per Category */}
-                                {['RECEIPT_PAID', 'PARTIAL_PAID', 'CASH_SALE', 'CREDIT_UNPAID', 'SUSPICIOUS_PAID'].map(catKey => {
-                                    const items = classifyData.categories[catKey] || [];
-                                    if (items.length === 0) return null;
-                                    const catColors = { RECEIPT_PAID: '#2e7d32', PARTIAL_PAID: '#e65100', CASH_SALE: '#1565c0', CREDIT_UNPAID: '#546e7a', SUSPICIOUS_PAID: '#b71c1c' };
-                                    const catBg = { RECEIPT_PAID: '#e8f5e9', PARTIAL_PAID: '#fff3e0', CASH_SALE: '#e3f2fd', CREDIT_UNPAID: '#eceff1', SUSPICIOUS_PAID: '#ffebee' };
-                                    return (
-                                        <Box key={catKey} sx={{ mb: 2 }}>
-                                            <Typography variant="subtitle2" sx={{ color: catColors[catKey], fontWeight: 700, mb: 0.5 }}>
-                                                {catKey.replace(/_/g, ' ')} ({items.length})
-                                            </Typography>
-                                            <TableContainer sx={{ maxHeight: 220 }}>
-                                                <Table size="small" stickyHeader>
-                                                    <TableHead>
-                                                        <TableRow sx={{ bgcolor: catBg[catKey] }}>
-                                                            <TableCell>Invoice</TableCell>
-                                                            <TableCell>Customer</TableCell>
-                                                            <TableCell align="right">Total</TableCell>
-                                                            <TableCell>Current Status</TableCell>
-                                                            <TableCell align="right">Alloc</TableCell>
-                                                            <TableCell>Fields OK?</TableCell>
+                                {/* Repair Candidates Table — shows ALL orders needing repair */}
+                                {classifyData.repairCandidates && classifyData.repairCandidates.length > 0 && (
+                                    <Box sx={{ mb: 2 }}>
+                                        <Typography variant="subtitle2" sx={{ color: '#b71c1c', fontWeight: 700, mb: 0.5 }}>
+                                            Orders Needing Repair ({classifyData.repairCandidates.length})
+                                        </Typography>
+                                        {classifyData.repairsByAction && (
+                                            <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+                                                {Object.entries(classifyData.repairsByAction).map(([action, info]) => (
+                                                    <Chip key={action} size="small"
+                                                        label={`${action}: ${info.count}`}
+                                                        sx={{ bgcolor: action === 'RESET_TO_UNPAID' ? '#ffcdd2' : action === 'FIX_FROM_RECEIPTS' ? '#c8e6c9' : '#bbdefb', fontWeight: 600, fontSize: '0.75rem' }}
+                                                    />
+                                                ))}
+                                            </Box>
+                                        )}
+                                        <TableContainer sx={{ maxHeight: 300 }}>
+                                            <Table size="small" stickyHeader>
+                                                <TableHead>
+                                                    <TableRow sx={{ bgcolor: '#ffebee' }}>
+                                                        <TableCell>Invoice</TableCell>
+                                                        <TableCell>Customer</TableCell>
+                                                        <TableCell align="right">Total</TableCell>
+                                                        <TableCell>Current</TableCell>
+                                                        <TableCell>Expected</TableCell>
+                                                        <TableCell>Action</TableCell>
+                                                        <TableCell>Classification</TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {classifyData.repairCandidates.map(o => (
+                                                        <TableRow key={o.orderId} data-testid={`repair-candidate-${o.orderNumber}`}
+                                                            sx={{ bgcolor: '#fff8e1' }}>
+                                                            <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.8rem' }}>{o.orderNumber}</TableCell>
+                                                            <TableCell sx={{ fontSize: '0.8rem' }}>{o.customerName}</TableCell>
+                                                            <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{formatCurrency(o.total)}</TableCell>
+                                                            <TableCell>
+                                                                <Chip size="small" label={`${o.current.paymentStatus} (${formatCurrency(o.current.paidAmount)})`}
+                                                                    color={o.current.paymentStatus === 'paid' ? 'success' : o.current.paymentStatus === 'partial' ? 'warning' : 'default'}
+                                                                    sx={{ fontSize: '0.7rem' }} />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Chip size="small" label={`${o.expected.paymentStatus} (${formatCurrency(o.expected.paidAmount)})`}
+                                                                    sx={{ bgcolor: '#bbdefb', fontWeight: 700, fontSize: '0.7rem' }} />
+                                                            </TableCell>
+                                                            <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, color: o.repairAction === 'RESET_TO_UNPAID' ? '#b71c1c' : '#2e7d32' }}>{o.repairAction}</TableCell>
+                                                            <TableCell sx={{ fontSize: '0.72rem', color: '#546e7a' }}>{o.classification}</TableCell>
                                                         </TableRow>
-                                                    </TableHead>
-                                                    <TableBody>
-                                                        {items.map(o => (
-                                                            <TableRow key={o.orderId} data-testid={`classify-row-${o.orderNumber}`}
-                                                                sx={{ bgcolor: o.needsRepair ? '#fff8e1' : 'inherit' }}>
-                                                                <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.8rem' }}>{o.orderNumber}</TableCell>
-                                                                <TableCell sx={{ fontSize: '0.8rem' }}>{o.customerName}</TableCell>
-                                                                <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{formatCurrency(o.total)}</TableCell>
-                                                                <TableCell>
-                                                                    <Chip size="small" label={`${o.current.paymentStatus} (${formatCurrency(o.current.paidAmount)})`}
-                                                                        color={o.current.paymentStatus === 'paid' ? 'success' : o.current.paymentStatus === 'partial' ? 'warning' : 'default'}
-                                                                        sx={{ fontSize: '0.7rem' }} />
-                                                                </TableCell>
-                                                                <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{formatCurrency(o.evidence.allocTotal)}</TableCell>
-                                                                <TableCell>
-                                                                    {o.fieldCorrect
-                                                                        ? <Typography variant="caption" sx={{ color: '#2e7d32', fontWeight: 700 }}>OK</Typography>
-                                                                        : <Typography variant="caption" sx={{ color: '#b71c1c', fontWeight: 700 }}>
-                                                                            MISMATCH → {o.expected.paymentStatus} ({formatCurrency(o.expected.paidAmount)})
-                                                                          </Typography>
-                                                                    }
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        ))}
-                                                    </TableBody>
-                                                </Table>
-                                            </TableContainer>
-                                        </Box>
-                                    );
-                                })}
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </TableContainer>
+                                    </Box>
+                                )}
+                                {classifyData.totalNeedsRepair === 0 && (
+                                    <Alert severity="success" sx={{ mt: 1 }}>All orders are consistent with their evidence. No repairs needed.</Alert>
+                                )}
                             </Box>
                         )}
 
