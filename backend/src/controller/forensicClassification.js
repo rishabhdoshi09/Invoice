@@ -41,11 +41,18 @@ const CLASSIFICATION_SQL = `
         WHERE "isDeleted" IS NULL OR "isDeleted" = false
         GROUP BY "orderId"
     ),
-    pay_agg AS (
+    pay_order AS (
         SELECT "referenceId", SUM(amount) AS pay_total, COUNT(*) AS pay_count
         FROM payments
         WHERE "isDeleted" = false AND "referenceType" = 'order'
         GROUP BY "referenceId"
+    ),
+    -- Customer-level: total advance payments per customer (partyId = customerId)
+    pay_advance AS (
+        SELECT "partyId" AS customer_id, SUM(amount) AS advance_total, COUNT(*) AS advance_count
+        FROM payments
+        WHERE "isDeleted" = false AND "referenceType" = 'advance'
+        GROUP BY "partyId"
     ),
     base AS (
         SELECT
@@ -54,22 +61,28 @@ const CLASSIFICATION_SQL = `
             o."modifiedByName", o."createdAt", o."updatedAt",
             COALESCE(aa.alloc_total, 0) AS alloc_total,
             COALESCE(aa.alloc_count, 0) AS alloc_count,
-            COALESCE(pa.pay_total, 0)   AS pay_total,
-            COALESCE(pa.pay_count, 0)   AS pay_count,
+            COALESCE(po.pay_total, 0)   AS pay_total,
+            COALESCE(po.pay_count, 0)   AS pay_count,
+            COALESCE(pa.advance_total, 0) AS advance_total,
+            COALESCE(pa.advance_count, 0) AS advance_count,
             CASE
                 WHEN COALESCE(aa.alloc_total, 0) >= o.total AND o.total > 0 THEN 'RECEIPT_PAID'
                 WHEN COALESCE(aa.alloc_total, 0) > 0 AND COALESCE(aa.alloc_total, 0) < o.total AND o.total > 0 THEN 'PARTIAL_PAID'
                 WHEN o."paymentStatus" IN ('unpaid','partial')
-                     AND COALESCE(aa.alloc_total, 0) = 0 AND COALESCE(pa.pay_total, 0) = 0 THEN 'CREDIT_UNPAID'
-                WHEN o."paymentStatus" = 'paid' AND COALESCE(pa.pay_total, 0) > 0 THEN 'PAYMENT_PAID'
+                     AND COALESCE(aa.alloc_total, 0) = 0 AND COALESCE(po.pay_total, 0) = 0 THEN 'CREDIT_UNPAID'
+                WHEN o."paymentStatus" = 'paid' AND COALESCE(po.pay_total, 0) > 0 THEN 'PAYMENT_PAID'
+                -- Customer has advance payments → not suspicious (money was received)
+                WHEN o."paymentStatus" = 'paid' AND COALESCE(pa.advance_total, 0) > 0 THEN 'ADVANCE_PAID'
                 WHEN o."paymentStatus" = 'paid'
                      AND COALESCE(aa.alloc_total, 0) = 0
-                     AND COALESCE(pa.pay_total, 0) = 0 THEN 'NEEDS_AUDIT_CHECK'
+                     AND COALESCE(po.pay_total, 0) = 0
+                     AND COALESCE(pa.advance_total, 0) = 0 THEN 'NEEDS_AUDIT_CHECK'
                 ELSE 'OTHER'
             END AS pre_class
         FROM orders o
         LEFT JOIN alloc_agg aa ON aa."orderId" = o.id
-        LEFT JOIN pay_agg pa ON pa."referenceId" = o.id
+        LEFT JOIN pay_order po ON po."referenceId" = o.id
+        LEFT JOIN pay_advance pa ON pa.customer_id = o."customerId"
         WHERE o."isDeleted" = false
           AND o."customerName" IS NOT NULL AND TRIM(o."customerName") != ''
     ),
@@ -167,7 +180,7 @@ function computeExpectedValues(row) {
         expectedStatus = 'unpaid';
         repairAction = 'RESET_TO_UNPAID';
     } else {
-        // TOGGLED_PAID, CASH_SALE, CREDIT_UNPAID, OTHER — trust current values
+        // TOGGLED_PAID, CASH_SALE, ADVANCE_PAID, CREDIT_UNPAID, OTHER — trust current values
         expectedPaid = storedPaid;
         expectedDue = storedDue;
         expectedStatus = storedStatus;
@@ -204,6 +217,7 @@ module.exports = {
                 SUSPICIOUS_PAID: { count: 0, totalValue: 0, needsRepair: 0 },
                 TOGGLED_PAID: { count: 0, totalValue: 0, needsRepair: 0 },
                 PAYMENT_PAID: { count: 0, totalValue: 0, needsRepair: 0 },
+                ADVANCE_PAID: { count: 0, totalValue: 0, needsRepair: 0 },
                 OTHER: { count: 0, totalValue: 0, needsRepair: 0 }
             };
             const repairCandidates = [];
