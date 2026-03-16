@@ -49,17 +49,17 @@ export const AdminDashboard = () => {
             const orders = ordersRes.data.data?.rows || [];
             const payments = paymentsRes.data.data?.rows || [];
 
-            // Calculate stats
-            const totalReceivable = customers.reduce((sum, c) => sum + Math.max(0, c.balance || 0), 0);
-            const totalPayable = suppliers.reduce((sum, s) => sum + Math.max(0, s.balance || 0), 0);
-            const totalSales = customers.reduce((sum, c) => sum + (c.totalDebit || 0), 0);
-            const totalPurchases = suppliers.reduce((sum, s) => sum + (s.totalDebit || 0), 0);
+            // Calculate stats — force Number() since PostgreSQL returns strings
+            const totalReceivable = customers.reduce((sum, c) => sum + Math.max(0, Number(c.balance) || 0), 0);
+            const totalPayable = suppliers.reduce((sum, s) => sum + Math.max(0, Number(s.balance) || 0), 0);
+            const totalSales = customers.reduce((sum, c) => sum + (Number(c.totalDebit) || 0), 0);
+            const totalPurchases = suppliers.reduce((sum, s) => sum + (Number(s.totalDebit) || 0), 0);
 
             // Today's orders
             const today = moment().format('DD-MM-YYYY');
             const todayOrders = orders.filter(o => o.orderDate === today);
-            const todaySales = todayOrders.reduce((sum, o) => sum + (o.total || 0), 0);
-            const todayPaidSales = todayOrders.filter(o => o.paymentStatus === 'paid').reduce((sum, o) => sum + (o.total || 0), 0);
+            const todaySales = todayOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+            const todayPaidSales = todayOrders.filter(o => o.paymentStatus === 'paid').reduce((sum, o) => sum + (Number(o.total) || 0), 0);
 
             setStats({
                 customers: customers.length,
