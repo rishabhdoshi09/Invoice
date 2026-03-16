@@ -298,8 +298,16 @@ module.exports = {
                 entityType: 'PAYMENT',
                 entityId: result.id,
                 entityName: result.paymentNumber,
-                newValues: { amount: value.amount, partyType: value.partyType, partyName: value.partyName, referenceType: value.referenceType },
-                description: `Payment ${result.paymentNumber}: ₹${value.amount} from ${value.partyName} (${value.partyType})`,
+                oldValues: null,
+                newValues: {
+                    paymentNumber: result.paymentNumber,
+                    amount: Number(value.amount),
+                    partyType: value.partyType,
+                    partyName: value.partyName,
+                    referenceType: value.referenceType || null,
+                    paymentDate: value.paymentDate || null
+                },
+                description: `Payment created: ${result.paymentNumber} | ₹${value.amount} | ${value.partyName} (${value.partyType})`,
                 ipAddress: getClientIP(req),
                 userAgent: req.headers['user-agent']
             }).catch(e => console.warn('[AUDIT] Payment create log failed:', e.message));
@@ -482,8 +490,15 @@ module.exports = {
                 entityType: 'PAYMENT',
                 entityId: payment.id,
                 entityName: payment.paymentNumber,
-                oldValues: { amount: payment.amount, partyType: payment.partyType, partyName: payment.partyName },
-                description: `Deleted payment ${payment.paymentNumber}: ₹${payment.amount} from ${payment.partyName}`,
+                oldValues: {
+                    paymentNumber: payment.paymentNumber,
+                    amount: Number(payment.amount),
+                    partyType: payment.partyType,
+                    partyName: payment.partyName,
+                    paymentDate: payment.paymentDate
+                },
+                newValues: null,
+                description: `Payment deleted: ${payment.paymentNumber} | ₹${payment.amount} | ${payment.partyName} (${payment.partyType})`,
                 ipAddress: getClientIP(req),
                 userAgent: req.headers['user-agent']
             }).catch(e => console.warn('[AUDIT] Payment delete log failed:', e.message));

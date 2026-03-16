@@ -923,15 +923,23 @@ module.exports = {
             // Create audit log (outside transaction - non-critical)
             await createAuditLog({
                 userId: req.user?.id,
-                userName: changedByTrimmed, // Use the provided name
+                userName: changedByTrimmed,
                 userRole: req.user?.role || 'unknown',
-                action: 'UPDATE',
-                entityType: 'ORDER_PAYMENT_STATUS',
+                action: 'ORDER_PAYMENT_STATUS',
+                entityType: 'ORDER',
                 entityId: orderId,
                 entityName: order.orderNumber,
-                oldValues: { paymentStatus: oldStatus, paidAmount: order.paidAmount },
-                newValues: { paymentStatus: newStatus, paidAmount: newStatus === 'paid' ? order.total : 0, changedBy: changedByTrimmed },
-                description: `${changedByTrimmed} changed payment status from ${oldStatus} to ${newStatus} for order ${order.orderNumber}`,
+                oldValues: {
+                    paymentStatus: oldStatus,
+                    paidAmount: Number(order.paidAmount),
+                    dueAmount: Number(order.dueAmount)
+                },
+                newValues: {
+                    paymentStatus: newStatus,
+                    paidAmount: newStatus === 'paid' ? Number(order.total) : 0,
+                    dueAmount: newStatus === 'paid' ? 0 : Number(order.total)
+                },
+                description: `Toggle: ${order.orderNumber} | paymentStatus: ${oldStatus} → ${newStatus} | paidAmount: ₹${order.paidAmount} → ₹${newStatus === 'paid' ? order.total : 0} | by ${changedByTrimmed}`,
                 ipAddress: getClientIP(req),
                 userAgent: req.headers['user-agent']
             });

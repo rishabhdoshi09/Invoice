@@ -2508,17 +2508,25 @@ const LedgerModule = () => {
                                             <TableCell sx={{ fontSize: '0.7rem', maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                 {row.description}
                                             </TableCell>
-                                            <TableCell sx={{ fontSize: '0.65rem', maxWidth: 200 }}>
+                                            <TableCell sx={{ fontSize: '0.65rem', maxWidth: 300 }}>
                                                 {row.oldValues && (
-                                                    <span style={{ color: '#c62828' }}>
-                                                        {typeof row.oldValues === 'string' ? row.oldValues : JSON.stringify(row.oldValues).substring(0, 80)}
-                                                    </span>
+                                                    <Box sx={{ display: 'inline' }}>
+                                                        {Object.entries(typeof row.oldValues === 'string' ? JSON.parse(row.oldValues) : row.oldValues).map(([k, v]) => (
+                                                            <span key={k} style={{ color: '#c62828', marginRight: 6 }}>
+                                                                <strong>{k}:</strong> {v === null ? 'null' : String(v)}
+                                                            </span>
+                                                        ))}
+                                                    </Box>
                                                 )}
-                                                {row.oldValues && row.newValues && ' → '}
+                                                {row.oldValues && row.newValues && <span style={{ margin: '0 4px', fontWeight: 700 }}> → </span>}
                                                 {row.newValues && (
-                                                    <span style={{ color: '#2e7d32' }}>
-                                                        {typeof row.newValues === 'string' ? row.newValues : JSON.stringify(row.newValues).substring(0, 80)}
-                                                    </span>
+                                                    <Box sx={{ display: 'inline' }}>
+                                                        {Object.entries(typeof row.newValues === 'string' ? JSON.parse(row.newValues) : row.newValues).map(([k, v]) => (
+                                                            <span key={k} style={{ color: '#2e7d32', marginRight: 6 }}>
+                                                                <strong>{k}:</strong> {v === null ? 'null' : String(v)}
+                                                            </span>
+                                                        ))}
+                                                    </Box>
                                                 )}
                                             </TableCell>
                                         </TableRow>
