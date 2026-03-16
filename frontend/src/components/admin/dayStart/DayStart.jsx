@@ -12,7 +12,16 @@ import {
     Paper,
     Divider,
     ToggleButton,
-    ToggleButtonGroup
+    ToggleButtonGroup,
+    Table,
+    TableBody,
+    TableCell,
+    TableContainer,
+    TableHead,
+    TableRow,
+    Chip,
+    IconButton,
+    Collapse
 } from '@mui/material';
 import { 
     AccountBalance, 
@@ -24,7 +33,10 @@ import {
     ShoppingCart,
     Receipt,
     Today,
-    History
+    History,
+    ExpandMore,
+    ExpandLess,
+    Visibility
 } from '@mui/icons-material';
 import { 
     ResponsiveContainer, 
@@ -58,6 +70,8 @@ export const DayStart = () => {
     
     // Opening balance state
     const [openingBalanceInput, setOpeningBalanceInput] = useState('');
+    // Card expansion state for inline detail view
+    const [expandedCard, setExpandedCard] = useState(null); // 'cashSales' | 'creditSales' | 'customerReceipts' | 'supplierPayments' | 'expenses' | null
 
     // RTK Query hooks - automatic caching and refetch!
     // SINGLE SOURCE OF TRUTH: Real-time summary - calculated directly from orders
@@ -272,7 +286,17 @@ export const DayStart = () => {
                     
                     {/* Sales - now showing Cash Sales only */}
                     <Grid item xs={12} md={2}>
-                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: '#e3f2fd', borderRadius: 2 }}>
+                        <Box 
+                            data-testid="cash-sales-card"
+                            onClick={() => setExpandedCard(prev => prev === 'cashSales' ? null : 'cashSales')}
+                            sx={{ 
+                                textAlign: 'center', p: 2, bgcolor: expandedCard === 'cashSales' ? '#bbdefb' : '#e3f2fd', 
+                                borderRadius: 2, cursor: 'pointer', 
+                                border: expandedCard === 'cashSales' ? '2px solid #1976d2' : '2px solid transparent',
+                                '&:hover': { bgcolor: '#bbdefb', transform: 'translateY(-2px)' }, 
+                                transition: 'all 0.2s' 
+                            }}
+                        >
                             <ShoppingCart sx={{ fontSize: 40, color: '#1976d2' }} />
                             <Typography variant="body2" color="text.secondary">Cash Sales</Typography>
                             <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1976d2' }}>
@@ -282,10 +306,12 @@ export const DayStart = () => {
                                 {cashOrdersCount} cash orders
                             </Typography>
                             {creditSales > 0 && (
-                                <Typography variant="caption" sx={{ display: 'block', color: '#ff5722', fontWeight: 'bold' }}>
+                                <Typography variant="caption" sx={{ display: 'block', color: '#ff5722', fontWeight: 'bold', cursor: 'pointer' }}
+                                    onClick={(e) => { e.stopPropagation(); setExpandedCard(prev => prev === 'creditSales' ? null : 'creditSales'); }}>
                                     Credit: ₹{creditSales.toLocaleString('en-IN')} (not in drawer)
                                 </Typography>
                             )}
+                            <Visibility sx={{ fontSize: 14, color: '#999', mt: 0.5 }} />
                         </Box>
                     </Grid>
                     
@@ -296,7 +322,17 @@ export const DayStart = () => {
                     
                     {/* Customer Receipts */}
                     <Grid item xs={12} md={2}>
-                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: '#e8f5e9', borderRadius: 2 }}>
+                        <Box 
+                            data-testid="customer-receipts-card"
+                            onClick={() => setExpandedCard(prev => prev === 'customerReceipts' ? null : 'customerReceipts')}
+                            sx={{ 
+                                textAlign: 'center', p: 2, bgcolor: expandedCard === 'customerReceipts' ? '#c8e6c9' : '#e8f5e9', 
+                                borderRadius: 2, cursor: 'pointer',
+                                border: expandedCard === 'customerReceipts' ? '2px solid #4caf50' : '2px solid transparent',
+                                '&:hover': { bgcolor: '#c8e6c9', transform: 'translateY(-2px)' }, 
+                                transition: 'all 0.2s' 
+                            }}
+                        >
                             <People sx={{ fontSize: 40, color: '#2e7d32' }} />
                             <Typography variant="body2" color="text.secondary">Customer Receipts</Typography>
                             <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
@@ -305,6 +341,7 @@ export const DayStart = () => {
                             <Typography variant="caption" color="text.secondary">
                                 {customerReceiptsCount} receipts
                             </Typography>
+                            <br/><Visibility sx={{ fontSize: 14, color: '#999', mt: 0.5 }} />
                         </Box>
                     </Grid>
                     
@@ -315,7 +352,17 @@ export const DayStart = () => {
                     
                     {/* Supplier Payments */}
                     <Grid item xs={12} md={2}>
-                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: '#fff3e0', borderRadius: 2 }}>
+                        <Box 
+                            data-testid="supplier-payments-card"
+                            onClick={() => setExpandedCard(prev => prev === 'supplierPayments' ? null : 'supplierPayments')}
+                            sx={{ 
+                                textAlign: 'center', p: 2, bgcolor: expandedCard === 'supplierPayments' ? '#ffe0b2' : '#fff3e0', 
+                                borderRadius: 2, cursor: 'pointer',
+                                border: expandedCard === 'supplierPayments' ? '2px solid #ff9800' : '2px solid transparent',
+                                '&:hover': { bgcolor: '#ffe0b2', transform: 'translateY(-2px)' }, 
+                                transition: 'all 0.2s' 
+                            }}
+                        >
                             <LocalShipping sx={{ fontSize: 40, color: '#e65100' }} />
                             <Typography variant="body2" color="text.secondary">Supplier Payments</Typography>
                             <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#e65100' }}>
@@ -324,6 +371,7 @@ export const DayStart = () => {
                             <Typography variant="caption" color="text.secondary">
                                 {supplierPaymentsCount} payments
                             </Typography>
+                            <br/><Visibility sx={{ fontSize: 14, color: '#999', mt: 0.5 }} />
                         </Box>
                     </Grid>
                     
@@ -334,7 +382,17 @@ export const DayStart = () => {
                     
                     {/* Expenses */}
                     <Grid item xs={12} md={2}>
-                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: '#ffebee', borderRadius: 2 }}>
+                        <Box 
+                            data-testid="expenses-card"
+                            onClick={() => setExpandedCard(prev => prev === 'expenses' ? null : 'expenses')}
+                            sx={{ 
+                                textAlign: 'center', p: 2, bgcolor: expandedCard === 'expenses' ? '#ffcdd2' : '#ffebee', 
+                                borderRadius: 2, cursor: 'pointer',
+                                border: expandedCard === 'expenses' ? '2px solid #f44336' : '2px solid transparent',
+                                '&:hover': { bgcolor: '#ffcdd2', transform: 'translateY(-2px)' }, 
+                                transition: 'all 0.2s' 
+                            }}
+                        >
                             <Receipt sx={{ fontSize: 40, color: '#c62828' }} />
                             <Typography variant="body2" color="text.secondary">Expenses</Typography>
                             <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#c62828' }}>
@@ -343,6 +401,7 @@ export const DayStart = () => {
                             <Typography variant="caption" color="text.secondary">
                                 {Number(realTimeSummary?.expensesCount) || 0} expenses
                             </Typography>
+                            <br/><Visibility sx={{ fontSize: 14, color: '#999', mt: 0.5 }} />
                         </Box>
                     </Grid>
                 </Grid>
@@ -386,6 +445,233 @@ export const DayStart = () => {
                     </Grid>
                 </Grid>
             </Paper>
+
+            {/* Inline Expanded Details — shows records when a card is clicked */}
+            <Collapse in={!!expandedCard} timeout={300}>
+                {expandedCard && (
+                <Paper 
+                    elevation={3}
+                    data-testid="day-start-expanded-details"
+                    sx={{ 
+                        mb: 3, 
+                        border: expandedCard === 'cashSales' || expandedCard === 'creditSales' ? '2px solid #1976d2' : 
+                               expandedCard === 'customerReceipts' ? '2px solid #4caf50' : 
+                               expandedCard === 'supplierPayments' ? '2px solid #ff9800' : '2px solid #f44336',
+                        borderRadius: 2, overflow: 'hidden'
+                    }}
+                >
+                    <Box sx={{ 
+                        p: 2, 
+                        bgcolor: expandedCard === 'cashSales' || expandedCard === 'creditSales' ? '#e3f2fd' : 
+                                 expandedCard === 'customerReceipts' ? '#e8f5e9' : 
+                                 expandedCard === 'supplierPayments' ? '#fff3e0' : '#ffebee',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center' 
+                    }}>
+                        <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {(expandedCard === 'cashSales' || expandedCard === 'creditSales') && <ShoppingCart color="primary" />}
+                            {expandedCard === 'customerReceipts' && <People color="success" />}
+                            {expandedCard === 'supplierPayments' && <LocalShipping color="warning" />}
+                            {expandedCard === 'expenses' && <Receipt sx={{ color: '#d32f2f' }} />}
+                            {expandedCard === 'cashSales' ? `Cash Sales — ${cashOrdersCount} Orders` : 
+                             expandedCard === 'creditSales' ? `Credit Sales — ${creditOrdersCount} Orders` :
+                             expandedCard === 'customerReceipts' ? `Customer Receipts — ${customerReceiptsCount} Receipts` : 
+                             expandedCard === 'supplierPayments' ? `Supplier Payments — ${supplierPaymentsCount} Payments` : 
+                             `Expenses — ${Number(realTimeSummary?.expensesCount) || 0} Records`}
+                        </Typography>
+                        <IconButton onClick={() => setExpandedCard(null)} size="small"><ExpandLess /></IconButton>
+                    </Box>
+
+                    {/* CASH SALES - Order records */}
+                    {expandedCard === 'cashSales' && (
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>#</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Invoice #</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Time</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Customer</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Mode</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {(realTimeSummary?.cashOrderRecords || []).map((order, idx) => (
+                                        <TableRow key={order.id} hover sx={{ '&:nth-of-type(odd)': { bgcolor: 'rgba(0,0,0,0.02)' } }}>
+                                            <TableCell>{idx + 1}</TableCell>
+                                            <TableCell><Typography variant="body2" fontWeight="bold" sx={{ fontFamily: 'monospace' }}>{order.orderNumber}</Typography></TableCell>
+                                            <TableCell>{moment(order.createdAt).format('hh:mm A')}</TableCell>
+                                            <TableCell><Typography fontWeight="bold">{order.customerName || 'Walk-in'}</Typography></TableCell>
+                                            <TableCell><Chip label="CASH" size="small" color="primary" /></TableCell>
+                                            <TableCell align="right"><Typography fontWeight="bold" color="primary">₹{Number(order.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                        </TableRow>
+                                    ))}
+                                    <TableRow sx={{ bgcolor: '#bbdefb' }}>
+                                        <TableCell colSpan={5}><Typography fontWeight="bold">Total ({(realTimeSummary?.cashOrderRecords || []).length} orders)</Typography></TableCell>
+                                        <TableCell align="right"><Typography fontWeight="bold" variant="h6" color="primary">₹{cashSales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+
+                    {/* CREDIT SALES - Credit order records */}
+                    {expandedCard === 'creditSales' && (
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>#</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Invoice #</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Time</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Customer</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Total</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Due</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {(realTimeSummary?.creditOrderRecords || []).map((order, idx) => (
+                                        <TableRow key={order.id} hover sx={{ '&:nth-of-type(odd)': { bgcolor: 'rgba(0,0,0,0.02)' } }}>
+                                            <TableCell>{idx + 1}</TableCell>
+                                            <TableCell><Typography variant="body2" fontWeight="bold" sx={{ fontFamily: 'monospace' }}>{order.orderNumber}</Typography></TableCell>
+                                            <TableCell>{moment(order.createdAt).format('hh:mm A')}</TableCell>
+                                            <TableCell><Typography fontWeight="bold">{order.customerName || 'Walk-in'}</Typography></TableCell>
+                                            <TableCell><Chip label={order.paymentStatus} size="small" color={order.paymentStatus === 'paid' ? 'success' : order.paymentStatus === 'partial' ? 'warning' : 'error'} /></TableCell>
+                                            <TableCell align="right">₹{Number(order.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
+                                            <TableCell align="right"><Typography fontWeight="bold" color="error.main">₹{Number(order.dueAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                        </TableRow>
+                                    ))}
+                                    <TableRow sx={{ bgcolor: '#ffcdd2' }}>
+                                        <TableCell colSpan={6}><Typography fontWeight="bold">Total Credit ({(realTimeSummary?.creditOrderRecords || []).length} orders)</Typography></TableCell>
+                                        <TableCell align="right"><Typography fontWeight="bold" variant="h6" color="error.main">₹{creditSales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+
+                    {/* CUSTOMER RECEIPTS - Payment records */}
+                    {expandedCard === 'customerReceipts' && (
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>#</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Receipt #</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Time</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Customer</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Reference</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Notes</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {(realTimeSummary?.customerReceiptRecords || []).map((p, idx) => (
+                                        <TableRow key={p.id} hover sx={{ '&:nth-of-type(odd)': { bgcolor: 'rgba(0,0,0,0.02)' } }}>
+                                            <TableCell>{idx + 1}</TableCell>
+                                            <TableCell><Typography variant="body2" fontWeight="bold" sx={{ fontFamily: 'monospace' }}>{p.paymentNumber}</Typography></TableCell>
+                                            <TableCell>{moment(p.createdAt).format('hh:mm A')}</TableCell>
+                                            <TableCell><Typography fontWeight="bold">{p.partyName}</Typography></TableCell>
+                                            <TableCell align="right"><Typography fontWeight="bold" color="success.main">+₹{Number(p.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                            <TableCell><Chip label={p.referenceType || '-'} size="small" variant="outlined" /></TableCell>
+                                            <TableCell><Typography variant="body2" color="text.secondary">{p.notes || '-'}</Typography></TableCell>
+                                        </TableRow>
+                                    ))}
+                                    <TableRow sx={{ bgcolor: '#c8e6c9' }}>
+                                        <TableCell colSpan={4}><Typography fontWeight="bold">Total ({(realTimeSummary?.customerReceiptRecords || []).length} receipts)</Typography></TableCell>
+                                        <TableCell align="right"><Typography fontWeight="bold" variant="h6" color="success.main">₹{customerPayments.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                        <TableCell colSpan={2}></TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+
+                    {/* SUPPLIER PAYMENTS */}
+                    {expandedCard === 'supplierPayments' && (
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>#</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Payment #</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Time</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Supplier</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Reference</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Notes</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {(realTimeSummary?.supplierPaymentRecords || []).map((p, idx) => (
+                                        <TableRow key={p.id} hover sx={{ '&:nth-of-type(odd)': { bgcolor: 'rgba(0,0,0,0.02)' } }}>
+                                            <TableCell>{idx + 1}</TableCell>
+                                            <TableCell><Typography variant="body2" fontWeight="bold" sx={{ fontFamily: 'monospace' }}>{p.paymentNumber}</Typography></TableCell>
+                                            <TableCell>{moment(p.createdAt).format('hh:mm A')}</TableCell>
+                                            <TableCell><Typography fontWeight="bold">{p.partyName}</Typography></TableCell>
+                                            <TableCell align="right"><Typography fontWeight="bold" color="warning.main">-₹{Number(p.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                            <TableCell><Chip label={p.referenceType || '-'} size="small" variant="outlined" /></TableCell>
+                                            <TableCell><Typography variant="body2" color="text.secondary">{p.notes || '-'}</Typography></TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {(realTimeSummary?.supplierPaymentRecords || []).length === 0 && (
+                                        <TableRow><TableCell colSpan={7}><Alert severity="info">No supplier payments for this date</Alert></TableCell></TableRow>
+                                    )}
+                                    {(realTimeSummary?.supplierPaymentRecords || []).length > 0 && (
+                                        <TableRow sx={{ bgcolor: '#ffe0b2' }}>
+                                            <TableCell colSpan={4}><Typography fontWeight="bold">Total ({(realTimeSummary?.supplierPaymentRecords || []).length} payments)</Typography></TableCell>
+                                            <TableCell align="right"><Typography fontWeight="bold" variant="h6" color="warning.main">₹{supplierPayments.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                            <TableCell colSpan={2}></TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+
+                    {/* EXPENSES */}
+                    {expandedCard === 'expenses' && (
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>#</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Payment #</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Time</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Notes</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {(realTimeSummary?.expenseRecords || []).map((p, idx) => (
+                                        <TableRow key={p.id} hover sx={{ '&:nth-of-type(odd)': { bgcolor: 'rgba(0,0,0,0.02)' } }}>
+                                            <TableCell>{idx + 1}</TableCell>
+                                            <TableCell><Typography variant="body2" fontWeight="bold" sx={{ fontFamily: 'monospace' }}>{p.paymentNumber}</Typography></TableCell>
+                                            <TableCell>{moment(p.createdAt).format('hh:mm A')}</TableCell>
+                                            <TableCell><Typography fontWeight="bold">{p.partyName}</Typography></TableCell>
+                                            <TableCell align="right"><Typography fontWeight="bold" color="error.main">-₹{Number(p.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                            <TableCell><Typography variant="body2" color="text.secondary">{p.notes || '-'}</Typography></TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {(realTimeSummary?.expenseRecords || []).length === 0 && (
+                                        <TableRow><TableCell colSpan={6}><Alert severity="info">No expenses for this date</Alert></TableCell></TableRow>
+                                    )}
+                                    {(realTimeSummary?.expenseRecords || []).length > 0 && (
+                                        <TableRow sx={{ bgcolor: '#ffcdd2' }}>
+                                            <TableCell colSpan={4}><Typography fontWeight="bold">Total ({(realTimeSummary?.expenseRecords || []).length} expenses)</Typography></TableCell>
+                                            <TableCell align="right"><Typography fontWeight="bold" variant="h6" color="error.main">₹{expenses.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                            <TableCell></TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+                </Paper>
+                )}
+            </Collapse>
 
             {/* Charts Section */}
             <Grid container spacing={3} sx={{ mb: 3 }}>

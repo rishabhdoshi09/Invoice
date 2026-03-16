@@ -456,7 +456,33 @@ module.exports = {
             supplierPayments: supplierPaymentsAmount,
             // Expenses (cash going out)
             expensesCount: payments.filter(p => p.partyType === 'expense').length,
-            expenses: expensePayments
+            expenses: expensePayments,
+            // Individual records for inline detail view
+            cashOrderRecords: cashOrders.map(o => ({
+                id: o.id, orderNumber: o.orderNumber, customerName: o.customerName,
+                total: Number(o.total), paidAmount: Number(o.paidAmount), paymentStatus: o.paymentStatus,
+                paymentMode: o.paymentMode, createdAt: o.createdAt
+            })),
+            creditOrderRecords: creditOrders.map(o => ({
+                id: o.id, orderNumber: o.orderNumber, customerName: o.customerName,
+                total: Number(o.total), dueAmount: Number(o.dueAmount), paymentStatus: o.paymentStatus,
+                paymentMode: o.paymentMode, createdAt: o.createdAt
+            })),
+            customerReceiptRecords: customerReceipts.map(p => ({
+                id: p.id, paymentNumber: p.paymentNumber, partyName: p.partyName,
+                amount: Number(p.amount), referenceType: p.referenceType,
+                referenceNumber: p.referenceNumber, notes: p.notes, createdAt: p.createdAt
+            })),
+            supplierPaymentRecords: payments.filter(p => p.partyType === 'supplier').map(p => ({
+                id: p.id, paymentNumber: p.paymentNumber, partyName: p.partyName,
+                amount: Number(p.amount), referenceType: p.referenceType,
+                referenceNumber: p.referenceNumber, notes: p.notes, createdAt: p.createdAt
+            })),
+            expenseRecords: payments.filter(p => p.partyType === 'expense').map(p => ({
+                id: p.id, paymentNumber: p.paymentNumber, partyName: p.partyName,
+                amount: Number(p.amount), referenceType: p.referenceType,
+                referenceNumber: p.referenceNumber, notes: p.notes, createdAt: p.createdAt
+            }))
         };
     }
 };
