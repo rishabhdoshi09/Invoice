@@ -55,4 +55,13 @@ module.exports = (router) => {
             auditMiddleware('ORDER'),
             Controller.order.togglePaymentStatus
         );
+
+    // Confirm link — admin explicitly links order to existing customer after prompt
+    router
+        .route('/orders/:orderId/confirm-link')
+        .post(
+            authenticate,
+            canModify,
+            Controller.order.confirmLink
+        );
 };
