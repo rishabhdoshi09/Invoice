@@ -3,6 +3,9 @@ const Services = require('../services');
 const Validations = require('../validations');
 const db = require('../models');
 const { postPaymentToLedger, reversePaymentLedger, postSupplierPaymentToLedger } = require('../services/realTimeLedger');
+const { createAuditLog } = require('../middleware/auditLogger');
+
+const getClientIP = (req) => req.headers['x-forwarded-for'] || req.connection?.remoteAddress || '';
 
 module.exports = {
     createPayment: async (req, res) => {
@@ -286,6 +289,21 @@ module.exports = {
                 return response;
             });
 
+            // Audit trail — payment created
+            await createAuditLog({
+                userId: req.user?.id,
+                userName: req.user?.name || req.user?.username || 'System',
+                userRole: req.user?.role || 'unknown',
+                action: 'CREATE',
+                entityType: 'PAYMENT',
+                entityId: result.id,
+                entityName: result.paymentNumber,
+                newValues: { amount: value.amount, partyType: value.partyType, partyName: value.partyName, referenceType: value.referenceType },
+                description: `Payment ${result.paymentNumber}: ₹${value.amount} from ${value.partyName} (${value.partyType})`,
+                ipAddress: getClientIP(req),
+                userAgent: req.headers['user-agent']
+            }).catch(e => console.warn('[AUDIT] Payment create log failed:', e.message));
+
             return res.status(200).send({
                 status: 200,
                 message: 'payment recorded successfully',
@@ -454,6 +472,21 @@ module.exports = {
                     { where: { id: req.params.paymentId }, transaction }
                 );
             });
+
+            // Audit trail — payment deleted
+            await createAuditLog({
+                userId: req.user?.id,
+                userName: req.user?.name || req.user?.username || 'System',
+                userRole: req.user?.role || 'unknown',
+                action: 'DELETE',
+                entityType: 'PAYMENT',
+                entityId: payment.id,
+                entityName: payment.paymentNumber,
+                oldValues: { amount: payment.amount, partyType: payment.partyType, partyName: payment.partyName },
+                description: `Deleted payment ${payment.paymentNumber}: ₹${payment.amount} from ${payment.partyName}`,
+                ipAddress: getClientIP(req),
+                userAgent: req.headers['user-agent']
+            }).catch(e => console.warn('[AUDIT] Payment delete log failed:', e.message));
 
             return res.status(200).send({
                 status: 200,

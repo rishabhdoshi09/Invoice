@@ -994,6 +994,21 @@ module.exports = {
                 }
             });
 
+            // Audit trail — confirm link
+            await createAuditLog({
+                userId: req.user?.id,
+                userName: req.user?.name || req.user?.username || 'System',
+                userRole: req.user?.role || 'unknown',
+                action: 'CONFIRM_LINK',
+                entityType: 'ORDER',
+                entityId: orderId,
+                entityName: order.orderNumber,
+                newValues: { customerId: customer.id, customerName: customer.name },
+                description: `Admin linked order ${order.orderNumber} to customer "${customer.name}"`,
+                ipAddress: getClientIP(req),
+                userAgent: req.headers['user-agent']
+            }).catch(e => console.warn('[AUDIT] Confirm link log failed:', e.message));
+
             return res.status(200).json({
                 status: 200,
                 message: `Order ${order.orderNumber} linked to "${customer.name}".`,

@@ -1,5 +1,8 @@
 const Services = require('../services');
 const Validations = require('../validations');
+const { createAuditLog } = require('../middleware/auditLogger');
+
+const getClientIP = (req) => req.headers['x-forwarded-for'] || req.connection?.remoteAddress || '';
 
 module.exports = {
     createCustomer: async (req, res) => {
@@ -194,6 +197,21 @@ module.exports = {
                 await db.customer.destroy({ where: { id: customerId }, transaction });
             });
 
+            // Audit trail — customer deleted
+            await createAuditLog({
+                userId: req.user?.id,
+                userName: req.user?.name || req.user?.username || 'System',
+                userRole: req.user?.role || 'unknown',
+                action: 'DELETE',
+                entityType: 'CUSTOMER',
+                entityId: customerId,
+                entityName: customer.name,
+                oldValues: { name: customer.name, mobile: customer.mobile, currentBalance: customer.currentBalance },
+                description: `Hard deleted customer "${customer.name}" (balance: ₹${customer.currentBalance || 0}). Orders/payments unlinked.`,
+                ipAddress: getClientIP(req),
+                userAgent: req.headers['user-agent']
+            }).catch(e => console.warn('[AUDIT] Customer delete log failed:', e.message));
+
             return res.status(200).send({
                 status: 200,
                 message: `Customer "${customer.name}" hard deleted. Orders/payments unlinked (customerName preserved).`,
@@ -341,6 +359,22 @@ module.exports = {
                 return { ordersRelinked: ordersUpdated?.rowCount || 0, paymentsRelinked: paymentsUpdated?.rowCount || 0 };
             });
 
+            // Audit trail — merge
+            await createAuditLog({
+                userId: req.user?.id,
+                userName: req.user?.name || req.user?.username || 'System',
+                userRole: req.user?.role || 'unknown',
+                action: 'MERGE',
+                entityType: 'CUSTOMER',
+                entityId: targetId,
+                entityName: target.name,
+                oldValues: { sourceId, sourceName: source.name },
+                newValues: { ordersRelinked: result.ordersRelinked, paymentsRelinked: result.paymentsRelinked },
+                description: `Merged "${source.name}" into "${target.name}". ${result.ordersRelinked} orders, ${result.paymentsRelinked} payments.`,
+                ipAddress: getClientIP(req),
+                userAgent: req.headers['user-agent']
+            }).catch(e => console.warn('[AUDIT] Merge log failed:', e.message));
+
             return res.status(200).json({
                 status: 200,
                 message: `Merged "${source.name}" into "${target.name}". ${result.ordersRelinked} orders, ${result.paymentsRelinked} payments relinked.`,
@@ -387,6 +421,21 @@ module.exports = {
                   AND "partyType" = 'customer'
                   AND LOWER(TRIM("partyName")) = LOWER(TRIM(:orphanName))
             `, { replacements: { targetId, orphanName } });
+
+            // Audit trail — link orphans
+            await createAuditLog({
+                userId: req.user?.id,
+                userName: req.user?.name || req.user?.username || 'System',
+                userRole: req.user?.role || 'unknown',
+                action: 'LINK_ORPHANS',
+                entityType: 'CUSTOMER',
+                entityId: targetId,
+                entityName: target.name,
+                newValues: { orphanName, ordersLinked: ordersResult?.rowCount || 0, paymentsLinked: paymentsResult?.rowCount || 0 },
+                description: `Linked orphan "${orphanName}" to "${target.name}". ${ordersResult?.rowCount || 0} orders, ${paymentsResult?.rowCount || 0} payments.`,
+                ipAddress: getClientIP(req),
+                userAgent: req.headers['user-agent']
+            }).catch(e => console.warn('[AUDIT] Link orphans log failed:', e.message));
 
             return res.status(200).json({
                 status: 200,
