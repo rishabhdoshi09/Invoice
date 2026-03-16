@@ -95,27 +95,16 @@ module.exports = {
                         }
 
                         if (existingCustomer) {
-                            // Match found — DON'T auto-link. Return suggestion for user to confirm.
+                            // Match found — DON'T auto-link. Order created with customerName only.
+                            // Return suggestion for frontend to prompt user.
                             linkSuggestion = {
                                 customerId: existingCustomer.id,
                                 name: existingCustomer.name,
                                 mobile: existingCustomer.mobile,
                                 currentBalance: existingCustomer.currentBalance
                             };
-                            // Still create new customer (will be merged if user confirms)
-                            const customerName = hasCustomerName ? orderObj.customerName.trim() : orderObj.customerMobile.trim();
-                            const newCustomer = await db.customer.create({
-                                id: uuidv4(),
-                                name: customerName,
-                                mobile: hasCustomerMobile ? orderObj.customerMobile.trim() : null,
-                                address: orderObj.customerAddress || null,
-                                openingBalance: 0,
-                                currentBalance: orderObj.dueAmount > 0 ? orderObj.dueAmount : 0
-                            }, { transaction });
-                            orderObj.customerId = newCustomer.id;
-                            // Also store the new customer id for merge suggestion
-                            linkSuggestion.newCustomerId = newCustomer.id;
-                            console.log(`Order: Match found "${existingCustomer.name}" — NOT auto-linked. Suggestion returned.`);
+                            // Order stays with customerName but NO customerId until user confirms
+                            console.log(`Order: Match found "${existingCustomer.name}" — NOT auto-linked. Awaiting user confirmation.`);
                         } else {
                             // No match — create new customer
                             const customerName = hasCustomerName ? orderObj.customerName.trim() : orderObj.customerMobile.trim();
@@ -977,57 +966,38 @@ module.exports = {
 
     /**
      * POST /api/orders/:orderId/confirm-link
-     * Admin explicitly confirms linking an order to an existing customer.
-     * Merges the duplicate customer into the existing one.
-     * Body: { targetCustomerId, sourceCustomerId (the newly created duplicate) }
+     * Admin explicitly confirms linking an order to an existing customer after prompt.
+     * Body: { customerId }
      */
     confirmLink: async (req, res) => {
         try {
             const { orderId } = req.params;
-            const { targetCustomerId, sourceCustomerId } = req.body;
+            const { customerId } = req.body;
 
-            if (!targetCustomerId) return res.status(400).json({ status: 400, message: 'targetCustomerId required' });
+            if (!customerId) return res.status(400).json({ status: 400, message: 'customerId required' });
 
             const order = await db.order.findByPk(orderId);
             if (!order) return res.status(404).json({ status: 404, message: 'Order not found' });
 
-            const target = await db.customer.findByPk(targetCustomerId);
-            if (!target) return res.status(404).json({ status: 404, message: 'Target customer not found' });
+            const customer = await db.customer.findByPk(customerId);
+            if (!customer) return res.status(404).json({ status: 404, message: 'Customer not found' });
 
             await db.sequelize.transaction(async (transaction) => {
-                // Relink order to existing customer
-                await order.update({ customerId: targetCustomerId, customerName: target.name }, { transaction });
+                // Link order to existing customer
+                await order.update({ customerId: customer.id }, { transaction });
 
-                // Update target customer balance
+                // Update customer balance
                 if (Number(order.dueAmount) > 0) {
-                    await target.update({
-                        currentBalance: (Number(target.currentBalance) || 0) + Number(order.dueAmount)
+                    await customer.update({
+                        currentBalance: (Number(customer.currentBalance) || 0) + Number(order.dueAmount)
                     }, { transaction });
-                }
-
-                // If a duplicate customer was created, merge and delete it
-                if (sourceCustomerId && sourceCustomerId !== targetCustomerId) {
-                    // Move any other orders from source to target
-                    await db.sequelize.query(`
-                        UPDATE orders SET "customerId" = :targetId, "customerName" = :targetName
-                        WHERE "customerId" = :sourceId AND id != :orderId
-                    `, { replacements: { targetId: targetCustomerId, targetName: target.name, sourceId: sourceCustomerId, orderId }, transaction });
-
-                    // Move payments
-                    await db.sequelize.query(`
-                        UPDATE payments SET "partyId" = :targetId, "partyName" = :targetName
-                        WHERE "partyId" = :sourceId AND "partyType" = 'customer'
-                    `, { replacements: { targetId: targetCustomerId, targetName: target.name, sourceId: sourceCustomerId }, transaction });
-
-                    // Delete duplicate customer
-                    await db.customer.destroy({ where: { id: sourceCustomerId }, transaction });
                 }
             });
 
             return res.status(200).json({
                 status: 200,
-                message: `Order ${order.orderNumber} linked to "${target.name}". ${sourceCustomerId ? 'Duplicate customer merged.' : ''}`,
-                data: { orderId, customerId: targetCustomerId, customerName: target.name }
+                message: `Order ${order.orderNumber} linked to "${customer.name}".`,
+                data: { orderId, customerId: customer.id, customerName: customer.name }
             });
         } catch (error) {
             return res.status(500).json({ status: 500, message: error.message });
