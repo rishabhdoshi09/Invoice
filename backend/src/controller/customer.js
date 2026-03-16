@@ -283,16 +283,22 @@ module.exports = {
     /**
      * POST /api/customers/:targetId/merge
      * Merge sourceId into targetId: relink all orders, payments, allocations → delete source
+     * REQUIRES: confirmText = "MERGE" to prevent accidental execution
      */
     mergeCustomer: async (req, res) => {
         try {
             const db = require('../models');
             const targetId = req.params.targetId;
-            const { sourceId } = req.body;
+            const { sourceId, confirmText } = req.body;
 
             if (!sourceId) return res.status(400).json({ status: 400, message: 'sourceId is required' });
             if (sourceId === targetId) return res.status(400).json({ status: 400, message: 'Cannot merge customer into itself' });
+            if (confirmText !== 'MERGE') return res.status(400).json({ status: 400, message: 'Type "MERGE" to confirm this action' });
 
+            // Admin-only check
+            if (!req.user || req.user.role !== 'admin') {
+                return res.status(403).json({ status: 403, message: 'Only admin can merge customers' });
+            }
             const target = await db.customer.findByPk(targetId);
             const source = await db.customer.findByPk(sourceId);
             if (!target) return res.status(404).json({ status: 404, message: 'Target customer not found' });
@@ -342,6 +348,52 @@ module.exports = {
             });
         } catch (error) {
             console.error('Merge customer error:', error);
+            return res.status(500).json({ status: 500, message: error.message });
+        }
+    },
+
+    /**
+     * POST /api/customers/:targetId/link-orphans
+     * Admin explicitly links orphan orders (no customerId) to a customer by matching customerName.
+     * REQUIRES: confirmText = "LINK"
+     */
+    linkOrphans: async (req, res) => {
+        try {
+            const db = require('../models');
+            const targetId = req.params.targetId;
+            const { orphanName, confirmText } = req.body;
+
+            if (!orphanName) return res.status(400).json({ status: 400, message: 'orphanName is required' });
+            if (confirmText !== 'LINK') return res.status(400).json({ status: 400, message: 'Type "LINK" to confirm this action' });
+            if (!req.user || req.user.role !== 'admin') {
+                return res.status(403).json({ status: 403, message: 'Only admin can link orphans' });
+            }
+
+            const target = await db.customer.findByPk(targetId);
+            if (!target) return res.status(404).json({ status: 404, message: 'Target customer not found' });
+
+            // Link orphan orders (customerId IS NULL, customerName matches)
+            const [, ordersResult] = await db.sequelize.query(`
+                UPDATE orders SET "customerId" = :targetId
+                WHERE "customerId" IS NULL
+                  AND LOWER(TRIM("customerName")) = LOWER(TRIM(:orphanName))
+                  AND "isDeleted" = false
+            `, { replacements: { targetId, orphanName } });
+
+            // Link orphan payments
+            const [, paymentsResult] = await db.sequelize.query(`
+                UPDATE payments SET "partyId" = :targetId
+                WHERE "partyId" IS NULL
+                  AND "partyType" = 'customer'
+                  AND LOWER(TRIM("partyName")) = LOWER(TRIM(:orphanName))
+            `, { replacements: { targetId, orphanName } });
+
+            return res.status(200).json({
+                status: 200,
+                message: `Linked orphan "${orphanName}" to "${target.name}". ${ordersResult?.rowCount || 0} orders, ${paymentsResult?.rowCount || 0} payments linked.`,
+                data: { ordersLinked: ordersResult?.rowCount || 0, paymentsLinked: paymentsResult?.rowCount || 0 }
+            });
+        } catch (error) {
             return res.status(500).json({ status: 500, message: error.message });
         }
     }

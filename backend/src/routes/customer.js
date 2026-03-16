@@ -34,10 +34,15 @@ module.exports = (router) => {
         .route('/customers/ghosts')
         .get(authenticate, Controller.customer.findGhosts);
 
-    // Merge customer (source into target)
+    // Merge customer (source into target) — admin only, requires "MERGE" confirmation
     router
         .route('/customers/:targetId/merge')
         .post(authenticate, canModify, Controller.customer.mergeCustomer);
+
+    // Link orphan orders to a customer — admin only, requires "LINK" confirmation
+    router
+        .route('/customers/:targetId/link-orphans')
+        .post(authenticate, canModify, Controller.customer.linkOrphans);
 
     router
         .route('/customers/:customerId')
