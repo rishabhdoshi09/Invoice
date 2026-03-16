@@ -57,53 +57,41 @@ module.exports = {
                 const invoiceInfo = await Services.invoiceSequence.generateInvoiceNumber(transaction);
                 orderObj.orderNumber = invoiceInfo.invoiceNumber;
                 
-                // If customer info is provided, create/update customer record FIRST
-                // This ensures customerId is set BEFORE the order is created
-                // Link customers for ALL orders (paid or credit) when customer info is available
+                // Create/link customer — NO silent auto-assign to wrong customer
+                // Exact name match = link. No match = create new. Linking is authoritative.
                 const hasCustomerName = orderObj.customerName && orderObj.customerName.trim();
                 const hasCustomerMobile = orderObj.customerMobile && orderObj.customerMobile.trim();
                 if (hasCustomerName || hasCustomerMobile) {
                     try {
-                        // Check if customer already exists by mobile or name
                         let existingCustomer = null;
+                        // Step 1: Find by exact mobile (strongest link)
                         if (hasCustomerMobile) {
                             existingCustomer = await db.customer.findOne({
                                 where: { mobile: orderObj.customerMobile.trim() },
                                 transaction
                             });
                         }
+                        // Step 2: Find by exact name (case-insensitive)
                         if (!existingCustomer && hasCustomerName) {
                             existingCustomer = await db.customer.findOne({
-                                where: { name: orderObj.customerName.trim() },
+                                where: db.Sequelize.where(
+                                    db.Sequelize.fn('LOWER', db.Sequelize.fn('TRIM', db.Sequelize.col('name'))),
+                                    orderObj.customerName.trim().toLowerCase()
+                                ),
                                 transaction
                             });
                         }
 
                         if (existingCustomer) {
-                            // Update existing customer's balance (only for credit sales)
-                            const updateData = {};
-                            if (orderObj.dueAmount > 0) {
-                                updateData.currentBalance = (Number(existingCustomer.currentBalance) || 0) + orderObj.dueAmount;
-                            }
-                            // Update mobile if customer doesn't have one but order does
-                            if (!existingCustomer.mobile && hasCustomerMobile) {
-                                updateData.mobile = orderObj.customerMobile.trim();
-                            }
-                            // Update name if customer doesn't have one but order does
-                            if (!existingCustomer.name && hasCustomerName) {
-                                updateData.name = orderObj.customerName.trim();
-                            }
-                            // Update address if customer doesn't have one but order does
-                            if (!existingCustomer.address && orderObj.customerAddress) {
-                                updateData.address = orderObj.customerAddress;
-                            }
-                            if (Object.keys(updateData).length > 0) {
-                                await existingCustomer.update(updateData, { transaction });
-                            }
                             orderObj.customerId = existingCustomer.id;
-                            console.log(`Order: Linked to existing customer ${existingCustomer.name || existingCustomer.mobile} (ID: ${existingCustomer.id})`);
+                            if (orderObj.dueAmount > 0) {
+                                await existingCustomer.update({
+                                    currentBalance: (Number(existingCustomer.currentBalance) || 0) + orderObj.dueAmount
+                                }, { transaction });
+                            }
+                            console.log(`Order: LINKED to "${existingCustomer.name}" (ID: ${existingCustomer.id}) — exact match`);
                         } else {
-                            // Create new customer (use mobile as name if name not provided)
+                            // Create new customer
                             const customerName = hasCustomerName ? orderObj.customerName.trim() : orderObj.customerMobile.trim();
                             const newCustomer = await db.customer.create({
                                 id: uuidv4(),
@@ -114,11 +102,10 @@ module.exports = {
                                 currentBalance: orderObj.dueAmount > 0 ? orderObj.dueAmount : 0
                             }, { transaction });
                             orderObj.customerId = newCustomer.id;
-                            console.log(`Order: Created new customer ${customerName} (ID: ${newCustomer.id})`);
+                            console.log(`Order: CREATED new customer "${customerName}" (ID: ${newCustomer.id})`);
                         }
                     } catch (customerError) {
-                        console.error('Failed to create/update customer:', customerError);
-                        // Continue with order - don't fail for customer creation issues
+                        console.error('Failed to create/link customer:', customerError);
                     }
                 }
                 
@@ -789,7 +776,6 @@ module.exports = {
                         }
                         
                         if (existingCustomer) {
-                            // Use existing customer
                             updateData.customerId = existingCustomer.id;
                             customerIdToUpdate = existingCustomer.id;
                         } else {
@@ -803,6 +789,7 @@ module.exports = {
                             }, { transaction });
                             updateData.customerId = newCustomer.id;
                             customerIdToUpdate = newCustomer.id;
+                            console.log(`Toggle: CREATED new customer "${customerName.trim()}" (ID: ${newCustomer.id})`);
                         }
                     }
                 }

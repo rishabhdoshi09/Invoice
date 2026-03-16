@@ -24,6 +24,21 @@ module.exports = (router) => {
             Controller.customer.listCustomersWithBalance
         );
 
+    // Find duplicate customers
+    router
+        .route('/customers/duplicates')
+        .get(authenticate, Controller.customer.findDuplicates);
+
+    // Find ghost/orphan customers
+    router
+        .route('/customers/ghosts')
+        .get(authenticate, Controller.customer.findGhosts);
+
+    // Merge customer (source into target)
+    router
+        .route('/customers/:targetId/merge')
+        .post(authenticate, canModify, Controller.customer.mergeCustomer);
+
     router
         .route('/customers/:customerId')
         .get(

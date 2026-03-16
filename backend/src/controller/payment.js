@@ -36,14 +36,16 @@ module.exports = {
                         customer = await Services.customer.getCustomer({ id: value.partyId });
                     }
                     
-                    // If not found by ID, try to find or create by name
+                    // If not found by ID, find or create by exact name
                     if (!customer && value.partyName && value.partyName.trim()) {
                         customer = await db.customer.findOne({ 
-                            where: { name: value.partyName.trim() },
+                            where: db.Sequelize.where(
+                                db.Sequelize.fn('LOWER', db.Sequelize.fn('TRIM', db.Sequelize.col('name'))),
+                                value.partyName.trim().toLowerCase()
+                            ),
                             transaction
                         });
                         
-                        // If customer doesn't exist, CREATE it
                         if (!customer) {
                             const uuidv4 = require('uuid/v4');
                             customer = await db.customer.create({
@@ -53,10 +55,9 @@ module.exports = {
                                 openingBalance: 0,
                                 currentBalance: 0
                             }, { transaction });
-                            console.log(`Created new customer from payment: ${customer.name} (ID: ${customer.id})`);
+                            console.log(`CREATED new customer from payment: "${customer.name}" (ID: ${customer.id})`);
                         }
                         
-                        // Update payment with the correct partyId
                         await response.update({ partyId: customer.id }, { transaction });
                     }
                     
@@ -100,14 +101,16 @@ module.exports = {
                         supplier = await Services.supplier.getSupplier({ id: value.partyId });
                     }
                     
-                    // If not found by ID, try to find or create by name
+                    // If not found by ID, find or create by exact name
                     if (!supplier && value.partyName && value.partyName.trim()) {
                         supplier = await db.supplier.findOne({ 
-                            where: { name: value.partyName.trim() },
+                            where: db.Sequelize.where(
+                                db.Sequelize.fn('LOWER', db.Sequelize.fn('TRIM', db.Sequelize.col('name'))),
+                                value.partyName.trim().toLowerCase()
+                            ),
                             transaction
                         });
                         
-                        // If supplier doesn't exist, CREATE it
                         if (!supplier) {
                             const uuidv4 = require('uuid/v4');
                             supplier = await db.supplier.create({
@@ -116,10 +119,9 @@ module.exports = {
                                 openingBalance: 0,
                                 currentBalance: 0
                             }, { transaction });
-                            console.log(`Created new supplier from payment: ${supplier.name} (ID: ${supplier.id})`);
+                            console.log(`CREATED new supplier from payment: "${supplier.name}" (ID: ${supplier.id})`);
                         }
                         
-                        // Update payment with the correct partyId
                         await response.update({ partyId: supplier.id }, { transaction });
                     }
                     
