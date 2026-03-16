@@ -28,6 +28,7 @@ module.exports = {
             dueAmount: Joi.number().greater(-1).optional(),
             paymentStatus: Joi.string().trim().valid('paid', 'partial', 'unpaid').optional(),
             notes: Joi.string().trim().allow("").optional(), // Allow notes field
+            paymentMode: Joi.string().trim().valid('CASH', 'CREDIT').optional(), // Set by backend
             orderItems: Joi.array().items(orderItems).required()
         });
         return Joi.validate(orderObj, schema, { convert: true });

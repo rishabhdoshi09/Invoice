@@ -40,10 +40,13 @@ module.exports = {
             
             if (orderObj.paidAmount === 0) {
                 orderObj.paymentStatus = 'unpaid';
+                orderObj.paymentMode = 'CREDIT';
             } else if (orderObj.paidAmount >= orderObj.total) {
                 orderObj.paymentStatus = 'paid';
+                orderObj.paymentMode = 'CASH';
             } else {
                 orderObj.paymentStatus = 'partial';
+                orderObj.paymentMode = 'CREDIT'; // Partial at POS is still a credit sale
             }
 
             // Add created by user info
@@ -751,10 +754,11 @@ module.exports = {
                     throw new Error(`Payment status was already changed to "${lockedOrder.paymentStatus}" by another user. Please refresh and try again.`);
                 }
 
-                // Update order payment status and customer info
+                // Update order payment status — toggle is ONLY a status marker
+                // paidAmount stays as-is (reflects actual cash at POS, set at creation)
+                // paymentMode NEVER changes (CASH/CREDIT is determined at creation)
                 const updateData = {
                     paymentStatus: newStatus,
-                    paidAmount: newStatus === 'paid' ? order.total : 0,
                     dueAmount: newStatus === 'paid' ? 0 : order.total,
                     modifiedBy: req.user?.id,
                     modifiedByName: changedByTrimmed // Use the provided name for audit
@@ -816,65 +820,9 @@ module.exports = {
                     transaction 
                 });
 
-                // === STEP 8 ENFORCEMENT: Payment toggle must create payment + allocation ===
-                // When marking as PAID: ALWAYS create payment record + receipt allocation
-                if (newStatus === 'paid' && oldStatus !== 'paid') {
-                    const uuidv4Inline = require('uuid/v4');
-                    const paymentId = uuidv4Inline();
-                    const paymentNumber = `PAY-TOGGLE-${Date.now().toString(36).toUpperCase()}`;
-                    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-
-                    // Create payment record
-                    await db.payment.create({
-                        id: paymentId,
-                        paymentNumber,
-                        paymentDate: today,
-                        partyType: 'customer',
-                        partyId: customerIdToUpdate || null,
-                        partyName: order.customerName || 'Walk-in Customer',
-                        amount: Number(order.total),
-                        referenceType: 'order',
-                        referenceId: orderId,
-                        referenceNumber: order.orderNumber,
-                        notes: `Payment via status toggle by ${changedByTrimmed}`,
-                        isDeleted: false
-                    }, { transaction });
-
-                    // Create receipt allocation linking payment to order
-                    await db.receiptAllocation.create({
-                        paymentId: paymentId,
-                        orderId: orderId,
-                        amount: Number(order.total),
-                        allocatedBy: req.user?.id,
-                        allocatedByName: changedByTrimmed,
-                        notes: `Allocated via payment status toggle by ${changedByTrimmed}`
-                    }, { transaction });
-                }
-                
-                // When marking as UNPAID (reversing): Clean up ONLY toggle-created allocations and payments
-                if (newStatus === 'unpaid' && oldStatus === 'paid') {
-                    // Remove receipt allocations for this order
-                    try {
-                        await db.receiptAllocation.update(
-                            { isDeleted: true },
-                            { where: { orderId: orderId, isDeleted: false }, transaction }
-                        );
-                    } catch (allocErr) {
-                        console.warn('[ALLOCATION] Could not clean up allocations on toggle:', allocErr.message);
-                    }
-                    // Soft-delete ONLY toggle-created payments (PAY-TOGGLE-*), not legitimate payments
-                    await db.payment.update(
-                        { isDeleted: true, deletedAt: new Date(), deletedBy: req.user?.id, deletedByName: changedByTrimmed },
-                        {
-                            where: {
-                                referenceId: orderId,
-                                referenceType: 'order',
-                                paymentNumber: { [db.Sequelize.Op.like]: 'PAY-TOGGLE-%' }
-                            },
-                            transaction
-                        }
-                    );
-                }
+                // NO synthetic PAY-TOGGLE payments — toggle is purely a status marker.
+                // Actual cash flow is tracked via Customer Receipts (payment records).
+                // paymentMode stays CASH/CREDIT as set at creation time.
 
                 // Update daily summary when payment status changes
                 await Services.dailySummary.recordPaymentStatusChange(order, oldStatus, newStatus, transaction);
@@ -932,14 +880,16 @@ module.exports = {
                 oldValues: {
                     paymentStatus: oldStatus,
                     paidAmount: Number(order.paidAmount),
-                    dueAmount: Number(order.dueAmount)
+                    dueAmount: Number(order.dueAmount),
+                    paymentMode: order.paymentMode
                 },
                 newValues: {
                     paymentStatus: newStatus,
-                    paidAmount: newStatus === 'paid' ? Number(order.total) : 0,
-                    dueAmount: newStatus === 'paid' ? 0 : Number(order.total)
+                    paidAmount: Number(order.paidAmount), // paidAmount unchanged by toggle
+                    dueAmount: newStatus === 'paid' ? 0 : Number(order.total),
+                    paymentMode: order.paymentMode // paymentMode never changes
                 },
-                description: `Toggle: ${order.orderNumber} | paymentStatus: ${oldStatus} → ${newStatus} | paidAmount: ₹${order.paidAmount} → ₹${newStatus === 'paid' ? order.total : 0} | by ${changedByTrimmed}`,
+                description: `Toggle: ${order.orderNumber} | ${oldStatus} → ${newStatus} | paymentMode: ${order.paymentMode} | by ${changedByTrimmed}`,
                 ipAddress: getClientIP(req),
                 userAgent: req.headers['user-agent']
             });

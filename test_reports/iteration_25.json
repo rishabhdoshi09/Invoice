@@ -1,0 +1,75 @@
+{
+  "summary": "Double-Counting Bug Fix Testing - 100% PASS. All 13 backend tests passed verifying the fix for Day Start cash calculation double-counting. Key fixes verified: 1) paymentMode (CASH/CREDIT) set at order creation and NEVER changes, 2) Cash Sales = SUM(total) from CASH mode orders only, 3) Toggle only updates paymentStatus/dueAmount (NOT paidAmount or paymentMode), 4) No synthetic PAY-TOGGLE payments created, 5) Customer Receipts excludes PAY-TOGGLE-* payments.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_double_counting_fix.py",
+    "/app/test_reports/pytest/double_counting_fix_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "VERIFIED: paymentMode ENUM added to order model (line 60-63 in order.js) with CASH/CREDIT values",
+    "VERIFIED: createOrder sets paymentMode based on paidAmount - CREDIT if paidAmount=0 or partial, CASH if paidAmount>=total (lines 41-50 in controller/order.js)",
+    "VERIFIED: togglePaymentStatus does NOT modify paymentMode or paidAmount (lines 757-765 in controller/order.js) - only updates paymentStatus and dueAmount",
+    "VERIFIED: No PAY-TOGGLE payment created in togglePaymentStatus - comment at lines 823-825 explicitly states this",
+    "VERIFIED: getRealTimeSummary uses paymentMode='CASH' for Cash Sales calculation (line 387 in dailySummary.js)",
+    "VERIFIED: Customer Receipts exclude PAY-TOGGLE-* payments (lines 416-418 in dailySummary.js)",
+    "VERIFIED: getExpectedCashInDrawer in telegramAlert.js uses same logic - CASH orders for cashSales (lines 175-176)",
+    "VERIFIED: Auto-migration adds paymentMode column with backfill for existing paid orders (lines 52-66 in index.js)",
+    "VERIFIED: Audit log for toggle includes paymentMode in oldValues/newValues and description (lines 880-892 in controller/order.js)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_double_counting_fix.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 tests passed)",
+    "frontend": "N/A - Backend only testing"
+  },
+  "test_credentials": {
+    "username": "admin",
+    "password": "yttriumR"
+  },
+  "seed_data_creation": "Created 13 test orders during test execution with prefixes: TEST_Credit_, TEST_Cash_, TEST_Partial_, TEST_Toggle_, TEST_NoPayToggle, TEST_CashSales_, TEST_ToggleCashSales, TEST_DoubleCount, TEST_AuditPaymentMode",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Double-counting bug fix verified working. paymentMode (CASH/CREDIT) is set at order creation based on paidAmount and NEVER changes afterward. Toggle only updates paymentStatus and dueAmount. Day Start Cash formula: Expected Cash = Opening Balance + Cash Sales (CASH orders only) + Customer Receipts (excl PAY-TOGGLE) - Supplier Payments - Expenses. No PAY-TOGGLE payments are created by current code. Backfill migration updates existing paid orders to CASH mode.",
+  "features_verified": {
+    "PASSED": [
+      "POST /api/orders with paidAmount=0 sets paymentMode='CREDIT'",
+      "POST /api/orders with paidAmount>=total sets paymentMode='CASH'",
+      "POST /api/orders with partial payment sets paymentMode='CREDIT'",
+      "PATCH /api/orders/:id/payment-status toggle to paid does NOT change paymentMode",
+      "PATCH /api/orders/:id/payment-status toggle to paid does NOT change paidAmount",
+      "PATCH /api/orders/:id/payment-status toggle to paid sets dueAmount=0",
+      "PATCH /api/orders/:id/payment-status toggle does NOT create PAY-TOGGLE payment",
+      "GET /api/dashboard/summary/realtime/:date - Cash Sales only counts CASH mode orders",
+      "GET /api/dashboard/summary/realtime/:date - Credit order toggled to paid does NOT increase Cash Sales",
+      "GET /api/dashboard/summary/realtime/:date - Customer Receipts field present (excludes PAY-TOGGLE per code review)",
+      "Double-count scenario: Credit order + toggle = Cash Sales unchanged",
+      "Backfill: Test orders correctly have CASH/CREDIT paymentMode",
+      "Audit log includes paymentMode in toggle description and values"
+    ],
+    "FAILED": [],
+    "NOT_TESTED": []
+  },
+  "bug_fix_details": {
+    "root_cause": "When toggling a credit sale to 'paid', the old code was adding the order total to Cash Sales AND also counting any Customer Receipt separately - resulting in double-counting the same money",
+    "fix_implemented": [
+      "Added paymentMode (CASH/CREDIT) enum to orders table - set at creation, immutable afterward",
+      "CASH = paid at POS (paidAmount >= total at creation)",
+      "CREDIT = unpaid or partial at creation",
+      "Cash Sales now calculated from paymentMode='CASH' orders only, not from paidAmount",
+      "Toggle only changes paymentStatus and dueAmount, NOT paidAmount or paymentMode",
+      "No synthetic PAY-TOGGLE payments created - toggle is purely a status marker",
+      "Customer Receipts in summary excludes any legacy PAY-TOGGLE-* payment records"
+    ],
+    "formula": "Expected Cash = Opening Balance + Cash Sales (CASH orders) + Customer Receipts - Supplier Payments - Expenses"
+  }
+}

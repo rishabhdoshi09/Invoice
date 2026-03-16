@@ -56,6 +56,11 @@ module.exports = (sequelize, Sequelize) => {
                 type: Sequelize.ENUM('paid', 'partial', 'unpaid'),
                 defaultValue: 'paid'
             },
+            // CASH = paid at POS, CREDIT = unpaid/due at creation. NEVER changes after creation.
+            paymentMode: {
+                type: Sequelize.ENUM('CASH', 'CREDIT'),
+                defaultValue: 'CREDIT'
+            },
             customerId: {
                 type: Sequelize.UUID,
                 allowNull: true

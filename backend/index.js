@@ -48,6 +48,29 @@ app.listen(PORT, async () => {
       await db.sequelize.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT NULL`);
     } catch (e) { /* column may already exist */ }
 
+    // Add paymentMode column to orders (CASH/CREDIT) — prevents double-counting in Day Start
+    try {
+      await db.sequelize.query(`DO $$ BEGIN CREATE TYPE "enum_orders_paymentMode" AS ENUM ('CASH', 'CREDIT'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);
+      await db.sequelize.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS "paymentMode" "enum_orders_paymentMode" NOT NULL DEFAULT 'CREDIT'`);
+      // Backfill: orders created as paid (at POS, not toggled) → CASH
+      const [results] = await db.sequelize.query(`
+        UPDATE orders SET "paymentMode" = 'CASH' 
+        WHERE "paymentMode" = 'CREDIT' 
+          AND "paymentStatus" = 'paid' 
+          AND "paidAmount" >= "total" 
+          AND ("modifiedByName" IS NULL OR "modifiedByName" = '')
+          AND "isDeleted" = false
+        RETURNING id
+      `);
+      if (results.length > 0) console.log(`[MIGRATION] Backfilled ${results.length} orders as CASH mode`);
+    } catch (e) { console.warn('[MIGRATION] paymentMode:', e.message); }
+
+    // Add ORDER_PAYMENT_STATUS and CONFIRM_LINK to audit_logs action enum
+    try {
+      await db.sequelize.query("ALTER TYPE enum_audit_logs_action ADD VALUE IF NOT EXISTS 'ORDER_PAYMENT_STATUS'");
+      await db.sequelize.query("ALTER TYPE enum_audit_logs_action ADD VALUE IF NOT EXISTS 'CONFIRM_LINK'");
+    } catch (e) { /* values may already exist */ }
+
     // Start scheduled jobs (async, non-blocking)
     try {
       require('./src/scheduler').init(db);

@@ -168,11 +168,12 @@ async function getExpectedCashInDrawer() {
         const summary = await db.dailySummary.findOne({ where: { date: today } });
         if (summary) openingBalance = Number(summary.openingBalance) || 0;
 
-        // 2. Cash sales (paidAmount from today's orders)
+        // 2. Cash sales = total from CASH mode orders ONLY (not paidAmount)
         const orders = await db.order.findAll({
             where: { orderDate: todayDDMMYYYY, isDeleted: false }
         });
-        const cashSales = orders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
+        const cashOrders = orders.filter(o => o.paymentMode === 'CASH');
+        const cashSales = cashOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
         const totalOrders = orders.length;
         const paidOrders = orders.filter(o => o.paymentStatus === 'paid').length;
 
@@ -186,10 +187,9 @@ async function getExpectedCashInDrawer() {
             where: { isDeleted: false, paymentDate: { [Op.in]: dateFormats } }
         });
 
-        const todaysOrderIds = orders.map(o => String(o.id));
-        // Customer receipts: only for PAST orders (today's order payments already in cashSales)
+        // Customer receipts: ALL customer payments EXCEPT synthetic PAY-TOGGLE-* records
         const customerReceipts = payments
-            .filter(p => p.partyType === 'customer' && !(p.referenceType === 'order' && todaysOrderIds.includes(String(p.referenceId))))
+            .filter(p => p.partyType === 'customer' && !(p.paymentNumber && p.paymentNumber.startsWith('PAY-TOGGLE-')))
             .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         const supplierPayments = payments.filter(p => p.partyType === 'supplier').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         const expenses = payments.filter(p => p.partyType === 'expense').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
