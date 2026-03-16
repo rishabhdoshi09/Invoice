@@ -367,12 +367,13 @@ module.exports = {
     getRealTimeSummary: async (date) => {
         const dateDDMMYYYY = moment(date).format('DD-MM-YYYY');
         
-        // Get all orders for this date
+        // Get all orders for this date (raw: true for reliable serialization)
         const orders = await db.order.findAll({
             where: {
                 orderDate: dateDDMMYYYY,
                 isDeleted: false
-            }
+            },
+            raw: true
         });
         
         // Separate CASH and CREDIT orders
@@ -406,7 +407,8 @@ module.exports = {
                     { paymentDate: dateDDMMYYYY_slash },
                     { paymentDate: dateYYYYMMDD }
                 ]
-            }
+            },
+            raw: true
         });
         
         console.log(`[getRealTimeSummary] Date: ${dateDDMMYYYY}, Orders: ${orders.length} (CASH: ${cashOrders.length}, CREDIT: ${creditOrders.length}), Payments: ${payments.length}`);
@@ -471,17 +473,20 @@ module.exports = {
             customerReceiptRecords: customerReceipts.map(p => ({
                 id: p.id, paymentNumber: p.paymentNumber, partyName: p.partyName,
                 amount: Number(p.amount), referenceType: p.referenceType,
-                referenceNumber: p.referenceNumber, notes: p.notes, createdAt: p.createdAt
+                referenceNumber: p.referenceNumber, notes: p.notes, 
+                paymentDate: p.paymentDate, createdAt: p.createdAt
             })),
             supplierPaymentRecords: payments.filter(p => p.partyType === 'supplier').map(p => ({
                 id: p.id, paymentNumber: p.paymentNumber, partyName: p.partyName,
                 amount: Number(p.amount), referenceType: p.referenceType,
-                referenceNumber: p.referenceNumber, notes: p.notes, createdAt: p.createdAt
+                referenceNumber: p.referenceNumber, notes: p.notes, 
+                paymentDate: p.paymentDate, createdAt: p.createdAt
             })),
             expenseRecords: payments.filter(p => p.partyType === 'expense').map(p => ({
                 id: p.id, paymentNumber: p.paymentNumber, partyName: p.partyName,
                 amount: Number(p.amount), referenceType: p.referenceType,
-                referenceNumber: p.referenceNumber, notes: p.notes, createdAt: p.createdAt
+                referenceNumber: p.referenceNumber, notes: p.notes, 
+                paymentDate: p.paymentDate, createdAt: p.createdAt
             }))
         };
     }
