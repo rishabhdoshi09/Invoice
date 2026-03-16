@@ -1421,12 +1421,13 @@ export const CreateOrder = () => {
 
       // Note: Daily totals are now tracked server-side only to prevent duplicates
 
-      // Generate and archive PDF with the SAVED order (which has the real invoice number)
-      // Note: savedOrder from backend doesn't include orderItems — use original orderProps items
+      // Generate and archive PDF with the SAVED order's real invoice number
+      // Keep orderProps (has all computed totals/items) — only override orderNumber from savedOrder
       let newPdfUrl = '';
       const pdfData = {
-        ...savedOrder,
-        orderItems: savedOrder.orderItems || orderProps.orderItems || []
+        ...orderProps,
+        orderNumber: savedOrder.orderNumber || orderProps.orderNumber,
+        id: savedOrder.id
       };
       try { 
         newPdfUrl = await generatePdf(pdfData); 
