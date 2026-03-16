@@ -413,17 +413,38 @@ module.exports = {
         
         console.log(`[getRealTimeSummary] Date: ${dateDDMMYYYY}, Orders: ${orders.length} (CASH: ${cashOrders.length}, CREDIT: ${creditOrders.length}), Payments: ${payments.length}`);
         
-        // Customer Receipts = ALL customer payments EXCEPT synthetic PAY-TOGGLE-* records
-        // PAY-TOGGLE payments are legacy bookkeeping markers, not real cash
-        const customerReceipts = payments.filter(p => 
+        // IDs of today's CASH orders — payments linked to these are ALREADY counted in Cash Sales
+        const todaysCashOrderIds = cashOrders.map(o => String(o.id));
+        
+        // Customer Receipts = customer payments EXCEPT:
+        //   1. PAY-TOGGLE-* (legacy synthetic markers)
+        //   2. Payments linked to today's CASH orders (already in Cash Sales → would double count)
+        // Only INCLUDE: advance payments, payments for CREDIT orders, payments for past orders
+        const allCustomerPayments = payments.filter(p => 
             p.partyType === 'customer' && 
             !(p.paymentNumber && p.paymentNumber.startsWith('PAY-TOGGLE-'))
+        );
+        
+        const customerReceipts = allCustomerPayments.filter(p => {
+            // If payment is linked to a today's CASH order → EXCLUDE (already in Cash Sales)
+            if (p.referenceType === 'order' && p.referenceId) {
+                if (todaysCashOrderIds.includes(String(p.referenceId))) {
+                    return false; // Already counted in Cash Sales
+                }
+            }
+            return true; // Include: advance payments, credit order payments, past order payments
+        });
+        
+        // Payments excluded from receipts (for debugging/audit)
+        const paymentsExcludedFromReceipts = allCustomerPayments.filter(p => 
+            p.referenceType === 'order' && p.referenceId && todaysCashOrderIds.includes(String(p.referenceId))
         );
         
         const customerReceiptsTotal = customerReceipts.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         const customerReceiptsCount = customerReceipts.length;
         
-        console.log(`[getRealTimeSummary] Cash Sales (CASH orders): ₹${cashFromTodaysOrders}, Customer Receipts (excl PAY-TOGGLE): ₹${customerReceiptsTotal} (${customerReceiptsCount})`);
+        console.log(`[getRealTimeSummary] Cash Sales (CASH orders): ₹${cashFromTodaysOrders}`);
+        console.log(`[getRealTimeSummary] Customer Receipts: ₹${customerReceiptsTotal} (${customerReceiptsCount} included, ${paymentsExcludedFromReceipts.length} excluded as already in Cash Sales)`);
         
         // Supplier payments (cash going out)
         const supplierPaymentsAmount = payments

@@ -187,9 +187,18 @@ async function getExpectedCashInDrawer() {
             where: { isDeleted: false, paymentDate: { [Op.in]: dateFormats } }
         });
 
-        // Customer receipts: ALL customer payments EXCEPT synthetic PAY-TOGGLE-* records
-        const customerReceipts = payments
-            .filter(p => p.partyType === 'customer' && !(p.paymentNumber && p.paymentNumber.startsWith('PAY-TOGGLE-')))
+        // Customer receipts: Exclude PAY-TOGGLE-* AND payments linked to today's CASH orders (already in Cash Sales)
+        const todaysCashOrderIds = cashOrders.map(o => String(o.id));
+        const allCustomerPayments = payments.filter(p => 
+            p.partyType === 'customer' && !(p.paymentNumber && p.paymentNumber.startsWith('PAY-TOGGLE-'))
+        );
+        const customerReceipts = allCustomerPayments
+            .filter(p => {
+                if (p.referenceType === 'order' && p.referenceId) {
+                    return !todaysCashOrderIds.includes(String(p.referenceId));
+                }
+                return true;
+            })
             .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         const supplierPayments = payments.filter(p => p.partyType === 'supplier').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         const expenses = payments.filter(p => p.partyType === 'expense').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
