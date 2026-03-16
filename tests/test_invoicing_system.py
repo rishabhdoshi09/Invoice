@@ -9,7 +9,7 @@ import time
 import random
 import string
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://order-healer.preview.emergentagent.com/api').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://payment-guardian-9.preview.emergentagent.com/api').rstrip('/')
 
 # Test data tracking for cleanup
 created_orders = []
