@@ -116,11 +116,13 @@ export const DayStart = () => {
     
     // Use realTimeSummary for accurate sales breakdown
     // RTK Query already transformed response, so access fields directly
-    const cashSales = Number(realTimeSummary?.cashSales) || 0;  // Only PAID orders
-    const creditSales = Number(realTimeSummary?.creditSales) || 0;  // Unpaid + partial orders
+    const cashSales = Number(realTimeSummary?.cashSales) || 0;  // Only CASH mode orders
+    const creditSales = Number(realTimeSummary?.creditSales) || 0;  // Outstanding dues
     const totalBusinessDone = Number(realTimeSummary?.totalBusinessDone) || 0;
     const paidOrdersCount = Number(realTimeSummary?.paidOrdersCount) || 0;
     const totalOrdersCount = Number(realTimeSummary?.totalOrders) || 0;
+    const cashOrdersCount = Number(realTimeSummary?.cashOrdersCount) || 0;
+    const creditOrdersCount = Number(realTimeSummary?.creditOrdersCount) || 0;
     
     // Total sales = Cash Sales + Credit Sales (all orders)
     const totalSales = totalBusinessDone;
@@ -135,9 +137,9 @@ export const DayStart = () => {
     const supplierPaymentsCount = Number(realTimeSummary?.supplierPaymentsCount) || 0;
     const expenses = Number(realTimeSummary?.expenses) || 0;
     
-    // Expected cash = Opening + Cash Sales (from today's orders) + Customer Receipts (for past dues) - Supplier Payments - Expenses
-    // NOTE: Cash Sales already includes partial payments from today's orders
-    // Customer Receipts are ADDITIONAL payments for PAST dues (not double counted)
+    // Expected cash = Opening + Cash Sales (CASH mode orders ONLY) + Customer Receipts - Supplier Payments - Expenses
+    // Cash Sales = SUM(total) from orders WHERE paymentMode='CASH' (set at creation, never changes)
+    // Customer Receipts = all customer payments excluding synthetic PAY-TOGGLE records
     const expectedCash = openingBalance + cashSales + customerPayments - supplierPayments - expenses;
     const netCashFlow = cashSales + customerPayments - supplierPayments - expenses;
 
@@ -277,7 +279,7 @@ export const DayStart = () => {
                                 ₹{cashSales.toLocaleString('en-IN')}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                                {totalOrdersCount} orders ({paidOrdersCount} paid{Number(realTimeSummary?.partialOrdersCount) > 0 ? `, ${realTimeSummary.partialOrdersCount} partial` : ''})
+                                {cashOrdersCount} cash orders
                             </Typography>
                             {creditSales > 0 && (
                                 <Typography variant="caption" sx={{ display: 'block', color: '#ff5722', fontWeight: 'bold' }}>
