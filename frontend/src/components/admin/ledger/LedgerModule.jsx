@@ -69,6 +69,11 @@ const LedgerModule = () => {
     const [fifoRunning, setFifoRunning] = useState(false);
     const [backupRunning, setBackupRunning] = useState(false);
 
+    // Audit Trail states
+    const [auditData, setAuditData] = useState(null);
+    const [auditLoading, setAuditLoading] = useState(false);
+    const [auditFilters, setAuditFilters] = useState({ action: '', entityType: '', userName: '', search: '', from: '', to: '' });
+
     const getAuthHeader = () => ({
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     });
@@ -496,7 +501,8 @@ const LedgerModule = () => {
                     <Tab label="Reconciliation" icon={<Sync />} iconPosition="start" data-testid="tab-reconciliation" />
                     <Tab label="Journal Entries" icon={<Receipt />} iconPosition="start" data-testid="tab-journal-entries" />
                     <Tab label="Posting Matrix" icon={<AccountBalance />} iconPosition="start" data-testid="tab-posting-matrix" />
-                    <Tab label={selectedAccount ? `Ledger: ${selectedAccount.name}` : 'Account Ledger'} icon={<Receipt />} iconPosition="start" data-testid="tab-account-ledger" />
+                    <Tab label="Account Ledger" icon={<Receipt />} iconPosition="start" data-testid="tab-account-ledger" />
+                    <Tab label="Audit Trail" icon={<Assessment />} iconPosition="start" data-testid="tab-audit-trail" />
                 </Tabs>
             </Paper>
 
@@ -2382,6 +2388,152 @@ const LedgerModule = () => {
                     ) : null}
                 </Box>
             )}
+            {/* TAB 9: Audit Trail */}
+            {activeTab === 9 && (
+                <Box>
+                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 700 }}>Audit Trail</Typography>
+                    <Typography variant="body2" sx={{ mb: 2, color: '#546e7a' }}>
+                        Complete trail of every financial action. Nothing happens silently — every create, update, delete, toggle, merge, and link is logged here.
+                    </Typography>
+
+                    {/* Filters */}
+                    <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <TextField size="small" label="Search" value={auditFilters.search}
+                            onChange={e => setAuditFilters(f => ({ ...f, search: e.target.value }))}
+                            data-testid="audit-search" sx={{ minWidth: 180 }} />
+                        <TextField select size="small" label="Action" value={auditFilters.action}
+                            onChange={e => setAuditFilters(f => ({ ...f, action: e.target.value }))}
+                            data-testid="audit-action-filter" sx={{ minWidth: 130 }}
+                            SelectProps={{ native: true }}>
+                            <option value="">All</option>
+                            <option value="CREATE">CREATE</option>
+                            <option value="UPDATE">UPDATE</option>
+                            <option value="DELETE">DELETE</option>
+                            <option value="ORDER_PAYMENT_STATUS">TOGGLE</option>
+                            <option value="CONFIRM_LINK">LINK</option>
+                            <option value="MERGE">MERGE</option>
+                            <option value="LINK_ORPHANS">LINK ORPHANS</option>
+                        </TextField>
+                        <TextField select size="small" label="Entity" value={auditFilters.entityType}
+                            onChange={e => setAuditFilters(f => ({ ...f, entityType: e.target.value }))}
+                            data-testid="audit-entity-filter" sx={{ minWidth: 130 }}
+                            SelectProps={{ native: true }}>
+                            <option value="">All</option>
+                            <option value="ORDER">ORDER</option>
+                            <option value="PAYMENT">PAYMENT</option>
+                            <option value="CUSTOMER">CUSTOMER</option>
+                            <option value="AUTH">AUTH</option>
+                        </TextField>
+                        <TextField size="small" label="From" type="date" InputLabelProps={{ shrink: true }}
+                            value={auditFilters.from}
+                            onChange={e => setAuditFilters(f => ({ ...f, from: e.target.value }))}
+                            data-testid="audit-from" />
+                        <TextField size="small" label="To" type="date" InputLabelProps={{ shrink: true }}
+                            value={auditFilters.to}
+                            onChange={e => setAuditFilters(f => ({ ...f, to: e.target.value }))}
+                            data-testid="audit-to" />
+                        <Button variant="contained" size="small" data-testid="audit-fetch-btn"
+                            startIcon={auditLoading ? <CircularProgress size={14} color="inherit" /> : <Assessment />}
+                            disabled={auditLoading}
+                            onClick={async () => {
+                                setAuditLoading(true);
+                                setError(null);
+                                try {
+                                    const params = new URLSearchParams();
+                                    Object.entries(auditFilters).forEach(([k, v]) => { if (v) params.append(k, v); });
+                                    params.append('limit', '200');
+                                    const resp = await axios.get(`/api/audit-trail?${params}`, getAuthHeader());
+                                    setAuditData(resp.data.data);
+                                } catch (err) {
+                                    setError('Failed to fetch audit trail: ' + (err.response?.data?.message || err.message));
+                                } finally {
+                                    setAuditLoading(false);
+                                }
+                            }}
+                            sx={{ bgcolor: '#1565c0' }}>
+                            {auditLoading ? 'Loading...' : 'Fetch Trail'}
+                        </Button>
+                    </Box>
+
+                    {/* Summary chips */}
+                    {auditData?.summary && (
+                        <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+                            {auditData.summary.map((s, i) => (
+                                <Chip key={i} size="small" variant="outlined"
+                                    label={`${s.action} ${s.entityType}: ${s.count}`}
+                                    color={s.action === 'DELETE' ? 'error' : s.action === 'CREATE' ? 'success' : 'default'}
+                                    onClick={() => setAuditFilters(f => ({ ...f, action: s.action, entityType: s.entityType }))} />
+                            ))}
+                            <Chip size="small" label={`Total: ${auditData.total}`} color="primary" />
+                        </Box>
+                    )}
+
+                    {/* Results table */}
+                    {auditData?.rows && (
+                        <TableContainer component={Paper} sx={{ maxHeight: 600 }}>
+                            <Table size="small" stickyHeader>
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Time</TableCell>
+                                        <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>User</TableCell>
+                                        <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Action</TableCell>
+                                        <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Entity</TableCell>
+                                        <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Name</TableCell>
+                                        <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Description</TableCell>
+                                        <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem' }}>Before → After</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {auditData.rows.map((row) => (
+                                        <TableRow key={row.id} hover sx={{
+                                            bgcolor: row.action === 'DELETE' ? '#ffebee' :
+                                                     row.action === 'ORDER_PAYMENT_STATUS' ? '#fff3e0' :
+                                                     row.action === 'MERGE' ? '#e8eaf6' : 'inherit'
+                                        }}>
+                                            <TableCell sx={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
+                                                {new Date(row.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                            </TableCell>
+                                            <TableCell sx={{ fontSize: '0.75rem' }}>{row.userName}</TableCell>
+                                            <TableCell>
+                                                <Chip size="small" label={row.action}
+                                                    color={row.action === 'DELETE' ? 'error' :
+                                                           row.action === 'CREATE' ? 'success' :
+                                                           row.action === 'ORDER_PAYMENT_STATUS' ? 'warning' : 'default'}
+                                                    sx={{ fontSize: '0.65rem', height: 20 }} />
+                                            </TableCell>
+                                            <TableCell sx={{ fontSize: '0.75rem' }}>{row.entityType}</TableCell>
+                                            <TableCell sx={{ fontSize: '0.75rem', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {row.entityName}
+                                            </TableCell>
+                                            <TableCell sx={{ fontSize: '0.7rem', maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {row.description}
+                                            </TableCell>
+                                            <TableCell sx={{ fontSize: '0.65rem', maxWidth: 200 }}>
+                                                {row.oldValues && (
+                                                    <span style={{ color: '#c62828' }}>
+                                                        {typeof row.oldValues === 'string' ? row.oldValues : JSON.stringify(row.oldValues).substring(0, 80)}
+                                                    </span>
+                                                )}
+                                                {row.oldValues && row.newValues && ' → '}
+                                                {row.newValues && (
+                                                    <span style={{ color: '#2e7d32' }}>
+                                                        {typeof row.newValues === 'string' ? row.newValues : JSON.stringify(row.newValues).substring(0, 80)}
+                                                    </span>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+
+                    {auditData && auditData.rows?.length === 0 && (
+                        <Alert severity="info" sx={{ mt: 2 }}>No audit logs found for the selected filters.</Alert>
+                    )}
+                </Box>
+            )}
+
         </Box>
     );
 };

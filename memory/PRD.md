@@ -62,12 +62,14 @@ Build a production-grade, double-entry accounting ledger with fraud prevention a
 - Frontend shows classification breakdown chips (preserved counts per category)
 - DB Backup button: One-click `pg_dump` download before executing
 
-## Prioritized Backlog
-### P0 — User Action Required
-- Pull latest code, restart backend
-- Click "Download DB Backup" first
-- Run `reconstruct-fifo` dry run to verify human orders + outside-window orders are preserved
-- Then execute with confidence
+### Phase 10: Presidential Authority + Full Audit Trail (Feb 2026)
+- **No silent operations**: Customer linking requires user confirmation via `linkSuggestion` prompt
+- **Full audit trail**: Every payment create/delete, customer delete/merge/link-orphans, order confirm-link now creates audit_log
+- **One-click Audit Trail tab**: New "Audit Trail" tab in Ledger with filters (action, entity, user, date, search) + summary chips + color-coded table
+- **API**: `GET /api/audit-trail` with query filters
+- **Toggle fix**: paid→unpaid now SOFT-deletes only `PAY-TOGGLE-*` payments (not all payments)
+- **Hard delete**: Customer delete properly unlinks orders/payments first
+- **Merge/Link**: Requires typed confirmation ("MERGE"/"LINK") + admin role
 
 ### P1 — Upcoming
 - Toggle paid → auto-allocate from On Account payments
