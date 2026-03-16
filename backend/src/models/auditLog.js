@@ -23,7 +23,7 @@ module.exports = (sequelize, Sequelize) => {
             },
             // What action was performed
             action: {
-                type: Sequelize.ENUM('CREATE', 'UPDATE', 'DELETE', 'RESTORE', 'LOGIN', 'LOGOUT', 'LOGIN_FAILED', 'VIEW'),
+                type: Sequelize.ENUM('CREATE', 'UPDATE', 'DELETE', 'RESTORE', 'LOGIN', 'LOGOUT', 'LOGIN_FAILED', 'VIEW', 'ORDER_PAYMENT_STATUS', 'CONFIRM_LINK'),
                 allowNull: false
             },
             // What entity was affected

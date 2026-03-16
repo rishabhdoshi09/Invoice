@@ -52,6 +52,7 @@ module.exports = {
                 orderObj.createdByName = req.user.name || req.user.username;
             }
 
+            let linkSuggestion = null;
             const result = await db.sequelize.transaction(async (transaction) => {
                 // Generate invoice number INSIDE transaction (only if everything else is valid)
                 const invoiceInfo = await Services.invoiceSequence.generateInvoiceNumber(transaction);
@@ -61,7 +62,6 @@ module.exports = {
                 // If explicit customerId passed from frontend → trust it (user already confirmed)
                 // If only customerName → search for match, DON'T auto-link, return suggestion
                 // If no match → create new customer
-                let linkSuggestion = null;
                 const hasCustomerName = orderObj.customerName && orderObj.customerName.trim();
                 const hasCustomerMobile = orderObj.customerMobile && orderObj.customerMobile.trim();
                 
