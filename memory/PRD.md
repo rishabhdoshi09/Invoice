@@ -5,62 +5,21 @@ Build a production-grade, double-entry accounting ledger with fraud prevention a
 
 **Critical Rule:** Order is paid ONLY when real payment entry exists against it. Human toggles are preserved, system toggles are undone.
 
+**Guiding Principle:** "Bina President kuch nahi" — No silent operations. Every financial action must be explicitly authorized and leave an audit trail with before/after values.
+
 ## Core Architecture
 - **Frontend:** React + Material-UI (port 3000)
 - **Backend:** Node.js + Express + Sequelize ORM (port 8001)
-- **Database:** PostgreSQL (port 5432)
+- **Database:** PostgreSQL 15 (port 5432)
 
 ## What's Been Implemented
 
-### Phase 8: Forensic Classification Rewrite (Mar 15 2026)
-- **Classification uses `modifiedByName`** as primary indicator:
-  - `HUMAN_TOGGLED`: modifiedByName has real person → preserve
-  - `SYSTEM_TOGGLED`: modifiedByName empty → undo
-  - `CASH_SALE`: created as paid at POS → preserve
-  - `RECEIPT_PAID` / `PARTIAL_PAID`: has receipt_allocations → preserve
-  - `CREDIT_UNPAID`: already unpaid → no change
-- Removed ADVANCE_PAID, PAYMENT_PAID, SUSPICIOUS_PAID categories
-- All paid orders without receipt_allocations go through modifiedByName check
-- **FIFO Reconstruction endpoint** (`POST /api/data-audit/reconstruct-fifo`):
-  - Step 1: Reset ONLY system-damaged orders to unpaid (modifiedByName NULL/empty)
-  - Step 2: FIFO allocate existing payments against system orders only
-  - Step 3: Update order statuses from allocations
-  - Human-toggled orders (non-empty modifiedByName) are NEVER touched
-  - Supports dry run — returns `humanSkipped` count
-- **Toggle History tab** in customer dialog (audit_logs for ORDER_PAYMENT_STATUS)
-- **Customer Notes tab** with save (notes TEXT column on customers)
-- Auto-migration for notes column on startup
-- Production data: 237 system-toggled, 18 human-toggled (Rishabh Doshi: 10, BIlling staff: 8)
-
-### Earlier Phases (1-7) — All Completed
-- Tally-Correct System Hardening, Receipt Allocation, Invoice Immutability
-- Automation Removal (deleted auto-reconciliation)
-- Forensic Audit Tool, Payment Recovery Script
-- Full invoicing, double-entry ledger, audit logging, PDF generation
-- Telegram/WhatsApp, GST/Tally export
-
-## Key API Endpoints
-- `GET /api/data-audit/classify` — Classification with modifiedByName logic
-- `POST /api/data-audit/reconstruct-fifo` — FIFO reconstruction (dryRun support)
-- `POST /api/data-audit/repair/preview` — Repair preview
-- `POST /api/data-audit/repair/execute` — Execute repair
-- `GET /api/data-audit/diagnose` — Diagnostic endpoint
-- `GET /api/customers/:id/transactions` — Now includes toggleHistory
-
-## Key Files
-- `backend/src/controller/forensicClassification.js` — Classification + FIFO reconstruction
-- `backend/src/dao/customer.js` — Customer data with toggle history
-- `backend/src/routes/dataIntegrityAudit.js` — Routes
-- `frontend/src/components/admin/customers/list.jsx` — Customer dialog with Toggle History + Notes tabs
-- `backend/index.js` — Auto-migration for notes column
-
-### Phase 9: Forensic + FIFO Merged Reconstruction (Feb 2026)
-- **Merged forensic classification with FIFO tool** — now classifies ALL orders first using existing `CLASSIFICATION_SQL`
-- Only resets `SYSTEM_TOGGLED` orders within damage window (Jan 9 → Mar 15, 2026)
-- Preserves: `HUMAN_TOGGLED`, `CASH_SALE`, `RECEIPT_PAID`, `PARTIAL_PAID`, `CREDIT_UNPAID`, outside-window orders
-- **Customer balance recalculation**: After FIFO, recalculates `customer.currentBalance` from scratch using formula: `openingBalance + SUM(orders.total) - SUM(payments.amount)`
-- Frontend shows classification breakdown chips (preserved counts per category)
-- DB Backup button: One-click `pg_dump` download before executing
+### Phase 11: Critical Bug Fixes (Feb 15, 2026)
+- **Bug 1 FIXED:** `linkSuggestion is not defined` — Variable was declared inside transaction scope but referenced outside. Moved declaration before transaction block.
+- **Bug 2 FIXED:** `invalid input value for enum "ORDER_PAYMENT_STATUS"` — Added `ORDER_PAYMENT_STATUS` and `CONFIRM_LINK` to PostgreSQL `enum_audit_logs_action` via ALTER TYPE + Sequelize model update.
+- **Migration:** `20260215000001-add-audit-enum-values.js` created for the enum changes.
+- **Day Start Cash Verification:** User verified formula consistency between UI and backend — confirmed correct.
+- **Testing:** 16/16 backend tests passed via testing agent (iteration_24).
 
 ### Phase 10: Presidential Authority + Full Audit Trail (Feb 2026)
 - **No silent operations**: Customer linking requires user confirmation via `linkSuggestion` prompt
@@ -71,13 +30,66 @@ Build a production-grade, double-entry accounting ledger with fraud prevention a
 - **Hard delete**: Customer delete properly unlinks orders/payments first
 - **Merge/Link**: Requires typed confirmation ("MERGE"/"LINK") + admin role
 
+### Phase 9: Forensic + FIFO Merged Reconstruction (Feb 2026)
+- Merged forensic classification with FIFO tool — classifies ALL orders first
+- Only resets `SYSTEM_TOGGLED` orders within damage window
+- Preserves: `HUMAN_TOGGLED`, `CASH_SALE`, `RECEIPT_PAID`, `PARTIAL_PAID`, `CREDIT_UNPAID`
+- Customer balance recalculation after FIFO
+- DB Backup button: One-click `pg_dump` download before executing
+
+### Phase 8: Forensic Classification Rewrite
+- Classification uses `modifiedByName` as primary indicator
+- FIFO Reconstruction endpoint (`POST /api/data-audit/reconstruct-fifo`)
+- Toggle History tab in customer dialog
+- Customer Notes tab
+
+### Earlier Phases (1-7) — All Completed
+- Tally-Correct System Hardening, Receipt Allocation, Invoice Immutability
+- Automation Removal (deleted auto-reconciliation)
+- Forensic Audit Tool, Payment Recovery Script
+- Full invoicing, double-entry ledger, audit logging, PDF generation
+- Telegram/WhatsApp, GST/Tally export
+
+## Key API Endpoints
+- `POST /api/orders` — WORKING (Bug 1 fixed)
+- `PATCH /api/orders/:id/payment-status` — WORKING (Bug 2 fixed)
+- `POST /api/orders/:id/confirm-link` — Links order to customer with audit trail
+- `GET /api/data-audit/classify` — Classification with modifiedByName logic
+- `POST /api/data-audit/reconstruct-fifo` — FIFO reconstruction (dryRun support)
+- `GET /api/customers/duplicates` — Find duplicate customers
+- `GET /api/customers/ghosts` — Find orphaned records
+- `POST /api/customers/:targetId/merge` — Merge customers
+- `GET /api/audit-trail` — Fetch audit logs with filters
+
+## Key Files
+- `backend/src/controller/order.js` — Order CRUD + toggle + confirm-link
+- `backend/src/controller/forensicClassification.js` — Classification + FIFO reconstruction
+- `backend/src/middleware/auditLogger.js` — Central audit log function
+- `backend/src/models/auditLog.js` — Audit log model with full ENUM
+- `backend/src/migrations/20260215000001-add-audit-enum-values.js` — Enum migration
+- `frontend/src/components/admin/ledger/LedgerModule.jsx` — Repair tool + audit trail UI
+
+## Audit Log Action ENUM Values
+CREATE, UPDATE, DELETE, RESTORE, LOGIN, LOGOUT, LOGIN_FAILED, VIEW, ORDER_PAYMENT_STATUS, CONFIRM_LINK
+
+### P0 — User Verification Pending
+- Dry Run of data repair tool (forensic classification accuracy check)
+
 ### P1 — Upcoming
-- Toggle paid → auto-allocate from On Account payments
+- Admin UI for Customer Management (duplicates/ghosts/merge interface)
 - Core ledger reports UI (Trial Balance, P&L, Balance Sheet)
+- Toggle paid → auto-allocate from On Account payments
 
 ### P2 — Future
-- RBAC, Financial period lock, Reconciliation dashboard
+- Telegram alert stability (retry mechanism for ENETUNREACH)
+- Concurrency review (FOR UPDATE row-level locks)
+- RBAC (Role-Based Access Control)
+- Financial period lock
+- Reconciliation dashboard
 - Credit Note / Debit Note voucher types
+
+### Refactoring Needed
+- Break down `forensicClassification.js` into smaller modules
 
 ## Test Credentials
 - Username: admin / Password: yttriumR
