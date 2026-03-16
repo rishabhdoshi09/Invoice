@@ -529,15 +529,15 @@ module.exports = {
                 offset: 0
             });
 
-            // Calculate summaries
-            const totalAmount = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+            // Calculate summaries — force Number() since Sequelize may return strings
+            const totalAmount = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
             const customerPayments = payments.filter(p => p.partyType === 'customer');
             const supplierPayments = payments.filter(p => p.partyType === 'supplier');
             const expensePayments = payments.filter(p => p.partyType === 'expense');
             
-            const customerTotal = customerPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-            const supplierTotal = supplierPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-            const expenseTotal = expensePayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+            const customerTotal = customerPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            const supplierTotal = supplierPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            const expenseTotal = expensePayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
             // Group by reference type
             const orderPayments = payments.filter(p => p.referenceType === 'order');
@@ -568,15 +568,15 @@ module.exports = {
                     byReferenceType: {
                         orders: {
                             count: orderPayments.length,
-                            amount: orderPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
+                            amount: orderPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
                         },
                         purchases: {
                             count: purchasePayments.length,
-                            amount: purchasePayments.reduce((sum, p) => sum + (p.amount || 0), 0)
+                            amount: purchasePayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
                         },
                         advances: {
                             count: advancePayments.length,
-                            amount: advancePayments.reduce((sum, p) => sum + (p.amount || 0), 0)
+                            amount: advancePayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
                         }
                     },
                     payments: payments

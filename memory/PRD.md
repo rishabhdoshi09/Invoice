@@ -15,87 +15,67 @@ Build a production-grade, double-entry accounting ledger with fraud prevention a
 
 ## What's Been Implemented
 
-### Phase 12: Double-Counting Fix (Mar 16, 2026)
-**Root cause:** When a credit sale was toggled to "paid" after a customer receipt, the same money appeared in both Cash Sales AND Customer Receipts.
+### Phase 13: Inline Receipt Details + Amount Fix (Mar 16, 2026)
+- **Inline Receipt Details:** "From Customers" card now expands to show receipt table inline on the page (not in a dialog). Shows: Payment No, Time, Party Name, Amount, Reference, Linked To, Notes + Total row
+- **All summary cards expandable**: Total Payments (with Type column), From Customers, To Suppliers, Expenses
+- **Active card state**: Colored border + elevated shadow on selected card
+- **String concatenation fix**: `p.amount` from PostgreSQL is a string — added `Number()` conversion in both backend (`getDailySummary`) and frontend to prevent `₹01000.00` bug
+- **Amount formatting**: Consistent `toLocaleString('en-IN', { minimumFractionDigits: 2 })` across all amounts
 
-**Fix implemented:**
+### Phase 12: Double-Counting Fix (Mar 16, 2026)
 - **paymentMode field** added to orders: `CASH` (paid at POS) or `CREDIT` (unpaid at creation). Set at creation, NEVER changes.
-- **Cash Sales = SUM(total) WHERE paymentMode='CASH'** — Not derived from paidAmount
-- **Toggle simplified**: Only updates `paymentStatus` and `dueAmount`. Does NOT change `paidAmount` or create synthetic `PAY-TOGGLE` payments
+- **Cash Sales = SUM(total) WHERE paymentMode='CASH'** — Not from paidAmount
+- **Toggle simplified**: Only updates `paymentStatus` and `dueAmount`. No synthetic `PAY-TOGGLE` payments, no paidAmount changes
 - **Customer Receipts**: Excludes legacy `PAY-TOGGLE-*` payment records
-- **Backfill migration**: Existing paid orders (no modifiedByName) → CASH, all others → CREDIT
-- **Formula**: `Expected Cash = Opening Balance + Cash Sales (CASH orders) + Customer Receipts - Supplier Payments - Expenses`
+- **Formula**: `Expected Cash = Opening + Cash Sales (CASH orders) + Customer Receipts - Supplier Payments - Expenses`
 - **Testing**: 13/13 tests passed (iteration_25)
 
 ### Phase 11: Critical Bug Fixes (Feb 15, 2026)
-- **Bug 1 FIXED:** `linkSuggestion is not defined` — Variable scoping issue
-- **Bug 2 FIXED:** `ORDER_PAYMENT_STATUS` and `CONFIRM_LINK` enum values added to audit_logs
-- **Testing**: 16/16 tests passed (iteration_24)
+- `linkSuggestion is not defined` — Variable scoping fix
+- `ORDER_PAYMENT_STATUS` and `CONFIRM_LINK` enum values added to audit_logs
 
-### Phase 10: Presidential Authority + Full Audit Trail (Feb 2026)
-- No silent operations: Customer linking requires user confirmation via `linkSuggestion`
-- Full audit trail with before/after values for all financial operations
+### Phase 10: Presidential Authority + Full Audit Trail
+- No silent operations, linkSuggestion prompt, full before/after audit trail
 - Audit Trail tab in Ledger with filters
-- Toggle fix: paid→unpaid no longer hard-deletes payments
-- Merge/Link requires typed confirmation + admin role
 
-### Phase 9: Forensic + FIFO Merged Reconstruction
-- Forensic classification with FIFO tool — only resets SYSTEM_TOGGLED orders
-- Customer balance recalculation after FIFO
-- DB Backup button
-
-### Phases 1-8: All Completed
+### Phases 1-9: All Completed
 - Full invoicing, double-entry ledger, audit logging, PDF generation
-- Tally-Correct System Hardening, Receipt Allocation, Invoice Immutability
-- Automation Removal, Forensic Audit, Payment Recovery
+- Forensic classification + FIFO reconstruction
+- Tally-Correct System Hardening, Receipt Allocation
+- Automation Removal, Payment Recovery
 - Telegram/WhatsApp, GST/Tally export
 
-## Key Data Model Changes
+## Key Data Model
 ### orders.paymentMode (ENUM: CASH/CREDIT)
-- **CASH**: paidAmount >= total at creation (POS sale)
-- **CREDIT**: paidAmount = 0 or partial at creation
-- **IMMUTABLE**: Never changes after creation, even on toggle
-- Used for Day Start Cash Sales calculation
+- CASH: paidAmount >= total at creation (POS sale)
+- CREDIT: paidAmount = 0 or partial at creation
+- IMMUTABLE: Never changes after creation
 
 ## Key API Endpoints
 - `POST /api/orders` — Sets paymentMode at creation
-- `PATCH /api/orders/:id/payment-status` — Toggle (status only, no paidAmount/paymentMode changes)
-- `GET /api/dashboard/summary/realtime/:date` — Day Start with paymentMode-based Cash Sales
-- `POST /api/orders/:id/confirm-link` — Link order to customer with audit
-- `GET /api/data-audit/classify` — Forensic classification
-- `POST /api/data-audit/reconstruct-fifo` — FIFO reconstruction
+- `PATCH /api/orders/:id/payment-status` — Toggle (status only)
+- `GET /api/dashboard/summary/realtime/:date` — Day Start with CASH-based Cash Sales
+- `GET /api/payments/daily-summary?date=` — Daily payment summary with breakdown
 - `GET /api/audit-trail` — Audit log viewer
 
-## Key Files
-- `backend/src/models/order.js` — paymentMode ENUM field
-- `backend/src/controller/order.js` — createOrder (paymentMode), togglePaymentStatus (simplified)
-- `backend/src/services/dailySummary.js` — getRealTimeSummary (Cash Sales from CASH orders)
-- `backend/src/services/telegramAlert.js` — Cash calculation using paymentMode
-- `backend/src/middleware/auditLogger.js` — Central audit log
-- `backend/index.js` — Auto-migration for paymentMode + backfill
-- `frontend/src/components/admin/dayStart/DayStart.jsx` — Day Start UI
+## Pending Tasks
 
-## Audit Log Action ENUM Values
-CREATE, UPDATE, DELETE, RESTORE, LOGIN, LOGOUT, LOGIN_FAILED, VIEW, ORDER_PAYMENT_STATUS, CONFIRM_LINK
-
-### P0 — User Verification Pending
-- Dry Run of data repair tool (forensic classification accuracy check)
-- Verify Day Start numbers on production data match expected values
+### P0 — User Verification
+- Verify Day Start numbers on production data
+- Dry Run of data repair tool
 
 ### P1 — Upcoming
-- Admin UI for Customer Management (duplicates/ghosts/merge interface)
-- Core ledger reports UI (Trial Balance, P&L, Balance Sheet)
-- Toggle paid → auto-allocate from On Account payments
+- Admin UI for Customer Management (duplicates/ghosts/merge)
+- Core ledger reports (Trial Balance, P&L, Balance Sheet)
+- Admin Dashboard "Today's Sales" string concat bug fix
 
 ### P2 — Future
-- Telegram alert stability (retry for ENETUNREACH)
-- Concurrency review (FOR UPDATE row-level locks)
-- RBAC (Role-Based Access Control)
-- Financial period lock, Reconciliation dashboard
-- Credit Note / Debit Note voucher types
+- Telegram alert stability, Concurrency review, RBAC
+- Financial period lock, Credit/Debit notes
+- Payments tab "Invalid date" column fix
 
-### Refactoring Needed
-- Break down forensicClassification.js into smaller modules
+### Refactoring
+- Break down forensicClassification.js
 
 ## Test Credentials
 - Username: admin / Password: yttriumR

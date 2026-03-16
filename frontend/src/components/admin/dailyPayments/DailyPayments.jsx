@@ -120,8 +120,8 @@ export const DailyPayments = () => {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [paymentToDelete, setPaymentToDelete] = useState(null);
     
-    // Details dialog for summary cards
-    const [detailsDialog, setDetailsDialog] = useState({ open: false, type: '', title: '' });
+    // Details dialog for summary cards — now inline expanded section
+    const [expandedCard, setExpandedCard] = useState(null); // 'all' | 'customers' | 'suppliers' | 'expenses' | null
     
     // Simple form for quick expense recording
     const [simpleForm, setSimpleForm] = useState({
@@ -477,14 +477,9 @@ export const DailyPayments = () => {
         }
     };
 
-    // Open details dialog
-    const handleOpenDetails = (type, title) => {
-        setDetailsDialog({ open: true, type, title });
-    };
-
-    // Close details dialog
-    const handleCloseDetails = () => {
-        setDetailsDialog({ open: false, type: '', title: '' });
+    // Toggle inline expansion for summary cards
+    const handleOpenDetails = (type) => {
+        setExpandedCard(prev => prev === type ? null : type);
     };
 
     return (
@@ -574,16 +569,16 @@ export const DailyPayments = () => {
             <Grid container spacing={2} sx={{ mb: 3 }}>
                 <Grid item xs={12} sm={6} md={2.4}>
                     <Paper 
-                        elevation={2} 
-                        sx={{ p: 2, bgcolor: '#e3f2fd', cursor: 'pointer', '&:hover': { bgcolor: '#bbdefb', transform: 'translateY(-2px)' }, transition: 'all 0.2s' }}
-                        onClick={() => handleOpenDetails('all', 'All Payments')}
+                        elevation={expandedCard === 'all' ? 6 : 2} 
+                        sx={{ p: 2, bgcolor: expandedCard === 'all' ? '#bbdefb' : '#e3f2fd', cursor: 'pointer', '&:hover': { bgcolor: '#bbdefb', transform: 'translateY(-2px)' }, transition: 'all 0.2s', border: expandedCard === 'all' ? '2px solid #1976d2' : 'none' }}
+                        onClick={() => handleOpenDetails('all')}
                     >
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <AccountBalance color="primary" />
                             <Box>
                                 <Typography variant="body2" color="text.secondary">Total Payments</Typography>
                                 <Typography variant="h5" fontWeight="bold">
-                                    ₹{summary?.totalAmount?.toLocaleString() || 0}
+                                    ₹{Number(summary?.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
                                     {summary?.totalCount || 0} transactions
@@ -594,16 +589,16 @@ export const DailyPayments = () => {
                 </Grid>
                 <Grid item xs={12} sm={6} md={2.4}>
                     <Paper 
-                        elevation={2} 
-                        sx={{ p: 2, bgcolor: '#e8f5e9', cursor: 'pointer', '&:hover': { bgcolor: '#c8e6c9', transform: 'translateY(-2px)' }, transition: 'all 0.2s' }}
-                        onClick={() => handleOpenDetails('customers', 'Payments From Customers')}
+                        elevation={expandedCard === 'customers' ? 6 : 2} 
+                        sx={{ p: 2, bgcolor: expandedCard === 'customers' ? '#c8e6c9' : '#e8f5e9', cursor: 'pointer', '&:hover': { bgcolor: '#c8e6c9', transform: 'translateY(-2px)' }, transition: 'all 0.2s', border: expandedCard === 'customers' ? '2px solid #4caf50' : 'none' }}
+                        onClick={() => handleOpenDetails('customers')}
                     >
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <People color="success" />
                             <Box>
                                 <Typography variant="body2" color="text.secondary">From Customers</Typography>
                                 <Typography variant="h5" fontWeight="bold">
-                                    ₹{summary?.summary?.customers?.amount?.toLocaleString() || 0}
+                                    ₹{Number(summary?.summary?.customers?.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
                                     {summary?.summary?.customers?.count || 0} receipts
@@ -614,16 +609,16 @@ export const DailyPayments = () => {
                 </Grid>
                 <Grid item xs={12} sm={6} md={2.4}>
                     <Paper 
-                        elevation={2} 
-                        sx={{ p: 2, bgcolor: '#fff3e0', cursor: 'pointer', '&:hover': { bgcolor: '#ffe0b2', transform: 'translateY(-2px)' }, transition: 'all 0.2s' }}
-                        onClick={() => handleOpenDetails('suppliers', 'Payments To Suppliers')}
+                        elevation={expandedCard === 'suppliers' ? 6 : 2} 
+                        sx={{ p: 2, bgcolor: expandedCard === 'suppliers' ? '#ffe0b2' : '#fff3e0', cursor: 'pointer', '&:hover': { bgcolor: '#ffe0b2', transform: 'translateY(-2px)' }, transition: 'all 0.2s', border: expandedCard === 'suppliers' ? '2px solid #ff9800' : 'none' }}
+                        onClick={() => handleOpenDetails('suppliers')}
                     >
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <LocalShipping color="warning" />
                             <Box>
                                 <Typography variant="body2" color="text.secondary">To Suppliers</Typography>
                                 <Typography variant="h5" fontWeight="bold">
-                                    ₹{summary?.summary?.suppliers?.amount?.toLocaleString() || 0}
+                                    ₹{Number(summary?.summary?.suppliers?.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
                                     {summary?.summary?.suppliers?.count || 0} payments
@@ -634,16 +629,16 @@ export const DailyPayments = () => {
                 </Grid>
                 <Grid item xs={12} sm={6} md={2.4}>
                     <Paper 
-                        elevation={2} 
-                        sx={{ p: 2, bgcolor: '#ffebee', cursor: 'pointer', '&:hover': { bgcolor: '#ffcdd2', transform: 'translateY(-2px)' }, transition: 'all 0.2s' }}
-                        onClick={() => handleOpenDetails('expenses', 'Expenses')}
+                        elevation={expandedCard === 'expenses' ? 6 : 2} 
+                        sx={{ p: 2, bgcolor: expandedCard === 'expenses' ? '#ffcdd2' : '#ffebee', cursor: 'pointer', '&:hover': { bgcolor: '#ffcdd2', transform: 'translateY(-2px)' }, transition: 'all 0.2s', border: expandedCard === 'expenses' ? '2px solid #f44336' : 'none' }}
+                        onClick={() => handleOpenDetails('expenses')}
                     >
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <AccountBalance sx={{ color: '#d32f2f' }} />
                             <Box>
                                 <Typography variant="body2" color="text.secondary">Expenses</Typography>
                                 <Typography variant="h5" fontWeight="bold" color="error.main">
-                                    ₹{summary?.summary?.expenses?.amount?.toLocaleString() || 0}
+                                    ₹{Number(summary?.summary?.expenses?.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
                                     {summary?.summary?.expenses?.count || 0} expenses
@@ -661,7 +656,7 @@ export const DailyPayments = () => {
                                 <Typography variant="h5" fontWeight="bold" 
                                     color={(summary?.summary?.customers?.amount || 0) - (summary?.summary?.suppliers?.amount || 0) - (summary?.summary?.expenses?.amount || 0) >= 0 ? 'success.main' : 'error.main'}
                                 >
-                                    ₹{((summary?.summary?.customers?.amount || 0) - (summary?.summary?.suppliers?.amount || 0) - (summary?.summary?.expenses?.amount || 0)).toLocaleString()}
+                                    ₹{(Number(summary?.summary?.customers?.amount || 0) - Number(summary?.summary?.suppliers?.amount || 0) - Number(summary?.summary?.expenses?.amount || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
                                     (In - Out - Expenses)
@@ -671,6 +666,143 @@ export const DailyPayments = () => {
                     </Paper>
                 </Grid>
             </Grid>
+
+            {/* Inline Expanded Receipt Details — shows when a summary card is clicked */}
+            {expandedCard && (
+                <Paper 
+                    elevation={3} 
+                    data-testid="expanded-receipt-details"
+                    sx={{ 
+                        mb: 3, mt: 1, 
+                        border: expandedCard === 'customers' ? '2px solid #4caf50' : 
+                               expandedCard === 'suppliers' ? '2px solid #ff9800' : 
+                               expandedCard === 'expenses' ? '2px solid #f44336' : '2px solid #1976d2',
+                        borderRadius: 2,
+                        overflow: 'hidden'
+                    }}
+                >
+                    <Box sx={{ 
+                        p: 2, 
+                        bgcolor: expandedCard === 'customers' ? '#e8f5e9' : 
+                                 expandedCard === 'suppliers' ? '#fff3e0' : 
+                                 expandedCard === 'expenses' ? '#ffebee' : '#e3f2fd',
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center' 
+                    }}>
+                        <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {expandedCard === 'customers' && <People color="success" />}
+                            {expandedCard === 'suppliers' && <LocalShipping color="warning" />}
+                            {expandedCard === 'expenses' && <Receipt sx={{ color: '#d32f2f' }} />}
+                            {expandedCard === 'all' && <AccountBalance color="primary" />}
+                            {expandedCard === 'customers' ? 'Customer Receipts' : 
+                             expandedCard === 'suppliers' ? 'Supplier Payments' : 
+                             expandedCard === 'expenses' ? 'Expenses' : 'All Payments'} 
+                            — {moment(selectedDate).format('DD/MM/YYYY')}
+                        </Typography>
+                        <IconButton onClick={() => setExpandedCard(null)} size="small">
+                            <ExpandLess />
+                        </IconButton>
+                    </Box>
+                    {getFilteredPayments(expandedCard).length === 0 ? (
+                        <Alert severity="info" sx={{ m: 2 }}>
+                            No {expandedCard === 'all' ? 'payments' : expandedCard} recorded for this date.
+                        </Alert>
+                    ) : (
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>#</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Payment No</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Time</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Party Name</TableCell>
+                                        {expandedCard === 'all' && <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>}
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Reference</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Linked To</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Notes</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {getFilteredPayments(expandedCard).map((payment, idx) => (
+                                        <TableRow key={payment.id} hover sx={{ '&:nth-of-type(odd)': { bgcolor: 'rgba(0,0,0,0.02)' } }}>
+                                            <TableCell>
+                                                <Typography variant="body2" color="text.secondary">{idx + 1}</Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" fontWeight="bold" sx={{ fontFamily: 'monospace' }}>
+                                                    {payment.paymentNumber}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2">
+                                                    {moment(payment.createdAt).format('hh:mm A')}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" fontWeight="bold">
+                                                    {payment.partyName || '-'}
+                                                </Typography>
+                                            </TableCell>
+                                            {expandedCard === 'all' && (
+                                                <TableCell>
+                                                    <Chip 
+                                                        label={payment.partyType} 
+                                                        size="small"
+                                                        color={payment.partyType === 'customer' ? 'success' : 
+                                                               payment.partyType === 'supplier' ? 'warning' : 'error'}
+                                                    />
+                                                </TableCell>
+                                            )}
+                                            <TableCell align="right">
+                                                <Typography 
+                                                    fontWeight="bold"
+                                                    variant="body1"
+                                                    color={payment.partyType === 'customer' ? 'success.main' : 'error.main'}
+                                                >
+                                                    {payment.partyType === 'customer' ? '+' : '-'}₹{Number(payment.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Chip 
+                                                    label={payment.referenceType || '-'} 
+                                                    size="small" 
+                                                    variant="outlined"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" color="primary">
+                                                    {payment.referenceNumber || '-'}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 250 }}>
+                                                    {payment.notes || '-'}
+                                                </Typography>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {/* Total Row */}
+                                    <TableRow sx={{ bgcolor: expandedCard === 'customers' ? '#c8e6c9' : 
+                                                            expandedCard === 'suppliers' ? '#ffe0b2' : 
+                                                            expandedCard === 'expenses' ? '#ffcdd2' : '#bbdefb' }}>
+                                        <TableCell colSpan={expandedCard === 'all' ? 5 : 4}>
+                                            <Typography fontWeight="bold" variant="body1">Total ({getFilteredPayments(expandedCard).length} entries)</Typography>
+                                        </TableCell>
+                                        <TableCell align="right">
+                                            <Typography fontWeight="bold" variant="h6" color="primary">
+                                                ₹{getFilteredPayments(expandedCard).reduce((sum, p) => sum + (Number(p.amount) || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                            </Typography>
+                                        </TableCell>
+                                        <TableCell colSpan={3}></TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+                </Paper>
+            )}
 
             {/* Outstanding Receivables Section */}
             {Array.isArray(outstandingReceivables) && outstandingReceivables.length > 0 && (
@@ -1337,113 +1469,6 @@ export const DailyPayments = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Details Dialog for Summary Cards */}
-            <Dialog 
-                open={detailsDialog.open} 
-                onClose={handleCloseDetails}
-                maxWidth="md"
-                fullWidth
-            >
-                <DialogTitle sx={{ 
-                    bgcolor: detailsDialog.type === 'customers' ? '#e8f5e9' : 
-                             detailsDialog.type === 'suppliers' ? '#fff3e0' : 
-                             detailsDialog.type === 'expenses' ? '#ffebee' : '#e3f2fd',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1
-                }}>
-                    {detailsDialog.type === 'customers' && <People color="success" />}
-                    {detailsDialog.type === 'suppliers' && <LocalShipping color="warning" />}
-                    {detailsDialog.type === 'expenses' && <Receipt sx={{ color: '#d32f2f' }} />}
-                    {detailsDialog.type === 'all' && <AccountBalance color="primary" />}
-                    {detailsDialog.title} - {moment(selectedDate).format('DD/MM/YYYY')}
-                </DialogTitle>
-                <DialogContent>
-                    {getFilteredPayments(detailsDialog.type).length === 0 ? (
-                        <Alert severity="info" sx={{ mt: 2 }}>
-                            No {detailsDialog.type === 'all' ? 'payments' : detailsDialog.type} recorded for this date.
-                        </Alert>
-                    ) : (
-                        <TableContainer sx={{ mt: 2 }}>
-                            <Table size="small">
-                                <TableHead>
-                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                                        <TableCell><strong>Time</strong></TableCell>
-                                        <TableCell><strong>Party Name</strong></TableCell>
-                                        <TableCell><strong>Type</strong></TableCell>
-                                        <TableCell align="right"><strong>Amount</strong></TableCell>
-                                        <TableCell><strong>Reference</strong></TableCell>
-                                        <TableCell><strong>Notes</strong></TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {getFilteredPayments(detailsDialog.type).map((payment) => (
-                                        <TableRow key={payment.id} hover>
-                                            <TableCell>
-                                                {moment(payment.createdAt).format('hh:mm A')}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Typography variant="body2" fontWeight="bold">
-                                                    {payment.partyName || '-'}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Chip 
-                                                    label={payment.partyType} 
-                                                    size="small"
-                                                    color={payment.partyType === 'customer' ? 'success' : 
-                                                           payment.partyType === 'supplier' ? 'warning' : 'error'}
-                                                />
-                                            </TableCell>
-                                            <TableCell align="right">
-                                                <Typography 
-                                                    fontWeight="bold"
-                                                    color={payment.partyType === 'customer' ? 'success.main' : 
-                                                           payment.partyType === 'supplier' ? 'warning.main' : 'error.main'}
-                                                >
-                                                    {payment.partyType === 'customer' ? '+' : '-'}₹{payment.amount?.toLocaleString('en-IN')}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell>
-                                                {payment.referenceType && (
-                                                    <Typography variant="caption">
-                                                        {payment.referenceType}
-                                                        {payment.referenceNumber && ` - ${payment.referenceNumber}`}
-                                                    </Typography>
-                                                )}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                    {payment.notes || '-'}
-                                                </Typography>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                    {/* Total Row */}
-                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                                        <TableCell colSpan={3}>
-                                            <Typography fontWeight="bold">Total</Typography>
-                                        </TableCell>
-                                        <TableCell align="right">
-                                            <Typography fontWeight="bold" color="primary">
-                                                ₹{getFilteredPayments(detailsDialog.type).reduce((sum, p) => sum + (p.amount || 0), 0).toLocaleString('en-IN')}
-                                            </Typography>
-                                        </TableCell>
-                                        <TableCell colSpan={2}>
-                                            <Typography variant="body2" color="text.secondary">
-                                                {getFilteredPayments(detailsDialog.type).length} entries
-                                            </Typography>
-                                        </TableCell>
-                                    </TableRow>
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseDetails}>Close</Button>
-                </DialogActions>
-            </Dialog>
         </Box>
     );
 };
