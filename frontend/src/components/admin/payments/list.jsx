@@ -161,7 +161,7 @@ export const ListPayments = () => {
                                     payments.map((payment) => (
                                         <TableRow key={payment.id}>
                                             <TableCell>{payment.paymentNumber}</TableCell>
-                                            <TableCell>{moment(payment.paymentDate).format('DD-MM-YYYY')}</TableCell>
+                                            <TableCell>{moment(payment.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD', 'DD/MM/YYYY']).format('DD-MM-YYYY')}</TableCell>
                                             <TableCell>{payment.partyName}</TableCell>
                                             <TableCell>
                                                 <Chip label={payment.partyType} size="small" />

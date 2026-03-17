@@ -137,9 +137,13 @@ module.exports = {
 
             // === BALANCE CALCULATION ===
             // Balance = Opening + Total Sales - ALL Receipts (including On Account)
-            // This is the true Tally-style: Outstanding = Opening + Invoices - Receipts
+            // EXCLUDE PAY-TOGGLE-* payments (phantom entries from old toggle logic, not real money)
+            const realPayments = payments.filter(p => {
+                const pNum = p.paymentNumber || (p.dataValues && p.dataValues.paymentNumber) || '';
+                return !pNum.startsWith('PAY-TOGGLE-');
+            });
             const totalSales = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
-            const totalReceived = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            const totalReceived = realPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
             const totalDebit = totalSales + openingBal;
             const totalCredit = Math.round(totalReceived * 100) / 100;
             const balance = Math.round((openingBal + totalSales - totalReceived) * 100) / 100;
@@ -268,6 +272,7 @@ module.exports = {
                     FROM payments
                     WHERE "partyType" = 'customer'
                     AND ("partyId" = c.id OR ("partyName" = c.name AND "partyId" IS NULL))
+                    AND ("paymentNumber" IS NULL OR "paymentNumber" NOT LIKE 'PAY-TOGGLE-%')
                     ${db.payment.rawAttributes.isDeleted ? 'AND "isDeleted" = false' : ''}
                 ) payment_totals ON true
                 ORDER BY c.name ASC

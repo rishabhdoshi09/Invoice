@@ -4,7 +4,7 @@
 
 const axios = require('axios');
 
-const API_URL = process.env.API_URL || 'https://payment-guardian-9.preview.emergentagent.com/api';
+const API_URL = process.env.API_URL || 'https://accounting-audit-3.preview.emergentagent.com/api';
 const USERNAME = 'admin';
 const PASSWORD = 'admin123';
 

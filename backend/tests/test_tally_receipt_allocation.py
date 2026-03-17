@@ -14,7 +14,7 @@ import requests
 import os
 import uuid
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://payment-guardian-9.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://accounting-audit-3.preview.emergentagent.com').rstrip('/')
 
 # Test customer IDs from the context
 TEST_CREDIT_CUSTOMER_ID = "2e896797-65ad-44ba-9fb4-bd1ddf3cf1fb"

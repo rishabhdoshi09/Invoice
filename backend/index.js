@@ -52,17 +52,42 @@ app.listen(PORT, async () => {
     try {
       await db.sequelize.query(`DO $$ BEGIN CREATE TYPE "enum_orders_paymentMode" AS ENUM ('CASH', 'CREDIT'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);
       await db.sequelize.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS "paymentMode" "enum_orders_paymentMode" NOT NULL DEFAULT 'CREDIT'`);
-      // Backfill: orders created as paid (at POS, not toggled) → CASH
-      const [results] = await db.sequelize.query(`
-        UPDATE orders SET "paymentMode" = 'CASH' 
-        WHERE "paymentMode" = 'CREDIT' 
-          AND "paymentStatus" = 'paid' 
-          AND "paidAmount" >= "total" 
-          AND ("modifiedByName" IS NULL OR "modifiedByName" = '')
+
+      // Step 1: Fix misclassified orders — any order with linked customer receipts (non-PAY-TOGGLE) is CREDIT
+      const [fixedToCredit] = await db.sequelize.query(`
+        UPDATE orders SET "paymentMode" = 'CREDIT'
+        WHERE "paymentMode" = 'CASH'
           AND "isDeleted" = false
+          AND EXISTS (
+            SELECT 1 FROM payments
+            WHERE payments."referenceId"::text = orders.id::text
+              AND payments."referenceType" = 'order'
+              AND payments."partyType" = 'customer'
+              AND (payments."isDeleted" = false OR payments."isDeleted" IS NULL)
+              AND (payments."paymentNumber" IS NULL OR payments."paymentNumber" NOT LIKE 'PAY-TOGGLE-%')
+          )
         RETURNING id
       `);
-      if (results.length > 0) console.log(`[MIGRATION] Backfilled ${results.length} orders as CASH mode`);
+      if (fixedToCredit.length > 0) console.log(`[MIGRATION] Fixed ${fixedToCredit.length} misclassified CASH→CREDIT orders (had linked receipts)`);
+
+      // Step 2: Backfill remaining CREDIT→CASH for orders that are paid at POS with NO linked receipts
+      const [backfilled] = await db.sequelize.query(`
+        UPDATE orders SET "paymentMode" = 'CASH'
+        WHERE "paymentMode" = 'CREDIT'
+          AND "paymentStatus" = 'paid'
+          AND "paidAmount" >= "total"
+          AND "isDeleted" = false
+          AND NOT EXISTS (
+            SELECT 1 FROM payments
+            WHERE payments."referenceId"::text = orders.id::text
+              AND payments."referenceType" = 'order'
+              AND payments."partyType" = 'customer'
+              AND (payments."isDeleted" = false OR payments."isDeleted" IS NULL)
+              AND (payments."paymentNumber" IS NULL OR payments."paymentNumber" NOT LIKE 'PAY-TOGGLE-%')
+          )
+        RETURNING id
+      `);
+      if (backfilled.length > 0) console.log(`[MIGRATION] Backfilled ${backfilled.length} orders as CASH mode (paid at POS, no receipts)`);
     } catch (e) { console.warn('[MIGRATION] paymentMode:', e.message); }
 
     // Add ORDER_PAYMENT_STATUS and CONFIRM_LINK to audit_logs action enum
