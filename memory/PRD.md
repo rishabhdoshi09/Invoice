@@ -15,6 +15,12 @@ Build a production-grade, double-entry accounting ledger with fraud prevention a
 
 ## What's Been Implemented
 
+### Phase 14: Critical Accounting Bug Fixes (Mar 17, 2026)
+- **P0 FIXED - Double-counting in Day Start:** Backfill migration in `index.js` now correctly classifies orders — checks for linked payment receipts (excluding PAY-TOGGLE) before marking as CASH. Orders with ANY real customer receipts are classified as CREDIT, even if fully paid. Result: Cash Sales and Customer Receipts no longer overlap.
+- **P1 FIXED - Customer balance corruption:** `listCustomersWithBalance` SQL query now excludes `PAY-TOGGLE-*` payments from `total_received`/`totalCredit`. 4 legacy PAY-TOGGLE records (₹2500) no longer inflate customer balances.
+- **P2 FIXED - Invalid date in Payments tab:** `moment(payment.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD', 'DD/MM/YYYY']).format('DD-MM-YYYY')` — explicit input format parsing prevents "Invalid date" display.
+- **Testing:** 100% pass rate (backend pytest + Playwright frontend), iteration_26.
+
 ### Phase 13: Inline Receipt Details + Amount Fix (Mar 16, 2026)
 - **Inline Receipt Details:** "From Customers" card now expands to show receipt table inline on the page (not in a dialog). Shows: Payment No, Time, Party Name, Amount, Reference, Linked To, Notes + Total row
 - **All summary cards expandable**: Total Payments (with Type column), From Customers, To Suppliers, Expenses
@@ -28,27 +34,20 @@ Build a production-grade, double-entry accounting ledger with fraud prevention a
 - **Toggle simplified**: Only updates `paymentStatus` and `dueAmount`. No synthetic `PAY-TOGGLE` payments, no paidAmount changes
 - **Customer Receipts**: Excludes legacy `PAY-TOGGLE-*` payment records
 - **Formula**: `Expected Cash = Opening + Cash Sales (CASH orders) + Customer Receipts - Supplier Payments - Expenses`
-- **Testing**: 13/13 tests passed (iteration_25)
 
-### Phase 11: Critical Bug Fixes (Feb 15, 2026)
-- `linkSuggestion is not defined` — Variable scoping fix
-- `ORDER_PAYMENT_STATUS` and `CONFIRM_LINK` enum values added to audit_logs
-
-### Phase 10: Presidential Authority + Full Audit Trail
-- No silent operations, linkSuggestion prompt, full before/after audit trail
-- Audit Trail tab in Ledger with filters
-
-### Phases 1-9: All Completed
+### Phases 1-11: All Completed
 - Full invoicing, double-entry ledger, audit logging, PDF generation
 - Forensic classification + FIFO reconstruction
 - Tally-Correct System Hardening, Receipt Allocation
 - Automation Removal, Payment Recovery
 - Telegram/WhatsApp, GST/Tally export
+- Presidential Authority + Full Audit Trail
+- Critical Bug Fixes (linkSuggestion, ENUM values)
 
 ## Key Data Model
 ### orders.paymentMode (ENUM: CASH/CREDIT)
-- CASH: paidAmount >= total at creation (POS sale)
-- CREDIT: paidAmount = 0 or partial at creation
+- CASH: paidAmount >= total at creation AND no linked payment receipts (POS sale)
+- CREDIT: paidAmount = 0 or partial at creation, OR has linked payment receipts
 - IMMUTABLE: Never changes after creation
 
 ## Key API Endpoints
@@ -56,6 +55,7 @@ Build a production-grade, double-entry accounting ledger with fraud prevention a
 - `PATCH /api/orders/:id/payment-status` — Toggle (status only)
 - `GET /api/dashboard/summary/realtime/:date` — Day Start with CASH-based Cash Sales
 - `GET /api/payments/daily-summary?date=` — Daily payment summary with breakdown
+- `GET /api/customers/with-balance` — Customer balances excluding PAY-TOGGLE
 - `GET /api/audit-trail` — Audit log viewer
 
 ## Pending Tasks
@@ -72,9 +72,9 @@ Build a production-grade, double-entry accounting ledger with fraud prevention a
 ### P2 — Future
 - Telegram alert stability, Concurrency review, RBAC
 - Financial period lock, Credit/Debit notes
-- Payments tab "Invalid date" column fix
 
 ### Refactoring
+- Move backfill logic from index.js to proper one-time migration file
 - Break down forensicClassification.js
 
 ## Test Credentials
