@@ -378,6 +378,9 @@ export const CreateOrder = () => {
   const [originalPriceForSpecial, setOriginalPriceForSpecial] = useState(null);
   const [allowOriginalPrice, setAllowOriginalPrice] = useState(false);
 
+  // Digit-count lock for non-weighted products (e.g., DZN=₹40 → max 2 digits)
+  const maxPriceDigitsRef = useRef(null);
+
   // NEW: Past totals (history)
   const [dailyHistory, setDailyHistory] = useState([]);
   const [selectedHistoryDate, setSelectedHistoryDate] = useState('');
@@ -729,6 +732,9 @@ export const CreateOrder = () => {
     const current = Number(formik.values.productPrice || 0) || 0;
     let next = current + delta;
     if (next < 0) next = 0;
+    // Respect digit-count lock for non-weighted products
+    const maxDigits = maxPriceDigitsRef.current;
+    if (maxDigits && !isNameAdd && String(next).length > maxDigits) return;
     const newVal = String(next);
 
     onPriceChange({ target: { value: newVal }, preventDefault: () => {} });
@@ -793,6 +799,7 @@ export const CreateOrder = () => {
         formik.setFieldValue('totalPrice', 0);
         setBowlPriceLock(false);
         setBowlProductIdLocked(null);
+        maxPriceDigitsRef.current = null;
 
         // focus price even for custom products (with 2xx selection logic)
         focusMainPriceInput();
@@ -831,6 +838,13 @@ export const CreateOrder = () => {
         rows[productId]?.weighted === true ||
         String(rows[productId]?.unitType || '').toLowerCase() === 'weighted'
       );
+
+      // Digit-count lock: for non-weighted products, lock price to original digit count
+      if (!looksWeighted && price > 0) {
+        maxPriceDigitsRef.current = String(Math.floor(price)).length;
+      } else {
+        maxPriceDigitsRef.current = null;
+      }
 
       try {
         const lab = (rows[productId]?.name || '').toLowerCase();
@@ -871,6 +885,7 @@ export const CreateOrder = () => {
       setBowlProductIdLocked(null);
       setOriginalPriceForSpecial(null);
       setAllowOriginalPrice(false);
+      maxPriceDigitsRef.current = null;
       clearQuickHighlight();
     }
   }, [selectedProduct, formik, rows, weighingScaleHandler, allowAddProductName, modalOpen, focusMainPriceInput]);
@@ -916,7 +931,19 @@ export const CreateOrder = () => {
     const navKeys = ['ArrowLeft','ArrowRight','Tab','Home','End'];
     if (navKeys.includes(e.key)) return;
 
-
+    // Digit-count lock: block digit keys if already at max digits for non-weighted products
+    const maxDigits = maxPriceDigitsRef.current;
+    if (maxDigits && !isNameAdd && /^\d$/.test(e.key)) {
+      const target = e.target;
+      const currentValue = String(target.value || '').replace(/\D/g, '');
+      const selStart = target.selectionStart ?? currentValue.length;
+      const selEnd = target.selectionEnd ?? selStart;
+      // If no text is selected (not replacing), and current digits >= max, block
+      if (selStart === selEnd && currentValue.length >= maxDigits) {
+        e.preventDefault();
+        return;
+      }
+    }
 
     if (bowlPriceLock) {
       const allowed = ['Backspace','Delete'];
@@ -965,6 +992,16 @@ export const CreateOrder = () => {
       }
       
       const numeric = Number(rawInput) || 0;
+      
+      // Digit-count lock: for non-weighted products, block if digits exceed original price's digit count
+      const maxDigits = maxPriceDigitsRef.current;
+      if (maxDigits && !isNameAdd) {
+        const digitsOnly = rawInput.replace(/\D/g, '');
+        if (digitsOnly.length > maxDigits) {
+          e.preventDefault && e.preventDefault();
+          return;
+        }
+      }
       
       // Block restricted ranges (200-209, 301-309) only for weighted products
       if (isWeighted && String(rawInput).length >= 3 && isRestrictedPrice(numeric)) {
@@ -1983,7 +2020,7 @@ export const CreateOrder = () => {
                   size="small"
                   id="productPrice"
                   name="productPrice" 
-                  label={isWeighted ? "Product Price (3-digit: 100-399)" : "Product Price"}
+                  label={isWeighted ? "Product Price (3-digit: 100-399)" : maxPriceDigitsRef.current ? `Product Price (${maxPriceDigitsRef.current}-digit locked)` : "Product Price"}
                   value={localPriceValue}
                   onChange={onPriceChange}
                   onFocus={onPriceFocus}
