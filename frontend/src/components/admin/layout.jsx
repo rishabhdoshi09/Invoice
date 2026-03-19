@@ -325,6 +325,7 @@ export const Layout = () =>  {
                             color="inherit"
                             onClick={handleMenuOpen}
                             startIcon={<AccountCircle />}
+                            sx={{ textTransform: 'none' }}
                         >
                             {user?.name || user?.username}
                         </Button>

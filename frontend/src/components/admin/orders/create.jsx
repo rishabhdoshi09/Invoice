@@ -386,9 +386,6 @@ export const CreateOrder = () => {
     setDailyHistory(computeDailyTotalsFromInvoices(inv));
   }, []);
 
-  // Tens digit protection - blocks 1,2,3,4 in tens place unless Caps Lock is ON
-  // Only enabled for admin users, billing staff can type freely
-  const [tensDigitProtection, setTensDigitProtection] = useState(true); // Default ON for admin
 
   const printPdf = useCallback(() => {
     try {
@@ -919,26 +916,7 @@ export const CreateOrder = () => {
     const navKeys = ['ArrowLeft','ArrowRight','Tab','Home','End'];
     if (navKeys.includes(e.key)) return;
 
-    // Tens digit protection: block 1,2,3,4,5 in tens place unless Caps Lock is ON
-    // Disabled for billing staff - they can type freely
-    const protectionEnabled = tensDigitProtection && isAdmin && !isBillingStaff;
-    if (protectionEnabled && /^[12345]$/.test(e.key) && !e.getModifierState('CapsLock')) {
-      const target = e.target;
-      const currentValue = String(target.value || '');
-      const selStart = target.selectionStart ?? currentValue.length;
-      const selEnd = target.selectionEnd ?? selStart;
-      
-      // Check if typing in tens place (position 1, i.e., second character)
-      // This happens when: cursor is at position 1, or selecting from position 1
-      // OR when current value has 1 digit and we're adding the second
-      const wouldBeInTensPlace = (currentValue.length === 1 && selStart === 1 && selEnd === 1) ||
-                                  (selStart === 1 && selEnd === 1);
-      
-      if (wouldBeInTensPlace) {
-        e.preventDefault();
-        return;
-      }
-    }
+
 
     if (bowlPriceLock) {
       const allowed = ['Backspace','Delete'];
@@ -2321,18 +2299,7 @@ export const CreateOrder = () => {
               </CardContent>
             </Card>
 
-            {/* Tens digit protection toggle - discreet placement */}
-            <Box sx={{ mt: 1, display: 'flex', justifyContent: 'flex-end', opacity: 0.5 }}>
-              <Button
-                size="small"
-                variant={tensDigitProtection ? "contained" : "outlined"}
-                color={tensDigitProtection ? "primary" : "inherit"}
-                onClick={() => setTensDigitProtection(!tensDigitProtection)}
-                sx={{ fontSize: '0.65rem', py: 0.25, px: 1, minWidth: 'auto' }}
-              >
-                {tensDigitProtection ? '₹X50+' : '₹X00+'}
-              </Button>
-            </Box>
+
           </Box>
         </Grid>
       </Grid>
