@@ -840,7 +840,8 @@ export const CreateOrder = () => {
       );
 
       // Digit-count lock: for non-weighted products, lock price to original digit count
-      if (!looksWeighted && price > 0) {
+      // Exception: product named 'add' has no locking whatsoever
+      if (!isAddSpecial && !looksWeighted && price > 0) {
         maxPriceDigitsRef.current = String(Math.floor(price)).length;
       } else {
         maxPriceDigitsRef.current = null;
