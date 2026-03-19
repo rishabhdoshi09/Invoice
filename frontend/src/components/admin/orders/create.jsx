@@ -1115,6 +1115,13 @@ export const CreateOrder = () => {
         return;
       }
 
+      // Block single-digit prices for all products except ADD
+      const currentPrice = String(formik.values.productPrice || '').replace(/\D/g, '');
+      if (!isAddName(formik.values.name) && currentPrice.length < 2) {
+        alert("Price must be at least 2 digits. Single-digit price not allowed.");
+        return;
+      }
+
       if (isWeighted) {
         // Check if weight was already fetched (via '=' key, '/' key, or Sync button)
         const currentQuantity = Number(formik.values.quantity) || 0;
@@ -2031,10 +2038,13 @@ export const CreateOrder = () => {
                   fullWidth
                   error={
                     (Boolean(isWeightedPriceInvalid) && localPriceValue !== "") ||
-                    (isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && !allowOriginalPrice && Number(localPriceValue) === originalPriceForSpecial)
+                    (isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && !allowOriginalPrice && Number(localPriceValue) === originalPriceForSpecial) ||
+                    (!isNameAdd && localPriceValue !== "" && String(localPriceValue).replace(/\D/g, '').length === 1)
                   }
                   helperText={
-                    isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && !allowOriginalPrice && Number(localPriceValue) === originalPriceForSpecial
+                    !isNameAdd && localPriceValue !== "" && String(localPriceValue).replace(/\D/g, '').length === 1
+                      ? 'Min 2 digits required'
+                      : isNoPriceProduct(formik.values.name) && originalPriceForSpecial !== null && !allowOriginalPrice && Number(localPriceValue) === originalPriceForSpecial
                       ? `⚠️ Cannot use original price (₹${originalPriceForSpecial}) - please edit`
                       : isWeighted && localPriceValue !== "" 
                         ? (isWeightedPriceInvalid 
