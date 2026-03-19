@@ -450,13 +450,14 @@ export const ListOrders = () => {
                                     <TableCell><strong>Mobile</strong></TableCell>
                                     <TableCell align="right"><strong>Total</strong></TableCell>
                                     <TableCell align="center"><strong>Status</strong></TableCell>
+                                    <TableCell><strong>Created By</strong></TableCell>
                                     <TableCell align="center"><strong>Actions</strong></TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {rows.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={8} align="center">
+                                        <TableCell colSpan={9} align="center">
                                             <Typography color="text.secondary" sx={{ py: 4 }}>
                                                 No orders found
                                             </Typography>
@@ -520,6 +521,11 @@ export const ListOrders = () => {
                                                         <Chip label="Unpaid" size="small" color="error" />
                                                     )
                                                 )}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" color="text.secondary" data-testid={`created-by-${row.id}`}>
+                                                    {row.createdByName || '-'}
+                                                </Typography>
                                             </TableCell>
                                             <TableCell align="center" onClick={(e) => e.stopPropagation()}>
                                                 <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
