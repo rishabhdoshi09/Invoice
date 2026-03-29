@@ -1,0 +1,105 @@
+'use strict';
+
+/**
+ * Migration: Financial integrity constraints + idempotency key
+ *
+ * 1. Orders table:
+ *    - paidAmount >= 0
+ *    - dueAmount  >= 0
+ *    - total      >  0
+ *    - subTotal   >  0
+ *    - paidAmount <= total
+ *
+ * 2. Payments table:
+ *    - amount > 0
+ *    - idempotencyKey column (STRING, unique, nullable)
+ *
+ * All changes are IDEMPOTENT — safe to re-run.
+ */
+
+module.exports = {
+    up: async (queryInterface, Sequelize) => {
+        const transaction = await queryInterface.sequelize.transaction();
+
+        try {
+            const constraintExists = async (table, name) => {
+                const [rows] = await queryInterface.sequelize.query(
+                    `SELECT 1 FROM information_schema.table_constraints
+                     WHERE table_name = '${table}' AND constraint_name = '${name}'`,
+                    { transaction }
+                );
+                return rows.length > 0;
+            };
+
+            const columnExists = async (table, column) => {
+                const [rows] = await queryInterface.sequelize.query(
+                    `SELECT 1 FROM information_schema.columns
+                     WHERE table_name = '${table}' AND column_name = '${column}'`,
+                    { transaction }
+                );
+                return rows.length > 0;
+            };
+
+            // ── orders ──────────────────────────────────────────────────────
+            const orderChecks = [
+                { name: 'chk_orders_paidAmount_gte_0',   sql: '"paidAmount" >= 0' },
+                { name: 'chk_orders_dueAmount_gte_0',    sql: '"dueAmount"  >= 0' },
+                { name: 'chk_orders_total_gt_0',         sql: '"total"      >  0' },
+                { name: 'chk_orders_subTotal_gt_0',      sql: '"subTotal"   >  0' },
+                { name: 'chk_orders_paidAmount_lte_total', sql: '"paidAmount" <= "total"' },
+            ];
+            for (const { name, sql } of orderChecks) {
+                if (!(await constraintExists('orders', name))) {
+                    await queryInterface.sequelize.query(
+                        `ALTER TABLE "orders" ADD CONSTRAINT "${name}" CHECK (${sql})`,
+                        { transaction }
+                    );
+                }
+            }
+
+            // ── payments ────────────────────────────────────────────────────
+            if (!(await constraintExists('payments', 'chk_payments_amount_gt_0'))) {
+                await queryInterface.sequelize.query(
+                    `ALTER TABLE "payments" ADD CONSTRAINT "chk_payments_amount_gt_0" CHECK ("amount" > 0)`,
+                    { transaction }
+                );
+            }
+
+            // idempotencyKey column (nullable, unique)
+            if (!(await columnExists('payments', 'idempotencyKey'))) {
+                await queryInterface.addColumn('payments', 'idempotencyKey', {
+                    type: Sequelize.STRING,
+                    allowNull: true,
+                    unique: true
+                }, { transaction });
+            }
+
+            await transaction.commit();
+        } catch (err) {
+            await transaction.rollback();
+            throw err;
+        }
+    },
+
+    down: async (queryInterface) => {
+        const transaction = await queryInterface.sequelize.transaction();
+        try {
+            const drops = [
+                `ALTER TABLE "orders"   DROP CONSTRAINT IF EXISTS "chk_orders_paidAmount_gte_0"`,
+                `ALTER TABLE "orders"   DROP CONSTRAINT IF EXISTS "chk_orders_dueAmount_gte_0"`,
+                `ALTER TABLE "orders"   DROP CONSTRAINT IF EXISTS "chk_orders_total_gt_0"`,
+                `ALTER TABLE "orders"   DROP CONSTRAINT IF EXISTS "chk_orders_subTotal_gt_0"`,
+                `ALTER TABLE "orders"   DROP CONSTRAINT IF EXISTS "chk_orders_paidAmount_lte_total"`,
+                `ALTER TABLE "payments" DROP CONSTRAINT IF EXISTS "chk_payments_amount_gt_0"`,
+            ];
+            for (const sql of drops) {
+                await queryInterface.sequelize.query(sql, { transaction });
+            }
+            await queryInterface.removeColumn('payments', 'idempotencyKey', { transaction });
+            await transaction.commit();
+        } catch (err) {
+            await transaction.rollback();
+            throw err;
+        }
+    }
+};

@@ -10,7 +10,11 @@ const getClientIP = (req) => {
            'unknown';
 };
 
-// Create an audit log entry
+// Create an audit log entry.
+// When `transaction` is supplied the write is part of that transaction and
+// errors propagate (causing a rollback).  Without a transaction the write is
+// best-effort (errors are logged but not re-thrown) to avoid breaking callers
+// that have no way to rollback at that point.
 const createAuditLog = async ({
     userId,
     userName,
@@ -24,29 +28,36 @@ const createAuditLog = async ({
     description,
     ipAddress,
     userAgent,
-    metadata
+    metadata,
+    transaction = null
 }) => {
+    const payload = {
+        id: uuidv4(),
+        userId,
+        userName,
+        userRole,
+        action,
+        entityType,
+        entityId: entityId ? String(entityId) : null,
+        entityName,
+        oldValues: oldValues || null,
+        newValues: newValues || null,
+        description,
+        ipAddress,
+        userAgent,
+        metadata
+    };
+
+    if (transaction) {
+        // Transactional write — errors bubble up and roll back the caller.
+        return db.auditLog.create(payload, { transaction });
+    }
+
+    // Best-effort write (caller has already committed or has no transaction).
     try {
-        const log = await db.auditLog.create({
-            id: uuidv4(),
-            userId,
-            userName,
-            userRole,
-            action,
-            entityType,
-            entityId: entityId ? String(entityId) : null,
-            entityName,
-            oldValues: oldValues || null,
-            newValues: newValues || null,
-            description,
-            ipAddress,
-            userAgent,
-            metadata
-        });
-        return log;
+        return await db.auditLog.create(payload);
     } catch (error) {
-        console.error('Failed to create audit log:', error);
-        // Don't throw - audit logging should not break the main operation
+        console.error('Failed to create audit log (best-effort):', error);
         return null;
     }
 };

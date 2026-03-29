@@ -43,6 +43,22 @@ module.exports = {
                 }
             }
 
+            // IDEMPOTENCY: if caller supplied a key and we already have a payment for it,
+            // return the existing record without side-effects (safe retry).
+            if (value.idempotencyKey) {
+                const existing = await db.payment.findOne({
+                    where: { idempotencyKey: value.idempotencyKey, isDeleted: false }
+                });
+                if (existing) {
+                    return res.status(200).send({
+                        status: 200,
+                        message: 'payment recorded successfully',
+                        data: existing,
+                        idempotent: true
+                    });
+                }
+            }
+
             const result = await db.sequelize.transaction(async (transaction) => {
                 const response = await Services.payment.createPayment(value, transaction);
 
@@ -302,31 +318,32 @@ module.exports = {
                     }
                 }
 
+                // Audit log INSIDE transaction — failure rolls back the payment write.
+                await createAuditLog({
+                    userId: req.user?.id,
+                    userName: req.user?.name || req.user?.username || 'System',
+                    userRole: req.user?.role || 'unknown',
+                    action: 'CREATE',
+                    entityType: 'PAYMENT',
+                    entityId: response.id,
+                    entityName: response.paymentNumber,
+                    oldValues: null,
+                    newValues: {
+                        paymentNumber: response.paymentNumber,
+                        amount: Number(value.amount),
+                        partyType: value.partyType,
+                        partyName: value.partyName,
+                        referenceType: value.referenceType || null,
+                        paymentDate: value.paymentDate || null
+                    },
+                    description: `Payment created: ${response.paymentNumber} | ₹${value.amount} | ${value.partyName} (${value.partyType})`,
+                    ipAddress: getClientIP(req),
+                    userAgent: req.headers['user-agent'],
+                    transaction
+                });
+
                 return response;
             });
-
-            // Audit trail — payment created
-            await createAuditLog({
-                userId: req.user?.id,
-                userName: req.user?.name || req.user?.username || 'System',
-                userRole: req.user?.role || 'unknown',
-                action: 'CREATE',
-                entityType: 'PAYMENT',
-                entityId: result.id,
-                entityName: result.paymentNumber,
-                oldValues: null,
-                newValues: {
-                    paymentNumber: result.paymentNumber,
-                    amount: Number(value.amount),
-                    partyType: value.partyType,
-                    partyName: value.partyName,
-                    referenceType: value.referenceType || null,
-                    paymentDate: value.paymentDate || null
-                },
-                description: `Payment created: ${result.paymentNumber} | ₹${value.amount} | ${value.partyName} (${value.partyType})`,
-                ipAddress: getClientIP(req),
-                userAgent: req.headers['user-agent']
-            }).catch(e => console.warn('[AUDIT] Payment create log failed:', e.message));
 
             return res.status(200).send({
                 status: 200,

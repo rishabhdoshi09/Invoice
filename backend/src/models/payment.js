@@ -45,6 +45,11 @@ module.exports = (sequelize, Sequelize) => {
                 type: Sequelize.STRING,
                 allowNull: true
             },
+            idempotencyKey: {
+                type: Sequelize.STRING,
+                allowNull: true,
+                unique: true
+            },
             notes: {
                 type: Sequelize.TEXT
             },

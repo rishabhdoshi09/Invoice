@@ -12,7 +12,8 @@ module.exports = {
             referenceType: Joi.string().trim().valid('order', 'purchase', 'advance').required(),
             referenceId: Joi.string().trim().allow("").optional(),
             referenceNumber: Joi.string().trim().allow("").optional(),
-            notes: Joi.string().trim().allow("").optional()
+            notes: Joi.string().trim().allow("").optional(),
+            idempotencyKey: Joi.string().trim().max(128).allow("", null).optional()
         });
         return Joi.validate(paymentObj, schema);
     },

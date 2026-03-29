@@ -268,27 +268,30 @@ module.exports = {
                     }
                 }
 
-                return await Services.order.getOrder({id: orderId }, transaction);
-            });
+                const createdOrder = await Services.order.getOrder({id: orderId }, transaction);
 
-            // Audit log for order creation
-            await createAuditLog({
-                userId: req.user?.id,
-                userName: req.user?.name || req.user?.username || 'Anonymous',
-                userRole: req.user?.role || 'unknown',
-                action: 'CREATE',
-                entityType: 'ORDER',
-                entityId: result.id,
-                entityName: result.orderNumber,
-                newValues: {
-                    orderNumber: result.orderNumber,
-                    total: result.total,
-                    customerName: result.customerName,
-                    itemCount: orderItems.length
-                },
-                description: `Created order ${result.orderNumber} for ₹${result.total}`,
-                ipAddress: getClientIP(req),
-                userAgent: req.headers['user-agent']
+                // Audit log INSIDE transaction — failure rolls back the order write.
+                await createAuditLog({
+                    userId: req.user?.id,
+                    userName: req.user?.name || req.user?.username || 'Anonymous',
+                    userRole: req.user?.role || 'unknown',
+                    action: 'CREATE',
+                    entityType: 'ORDER',
+                    entityId: createdOrder.id,
+                    entityName: createdOrder.orderNumber,
+                    newValues: {
+                        orderNumber: createdOrder.orderNumber,
+                        total: createdOrder.total,
+                        customerName: createdOrder.customerName,
+                        itemCount: orderItems.length
+                    },
+                    description: `Created order ${createdOrder.orderNumber} for ₹${createdOrder.total}`,
+                    ipAddress: getClientIP(req),
+                    userAgent: req.headers['user-agent'],
+                    transaction
+                });
+
+                return createdOrder;
             });
 
             // Mark recent weight fetches as consumed for this user
