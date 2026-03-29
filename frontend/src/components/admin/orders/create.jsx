@@ -8,14 +8,25 @@ import {
   Button,
   Card,
   CardContent,
+  Divider,
   Grid,
+  IconButton,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
+  Tooltip,
   Typography,
   Select,
   MenuItem,
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
   Switch,
   FormControlLabel,
@@ -25,7 +36,7 @@ import {
 import { CreateProduct } from '../products/create';
 import pdfMake from 'pdfmake/build/pdfmake';
 import { generatePdfDefinition, generatePdfDefinition2 } from './helper';
-import { Delete, Sync, Info, WhatsApp } from '@mui/icons-material';
+import { Delete, Edit as EditIcon, Sync, Info, WhatsApp } from '@mui/icons-material';
 import { fetchWeightsAction, createOrderAction } from '../../../store/orders';
 import { ProductType } from '../../../enums/product';
 import { useAuth } from '../../../context/AuthContext';
@@ -63,6 +74,26 @@ const INVOICES_KEY = 'invoices_v1';
 const DAY_TOTAL_KEY = 'dayTotals_v1';
 
 const getTodayStr = () => moment().format("DD-MM-YYYY");
+
+// Convert DD-MM-YYYY → YYYY-MM-DD (for HTML <input type="date">)
+const toInputDate = (ddmmyyyy) => {
+  if (!ddmmyyyy || !String(ddmmyyyy).match(/^\d{2}-\d{2}-\d{4}$/)) return '';
+  const [d, m, y] = String(ddmmyyyy).split('-');
+  return `${y}-${m}-${d}`;
+};
+// Convert YYYY-MM-DD → DD-MM-YYYY (from HTML <input type="date">)
+const fromInputDate = (yyyymmdd) => {
+  if (!yyyymmdd || !String(yyyymmdd).match(/^\d{4}-\d{2}-\d{2}$/)) return getTodayStr();
+  const [y, m, d] = String(yyyymmdd).split('-');
+  return `${d}-${m}-${y}`;
+};
+// Format DD-MM-YYYY → "DD MMM YYYY" for display
+const MONTHS_SHORT_CREATE = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const formatDateDisplay = (ddmmyyyy) => {
+  if (!ddmmyyyy || !String(ddmmyyyy).match(/^\d{2}-\d{2}-\d{4}$/)) return ddmmyyyy || '';
+  const [d, m, y] = String(ddmmyyyy).split('-');
+  return `${d} ${MONTHS_SHORT_CREATE[parseInt(m) - 1]} ${y}`;
+};
 
 const getStoredSeries = () => { try { const raw = localStorage.getItem(ORDER_SER_KEY); return raw ? JSON.parse(raw) : {}; } catch { return {}; } };
 const setStoredSeries = (obj) => { try { localStorage.setItem(ORDER_SER_KEY, JSON.stringify(obj)); } catch {} };
@@ -344,6 +375,9 @@ export const CreateOrder = () => {
   
   // Post-submit WhatsApp dialog
   const [whatsAppDialog, setWhatsAppDialog] = useState({ open: false, order: null });
+
+  // Edit Note dialog (replaces window.prompt)
+  const [editNoteDialog, setEditNoteDialog] = useState({ open: false, index: -1, value: '' });
 
   const [suppressAutoSuggest, setSuppressAutoSuggest] = useState(false);
 
@@ -1759,6 +1793,41 @@ export const CreateOrder = () => {
             }}
           >
             <Grid container spacing={2}>
+              {/* Invoice Header Row: Date + Invoice Number */}
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', pb: 1, borderBottom: '2px solid #E3EAF4', mb: 1 }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 0.3, fontWeight: 600, letterSpacing: '0.05em' }}>INVOICE DATE</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <TextField
+                        type="date"
+                        size="small"
+                        value={toInputDate(orderProps.orderDate)}
+                        onChange={(e) => {
+                          const converted = fromInputDate(e.target.value);
+                          setOrderProps(prev => ({ ...prev, orderDate: converted }));
+                        }}
+                        InputLabelProps={{ shrink: true }}
+                        inputProps={{ max: toInputDate(getTodayStr()) }}
+                        sx={{ width: 155 }}
+                      />
+                      {orderProps.orderDate && orderProps.orderDate !== getTodayStr() && (
+                        <Chip label="Backdated" size="small" color="warning" variant="outlined" sx={{ fontSize: '0.72rem' }} />
+                      )}
+                      {orderProps.orderDate === getTodayStr() && (
+                        <Chip label="Today" size="small" color="success" variant="outlined" sx={{ fontSize: '0.72rem' }} />
+                      )}
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', ml: 2 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 0.3, fontWeight: 600, letterSpacing: '0.05em' }}>INVOICE NO.</Typography>
+                    <Typography variant="body1" fontWeight={700} color="primary.main" sx={{ letterSpacing: '0.05em' }}>
+                      {archivedOrderProps?.orderNumber || orderProps.orderNumber}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+
               {/* Credit Sale Toggle - Prominent Position */}
               <Grid item xs={12}>
                 <Box 
@@ -2133,79 +2202,136 @@ export const CreateOrder = () => {
               </Grid>
 
               <Grid item xs={12}>
-                <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
-                  Shortcuts: '/' for weight refresh, '=' to add product, Shift+D delete last item, Ctrl/Cmd+P print. Weighted: 3-digit prices only (100-399)
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  Shortcuts: <strong>/</strong> fetch weight · <strong>=</strong> add item · <strong>Shift+D</strong> delete last · <strong>Ctrl+P</strong> print
                 </Typography>
-                <Button variant="contained" onClick={createOrder} sx={{ float: "right", margin: "5px" }} disabled={orderProps.orderItems.length === 0 || isSubmitting}>
-                  {isSubmitting ? 'Submitting...' : 'Submit'}
-                </Button>
-                <Button
-                  variant="contained"
-                  onClick={addProductHandler}
-                  sx={{ float: "right", margin: "5px" }}
-                  disabled={
-                    formik.values.name === "" ||
-                    (!allowAddProductName && isAddName(formik.values.name)) ||
-                    (isWeighted && (formik.values.productPrice === "" || isWeightedPriceInvalid))
-                  }
-                >
-                  Add Product
-                </Button>
+                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                  <Button
+                    variant="outlined"
+                    onClick={addProductHandler}
+                    disabled={
+                      formik.values.name === "" ||
+                      (!allowAddProductName && isAddName(formik.values.name)) ||
+                      (isWeighted && (formik.values.productPrice === "" || isWeightedPriceInvalid))
+                    }
+                  >
+                    Add Item
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    onClick={createOrder}
+                    disabled={orderProps.orderItems.length === 0 || isSubmitting}
+                    sx={{ minWidth: 140 }}
+                  >
+                    {isSubmitting ? 'Saving…' : 'Create Invoice'}
+                  </Button>
+                </Box>
 
                 {lastSubmitError && (
-                  <Box sx={{ mt: 1, p: 1, border: '1px dashed red', backgroundColor: '#fff0f0' }}>
-                    <Typography variant="caption" color="error">Last submit error:</Typography>
-                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
-                      {lastSubmitError.message || JSON.stringify(lastSubmitError, null, 2)}
-                    </Typography>
-                  </Box>
+                  <Alert severity="error" sx={{ mt: 1 }}>
+                    {lastSubmitError.message || 'Invoice creation failed. Check details and try again.'}
+                  </Alert>
                 )}
-                {lastSubmitResponse && (
-                  <Box sx={{ mt: 1, p: 1, border: '1px dashed #888', backgroundColor: '#fafafa' }}>
-                    <Typography variant="caption">Last server payload/response:</Typography>
-                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
-                      {JSON.stringify(lastSubmitResponse, null, 2)}
-                    </Typography>
-                  </Box>
-                )}
-
               </Grid>
             </Grid>
           </Box>
           <br />
 
-          {orderProps.orderItems?.map((item, index) => (
-            <Card key={index} sx={{ padding: '5px 15px ', margin: '5px 2px' }}>
-              <Grid container>
-                <Grid item xs={10}>
-                  <Typography variant='body2'>
-                    Name: {(item.altName && item.altName.trim())
-                      ? `${item.altName.trim()} (Original: ${safeGetProductName(rows, item)})`
-                      : safeGetProductName(rows, item)
-                    } | Qty: {item.quantity} | Price: {item.totalPrice}
+          {/* Order Items Table */}
+          {orderProps.orderItems && orderProps.orderItems.length > 0 ? (
+            <TableContainer component={Paper} variant="outlined" sx={{ mt: 2 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ width: 36, fontWeight: 700 }}>#</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Product</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700 }}>Qty</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>Rate (₹)</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>Amount (₹)</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700 }}>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {orderProps.orderItems.map((item, index) => (
+                    <TableRow key={index} hover>
+                      <TableCell sx={{ color: 'text.secondary', fontWeight: 500 }}>{index + 1}</TableCell>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight={600}>
+                          {(item.altName && item.altName.trim())
+                            ? item.altName.trim()
+                            : safeGetProductName(rows, item)}
+                        </Typography>
+                        {item.altName && item.altName.trim() && (
+                          <Typography variant="caption" color="text.secondary">
+                            {safeGetProductName(rows, item)}
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell align="center">{item.quantity}</TableCell>
+                      <TableCell align="right">₹{Number(item.productPrice).toLocaleString('en-IN')}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>
+                        ₹{Number(item.totalPrice).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell align="center">
+                        <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+                          <Tooltip title="Edit display name / note">
+                            <IconButton
+                              size="small"
+                              onClick={() => setEditNoteDialog({ open: true, index, value: item.altName || '' })}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Remove item">
+                            <IconButton size="small" color="error" onClick={() => removeItem(index)}>
+                              <Delete fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Box sx={{ mt: 2, py: 4, textAlign: 'center', border: '1px dashed #B0BEC5', borderRadius: 1, bgcolor: '#FAFAFA' }}>
+              <Typography color="text.secondary" variant="body2">No items added yet. Select a product and click <strong>Add Item</strong>.</Typography>
+            </Box>
+          )}
+
+          {/* Live Totals Summary */}
+          {orderProps.orderItems && orderProps.orderItems.length > 0 && (
+            <Box sx={{ mt: 2, p: 2, border: '2px solid #1565C0', borderRadius: 1, bgcolor: '#F0F7FF', maxWidth: 320, ml: 'auto' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="body2" color="text.secondary">Subtotal</Typography>
+                <Typography variant="body2" fontWeight={600}>₹{Number(orderProps.subTotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography>
+              </Box>
+              {Number(orderProps.taxPercent) > 0 && (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2" color="text.secondary">Tax ({orderProps.taxPercent}%)</Typography>
+                  <Typography variant="body2" fontWeight={600}>₹{Number(orderProps.tax).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography>
+                </Box>
+              )}
+              <Divider sx={{ my: 1 }} />
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="subtitle1" fontWeight={700} color="primary.dark">TOTAL</Typography>
+                <Typography variant="subtitle1" fontWeight={700} color="primary.dark">
+                  ₹{Number(orderProps.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </Typography>
+              </Box>
+              {isCreditSale && (
+                <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid #FF9800', display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="warning.main" fontWeight={600}>Due (Credit)</Typography>
+                  <Typography variant="body2" color="warning.main" fontWeight={600}>
+                    ₹{Number(orderProps.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </Typography>
-                </Grid>
-                <Grid item xs={2} sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                  <Button size="small" onClick={() => {
-                    const currentItem = orderProps.orderItems[index]; if (!currentItem) return;
-                    const currentNote = (currentItem.altName || "").trim();
-                    const suggested = currentNote || safeGetProductName(rows, currentItem);
-                    const newNote = window.prompt("Enter a note / alternate name for this product:", suggested);
-                    if (newNote !== null) {
-                      setOrderProps((prev) => {
-                        const updated = [...prev.orderItems];
-                        updated[index] = { ...updated[index], altName: String(newNote).trim() };
-                        const nextProps = { ...prev, orderItems: updated };
-                        try { generatePdf(nextProps); } catch {}
-                        return nextProps;
-                      });
-                    }
-                  }}>Edit Note</Button>
-                  <Button size="small" onClick={() => removeItem(index)}><Delete /></Button>
-                </Grid>
-              </Grid>
-            </Card>
-          ))}
+                </Box>
+              )}
+            </Box>
+          )}
+
 
           {/* Recently deleted items list - visible before and after submit */}
           {recentlyDeleted.length > 0 && (
@@ -2542,6 +2668,64 @@ export const CreateOrder = () => {
           onPriceChange({ target: { value: '' }, preventDefault: () => {} });
         }}
       />
+
+      {/* Edit Note / Alternate Name Dialog */}
+      <Dialog
+        open={editNoteDialog.open}
+        onClose={() => setEditNoteDialog({ open: false, index: -1, value: '' })}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Edit Display Name</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Enter an alternate name to print on the invoice instead of the product name. Leave blank to use the default product name.
+          </DialogContentText>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            label="Display name / note"
+            value={editNoteDialog.value}
+            onChange={(e) => setEditNoteDialog(prev => ({ ...prev, value: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const idx = editNoteDialog.index;
+                const newNote = editNoteDialog.value;
+                setOrderProps((prev) => {
+                  const updated = [...prev.orderItems];
+                  updated[idx] = { ...updated[idx], altName: String(newNote).trim() };
+                  const nextProps = { ...prev, orderItems: updated };
+                  try { generatePdf(nextProps); } catch {}
+                  return nextProps;
+                });
+                setEditNoteDialog({ open: false, index: -1, value: '' });
+              }
+            }}
+            placeholder="e.g. 'Thali - Special' or leave blank"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditNoteDialog({ open: false, index: -1, value: '' })}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              const idx = editNoteDialog.index;
+              const newNote = editNoteDialog.value;
+              setOrderProps((prev) => {
+                const updated = [...prev.orderItems];
+                updated[idx] = { ...updated[idx], altName: String(newNote).trim() };
+                const nextProps = { ...prev, orderItems: updated };
+                try { generatePdf(nextProps); } catch {}
+                return nextProps;
+              });
+              setEditNoteDialog({ open: false, index: -1, value: '' });
+            }}
+          >
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Post-Submit WhatsApp Dialog */}
       <Dialog 

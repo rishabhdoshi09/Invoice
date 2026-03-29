@@ -399,8 +399,27 @@ export const EditOrder = () => {
         </Box>
       )}
 
+      {/* ── Date formatting helper (display only) ── */}
+      {/* formatDateDisplay is inline below */}
+
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Edit Order</Typography>
+        <Box>
+          <Typography variant="h5" fontWeight={700} color="primary.dark">
+            Invoice {orderData.orderNumber}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {(() => {
+              const d = orderData.orderDate;
+              if (!d) return '';
+              if (typeof d === 'string' && d.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const [day, month, year] = d.split('-');
+                return `${day} ${months[parseInt(month) - 1]} ${year}`;
+              }
+              return d;
+            })()}
+          </Typography>
+        </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Tooltip title="View Invoice PDF">
             <Button 
@@ -461,12 +480,23 @@ export const EditOrder = () => {
         <CardContent>
           <Grid container spacing={3}>
             <Grid item xs={12} md={6}>
-              <Typography variant="subtitle2" color="textSecondary">Order Number</Typography>
-              <Typography variant="h6">{orderData.orderNumber}</Typography>
+              <Typography variant="subtitle2" color="text.secondary">Invoice Number</Typography>
+              <Typography variant="h6" color="primary.main">{orderData.orderNumber}</Typography>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Typography variant="subtitle2" color="textSecondary">Order Date</Typography>
-              <Typography variant="h6">{orderData.orderDate}</Typography>
+              <Typography variant="subtitle2" color="text.secondary">Invoice Date</Typography>
+              <Typography variant="h6">
+                {(() => {
+                  const d = orderData.orderDate;
+                  if (!d) return '-';
+                  if (typeof d === 'string' && d.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                    const [day, month, year] = d.split('-');
+                    return `${day} ${months[parseInt(month) - 1]} ${year}`;
+                  }
+                  return d;
+                })()}
+              </Typography>
             </Grid>
             <Grid item xs={12} md={6}>
               <TextField
@@ -490,17 +520,17 @@ export const EditOrder = () => {
               <TextField
                 fullWidth
                 size="small"
-                label="Subtotal (Locked)"
-                value={`₹${orderData.subTotal}`}
-                InputProps={{ readOnly: true }}
+                label="Subtotal"
+                value={`₹ ${Number(orderData.subTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                InputProps={{ readOnly: true, sx: { fontWeight: 500 } }}
               />
             </Grid>
             <Grid item xs={12} md={3}>
               <TextField
                 fullWidth
                 size="small"
-                label="Tax"
-                value={`₹${orderData.tax} (${orderData.taxPercent}%)`}
+                label={`Tax (${orderData.taxPercent || 0}%)`}
+                value={`₹ ${Number(orderData.tax || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
                 InputProps={{ readOnly: true }}
               />
             </Grid>
@@ -509,14 +539,9 @@ export const EditOrder = () => {
                 fullWidth
                 size="small"
                 label="Grand Total (Locked)"
-                value={`₹${orderData.total}`}
-                InputProps={{ readOnly: true }}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    backgroundColor: '#f0f0f0',
-                    fontWeight: 'bold'
-                  }
-                }}
+                value={`₹ ${Number(orderData.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                InputProps={{ readOnly: true, sx: { fontWeight: 700, color: 'primary.main' } }}
+                sx={{ '& .MuiOutlinedInput-root': { backgroundColor: '#EEF5FF' } }}
               />
             </Grid>
             <Grid item xs={12} md={3}>
@@ -524,8 +549,14 @@ export const EditOrder = () => {
                 fullWidth
                 size="small"
                 label="Payment Status"
-                value={orderData.paymentStatus || 'N/A'}
+                value={orderData.paymentStatus === 'paid' ? 'Paid' : orderData.paymentStatus === 'partial' ? 'Partial' : orderData.paymentStatus === 'unpaid' ? 'Unpaid' : 'N/A'}
                 InputProps={{ readOnly: true }}
+                sx={{
+                  '& .MuiInputBase-input': {
+                    color: orderData.paymentStatus === 'paid' ? '#2E7D32' : orderData.paymentStatus === 'unpaid' ? '#C62828' : '#E65100',
+                    fontWeight: 600
+                  }
+                }}
               />
             </Grid>
           </Grid>
@@ -730,14 +761,23 @@ export const EditOrder = () => {
           {orderData && (
             <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
               <Typography variant="body2"><strong>Invoice No:</strong> {orderData.orderNumber}</Typography>
-              <Typography variant="body2"><strong>Date:</strong> {orderData.orderDate}</Typography>
+              <Typography variant="body2"><strong>Date:</strong> {(() => {
+                const d = orderData.orderDate;
+                if (!d) return '-';
+                if (typeof d === 'string' && d.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                  const [day, month, year] = d.split('-');
+                  return `${day} ${months[parseInt(month) - 1]} ${year}`;
+                }
+                return d;
+              })()}</Typography>
               <Typography variant="body2"><strong>Customer:</strong> {orderData.customerName || 'N/A'}</Typography>
               <Typography variant="body2"><strong>Mobile:</strong> {orderData.customerMobile || 'N/A'}</Typography>
               <Divider sx={{ my: 1 }} />
-              <Typography variant="body2"><strong>Subtotal:</strong> ₹{orderData.subTotal?.toLocaleString()}</Typography>
-              <Typography variant="body2"><strong>Tax ({orderData.taxPercent}%):</strong> ₹{orderData.tax?.toLocaleString()}</Typography>
-              <Typography variant="body1" fontWeight="bold" color="primary.main">
-                <strong>Total:</strong> ₹{orderData.total?.toLocaleString()}
+              <Typography variant="body2"><strong>Subtotal:</strong> ₹ {Number(orderData.subTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography>
+              <Typography variant="body2"><strong>Tax ({orderData.taxPercent}%):</strong> ₹ {Number(orderData.tax || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography>
+              <Typography variant="body1" fontWeight={700} color="primary.main">
+                Total: ₹ {Number(orderData.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </Typography>
             </Box>
           )}

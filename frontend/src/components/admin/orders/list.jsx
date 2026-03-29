@@ -325,41 +325,49 @@ export const ListOrders = () => {
 
     const hasFilters = filters.q || filters.date;
 
-    // Format date for display
+    const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    // Format date as DD MMM YYYY (e.g. "15 Mar 2025") — Indian standard
     const formatDate = (dateString) => {
         if (!dateString) return '-';
         try {
-            // Handle different date formats
             let date;
             if (typeof dateString === 'string') {
-                // Handle DD-MM-YYYY format (Indian date format from backend)
                 if (dateString.match(/^\d{2}-\d{2}-\d{4}$/)) {
                     const [day, month, year] = dateString.split('-');
                     date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-                }
-                // Handle YYYY-MM-DD format
-                else if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                } else if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
                     date = new Date(dateString + 'T00:00:00');
-                }
-                // Handle ISO string or other formats
-                else {
+                } else {
                     date = new Date(dateString);
                 }
             } else {
                 date = new Date(dateString);
             }
-            
-            // Check if date is valid
             if (isNaN(date.getTime())) return '-';
-            
-            return date.toLocaleDateString('en-IN', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric'
-            });
+            const dd = String(date.getDate()).padStart(2, '0');
+            const mmm = MONTHS_SHORT[date.getMonth()];
+            const yyyy = date.getFullYear();
+            return `${dd} ${mmm} ${yyyy}`;
         } catch {
             return '-';
         }
+    };
+
+    // Returns true if the invoice date is not today (backdated entry)
+    const getTodayDDMMYYYY = () => {
+        const now = new Date();
+        const dd = String(now.getDate()).padStart(2, '0');
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        return `${dd}-${mm}-${now.getFullYear()}`;
+    };
+    const isBackdated = (dateString) => {
+        if (!dateString) return false;
+        const today = getTodayDDMMYYYY();
+        if (typeof dateString === 'string' && dateString.match(/^\d{2}-\d{2}-\d{4}$/)) {
+            return dateString !== today;
+        }
+        return false;
     };
 
     // Format time for display
@@ -381,15 +389,16 @@ export const ListOrders = () => {
         }
     };
 
-    // Format currency
+    // Format currency with Indian number formatting
     const formatCurrency = (amount) => {
-        return `₹${(amount || 0).toLocaleString('en-IN')}`;
+        const num = Number(amount) || 0;
+        return `₹\u202F${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     };
 
     return (
-        <Paper sx={{ width: '100%', overflow: 'hidden', padding: '10px' }}>
+        <Paper sx={{ width: '100%', overflow: 'hidden', padding: '16px' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h5">Orders</Typography>
+                <Typography variant="h5" fontWeight={700}>Invoices</Typography>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                     {loading && <CircularProgress size={20} />}
                     <Tooltip title="Refresh list">
@@ -397,8 +406,8 @@ export const ListOrders = () => {
                             <Refresh />
                         </IconButton>
                     </Tooltip>
-                    <Button variant="contained" onClick={() => navigate('/orders/create')}>
-                        Create Order
+                    <Button variant="contained" color="primary" onClick={() => navigate('/orders/create')}>
+                        + New Invoice
                     </Button>
                 </Box>
             </Box>
@@ -442,24 +451,24 @@ export const ListOrders = () => {
                     <TableContainer>
                         <Table size="small">
                             <TableHead>
-                                <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                                    <TableCell><strong>Order #</strong></TableCell>
-                                    <TableCell><strong>Date</strong></TableCell>
-                                    <TableCell><strong>Time</strong></TableCell>
-                                    <TableCell><strong>Customer</strong></TableCell>
-                                    <TableCell><strong>Mobile</strong></TableCell>
-                                    <TableCell align="right"><strong>Total</strong></TableCell>
-                                    <TableCell align="center"><strong>Status</strong></TableCell>
-                                    <TableCell><strong>Created By</strong></TableCell>
-                                    <TableCell align="center"><strong>Actions</strong></TableCell>
+                                <TableRow>
+                                    <TableCell>Invoice #</TableCell>
+                                    <TableCell>Date</TableCell>
+                                    <TableCell>Time</TableCell>
+                                    <TableCell>Customer</TableCell>
+                                    <TableCell>Mobile</TableCell>
+                                    <TableCell align="right">Total (₹)</TableCell>
+                                    <TableCell align="center">Status</TableCell>
+                                    <TableCell>Created By</TableCell>
+                                    <TableCell align="center">Actions</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {rows.length === 0 ? (
                                     <TableRow>
                                         <TableCell colSpan={9} align="center">
-                                            <Typography color="text.secondary" sx={{ py: 4 }}>
-                                                No orders found
+                                            <Typography color="text.secondary" sx={{ py: 6, fontSize: '1rem' }}>
+                                                No invoices found
                                             </Typography>
                                         </TableCell>
                                     </TableRow>
@@ -476,7 +485,18 @@ export const ListOrders = () => {
                                                     {row.orderNumber}
                                                 </Typography>
                                             </TableCell>
-                                            <TableCell>{formatDate(row.orderDate)}</TableCell>
+                                            <TableCell>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                    <Typography variant="body2" fontWeight={500}>
+                                                        {formatDate(row.orderDate)}
+                                                    </Typography>
+                                                    {isBackdated(row.orderDate) && (
+                                                        <Tooltip title="Backdated entry">
+                                                            <Chip label="Back" size="small" color="warning" variant="outlined" sx={{ fontSize: '0.68rem', height: 18, px: 0.2 }} />
+                                                        </Tooltip>
+                                                    )}
+                                                </Box>
+                                            </TableCell>
                                             <TableCell>
                                                 <Typography variant="body2" color="text.secondary">
                                                     {formatTime(row)}

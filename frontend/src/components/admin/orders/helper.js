@@ -1,4 +1,15 @@
 
+// Format DD-MM-YYYY → "DD MMM YYYY" for display in PDFs
+const PDF_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const formatPdfDate = (dateStr) => {
+    if (!dateStr) return '';
+    if (typeof dateStr === 'string' && dateStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+        const [d, m, y] = dateStr.split('-');
+        return `${d} ${PDF_MONTHS[parseInt(m) - 1]} ${y}`;
+    }
+    return dateStr;
+};
+
 export const generatePdfDefinition = (data) => {
     // GST Rate: 5% total (2.5% SGST + 2.5% CGST)
     const GST_RATE = 0.05;
@@ -94,7 +105,7 @@ export const generatePdfDefinition = (data) => {
                         width: '50%',
                         stack: [
                             { text: `Invoice No: ${data.orderNumber}`, style: 'invoiceInfo', alignment: 'right' },
-                            { text: `Date: ${data.orderDate}`, style: 'invoiceInfo', alignment: 'right' },
+                            { text: `Date: ${formatPdfDate(data.orderDate)}`, style: 'invoiceInfo', alignment: 'right' },
                         ]
                     }
                 ]
@@ -331,8 +342,8 @@ export const generatePdfDefinition2 = (data) => {
             },
             { text: `Customer Name: ${data.customerName}`, style: 'customerName' },
             { text: `Mobile: ${data.customerMobile}`, style: 'customerMobile' },
-            { text: `Order Number: ${data.orderNumber}`, style: 'orderNumber' },
-            { text: `Date: ${data.orderDate}`, style: 'orderDate' },
+            { text: `Invoice No: ${data.orderNumber}`, style: 'orderNumber' },
+            { text: `Date: ${formatPdfDate(data.orderDate)}`, style: 'orderDate' },
             {
                 style: 'tableExample',
                 table: {
