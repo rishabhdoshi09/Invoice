@@ -248,24 +248,24 @@ module.exports = {
                 }
 
                 // === NEW DOUBLE-ENTRY LEDGER: Real-time posting ===
-                // Non-blocking when CoA is not initialized; blocking (throws) when it IS initialized
-                // so a ledger failure rolls back the order rather than creating an unposted invoice.
-                if (orderObj.customerId) {
-                    const accountsExist = await db.account.count({ transaction });
-                    if (accountsExist > 0) {
-                        await postInvoiceToLedger(
+                // Non-blocking when CoA is not initialized; blocking (throws) when it IS initialized.
+                // Posted for ALL orders, including walk-in (no customerId) — postInvoiceToLedger
+                // and postInvoiceCashReceiptToLedger both use a generic Walk-in Customer account
+                // when customerId is null, so every sale gets a journal entry.
+                const accountsExist = await db.account.count({ transaction });
+                if (accountsExist > 0) {
+                    await postInvoiceToLedger(
+                        { ...orderObj, id: orderId, createdAt: new Date() },
+                        transaction
+                    );
+                    if (orderObj.paidAmount > 0) {
+                        await postInvoiceCashReceiptToLedger(
                             { ...orderObj, id: orderId, createdAt: new Date() },
                             transaction
                         );
-                        if (orderObj.paidAmount > 0) {
-                            await postInvoiceCashReceiptToLedger(
-                                { ...orderObj, id: orderId, createdAt: new Date() },
-                                transaction
-                            );
-                        }
-                    } else {
-                        console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — invoice ${orderObj.orderNumber} not posted to ledger`);
                     }
+                } else {
+                    console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — invoice ${orderObj.orderNumber} not posted to ledger`);
                 }
 
                 const createdOrder = await Services.order.getOrder({id: orderId }, transaction);

@@ -202,22 +202,13 @@ module.exports = {
                         }, { transaction });
                     }
                 } else if (value.partyType === 'expense') {
-                    // Simple expense: Cash/Bank (Credit) - money going out
-                    // Try to get or create an Expenses ledger
+                    // Double-entry for expenses: DR Expense account, CR Cash/Bank
+                    // NEVER create a single-sided (cash-only) entry — that breaks double-entry integrity.
                     let expenseLedger = await Services.ledger.getLedgerByName('Expenses');
                     if (!expenseLedger) {
-                        // If no expense ledger, just record the cash outflow
-                        if (CASH_BANK_LEDGER_ID) {
-                            ledgerEntries.push({
-                                ledgerId: CASH_BANK_LEDGER_ID,
-                                entryDate: value.paymentDate,
-                                debit: 0,
-                                credit: value.amount,
-                                description: `Expense: ${value.partyName} - ${value.notes || ''}`,
-                                referenceType: 'payment',
-                                referenceId: response.id
-                            });
-                        }
+                        // No expense ledger configured — skip old ledger entry entirely.
+                        // The new double-entry system will handle it when CoA is set up.
+                        console.warn('[OLD LEDGER] Expenses ledger not found — skipping old ledger entry for expense payment');
                     } else if (CASH_BANK_LEDGER_ID) {
                         // Double entry: Expense (Debit) to Cash/Bank (Credit)
                         ledgerEntries.push({

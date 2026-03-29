@@ -106,18 +106,21 @@ module.exports = {
 
                     createdAllocations.push(allocation);
 
-                    // Update the order's cached paidAmount/dueAmount/paymentStatus
-                    const newInvoiceAllocated = invoiceAllocatedTotal + Number(alloc.amount);
-                    const newDueAmount = Math.max(0, invoiceTotal - newInvoiceAllocated);
+                    // Update the order's cached paidAmount/dueAmount/paymentStatus.
+                    // paidAmount is ADDITIVE: POS cash-at-creation is preserved and each
+                    // allocated receipt is added on top.  Never reset paidAmount to the
+                    // allocation total alone (that would erase the POS payment).
+                    const newPaidAmount = Math.round((Number(order.paidAmount) + Number(alloc.amount)) * 100) / 100;
+                    const newDueAmount = Math.max(0, invoiceTotal - newPaidAmount);
                     let newPaymentStatus = 'unpaid';
-                    if (newInvoiceAllocated >= invoiceTotal) {
+                    if (newPaidAmount >= invoiceTotal) {
                         newPaymentStatus = 'paid';
-                    } else if (newInvoiceAllocated > 0) {
+                    } else if (newPaidAmount > 0) {
                         newPaymentStatus = 'partial';
                     }
 
                     await db.order.update({
-                        paidAmount: newInvoiceAllocated,
+                        paidAmount: newPaidAmount,
                         dueAmount: newDueAmount,
                         paymentStatus: newPaymentStatus
                     }, { where: { id: alloc.orderId }, transaction });

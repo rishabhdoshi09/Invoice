@@ -2,19 +2,19 @@ const uuidv4 = require('uuid/v4');
 const db = require('../models');
 
 module.exports = {
-    createPayment: async (payload) => {
+    createPayment: async (payload, transaction = null) => {
         try {
             // NORMALIZE DATE FORMAT: Always store as DD-MM-YYYY
             if (payload.paymentDate) {
                 const moment = require('moment-timezone');
-                // Try parsing with multiple formats
                 const parsedDate = moment(payload.paymentDate, ['YYYY-MM-DD', 'DD-MM-YYYY', 'DD/MM/YYYY'], true);
                 if (parsedDate.isValid()) {
                     payload.paymentDate = parsedDate.format('DD-MM-YYYY');
                 }
             }
-            
-            const res = await db.payment.create({ id: uuidv4(), ...payload });
+
+            const options = transaction ? { transaction } : {};
+            const res = await db.payment.create({ id: uuidv4(), ...payload }, options);
             return res;
         } catch (error) {
             console.log(error);

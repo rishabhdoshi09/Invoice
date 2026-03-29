@@ -221,10 +221,37 @@ async function reverseInvoiceLedger(order, transaction) {
             }))
         }, transaction);
 
-        // Mark original batch as reversed
+        // Mark original INVOICE batch as reversed
         await originalBatch.update({ isReversed: true }, { transaction });
 
         console.log(`[LEDGER] REVERSED: Invoice ${order.orderNumber || order.id} → batch ${result.batch.batchNumber}`);
+
+        // Also reverse the INVOICE_CASH batch if the order was paid at creation
+        const cashBatch = await db.journalBatch.findOne({
+            where: { referenceType: 'INVOICE_CASH', referenceId: order.id, isReversed: false },
+            transaction
+        });
+        if (cashBatch) {
+            const cashEntries = await db.ledgerEntry.findAll({
+                where: { batchId: cashBatch.id },
+                transaction
+            });
+            await ledgerService.createJournalBatch({
+                referenceType: 'REVERSAL',
+                referenceId: order.id,
+                description: `Reversal of Invoice Cash Receipt ${order.orderNumber || ''} (deleted)`,
+                transactionDate: new Date(),
+                entries: cashEntries.map(e => ({
+                    accountId: e.accountId,
+                    debit: Number(e.credit) || 0,
+                    credit: Number(e.debit) || 0,
+                    narration: `Reversal: ${e.narration || ''}`
+                }))
+            }, transaction);
+            await cashBatch.update({ isReversed: true }, { transaction });
+            console.log(`[LEDGER] REVERSED: Invoice cash batch for ${order.orderNumber || order.id}`);
+        }
+
         return { reversed: true, batchNumber: result.batch.batchNumber };
 
     } catch (error) {
@@ -606,11 +633,6 @@ async function postInvoiceCashReceiptToLedger(order, transaction) {
             return { skipped: true, reason: 'not_paid' };
         }
 
-        const customerId = order.customerId;
-        if (!customerId) {
-            return { skipped: true, reason: 'no_customer_id' };
-        }
-
         // Prevent duplicates — use a unique referenceType
         const existing = await db.journalBatch.findOne({
             where: { referenceType: 'INVOICE_CASH', referenceId: order.id },
@@ -621,8 +643,9 @@ async function postInvoiceCashReceiptToLedger(order, transaction) {
             return { skipped: true, batchNumber: existing.batchNumber };
         }
 
+        // Use walk-in customer account when no customerId (same account postInvoiceToLedger used)
         const customerAccount = await ledgerService.getOrCreateCustomerAccount(
-            customerId,
+            order.customerId || null,
             order.customerName || 'Walk-in Customer',
             transaction
         );
