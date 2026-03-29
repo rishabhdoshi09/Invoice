@@ -22,9 +22,9 @@ const ledgerService = new LedgerService(db);
  */
 async function postInvoiceToLedger(order, transaction) {
     try {
-        // Safeguard: prevent duplicate posting
+        // Safeguard: prevent duplicate posting (only block if an active, non-reversed batch exists)
         const existing = await db.journalBatch.findOne({
-            where: { referenceType: 'INVOICE', referenceId: order.id },
+            where: { referenceType: 'INVOICE', referenceId: order.id, isReversed: false },
             transaction
         });
         if (existing) {
@@ -633,9 +633,9 @@ async function postInvoiceCashReceiptToLedger(order, transaction) {
             return { skipped: true, reason: 'not_paid' };
         }
 
-        // Prevent duplicates — use a unique referenceType
+        // Prevent duplicates — only block if active (non-reversed) batch exists
         const existing = await db.journalBatch.findOne({
-            where: { referenceType: 'INVOICE_CASH', referenceId: order.id },
+            where: { referenceType: 'INVOICE_CASH', referenceId: order.id, isReversed: false },
             transaction
         });
         if (existing) {

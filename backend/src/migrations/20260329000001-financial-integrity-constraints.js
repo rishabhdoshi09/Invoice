@@ -65,10 +65,19 @@ module.exports = {
                 );
             }
 
-            // idempotencyKey column (nullable, unique)
+            // idempotencyKey column on payments (nullable, unique)
             if (!(await columnExists('payments', 'idempotencyKey'))) {
                 await queryInterface.addColumn('payments', 'idempotencyKey', {
                     type: Sequelize.STRING,
+                    allowNull: true,
+                    unique: true
+                }, { transaction });
+            }
+
+            // idempotencyKey column on orders (nullable, unique) — L7
+            if (!(await columnExists('orders', 'idempotencyKey'))) {
+                await queryInterface.addColumn('orders', 'idempotencyKey', {
+                    type: Sequelize.STRING(128),
                     allowNull: true,
                     unique: true
                 }, { transaction });
@@ -96,6 +105,7 @@ module.exports = {
                 await queryInterface.sequelize.query(sql, { transaction });
             }
             await queryInterface.removeColumn('payments', 'idempotencyKey', { transaction });
+            await queryInterface.removeColumn('orders', 'idempotencyKey', { transaction });
             await transaction.commit();
         } catch (err) {
             await transaction.rollback();

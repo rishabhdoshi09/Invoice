@@ -106,9 +106,11 @@ module.exports = {
             throw new Error(error);
         }
     },
-    updateOrder: async (filterObj, updateObj) => {
+    updateOrder: async (filterObj, updateObj, transaction = null) => {
         try {
-            const res = await db.order.update(updateObj, { where: filterObj });
+            const options = { where: filterObj };
+            if (transaction) options.transaction = transaction;
+            const res = await db.order.update(updateObj, options);
             return res;
         } catch (error) {
             console.log(error);

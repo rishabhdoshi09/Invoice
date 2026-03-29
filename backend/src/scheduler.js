@@ -7,6 +7,7 @@
 
 const cron = require('node-cron');
 const LedgerService = require('./services/ledgerService');
+const SelfAuditService = require('./services/selfAuditService');
 const telegram = require('./services/telegramAlert');
 
 let initialized = false;
@@ -16,6 +17,24 @@ function init(db) {
     initialized = true;
 
     const ledgerService = new LedgerService(db);
+    const selfAuditService = new SelfAuditService(db);
+
+    // ── Hourly Self-Audit (L3 Invariant Engine) ─────────────────────────────
+    cron.schedule('0 * * * *', async () => {
+        try {
+            const report = await selfAuditService.run({ writeHistory: true, triggeredBy: 'scheduler' });
+            if (report.summary.overallStatus !== 'OK') {
+                console.error(`[SCHEDULER] Self-audit ALERT: ${report.summary.overallStatus} — ` +
+                    `HALT=${report.summary.sevCounts.HALT} ` +
+                    `CRITICAL=${report.summary.sevCounts.CRITICAL} ` +
+                    `WARNING=${report.summary.sevCounts.WARNING}`);
+            }
+        } catch (err) {
+            console.error(`[SCHEDULER] Self-audit failed: ${err.message}`);
+        }
+    });
+
+    console.log('[SCHEDULER] Hourly self-audit (L3) registered — runs at :00 every hour');
 
     // ── Daily Drift Check — every day at 02:00 ──────────────
     cron.schedule('0 2 * * *', async () => {

@@ -29,6 +29,7 @@ module.exports = {
             paymentStatus: Joi.string().trim().valid('paid', 'partial', 'unpaid').optional(),
             notes: Joi.string().trim().allow("").optional(), // Allow notes field
             paymentMode: Joi.string().trim().valid('CASH', 'CREDIT').optional(), // Set by backend
+            idempotencyKey: Joi.string().trim().max(128).allow('', null).optional(),
             orderItems: Joi.array().items(orderItems).required()
         });
         return Joi.validate(orderObj, schema, { convert: true });

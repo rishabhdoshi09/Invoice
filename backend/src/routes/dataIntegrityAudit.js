@@ -2,9 +2,14 @@ const Controller = require('../controller/dataIntegrityAudit');
 const RecoveryController = require('../controller/paymentRecovery');
 const ClassifyController = require('../controller/forensicClassification');
 const { backupDatabase } = require('../controller/dbBackup');
+const SelfAuditController = require('../controller/selfAudit');
 const { authenticate, authorize } = require('../middleware/auth');
 
 module.exports = (router) => {
+    // ── Self-Audit Engine (L3/L4) ──────────────────────────────────────────
+    router.post('/self-audit/run', authenticate, authorize('admin'), SelfAuditController.runAudit);
+    router.get('/self-audit/history', authenticate, authorize('admin'), SelfAuditController.getHistory);
+    router.get('/self-audit/history/:id', authenticate, authorize('admin'), SelfAuditController.getRunDetail);
     // Forensic Classification: READ-ONLY — classifies every order into 5 categories
     router.get('/data-audit/classify', authenticate, authorize('admin'), ClassifyController.classifyOrders);
 

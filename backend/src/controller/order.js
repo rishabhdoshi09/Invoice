@@ -90,6 +90,22 @@ module.exports = {
                 orderObj.createdByName = req.user.name || req.user.username;
             }
 
+            // IDEMPOTENCY: If client supplies a key, return existing order on duplicate
+            if (orderObj.idempotencyKey) {
+                const existing = await db.order.findOne({
+                    where: { idempotencyKey: orderObj.idempotencyKey }
+                });
+                if (existing) {
+                    console.log(`[IDEMPOTENCY] Duplicate order request for key ${orderObj.idempotencyKey} — returning existing order ${existing.orderNumber}`);
+                    return res.status(200).send({
+                        status: 200,
+                        message: 'order created successfully',
+                        data: existing,
+                        idempotent: true
+                    });
+                }
+            }
+
             let linkSuggestion = null;
             const result = await db.sequelize.transaction(async (transaction) => {
                 // Generate invoice number INSIDE transaction (only if everything else is valid)
@@ -427,38 +443,76 @@ module.exports = {
             const result = await db.sequelize.transaction(async (transaction) => {
                 // Update order basic info (exclude orderItems from update)
                 const { orderItems: _, ...updateFields } = orderData;
-                
+
                 // Add modified by info
                 if (req.user) {
                     updateFields.modifiedBy = req.user.id;
                     updateFields.modifiedByName = req.user.name || req.user.username;
                 }
-                
-                await Services.order.updateOrder(
-                    { id: orderId },
-                    updateFields
-                );
-                
-                // Update order items if provided
+
+                // === SERVER-SIDE MATH: Recalculate totals if line items are being edited ===
+                const round2 = (n) => Math.round(n * 100) / 100;
+                let financialFieldsChanged = false;
+
                 if (orderItems && orderItems.length > 0) {
-                    // Bulk update existing items instead of delete + insert
-                    const updatePromises = orderItems.map(item => {
-                        return db.orderItems.update(
+                    const recomputedItems = orderItems.map(item => ({
+                        ...item,
+                        totalPrice: round2(item.quantity * item.productPrice)
+                    }));
+                    const computedSubTotal = round2(recomputedItems.reduce((s, i) => s + i.totalPrice, 0));
+                    const taxPercent = typeof updateFields.taxPercent === 'number'
+                        ? updateFields.taxPercent
+                        : (typeof originalOrder.taxPercent === 'number' ? originalOrder.taxPercent : 0);
+                    const computedTax = round2(computedSubTotal * taxPercent / 100);
+                    const computedTotal = round2(computedSubTotal + computedTax);
+
+                    updateFields.subTotal = computedSubTotal;
+                    updateFields.tax = computedTax;
+                    updateFields.total = computedTotal;
+                    // Recalculate dueAmount (paidAmount stays unchanged — only receipt/toggle can change it)
+                    const currentPaid = Number(originalOrder.paidAmount) || 0;
+                    updateFields.dueAmount = round2(Math.max(0, computedTotal - currentPaid));
+
+                    financialFieldsChanged = Math.abs(computedTotal - Number(originalOrder.total)) > 0.001;
+
+                    // Bulk update line items
+                    const updatePromises = recomputedItems.map(item =>
+                        db.orderItems.update(
                             {
                                 quantity: item.quantity,
                                 productPrice: item.productPrice,
                                 totalPrice: item.totalPrice
                             },
-                            {
-                                where: { id: item.id },
-                                transaction
-                            }
-                        );
-                    });
-                    
+                            { where: { id: item.id }, transaction }
+                        )
+                    );
                     await Promise.all(updatePromises);
                 }
-                
+
+                await Services.order.updateOrder(
+                    { id: orderId },
+                    updateFields,
+                    transaction
+                );
+
+                // === L5 IMMUTABLE LEDGER: Reverse old entries and re-post if total changed ===
+                if (financialFieldsChanged) {
+                    // Fetch the updated order for ledger posting
+                    const updatedOrder = await db.order.findOne({ where: { id: orderId }, transaction });
+                    try {
+                        await reverseInvoiceLedger(originalOrder, transaction);
+                        await postInvoiceToLedger(updatedOrder, transaction);
+                        // If invoice was cash-paid at creation, also re-post the cash receipt
+                        if (Number(updatedOrder.paidAmount) > 0) {
+                            await postInvoiceCashReceiptToLedger(updatedOrder, transaction);
+                        }
+                        console.log(`[LEDGER] Edit corrected: reversed + reposted invoice ${updatedOrder.orderNumber}`);
+                    } catch (ledgerErr) {
+                        console.error(`[LEDGER] Edit reversal/repost failed for ${orderId}: ${ledgerErr.message}`);
+                        throw ledgerErr; // block the edit if ledger is misconfigured
+                    }
+                }
+
                 // Return updated order with items (fetch outside transaction for speed)
                 return orderId;
             });

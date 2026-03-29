@@ -99,6 +99,12 @@ module.exports = (sequelize, Sequelize) => {
                 type: Sequelize.STRING,
                 allowNull: true
             },
+            // Idempotency key — prevents duplicate invoice creation on retry (L7)
+            idempotencyKey: {
+                type: Sequelize.STRING(128),
+                allowNull: true,
+                unique: true
+            },
             // Staff notes (for billing staff to communicate issues)
             staffNotes: {
                 type: Sequelize.TEXT,
