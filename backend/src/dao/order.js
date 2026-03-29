@@ -15,8 +15,8 @@ module.exports = {
     getOrder: async (filterObj, transaction = null) => {
         try {
             const options = {
-                where: { id: filterObj.id },
-                include: [ { 
+                where: { id: filterObj.id, isDeleted: false },
+                include: [ {
                     model: db.orderItems,
                     separate: true,
                     order: [['sortOrder', 'ASC']]

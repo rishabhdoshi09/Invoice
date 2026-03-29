@@ -14,7 +14,7 @@ module.exports = (sequelize, Sequelize) => {
                 type: Sequelize.TEXT
             },
             pricePerKg: {
-                type: Sequelize.DOUBLE
+                type: Sequelize.DECIMAL(15, 2)
             },
             type: {
                 type: Sequelize.ENUM(Object.values(Enums.product))

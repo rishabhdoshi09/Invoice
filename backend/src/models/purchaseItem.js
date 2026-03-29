@@ -19,15 +19,15 @@ module.exports = (sequelize, Sequelize) => {
                 allowNull: false
             },
             quantity: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 allowNull: false
             },
             price: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 allowNull: false
             },
             totalPrice: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 allowNull: false
             },
             type: {

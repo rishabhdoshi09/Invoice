@@ -21,7 +21,7 @@ module.exports = (sequelize, Sequelize) => {
                 allowNull: true
             },
             amount: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 allowNull: false
             },
             paidTo: {

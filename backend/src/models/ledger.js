@@ -18,11 +18,11 @@ module.exports = (sequelize, Sequelize) => {
                 allowNull: false
             },
             openingBalance: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             currentBalance: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             }
         }

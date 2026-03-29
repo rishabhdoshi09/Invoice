@@ -22,27 +22,27 @@ module.exports = (sequelize, Sequelize) => {
                 allowNull: false
             },
             subTotal: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             tax: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             taxPercent: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             total: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             paidAmount: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             dueAmount: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             paymentStatus: {

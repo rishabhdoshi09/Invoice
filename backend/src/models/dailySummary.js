@@ -15,7 +15,7 @@ module.exports = (sequelize, Sequelize) => {
             },
             // Opening balance for the day (cash in drawer at start)
             openingBalance: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             openingBalanceSetAt: {
@@ -27,7 +27,7 @@ module.exports = (sequelize, Sequelize) => {
                 allowNull: true
             },
             totalSales: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             totalOrders: {
@@ -35,15 +35,15 @@ module.exports = (sequelize, Sequelize) => {
                 defaultValue: 0
             },
             totalPurchases: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             totalPaymentsReceived: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             totalPaymentsMade: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             // Running invoice number for the day
@@ -71,7 +71,7 @@ module.exports = (sequelize, Sequelize) => {
             },
             // Closing balance (calculated: opening + sales - expenses)
             closingBalance: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 allowNull: true
             },
             notes: {

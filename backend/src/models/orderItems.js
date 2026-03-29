@@ -18,13 +18,13 @@ module.exports = (sequelize, Sequelize) => {
                 allowNull: true
             },
             quantity: {
-                type: Sequelize.DOUBLE
+                type: Sequelize.DECIMAL(15, 2)
             },
             productPrice: {
-                type: Sequelize.DOUBLE
+                type: Sequelize.DECIMAL(15, 2)
             },
             totalPrice: {
-                type: Sequelize.DOUBLE
+                type: Sequelize.DECIMAL(15, 2)
             },
             type: {
                 type: Sequelize.ENUM(Object.values(Enums.product))

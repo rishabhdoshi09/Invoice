@@ -25,10 +25,10 @@ module.exports = (sequelize, Sequelize) => {
                 type: Sequelize.STRING
             },
             openingBalance: {
-                type: Sequelize.DOUBLE
+                type: Sequelize.DECIMAL(15, 2)
             },
             currentBalance: {
-                type: Sequelize.DOUBLE
+                type: Sequelize.DECIMAL(15, 2)
             }
         }
     );

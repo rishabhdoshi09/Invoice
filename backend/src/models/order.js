@@ -33,23 +33,23 @@ module.exports = (sequelize, Sequelize) => {
                 defaultValue: '27-Maharashtra'
             },
             subTotal: {
-                type: Sequelize.DOUBLE
+                type: Sequelize.DECIMAL(15, 2)
             },
             total: {
-                type: Sequelize.DOUBLE
+                type: Sequelize.DECIMAL(15, 2)
             },
             tax: {
-                type: Sequelize.DOUBLE
+                type: Sequelize.DECIMAL(15, 2)
             },
             taxPercent: {
-                type: Sequelize.DOUBLE
+                type: Sequelize.DECIMAL(15, 2)
             },
             paidAmount: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             dueAmount: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             paymentStatus: {

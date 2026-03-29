@@ -18,6 +18,31 @@ module.exports = {
                 });
             }
 
+            // REFERENCE INTEGRITY: validate referenced entity exists before creating payment
+            if (value.referenceId) {
+                if (value.referenceType === 'order') {
+                    const referencedOrder = await db.order.findOne({
+                        where: { id: value.referenceId, isDeleted: false }
+                    });
+                    if (!referencedOrder) {
+                        return res.status(400).send({
+                            status: 400,
+                            message: `Referenced order (${value.referenceId}) does not exist or has been deleted`
+                        });
+                    }
+                } else if (value.referenceType === 'purchase') {
+                    const referencedPurchase = await db.purchaseBill.findOne({
+                        where: { id: value.referenceId, isDeleted: false }
+                    });
+                    if (!referencedPurchase) {
+                        return res.status(400).send({
+                            status: 400,
+                            message: `Referenced purchase bill (${value.referenceId}) does not exist or has been deleted`
+                        });
+                    }
+                }
+            }
+
             const result = await db.sequelize.transaction(async (transaction) => {
                 const response = await Services.payment.createPayment(value, transaction);
 
@@ -93,7 +118,7 @@ module.exports = {
                     // Update customer balance if found
                     if (customer) {
                         await customer.update({
-                            currentBalance: Math.max(0, (customer.currentBalance || 0) - value.amount)
+                            currentBalance: (Number(customer.currentBalance) || 0) - value.amount
                         }, { transaction });
                     }
                 } else if (value.partyType === 'supplier') {
@@ -157,7 +182,7 @@ module.exports = {
                     // Update supplier balance if found (reduce balance when payment is made)
                     if (supplier) {
                         await supplier.update({
-                            currentBalance: Math.max(0, (supplier.currentBalance || 0) - value.amount)
+                            currentBalance: (Number(supplier.currentBalance) || 0) - value.amount
                         }, { transaction });
                     }
                 } else if (value.partyType === 'expense') {
@@ -205,44 +230,35 @@ module.exports = {
                 }
 
                 // === NEW DOUBLE-ENTRY LEDGER: Real-time posting ===
-                // Non-blocking: if Chart of Accounts isn't set up, log warning but don't crash payment creation
+                // Non-blocking when CoA is not initialized; blocking when it IS initialized.
                 if (value.partyType === 'customer') {
-                    try {
-                        const accountsExist = await db.account.count({ transaction });
-                        if (accountsExist > 0) {
-                            const customerIdForLedger = response.partyId || value.partyId;
-                            await postPaymentToLedger(
-                                { ...value, id: response.id, paymentNumber: response.paymentNumber, createdAt: new Date() },
-                                customerIdForLedger,
-                                value.partyName,
-                                transaction
-                            );
-                        } else {
-                            console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — payment ${response.paymentNumber} not posted to ledger`);
-                        }
-                    } catch (ledgerError) {
-                        console.error(`[LEDGER] Failed to post payment ${response.paymentNumber}:`, ledgerError.message);
-                        // Don't crash payment creation — ledger posting is supplementary
+                    const accountsExist = await db.account.count({ transaction });
+                    if (accountsExist > 0) {
+                        const customerIdForLedger = response.partyId || value.partyId;
+                        await postPaymentToLedger(
+                            { ...value, id: response.id, paymentNumber: response.paymentNumber, createdAt: new Date() },
+                            customerIdForLedger,
+                            value.partyName,
+                            transaction
+                        );
+                    } else {
+                        console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — payment ${response.paymentNumber} not posted to ledger`);
                     }
                 }
 
                 // === NEW DOUBLE-ENTRY LEDGER: Supplier payment posting ===
                 if (value.partyType === 'supplier') {
-                    try {
-                        const accountsExist = await db.account.count({ transaction });
-                        if (accountsExist > 0) {
-                            const supplierIdForLedger = response.partyId || value.partyId;
-                            await postSupplierPaymentToLedger(
-                                { ...value, id: response.id, paymentNumber: response.paymentNumber, createdAt: new Date() },
-                                supplierIdForLedger,
-                                value.partyName,
-                                transaction
-                            );
-                        } else {
-                            console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — supplier payment ${response.paymentNumber} not posted to ledger`);
-                        }
-                    } catch (ledgerError) {
-                        console.error(`[LEDGER] Failed to post supplier payment ${response.paymentNumber}:`, ledgerError.message);
+                    const accountsExist = await db.account.count({ transaction });
+                    if (accountsExist > 0) {
+                        const supplierIdForLedger = response.partyId || value.partyId;
+                        await postSupplierPaymentToLedger(
+                            { ...value, id: response.id, paymentNumber: response.paymentNumber, createdAt: new Date() },
+                            supplierIdForLedger,
+                            value.partyName,
+                            transaction
+                        );
+                    } else {
+                        console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — supplier payment ${response.paymentNumber} not posted to ledger`);
                     }
                 }
 
@@ -459,14 +475,10 @@ module.exports = {
                 }
 
                 // Create REVERSAL journal batch in the new ledger (swap debit/credit)
-                try {
-                    const accountsExist = await db.account.count({ transaction });
-                    if (accountsExist > 0) {
-                        await reversePaymentLedger(payment, transaction);
-                    }
-                } catch (ledgerError) {
-                    console.error(`[LEDGER] Payment reversal failed for ${payment.paymentNumber}:`, ledgerError.message);
-                    // Don't crash delete if ledger reversal fails
+                // Blocking when CoA is initialized so delete and ledger are always in sync.
+                const accountsExist = await db.account.count({ transaction });
+                if (accountsExist > 0) {
+                    await reversePaymentLedger(payment, transaction);
                 }
                 
                 // Soft delete the payment (preserve for audit trail)

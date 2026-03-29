@@ -17,11 +17,11 @@ module.exports = (sequelize, Sequelize) => {
                 }
             },
             currentStock: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             minStockLevel: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             unit: {

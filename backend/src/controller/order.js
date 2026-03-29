@@ -31,13 +31,48 @@ module.exports = {
 
             let { orderItems, ...orderObj } = value;
 
+            // === SERVER-SIDE MATH: Ignore client totals entirely ===
+            // Recalculate every monetary field from the raw line items.
+            const round2 = (n) => Math.round(n * 100) / 100;
+
+            // 1. Recompute each line total (qty × rate)
+            orderItems = orderItems.map(item => ({
+                ...item,
+                totalPrice: round2(item.quantity * item.productPrice)
+            }));
+
+            // 2. Recompute subTotal from line totals
+            const computedSubTotal = round2(orderItems.reduce((s, i) => s + i.totalPrice, 0));
+
+            // 3. Recompute tax from taxPercent (if supplied) or accept as a rate on subTotal
+            const taxPercent = typeof orderObj.taxPercent === 'number' ? orderObj.taxPercent : 0;
+            const computedTax = round2(computedSubTotal * taxPercent / 100);
+
+            // 4. Grand total
+            const computedTotal = round2(computedSubTotal + computedTax);
+
+            // Override client-supplied values with server-computed values
+            orderObj.subTotal = computedSubTotal;
+            orderObj.tax = computedTax;
+            orderObj.taxPercent = taxPercent;
+            orderObj.total = computedTotal;
+
             // paidAmount MUST be explicitly set by frontend.
             // No default to "fully paid" — prevents silent data corruption.
             if (orderObj.paidAmount === undefined || orderObj.paidAmount === null) {
                 orderObj.paidAmount = 0; // Default: unpaid (safe default)
             }
-            orderObj.dueAmount = orderObj.total - orderObj.paidAmount;
-            
+
+            // OVERPAYMENT GUARD: paidAmount must not exceed invoice total
+            if (orderObj.paidAmount > computedTotal) {
+                return res.status(400).send({
+                    status: 400,
+                    message: `paidAmount (${orderObj.paidAmount}) cannot exceed invoice total (${computedTotal})`
+                });
+            }
+
+            orderObj.dueAmount = round2(orderObj.total - orderObj.paidAmount);
+
             if (orderObj.paidAmount === 0) {
                 orderObj.paymentStatus = 'unpaid';
                 orderObj.paymentMode = 'CREDIT';
@@ -213,28 +248,23 @@ module.exports = {
                 }
 
                 // === NEW DOUBLE-ENTRY LEDGER: Real-time posting ===
-                // Non-blocking: if Chart of Accounts isn't set up, log warning but don't crash order creation
+                // Non-blocking when CoA is not initialized; blocking (throws) when it IS initialized
+                // so a ledger failure rolls back the order rather than creating an unposted invoice.
                 if (orderObj.customerId) {
-                    try {
-                        const accountsExist = await db.account.count({ transaction });
-                        if (accountsExist > 0) {
-                            await postInvoiceToLedger(
+                    const accountsExist = await db.account.count({ transaction });
+                    if (accountsExist > 0) {
+                        await postInvoiceToLedger(
+                            { ...orderObj, id: orderId, createdAt: new Date() },
+                            transaction
+                        );
+                        if (orderObj.paidAmount > 0) {
+                            await postInvoiceCashReceiptToLedger(
                                 { ...orderObj, id: orderId, createdAt: new Date() },
                                 transaction
                             );
-                            // If order is paid (fully or partially), also post the cash receipt
-                            if (orderObj.paidAmount > 0) {
-                                await postInvoiceCashReceiptToLedger(
-                                    { ...orderObj, id: orderId, createdAt: new Date() },
-                                    transaction
-                                );
-                            }
-                        } else {
-                            console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — invoice ${orderObj.orderNumber} not posted to ledger`);
                         }
-                    } catch (ledgerError) {
-                        console.error(`[LEDGER] Failed to post invoice ${orderObj.orderNumber}:`, ledgerError.message);
-                        // Don't crash order creation — ledger posting is supplementary
+                    } else {
+                        console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — invoice ${orderObj.orderNumber} not posted to ledger`);
                     }
                 }
 
@@ -519,7 +549,7 @@ module.exports = {
                         if (customer) {
                             const dueAmount = Number(order.dueAmount) || Number(order.total) || 0;
                             await customer.update({
-                                currentBalance: Math.max(0, (Number(customer.currentBalance) || 0) - dueAmount)
+                                currentBalance: (Number(customer.currentBalance) || 0) - dueAmount
                             }, { transaction });
                             console.log(`Reversed customer ${customer.name} balance by ${dueAmount}`);
                         }
@@ -754,11 +784,13 @@ module.exports = {
                     throw new Error(`Payment status was already changed to "${lockedOrder.paymentStatus}" by another user. Please refresh and try again.`);
                 }
 
-                // Update order payment status — toggle is ONLY a status marker
-                // paidAmount stays as-is (reflects actual cash at POS, set at creation)
-                // paymentMode NEVER changes (CASH/CREDIT is determined at creation)
+                // Update order payment status.
+                // paidAmount is kept consistent with the status so financial state is never invalid
+                // (dueAmount=0 with paidAmount=0 would create a ghost receivable).
+                // paymentMode NEVER changes (CASH/CREDIT is determined at creation).
                 const updateData = {
                     paymentStatus: newStatus,
+                    paidAmount: newStatus === 'paid' ? order.total : 0,
                     dueAmount: newStatus === 'paid' ? 0 : order.total,
                     modifiedBy: req.user?.id,
                     modifiedByName: changedByTrimmed // Use the provided name for audit
@@ -838,30 +870,25 @@ module.exports = {
                             : Number(order.total);  // Increase balance when unpaid
                         
                         await customer.update({
-                            currentBalance: Math.max(0, (Number(customer.currentBalance) || 0) + balanceChange)
+                            currentBalance: (Number(customer.currentBalance) || 0) + balanceChange
                         }, { transaction });
                     }
                 }
 
                 // === DOUBLE-ENTRY LEDGER: Post payment toggle ===
-                // Non-blocking: if Chart of Accounts isn't set up, log warning but don't crash
+                // Non-blocking when CoA is not initialized; blocking when it IS initialized.
                 if (customerIdToUpdate) {
-                    try {
-                        const accountsExist = await db.account.count({ transaction });
-                        if (accountsExist > 0) {
-                            await postPaymentStatusToggleToLedger(
-                                { ...order.toJSON ? order.toJSON() : order, customerId: customerIdToUpdate },
-                                oldStatus,
-                                newStatus,
-                                changedByTrimmed,
-                                transaction
-                            );
-                        } else {
-                            console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — toggle for ${order.orderNumber} not posted to ledger`);
-                        }
-                    } catch (ledgerError) {
-                        console.error(`[LEDGER] Failed to post toggle for ${order.orderNumber}:`, ledgerError.message);
-                        // Don't crash toggle — ledger posting is supplementary
+                    const accountsExist = await db.account.count({ transaction });
+                    if (accountsExist > 0) {
+                        await postPaymentStatusToggleToLedger(
+                            { ...order.toJSON ? order.toJSON() : order, customerId: customerIdToUpdate },
+                            oldStatus,
+                            newStatus,
+                            changedByTrimmed,
+                            transaction
+                        );
+                    } else {
+                        console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — toggle for ${order.orderNumber} not posted to ledger`);
                     }
                 }
                 
@@ -885,7 +912,7 @@ module.exports = {
                 },
                 newValues: {
                     paymentStatus: newStatus,
-                    paidAmount: Number(order.paidAmount), // paidAmount unchanged by toggle
+                    paidAmount: newStatus === 'paid' ? Number(order.total) : 0,
                     dueAmount: newStatus === 'paid' ? 0 : Number(order.total),
                     paymentMode: order.paymentMode // paymentMode never changes
                 },
