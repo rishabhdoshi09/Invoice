@@ -354,6 +354,8 @@ export const CreateOrder = () => {
   const modalPriceRef = useRef(null);
   // ref for main productPrice input to focus after adding / selecting product
   const priceInputRef = useRef(null);
+  // ref for altName input so Tab from price jumps directly here
+  const altNameRef = useRef(null);
 
   const [selectedQuick, setSelectedQuick] = useState('');
   const clearQuickHighlight = () => setSelectedQuick('');
@@ -961,6 +963,16 @@ export const CreateOrder = () => {
       e.preventDefault();
       adjustPriceByStep(isUp ? 1 : -1, modalOpen ? modalPriceRef : priceInputRef);
       return;
+    }
+
+    // Tab from price → jump directly to altName (bypasses any focusable elements in between)
+    if (e.key === 'Tab' && !e.shiftKey && !modalOpen) {
+      const el = altNameRef && altNameRef.current;
+      if (el) {
+        e.preventDefault();
+        el.focus();
+        return;
+      }
     }
 
     const navKeys = ['ArrowLeft','ArrowRight','Tab','Home','End'];
@@ -2157,6 +2169,7 @@ export const CreateOrder = () => {
                         key={d}
                         size="small"
                         variant="outlined"
+                        tabIndex={-1}
                         onClick={() => applyDigitToPrice(d, priceInputRef)}
                       >
                         {d}
@@ -2168,7 +2181,8 @@ export const CreateOrder = () => {
 
               <Grid item xs={12} md={6}>
                 <TextField size="small" id="altName" name="altName" label="Alternate Name (optional)" placeholder="Print this name instead"
-                  value={formik.values.altName} onChange={(e) => formik.setFieldValue('altName', e.target.value)} fullWidth />
+                  value={formik.values.altName} onChange={(e) => formik.setFieldValue('altName', e.target.value)} fullWidth
+                  inputRef={altNameRef} />
               </Grid>
 
               <Grid item xs={12} md={6}>
