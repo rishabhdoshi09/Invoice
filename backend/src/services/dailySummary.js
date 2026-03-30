@@ -299,11 +299,16 @@ module.exports = {
         const dateStr = moment(date).format('YYYY-MM-DD');
         const dateDDMMYYYY = moment(date).format('DD-MM-YYYY');
         
-        // Get all orders for this date by orderDate field (not createdAt)
+        // Get all orders for this date by orderDate field (not createdAt) - try multiple date formats
+        const dateDDMMYYYY_slash = moment(date).format('DD/MM/YYYY');
         const orders = await db.order.findAll({
             where: {
-                orderDate: dateDDMMYYYY,
-                isDeleted: false
+                isDeleted: false,
+                [db.Sequelize.Op.or]: [
+                    { orderDate: dateDDMMYYYY },
+                    { orderDate: dateDDMMYYYY_slash },
+                    { orderDate: dateStr }
+                ]
             }
         });
         
@@ -367,11 +372,19 @@ module.exports = {
     getRealTimeSummary: async (date) => {
         const dateDDMMYYYY = moment(date).format('DD-MM-YYYY');
         
+        // Get all orders for this date - try multiple date formats
+        const dateYYYYMMDD_orders = moment(date).format('YYYY-MM-DD');
+        const dateDDMMYYYY_slash_orders = moment(date).format('DD/MM/YYYY');
+
         // Get all orders for this date (raw: true for reliable serialization)
         const orders = await db.order.findAll({
             where: {
-                orderDate: dateDDMMYYYY,
-                isDeleted: false
+                isDeleted: false,
+                [db.Sequelize.Op.or]: [
+                    { orderDate: dateDDMMYYYY },
+                    { orderDate: dateDDMMYYYY_slash_orders },
+                    { orderDate: dateYYYYMMDD_orders }
+                ]
             },
             raw: true
         });
