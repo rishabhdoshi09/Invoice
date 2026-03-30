@@ -399,17 +399,12 @@ module.exports = {
         // Total business done (all orders regardless of payment mode)
         const totalBusinessDone = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
         
-        // Get payments for this date - try multiple date formats
-        const dateYYYYMMDD = moment(date).format('YYYY-MM-DD');
-        const dateDDMMYYYY_dash = moment(date).format('DD-MM-YYYY');
-        const dateDDMMYYYY_slash = moment(date).format('DD/MM/YYYY');
-        
+        // Get payments for this date - try multiple date formats (vars already declared above)
         const payments = await db.payment.findAll({
             where: {
                 isDeleted: false,
                 [db.Sequelize.Op.or]: [
                     { paymentDate: dateDDMMYYYY },
-                    { paymentDate: dateDDMMYYYY_dash },
                     { paymentDate: dateDDMMYYYY_slash },
                     { paymentDate: dateYYYYMMDD }
                 ]
