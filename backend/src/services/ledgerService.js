@@ -87,10 +87,12 @@ class LedgerService {
      */
     async getOrCreateCustomerAccount(customerId, customerName, transaction = null) {
         const db = this.db;
-        
+        // Coerce undefined → null so Sequelize doesn't throw on walk-in orders
+        const resolvedCustomerId = customerId === undefined ? null : customerId;
+
         // Check if account exists for this customer
         let account = await db.account.findOne({
-            where: { partyId: customerId, partyType: 'customer' },
+            where: { partyId: resolvedCustomerId, partyType: 'customer' },
             transaction
         });
 
@@ -123,7 +125,7 @@ class LedgerService {
                 type: 'ASSET',
                 subType: 'RECEIVABLE',
                 parentId: arAccount?.id,
-                partyId: customerId,
+                partyId: resolvedCustomerId,
                 partyType: 'customer',
                 isSystemAccount: false
             }, { transaction });
