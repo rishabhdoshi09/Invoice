@@ -40,12 +40,38 @@ module.exports = {
                 return rows.length > 0;
             };
 
-            // ── orders ──────────────────────────────────────────────────────
+            // ── orders: clamp legacy data before adding constraints ─────────
+            // Fix rows that violate paidAmount >= 0
+            await queryInterface.sequelize.query(
+                `UPDATE "orders" SET "paidAmount" = 0 WHERE "paidAmount" < 0`,
+                { transaction }
+            );
+            // Fix rows that violate dueAmount >= 0
+            await queryInterface.sequelize.query(
+                `UPDATE "orders" SET "dueAmount" = 0 WHERE "dueAmount" < 0`,
+                { transaction }
+            );
+            // Fix rows where paidAmount > total (clamp to total, mark as paid)
+            const [overpaid] = await queryInterface.sequelize.query(
+                `SELECT COUNT(*) AS cnt FROM "orders" WHERE "paidAmount" > "total" AND "isDeleted" = false`,
+                { transaction }
+            );
+            if (Number(overpaid[0].cnt) > 0) {
+                console.log(`[MIGRATION] Clamping ${overpaid[0].cnt} order(s) where paidAmount > total`);
+                await queryInterface.sequelize.query(
+                    `UPDATE "orders"
+                     SET "paidAmount" = "total", "dueAmount" = 0, "paymentStatus" = 'paid'
+                     WHERE "paidAmount" > "total"`,
+                    { transaction }
+                );
+            }
+
+            // ── orders: add CHECK constraints ───────────────────────────────
             const orderChecks = [
-                { name: 'chk_orders_paidAmount_gte_0',   sql: '"paidAmount" >= 0' },
-                { name: 'chk_orders_dueAmount_gte_0',    sql: '"dueAmount"  >= 0' },
-                { name: 'chk_orders_total_gt_0',         sql: '"total"      >  0' },
-                { name: 'chk_orders_subTotal_gt_0',      sql: '"subTotal"   >  0' },
+                { name: 'chk_orders_paidAmount_gte_0',     sql: '"paidAmount" >= 0' },
+                { name: 'chk_orders_dueAmount_gte_0',      sql: '"dueAmount"  >= 0' },
+                { name: 'chk_orders_total_gt_0',           sql: '"total"      >  0' },
+                { name: 'chk_orders_subTotal_gt_0',        sql: '"subTotal"   >  0' },
                 { name: 'chk_orders_paidAmount_lte_total', sql: '"paidAmount" <= "total"' },
             ];
             for (const { name, sql } of orderChecks) {
