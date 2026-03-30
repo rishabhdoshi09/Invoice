@@ -40,7 +40,7 @@ async function postInvoiceToLedger(order, transaction) {
 
         // Get or create customer receivable account
         const customerAccount = await ledgerService.getOrCreateCustomerAccount(
-            order.customerId,
+            order.customerId || null,
             order.customerName || 'Walk-in Customer',
             transaction
         );
