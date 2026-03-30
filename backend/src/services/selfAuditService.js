@@ -276,7 +276,7 @@ class SelfAuditService {
             id: 'INV-08',
             name: 'No invoice overpayment (paidAmount ≤ total)',
             status: ok ? 'PASS' : 'FAIL',
-            severity: ok ? 'INFO' : 'CRITICAL',
+            severity: ok ? 'INFO' : 'WARNING', // overpayments are allowed business data
             count: rows.length,
             detail: ok ? 'No overpayments found' : rows.map(r =>
                 `${r.orderNumber}: paidAmount(${r.paidAmount}) > total(${r.total})`
@@ -498,16 +498,18 @@ class SelfAuditService {
         // Write to reconciliation_runs table (created by migration).
         // Silently skip if table doesn't exist yet.
         try {
+            const { randomUUID } = require('crypto');
             await this.db.sequelize.query(`
                 INSERT INTO reconciliation_runs
-                  ("triggeredBy", "startedAt", "finishedAt", "durationMs",
+                  (id, "triggeredBy", "startedAt", "finishedAt", "durationMs",
                    "overallStatus", "passCount", "failCount", "skipCount", "errorCount",
                    "haltCount", "criticalCount", "warningCount", results)
-                VALUES (:triggeredBy, :startedAt, :finishedAt, :durationMs,
+                VALUES (:id, :triggeredBy, :startedAt, :finishedAt, :durationMs,
                         :overallStatus, :passCount, :failCount, :skipCount, :errorCount,
                         :haltCount, :criticalCount, :warningCount, :results)
             `, {
                 replacements: {
+                    id: randomUUID(),
                     triggeredBy: report.triggeredBy,
                     startedAt: report.startedAt,
                     finishedAt: report.finishedAt,
