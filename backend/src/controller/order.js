@@ -63,14 +63,7 @@ module.exports = {
                 orderObj.paidAmount = 0; // Default: unpaid (safe default)
             }
 
-            // OVERPAYMENT GUARD: paidAmount must not exceed invoice total
-            if (orderObj.paidAmount > computedTotal) {
-                return res.status(400).send({
-                    status: 400,
-                    message: `paidAmount (${orderObj.paidAmount}) cannot exceed invoice total (${computedTotal})`
-                });
-            }
-
+            // dueAmount: allow negative (overpayment) — business may accept advance/excess payments
             orderObj.dueAmount = round2(orderObj.total - orderObj.paidAmount);
 
             if (orderObj.paidAmount === 0) {
