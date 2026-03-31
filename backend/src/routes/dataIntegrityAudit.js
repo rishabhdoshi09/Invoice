@@ -4,6 +4,7 @@ const ClassifyController = require('../controller/forensicClassification');
 const { backupDatabase } = require('../controller/dbBackup');
 const SelfAuditController = require('../controller/selfAudit');
 const { authenticate, authorize } = require('../middleware/auth');
+const { clearHaltCache, getCacheStatus } = require('../middleware/financialGuard');
 
 module.exports = (router) => {
     // ── Self-Audit Engine (L3/L4) ──────────────────────────────────────────
@@ -40,4 +41,13 @@ module.exports = (router) => {
     // Backward compat
     router.get('/data-audit/reconstruct', authenticate, authorize('admin'), Controller.reconstructOrders);
     router.post('/data-audit/reconstruct', authenticate, authorize('admin'), Controller.reconstructOrders);
+
+    // ── Financial Guard status + manual clear (admin only) ─────────────────
+    router.get('/financial-guard/status', authenticate, authorize('admin'), (req, res) => {
+        res.json({ status: 200, data: getCacheStatus() });
+    });
+    router.post('/financial-guard/clear-halt', authenticate, authorize('admin'), (req, res) => {
+        clearHaltCache();
+        res.json({ status: 200, message: 'HALT cache cleared. Financial writes are unblocked.' });
+    });
 };

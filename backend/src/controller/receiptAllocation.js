@@ -247,24 +247,28 @@ module.exports = {
                 // Soft delete the allocation
                 await allocation.update({ isDeleted: true }, { transaction });
 
-                // Recalculate order's cached payment fields
-                const remainingAllocations = await db.receiptAllocation.findAll({
-                    where: { orderId: allocation.orderId, isDeleted: false },
-                    transaction
+                // Recalculate order's cached payment fields.
+                // CRITICAL: paidAmount is SUBTRACTIVE here — we remove only the deleted
+                // allocation amount from the current paidAmount. We must NOT reset
+                // paidAmount to SUM(remaining_allocations) because that would erase any
+                // POS cash that was collected at invoice creation time (paymentMode=CASH).
+                const order = await db.order.findByPk(allocation.orderId, {
+                    transaction,
+                    lock: transaction.LOCK.UPDATE
                 });
-                const totalAllocated = remainingAllocations.reduce((s, a) => s + Number(a.amount), 0);
-
-                const order = await db.order.findByPk(allocation.orderId, { transaction });
                 if (order) {
                     const total = Number(order.total) || 0;
-                    const newDue = Math.max(0, total - totalAllocated);
+                    const round2 = (n) => Math.round(n * 100) / 100;
+                    // Subtract only the amount of the allocation being deleted
+                    const newPaidAmount = round2(Math.max(0, Number(order.paidAmount) - Number(allocation.amount)));
+                    const newDueAmount = round2(Math.max(0, total - newPaidAmount));
                     let status = 'unpaid';
-                    if (totalAllocated >= total) status = 'paid';
-                    else if (totalAllocated > 0) status = 'partial';
+                    if (newPaidAmount >= total - 0.01) status = 'paid';
+                    else if (newPaidAmount > 0.01) status = 'partial';
 
                     await db.order.update({
-                        paidAmount: totalAllocated,
-                        dueAmount: newDue,
+                        paidAmount: newPaidAmount,
+                        dueAmount: newDueAmount,
                         paymentStatus: status
                     }, { where: { id: allocation.orderId }, transaction });
                 }
@@ -431,8 +435,13 @@ module.exports = {
                     }
                 );
 
-                // Recalculate each affected order
+                // Recalculate each affected order.
+                // CRITICAL: paidAmount must be adjusted by SUBTRACTING the backfill
+                // allocation totals — NOT reset to SUM(remaining_allocations), which
+                // would erase POS cash collected at invoice creation (paymentMode=CASH).
                 const ordersFixed = [];
+                const round2 = (n) => Math.round(n * 100) / 100;
+
                 for (const orderId of affectedOrderIds) {
                     const order = await db.order.findByPk(orderId, { transaction, lock: transaction.LOCK.UPDATE });
                     if (!order) continue;
@@ -440,20 +449,20 @@ module.exports = {
                     const oldPaid = Number(order.paidAmount) || 0;
                     const oldStatus = order.paymentStatus;
 
-                    // Only count remaining legitimate allocations
-                    const remaining = await db.receiptAllocation.findAll({
-                        where: { orderId, isDeleted: false },
-                        transaction
-                    });
-                    const legitimateTotal = remaining.reduce((s, a) => s + Number(a.amount), 0);
+                    // Sum only the backfill allocations being removed for this order
+                    const backfillForOrder = backfillAllocations.filter(a => a.orderId === orderId);
+                    const backfillTotal = backfillForOrder.reduce((s, a) => s + Number(a.amount), 0);
+
                     const orderTotal = Number(order.total) || 0;
-                    const newDue = Math.max(0, orderTotal - legitimateTotal);
+                    // Subtract only the removed backfill amounts — POS cash is preserved
+                    const newPaidAmount = round2(Math.max(0, oldPaid - backfillTotal));
+                    const newDue = round2(Math.max(0, orderTotal - newPaidAmount));
                     let newStatus = 'unpaid';
-                    if (legitimateTotal >= orderTotal) newStatus = 'paid';
-                    else if (legitimateTotal > 0) newStatus = 'partial';
+                    if (newPaidAmount >= orderTotal - 0.01) newStatus = 'paid';
+                    else if (newPaidAmount > 0.01) newStatus = 'partial';
 
                     await db.order.update({
-                        paidAmount: legitimateTotal,
+                        paidAmount: newPaidAmount,
                         dueAmount: newDue,
                         paymentStatus: newStatus
                     }, { where: { id: orderId }, transaction });
@@ -462,7 +471,7 @@ module.exports = {
                         orderNumber: order.orderNumber,
                         customerName: order.customerName,
                         before: { paidAmount: oldPaid, paymentStatus: oldStatus },
-                        after: { paidAmount: legitimateTotal, dueAmount: newDue, paymentStatus: newStatus }
+                        after: { paidAmount: newPaidAmount, dueAmount: newDue, paymentStatus: newStatus }
                     });
                 }
 

@@ -1,8 +1,19 @@
 const jwt = require('jsonwebtoken');
 const db = require('../models');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d'; // Extended to 7 days
+// SECURITY: JWT_SECRET MUST be set in ENV. A hardcoded fallback would let anyone
+// who knows the default string forge admin tokens. Fail fast on startup instead.
+if (!process.env.JWT_SECRET) {
+    console.error(
+        '[SECURITY] FATAL: JWT_SECRET environment variable is not set. ' +
+        'The server cannot start without a strong, unique JWT secret. ' +
+        'Add JWT_SECRET=<random-256-bit-string> to your .env file and restart.'
+    );
+    process.exit(1);
+}
+
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 // Generate JWT token
 const generateToken = (user) => {

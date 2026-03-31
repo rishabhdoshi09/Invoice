@@ -1,3 +1,26 @@
+// ─── STARTUP ENV VALIDATION ──────────────────────────────────────────────────
+// Fail fast if required environment variables are missing or obviously insecure.
+// This runs before any module that imports from src/ so auth.js also gets the
+// populated process.env before its module-level code executes.
+const REQUIRED_ENV = ['DATABASE_NAME', 'DB_USER', 'PASSWORD', 'DB_HOST', 'JWT_SECRET'];
+const missingEnv = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missingEnv.length > 0) {
+    console.error(`[STARTUP] FATAL: Missing required environment variables: ${missingEnv.join(', ')}`);
+    console.error('[STARTUP] Add the missing variables to your .env file and restart.');
+    process.exit(1);
+}
+if (process.env.JWT_SECRET === 'CHANGE_ME_generate_with_node_crypto_randomBytes_64_hex') {
+    console.error(
+        '[STARTUP] FATAL: JWT_SECRET is still the placeholder value. ' +
+        'Generate a real secret: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"'
+    );
+    process.exit(1);
+}
+if (process.env.JWT_SECRET.length < 32) {
+    console.error('[STARTUP] FATAL: JWT_SECRET is too short (minimum 32 characters). Use a cryptographically random value.');
+    process.exit(1);
+}
+
 const express = require('express');
 const router = express.Router();
 const logger = require('morgan');

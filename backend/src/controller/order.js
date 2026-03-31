@@ -253,7 +253,21 @@ module.exports = {
                         console.warn('[OLD LEDGER] Sales Account or Cash Account ledger not found — skipping old ledger entries');
                     }
                 } catch (oldLedgerError) {
-                    console.warn('[OLD LEDGER] Skipped:', oldLedgerError.message);
+                    // C7 FIX: The old single-entry ledger is legacy. Missing accounts are
+                    // expected on new deployments (WARN level). But a genuine DB write error
+                    // (constraint violation, connection failure) must NOT be swallowed —
+                    // it indicates partial data was attempted and the transaction should roll back.
+                    if (
+                        oldLedgerError.message.includes('not found') ||
+                        oldLedgerError.message.includes('does not exist') ||
+                        oldLedgerError.message.includes('ledger account')
+                    ) {
+                        console.warn('[OLD LEDGER] Skipped (accounts not configured):', oldLedgerError.message);
+                    } else {
+                        // Genuine DB error — re-throw to roll back the transaction
+                        console.error('[OLD LEDGER] Write error — rolling back transaction:', oldLedgerError.message);
+                        throw oldLedgerError;
+                    }
                 }
 
                 // === NEW DOUBLE-ENTRY LEDGER: Real-time posting ===
@@ -495,9 +509,20 @@ module.exports = {
                     try {
                         await reverseInvoiceLedger(originalOrder, transaction);
                         await postInvoiceToLedger(updatedOrder, transaction);
-                        // If invoice was cash-paid at creation, also re-post the cash receipt
-                        if (Number(updatedOrder.paidAmount) > 0) {
-                            await postInvoiceCashReceiptToLedger(updatedOrder, transaction);
+                        // C8 FIX: When re-posting the cash receipt after an edit we must use
+                        // the ORIGINAL creation-time paidAmount (from the existing INVOICE_CASH
+                        // batch), NOT updatedOrder.paidAmount which may have grown due to receipt
+                        // allocations added after invoice creation.  Using the current paidAmount
+                        // would double-count all subsequent allocations as POS cash.
+                        // The reverseInvoiceLedger call above already reversed the original
+                        // INVOICE_CASH batch.  We re-post only if the original had POS cash.
+                        const originalPaidAtCreation = Number(originalOrder.paidAmount) || 0;
+                        if (originalPaidAtCreation > 0) {
+                            // Re-post using original creation-time paid amount, not current
+                            await postInvoiceCashReceiptToLedger(
+                                { ...updatedOrder.get({ plain: true }), paidAmount: originalPaidAtCreation },
+                                transaction
+                            );
                         }
                         console.log(`[LEDGER] Edit corrected: reversed + reposted invoice ${updatedOrder.orderNumber}`);
                     } catch (ledgerErr) {
