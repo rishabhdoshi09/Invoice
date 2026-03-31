@@ -735,6 +735,17 @@ export const CreateOrder = () => {
     } catch {}
   }, []);
 
+  // Helper: focus altName input (called on product selection so user can immediately type alt name)
+  const focusAltNameInput = useCallback(() => {
+    try {
+      setTimeout(() => {
+        const el = altNameRef && altNameRef.current;
+        if (!el || typeof el.focus !== 'function') return;
+        el.focus();
+      }, 80);
+    } catch {}
+  }, []);
+
   // Helper: virtual keypad digit writer (main + modal)
   const applyDigitToPrice = (digit, targetRefOverride = null) => {
     const targetRef = targetRefOverride || (modalOpen ? modalPriceRef : priceInputRef);
@@ -837,8 +848,8 @@ export const CreateOrder = () => {
         setBowlProductIdLocked(null);
         maxPriceDigitsRef.current = null;
 
-        // focus price even for custom products (with 2xx selection logic)
-        focusMainPriceInput();
+        // focus altName even for custom products
+        focusAltNameInput();
         setTimeout(() => clearQuickHighlight(), 100);
         return;
       }
@@ -906,9 +917,10 @@ export const CreateOrder = () => {
       // User should select product, set price, then press '=' to fetch weight and add
       // This allows the product to remain selected even without a connected scale
 
-      // After product selection, focus the productPrice input with 2xx logic
+      // After product selection, focus altName so user can immediately type alt name
+      // (pressing Enter/Tab in altName will jump to price)
       if (!modalOpen) {
-        focusMainPriceInput();
+        focusAltNameInput();
       }
 
       setTimeout(() => clearQuickHighlight(), 100);
@@ -925,7 +937,7 @@ export const CreateOrder = () => {
       maxPriceDigitsRef.current = null;
       clearQuickHighlight();
     }
-  }, [selectedProduct, formik, rows, weighingScaleHandler, allowAddProductName, modalOpen, focusMainPriceInput]);
+  }, [selectedProduct, formik, rows, weighingScaleHandler, allowAddProductName, modalOpen, focusAltNameInput]);
 
   const attemptProductChange = useCallback(async (value) => {
     // Whenever user tries to change product, allow modal to show again for the new selection
@@ -1712,12 +1724,12 @@ export const CreateOrder = () => {
     }
   }, [modalOpen, focusModalPriceInput]);
 
-  // When product changes and modal is not open, focus main price
+  // When product changes and modal is not open, focus altName so user can immediately set it
   useEffect(() => {
     if (selectedProduct && !modalOpen) {
-      focusMainPriceInput();
+      focusAltNameInput();
     }
-  }, [selectedProduct, modalOpen, focusMainPriceInput]);
+  }, [selectedProduct, modalOpen, focusAltNameInput]);
 
   const show200sKeypad = isWeighted && priceValue >= 200 && priceValue <= 299;
 
@@ -2182,7 +2194,13 @@ export const CreateOrder = () => {
               <Grid item xs={12} md={6}>
                 <TextField size="small" id="altName" name="altName" label="Alternate Name (optional)" placeholder="Print this name instead"
                   value={formik.values.altName} onChange={(e) => formik.setFieldValue('altName', e.target.value)} fullWidth
-                  inputRef={altNameRef} />
+                  inputRef={altNameRef}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === 'Tab') && !e.shiftKey) {
+                      e.preventDefault();
+                      focusMainPriceInput();
+                    }
+                  }} />
               </Grid>
 
               <Grid item xs={12} md={6}>
