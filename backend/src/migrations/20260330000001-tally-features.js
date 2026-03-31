@@ -259,27 +259,27 @@ module.exports = {
         await queryInterface.addColumn('orders', 'costCenterId',      { type: Sequelize.UUID,        allowNull: true });
 
         // OrderItems: HSN code + GST breakdown per line
-        await queryInterface.addColumn('order_items', 'hsnCode',      { type: Sequelize.STRING(20),   allowNull: true });
-        await queryInterface.addColumn('order_items', 'gstRate',      { type: Sequelize.DECIMAL(5,2),  defaultValue: 0 });
-        await queryInterface.addColumn('order_items', 'cgst',         { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
-        await queryInterface.addColumn('order_items', 'sgst',         { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
-        await queryInterface.addColumn('order_items', 'igst',         { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
-        await queryInterface.addColumn('order_items', 'discount',     { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
-        await queryInterface.addColumn('order_items', 'discountPct',  { type: Sequelize.DECIMAL(5,2),  defaultValue: 0 });
-        await queryInterface.addColumn('order_items', 'unit',         { type: Sequelize.STRING(20),    defaultValue: 'KG' });
+        await queryInterface.addColumn('orderItems', 'hsnCode',      { type: Sequelize.STRING(20),   allowNull: true });
+        await queryInterface.addColumn('orderItems', 'gstRate',      { type: Sequelize.DECIMAL(5,2),  defaultValue: 0 });
+        await queryInterface.addColumn('orderItems', 'cgst',         { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
+        await queryInterface.addColumn('orderItems', 'sgst',         { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
+        await queryInterface.addColumn('orderItems', 'igst',         { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
+        await queryInterface.addColumn('orderItems', 'discount',     { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
+        await queryInterface.addColumn('orderItems', 'discountPct',  { type: Sequelize.DECIMAL(5,2),  defaultValue: 0 });
+        await queryInterface.addColumn('orderItems', 'unit',         { type: Sequelize.STRING(20),    defaultValue: 'KG' });
 
         // PurchaseBills: Full GST breakdown
-        await queryInterface.addColumn('purchase_bills', 'cgst',      { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
-        await queryInterface.addColumn('purchase_bills', 'sgst',      { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
-        await queryInterface.addColumn('purchase_bills', 'igst',      { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
-        await queryInterface.addColumn('purchase_bills', 'cess',      { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
-        await queryInterface.addColumn('purchase_bills', 'supplierGstin', { type: Sequelize.STRING(20), allowNull: true });
-        await queryInterface.addColumn('purchase_bills', 'placeOfSupply', { type: Sequelize.STRING(10), allowNull: true });
-        await queryInterface.addColumn('purchase_bills', 'supplyType', { type: Sequelize.ENUM('INTRASTATE','INTERSTATE','IMPORT'), defaultValue: 'INTRASTATE' });
-        await queryInterface.addColumn('purchase_bills', 'reverseCharge', { type: Sequelize.BOOLEAN,   defaultValue: false });
-        await queryInterface.addColumn('purchase_bills', 'dueDate',    { type: Sequelize.DATEONLY,    allowNull: true });
-        await queryInterface.addColumn('purchase_bills', 'discount',   { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
-        await queryInterface.addColumn('purchase_bills', 'bankAccountId', { type: Sequelize.UUID,    allowNull: true });
+        await queryInterface.addColumn('purchaseBills', 'cgst',      { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
+        await queryInterface.addColumn('purchaseBills', 'sgst',      { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
+        await queryInterface.addColumn('purchaseBills', 'igst',      { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
+        await queryInterface.addColumn('purchaseBills', 'cess',      { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
+        await queryInterface.addColumn('purchaseBills', 'supplierGstin', { type: Sequelize.STRING(20), allowNull: true });
+        await queryInterface.addColumn('purchaseBills', 'placeOfSupply', { type: Sequelize.STRING(10), allowNull: true });
+        await queryInterface.addColumn('purchaseBills', 'supplyType', { type: Sequelize.ENUM('INTRASTATE','INTERSTATE','IMPORT'), defaultValue: 'INTRASTATE' });
+        await queryInterface.addColumn('purchaseBills', 'reverseCharge', { type: Sequelize.BOOLEAN,   defaultValue: false });
+        await queryInterface.addColumn('purchaseBills', 'dueDate',    { type: Sequelize.DATEONLY,    allowNull: true });
+        await queryInterface.addColumn('purchaseBills', 'discount',   { type: Sequelize.DECIMAL(15,2), defaultValue: 0 });
+        await queryInterface.addColumn('purchaseBills', 'bankAccountId', { type: Sequelize.UUID,    allowNull: true });
 
         // Payments: Bank account linkage
         await queryInterface.addColumn('payments', 'bankAccountId',   { type: Sequelize.UUID,        allowNull: true });
