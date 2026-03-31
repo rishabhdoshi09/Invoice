@@ -381,6 +381,10 @@ export const CreateOrder = () => {
   // Edit Note dialog (replaces window.prompt)
   const [editNoteDialog, setEditNoteDialog] = useState({ open: false, index: -1, value: '' });
 
+  // Inline alt-name editing in the invoice table
+  const [inlineEditIndex, setInlineEditIndex] = useState(-1);
+  const [inlineEditValue, setInlineEditValue] = useState('');
+
   const [suppressAutoSuggest, setSuppressAutoSuggest] = useState(false);
 
   // NEW: switch to control whether product named "add" is allowed
@@ -848,8 +852,8 @@ export const CreateOrder = () => {
         setBowlProductIdLocked(null);
         maxPriceDigitsRef.current = null;
 
-        // focus altName even for custom products
-        focusAltNameInput();
+        // focus price for custom products (with 2xx selection logic)
+        focusMainPriceInput();
         setTimeout(() => clearQuickHighlight(), 100);
         return;
       }
@@ -917,10 +921,9 @@ export const CreateOrder = () => {
       // User should select product, set price, then press '=' to fetch weight and add
       // This allows the product to remain selected even without a connected scale
 
-      // After product selection, focus altName so user can immediately type alt name
-      // (pressing Enter/Tab in altName will jump to price)
+      // After product selection, focus price
       if (!modalOpen) {
-        focusAltNameInput();
+        focusMainPriceInput();
       }
 
       setTimeout(() => clearQuickHighlight(), 100);
@@ -937,7 +940,7 @@ export const CreateOrder = () => {
       maxPriceDigitsRef.current = null;
       clearQuickHighlight();
     }
-  }, [selectedProduct, formik, rows, weighingScaleHandler, allowAddProductName, modalOpen, focusAltNameInput]);
+  }, [selectedProduct, formik, rows, weighingScaleHandler, allowAddProductName, modalOpen, focusMainPriceInput]);
 
   const attemptProductChange = useCallback(async (value) => {
     // Whenever user tries to change product, allow modal to show again for the new selection
@@ -1724,12 +1727,12 @@ export const CreateOrder = () => {
     }
   }, [modalOpen, focusModalPriceInput]);
 
-  // When product changes and modal is not open, focus altName so user can immediately set it
+  // When product changes and modal is not open, focus main price
   useEffect(() => {
     if (selectedProduct && !modalOpen) {
-      focusAltNameInput();
+      focusMainPriceInput();
     }
-  }, [selectedProduct, modalOpen, focusAltNameInput]);
+  }, [selectedProduct, modalOpen, focusMainPriceInput]);
 
   const show200sKeypad = isWeighted && priceValue >= 200 && priceValue <= 299;
 
@@ -2288,16 +2291,66 @@ export const CreateOrder = () => {
                   {orderProps.orderItems.map((item, index) => (
                     <TableRow key={index} hover>
                       <TableCell sx={{ color: 'text.secondary', fontWeight: 500 }}>{index + 1}</TableCell>
-                      <TableCell>
-                        <Typography variant="body2" fontWeight={600}>
-                          {(item.altName && item.altName.trim())
-                            ? item.altName.trim()
-                            : safeGetProductName(rows, item)}
-                        </Typography>
-                        {item.altName && item.altName.trim() && (
-                          <Typography variant="caption" color="text.secondary">
-                            {safeGetProductName(rows, item)}
-                          </Typography>
+                      <TableCell
+                        onClick={() => {
+                          if (inlineEditIndex !== index) {
+                            setInlineEditIndex(index);
+                            setInlineEditValue(item.altName || '');
+                          }
+                        }}
+                        sx={{ cursor: 'text', minWidth: 120 }}
+                      >
+                        {inlineEditIndex === index ? (
+                          <input
+                            autoFocus
+                            value={inlineEditValue}
+                            onChange={(e) => setInlineEditValue(e.target.value)}
+                            onBlur={() => {
+                              setOrderProps((prev) => {
+                                const updated = [...prev.orderItems];
+                                updated[index] = { ...updated[index], altName: inlineEditValue.trim() };
+                                const nextProps = { ...prev, orderItems: updated };
+                                try { generatePdf(nextProps); } catch {}
+                                return nextProps;
+                              });
+                              setInlineEditIndex(-1);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === 'Escape') {
+                                if (e.key === 'Enter') {
+                                  setOrderProps((prev) => {
+                                    const updated = [...prev.orderItems];
+                                    updated[index] = { ...updated[index], altName: inlineEditValue.trim() };
+                                    const nextProps = { ...prev, orderItems: updated };
+                                    try { generatePdf(nextProps); } catch {}
+                                    return nextProps;
+                                  });
+                                } else {
+                                  setInlineEditValue(item.altName || '');
+                                }
+                                setInlineEditIndex(-1);
+                              }
+                            }}
+                            placeholder={safeGetProductName(rows, item)}
+                            style={{
+                              width: '100%', border: 'none', borderBottom: '2px solid #1976d2',
+                              outline: 'none', fontSize: '0.875rem', fontWeight: 600,
+                              background: 'transparent', padding: '2px 0'
+                            }}
+                          />
+                        ) : (
+                          <>
+                            <Typography variant="body2" fontWeight={600}>
+                              {(item.altName && item.altName.trim())
+                                ? item.altName.trim()
+                                : safeGetProductName(rows, item)}
+                            </Typography>
+                            {item.altName && item.altName.trim() && (
+                              <Typography variant="caption" color="text.secondary">
+                                {safeGetProductName(rows, item)}
+                              </Typography>
+                            )}
+                          </>
                         )}
                       </TableCell>
                       <TableCell align="center">{item.quantity}</TableCell>
