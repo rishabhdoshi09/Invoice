@@ -43,8 +43,8 @@ module.exports = {
             DO $$ BEGIN
                 -- Named parties: one account per (partyType, partyId)
                 IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint
-                    WHERE conname = 'uq_accounts_party_type_id'
+                    SELECT 1 FROM pg_indexes
+                    WHERE indexname = 'uq_accounts_party_type_id'
                 ) THEN
                     CREATE UNIQUE INDEX uq_accounts_party_type_id
                         ON accounts ("partyType", "partyId")
