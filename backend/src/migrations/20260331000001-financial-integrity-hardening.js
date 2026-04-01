@@ -112,9 +112,32 @@ module.exports = {
         `);
 
         // ── 4. Order financial invariant: paid + due ≈ total ─────────────────────
-        // Using tolerance of 0.02 (2 paise) to accommodate floating-point edge cases
-        // from the existing server-side Math.round(x * 100) / 100 rounding.
-        // This catches genuine corruption while not rejecting legitimate rounding.
+        // Step 4a: Repair existing rows where paid + due ≠ total BEFORE adding
+        // the constraint.  dueAmount is the derived field — recompute it from
+        // total - paidAmount.  paidAmount and total are never touched here.
+        // Also fix paymentStatus label if it no longer matches paidAmount/total.
+        await queryInterface.sequelize.query(`
+            UPDATE orders
+            SET
+                "dueAmount" = ROUND(
+                    CAST(total AS NUMERIC) - CAST("paidAmount" AS NUMERIC),
+                    2
+                ),
+                "paymentStatus" = CASE
+                    WHEN CAST("paidAmount" AS NUMERIC) >= CAST(total AS NUMERIC) - 0.01 THEN 'paid'
+                    WHEN CAST("paidAmount" AS NUMERIC) > 0.01 THEN 'partial'
+                    ELSE 'unpaid'
+                END
+            WHERE
+                "isDeleted" = false
+                AND ABS(
+                    CAST("paidAmount" AS NUMERIC) +
+                    CAST("dueAmount"  AS NUMERIC) -
+                    CAST(total AS NUMERIC)
+                ) >= 0.02;
+        `);
+
+        // Step 4b: Now add the CHECK constraint — all rows should satisfy it.
         await queryInterface.sequelize.query(`
             DO $$ BEGIN
                 IF NOT EXISTS (
