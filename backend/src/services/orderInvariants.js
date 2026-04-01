@@ -44,8 +44,10 @@ async function assertOrderInvariants(orderId, transaction, options = {}) {
     // ── Fetch order ─────────────────────────────────────────────────────────────
     const order = await db.order.findByPk(orderId, {
         include: [{ model: db.orderItems, as: 'orderItems', required: false }],
-        transaction,
-        lock: transaction.LOCK.SHARE   // Consistent read, don't block writers
+        transaction
+        // No lock needed — we're inside the same transaction that wrote the data,
+        // so we already see our own writes. FOR SHARE also cannot be applied to
+        // the nullable side of the LEFT OUTER JOIN on orderItems.
     });
 
     if (!order) {
