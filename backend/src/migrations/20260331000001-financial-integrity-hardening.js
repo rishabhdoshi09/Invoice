@@ -112,10 +112,19 @@ module.exports = {
         `);
 
         // ── 4. Order financial invariant: paid + due ≈ total ─────────────────────
-        // Step 4a: Repair existing rows where paid + due ≠ total BEFORE adding
+        // Step 4a: Drop the old chk_orders_dueAmount_gte_0 constraint if it exists.
+        // Overpayments are valid (paidAmount > total → dueAmount < 0) so this
+        // constraint is too strict.  The new chk_orders_paid_due_balance (Step 4b)
+        // replaces it with the correct invariant: ABS(paid + due - total) < 0.02.
+        await queryInterface.sequelize.query(`
+            ALTER TABLE orders
+                DROP CONSTRAINT IF EXISTS "chk_orders_dueAmount_gte_0";
+        `);
+
+        // Step 4b: Repair existing rows where paid + due ≠ total BEFORE adding
         // the constraint.  dueAmount is the derived field — recompute it from
         // total - paidAmount.  paidAmount and total are never touched here.
-        // Also fix paymentStatus label if it no longer matches paidAmount/total.
+        // dueAmount CAN be negative for overpaid orders (paidAmount > total).
         await queryInterface.sequelize.query(`
             UPDATE orders
             SET
@@ -129,8 +138,7 @@ module.exports = {
                     ELSE 'unpaid'
                 END
             WHERE
-                "isDeleted" = false
-                AND ABS(
+                ABS(
                     CAST("paidAmount" AS NUMERIC) +
                     CAST("dueAmount"  AS NUMERIC) -
                     CAST(total AS NUMERIC)
