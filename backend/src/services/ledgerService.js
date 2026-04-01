@@ -83,145 +83,177 @@ class LedgerService {
     }
 
     /**
-     * Create or get customer account (sub-account under Accounts Receivable).
+     * Get or create the customer receivable ledger account.
      *
-     * Race-condition safe: uses advisory lock on (partyType, partyId) so that
-     * two concurrent invoice creations for the same customer never create two
-     * separate receivable accounts (which would split the customer balance and
-     * silently break INV-01 drift detection).
+     * PHASE 2 FIX (C3 / C9) — full atomic account creation:
+     *
+     * Three-layer defence against duplicate accounts under concurrency:
+     *
+     *   Layer 1 — Fast path: account already exists → return immediately (99% of calls).
+     *
+     *   Layer 2 — pg_advisory_xact_lock: serialises all concurrent "first invoice for
+     *              this customer" writes at the Postgres level.  Only one transaction
+     *              can hold the lock for a given (partyType, partyId) at a time.
+     *              The lock is transaction-scoped and released on commit/rollback.
+     *
+     *   Layer 3 — Re-check after lock + SequelizeUniqueConstraintError catch:
+     *              If a race somehow slips through (e.g., the lock key collides for
+     *              two different partyIds), the DB-level UNIQUE constraint on
+     *              (partyType, partyId) will block the duplicate INSERT.  We catch
+     *              the constraint error and return the existing row, so the caller
+     *              always receives exactly one account regardless of concurrency.
+     *
+     * Account code generation (C9 fix):
+     *   MAX(numeric suffix) is computed from the database inside the advisory lock,
+     *   so no two transactions can read the same last code simultaneously.
      */
     async getOrCreateCustomerAccount(customerId, customerName, transaction = null) {
         const db = this.db;
-        // Coerce undefined → null so Sequelize doesn't throw on walk-in orders
         const resolvedCustomerId = customerId === undefined ? null : customerId;
 
-        // Fast path: account already exists (covers the vast majority of calls)
+        // ── Layer 1: fast path ───────────────────────────────────────────────
         let account = await db.account.findOne({
             where: { partyId: resolvedCustomerId, partyType: 'customer' },
             transaction
         });
         if (account) return account;
 
-        // Slow path: first time this customer gets a ledger account.
-        // Serialize creation with a pg advisory lock keyed on a hash of
-        // ('customer', partyId) to prevent duplicate account creation under
-        // concurrent requests.  The lock is released automatically when the
-        // surrounding DB transaction commits or rolls back.
+        // ── Layer 2: advisory lock serialises concurrent first-time creates ──
         const lockKey = this._advisoryLockKey('customer', resolvedCustomerId);
         await db.sequelize.query(
             `SELECT pg_advisory_xact_lock(:key)`,
             { replacements: { key: lockKey }, transaction }
         );
 
-        // Re-check after acquiring lock (another request may have created it)
+        // Re-check: another transaction may have created the account while we
+        // were waiting for the lock.
         account = await db.account.findOne({
             where: { partyId: resolvedCustomerId, partyType: 'customer' },
             transaction
         });
         if (account) return account;
 
-        // Get parent Accounts Receivable account
-        const arAccount = await db.account.findOne({
-            where: { code: '1300' },
-            transaction
-        });
+        // ── Code generation: atomic MAX() inside the lock ────────────────────
+        // Use a regex-safe MAX on the numeric suffix to avoid non-numeric codes
+        // (e.g. '1300-WALKIN') corrupting the sequence.
+        const [codeRows] = await db.sequelize.query(`
+            SELECT COALESCE(
+                MAX(CAST(SPLIT_PART(code, '-', 2) AS INTEGER)),
+                0
+            ) + 1 AS next_num
+            FROM accounts
+            WHERE "partyType" = 'customer'
+              AND code ~ '^1300-[0-9]+$'
+        `, { transaction });
+        const nextNum = Number(codeRows[0].next_num) || 1;
+        const newCode = `1300-${String(nextNum).padStart(3, '0')}`;
 
-        // Generate unique code — safe now because we hold the advisory lock
-        const lastCustomerAccount = await db.account.findOne({
-            where: {
+        const arAccount = await db.account.findOne({ where: { code: '1300' }, transaction });
+
+        // ── Layer 3: handle residual unique-constraint races defensively ──────
+        try {
+            account = await db.account.create({
+                code: newCode,
+                name: customerName,
+                type: 'ASSET',
+                subType: 'RECEIVABLE',
+                parentId: arAccount?.id,
+                partyId: resolvedCustomerId,
                 partyType: 'customer',
-                code: { [db.Sequelize.Op.like]: '1300-%' }
-            },
-            order: [['code', 'DESC']],
-            transaction
-        });
-
-        let newCode = '1300-001';
-        if (lastCustomerAccount) {
-            const lastNum = parseInt(lastCustomerAccount.code.split('-')[1]) || 0;
-            newCode = `1300-${String(lastNum + 1).padStart(3, '0')}`;
+                isSystemAccount: false
+            }, { transaction });
+        } catch (err) {
+            if (err.name === 'SequelizeUniqueConstraintError') {
+                // DB constraint caught a duplicate — return the winner
+                account = await db.account.findOne({
+                    where: { partyId: resolvedCustomerId, partyType: 'customer' },
+                    transaction
+                });
+                if (!account) throw new Error(
+                    `Account creation failed with unique constraint but existing account not found for customer ${resolvedCustomerId}`
+                );
+            } else {
+                throw err;
+            }
         }
-
-        account = await db.account.create({
-            code: newCode,
-            name: customerName,
-            type: 'ASSET',
-            subType: 'RECEIVABLE',
-            parentId: arAccount?.id,
-            partyId: resolvedCustomerId,
-            partyType: 'customer',
-            isSystemAccount: false
-        }, { transaction });
 
         return account;
     }
 
     /**
-     * Create or get supplier account (sub-account under Accounts Payable).
-     * Race-condition safe via pg_advisory_xact_lock (same pattern as customer).
+     * Get or create the supplier payable ledger account.
+     * Same three-layer atomic pattern as getOrCreateCustomerAccount.
      */
     async getOrCreateSupplierAccount(supplierId, supplierName, transaction = null) {
         const db = this.db;
 
-        // Fast path
+        // ── Layer 1: fast path ───────────────────────────────────────────────
         let account = await db.account.findOne({
             where: { partyId: supplierId, partyType: 'supplier' },
             transaction
         });
         if (account) return account;
 
-        // Serialize with advisory lock
+        // ── Layer 2: advisory lock ───────────────────────────────────────────
         const lockKey = this._advisoryLockKey('supplier', supplierId);
         await db.sequelize.query(
             `SELECT pg_advisory_xact_lock(:key)`,
             { replacements: { key: lockKey }, transaction }
         );
 
-        // Re-check after lock
         account = await db.account.findOne({
             where: { partyId: supplierId, partyType: 'supplier' },
             transaction
         });
         if (account) return account;
 
-        const apAccount = await db.account.findOne({
-            where: { code: '2100' },
-            transaction
-        });
+        // ── Code generation inside lock ──────────────────────────────────────
+        const [codeRows] = await db.sequelize.query(`
+            SELECT COALESCE(
+                MAX(CAST(SPLIT_PART(code, '-', 2) AS INTEGER)),
+                0
+            ) + 1 AS next_num
+            FROM accounts
+            WHERE "partyType" = 'supplier'
+              AND code ~ '^2100-[0-9]+$'
+        `, { transaction });
+        const nextNum = Number(codeRows[0].next_num) || 1;
+        const newCode = `2100-${String(nextNum).padStart(3, '0')}`;
 
-        const lastSupplierAccount = await db.account.findOne({
-            where: {
+        const apAccount = await db.account.findOne({ where: { code: '2100' }, transaction });
+
+        // ── Layer 3: constraint-error fallback ───────────────────────────────
+        try {
+            account = await db.account.create({
+                code: newCode,
+                name: supplierName,
+                type: 'LIABILITY',
+                subType: 'PAYABLE',
+                parentId: apAccount?.id,
+                partyId: supplierId,
                 partyType: 'supplier',
-                code: { [db.Sequelize.Op.like]: '2100-%' }
-            },
-            order: [['code', 'DESC']],
-            transaction
-        });
-
-        let newCode = '2100-001';
-        if (lastSupplierAccount) {
-            const lastNum = parseInt(lastSupplierAccount.code.split('-')[1]) || 0;
-            newCode = `2100-${String(lastNum + 1).padStart(3, '0')}`;
+                isSystemAccount: false
+            }, { transaction });
+        } catch (err) {
+            if (err.name === 'SequelizeUniqueConstraintError') {
+                account = await db.account.findOne({
+                    where: { partyId: supplierId, partyType: 'supplier' },
+                    transaction
+                });
+                if (!account) throw new Error(
+                    `Account creation failed with unique constraint but existing account not found for supplier ${supplierId}`
+                );
+            } else {
+                throw err;
+            }
         }
-
-        account = await db.account.create({
-            code: newCode,
-            name: supplierName,
-            type: 'LIABILITY',
-            subType: 'PAYABLE',
-            parentId: apAccount?.id,
-            partyId: supplierId,
-            partyType: 'supplier',
-            isSystemAccount: false
-        }, { transaction });
 
         return account;
     }
 
     /**
-     * Deterministic 32-bit integer advisory lock key from party type + id string.
-     * Uses a simple djb2-style hash truncated to signed int32 range so PostgreSQL
-     * accepts it as a bigint advisory lock argument.
+     * Deterministic 32-bit advisory lock key for (partyType, partyId).
+     * djb2-style hash, clamped to positive int32 range for pg_advisory_xact_lock.
      */
     _advisoryLockKey(partyType, partyId) {
         const str = `${partyType}:${partyId || 'walkin'}`;
@@ -230,7 +262,6 @@ class LedgerService {
             hash = ((hash << 5) + hash) + str.charCodeAt(i);
             hash |= 0; // force 32-bit integer
         }
-        // pg advisory locks take bigint; keep in safe range
         return Math.abs(hash);
     }
 

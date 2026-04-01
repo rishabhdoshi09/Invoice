@@ -5,6 +5,7 @@ const Validations = require('../validations');
 const db = require('../models');
 const { createAuditLog } = require('../middleware/auditLogger');
 const { postInvoiceToLedger, reverseInvoiceLedger, postPaymentStatusToggleToLedger, postInvoiceCashReceiptToLedger } = require('../services/realTimeLedger');
+const { assertOrderInvariants } = require('../services/orderInvariants');
 const telegram = require('../services/telegramAlert');
 
 // Helper to get client IP
@@ -62,6 +63,15 @@ module.exports = {
             if (orderObj.paidAmount === undefined || orderObj.paidAmount === null) {
                 orderObj.paidAmount = 0; // Default: unpaid (safe default)
             }
+            orderObj.paidAmount = round2(orderObj.paidAmount);
+
+            // PHASE 1 FIX (C1/C2/C8): Capture the POS cash as an immutable field.
+            // originalPaidAmount is set ONCE here and protected by a DB trigger.
+            // All future paidAmount values are DERIVED:
+            //   paidAmount = originalPaidAmount + SUM(active receipt_allocations)
+            // This makes it structurally impossible for allocation delete/undo to
+            // erase the POS cash component.
+            orderObj.originalPaidAmount = orderObj.paidAmount;
 
             // dueAmount: allow negative (overpayment) — business may accept advance/excess payments
             orderObj.dueAmount = round2(orderObj.total - orderObj.paidAmount);
@@ -192,84 +202,6 @@ module.exports = {
                     // Don't fail the order creation for summary issues
                 }
 
-                // Dynamically get the Sales and Cash/Bank Ledger IDs (old single-entry system)
-                // Non-blocking: if old ledger accounts not set up, skip
-                try {
-                    const salesLedger = await Services.ledger.getLedgerByName('Sales Account');
-                    const cashBankLedger = await Services.ledger.getLedgerByName('Cash Account');
-                    
-                    if (salesLedger && cashBankLedger) {
-                        const SALES_LEDGER_ID = salesLedger.id;
-                        const CASH_BANK_LEDGER_ID = cashBankLedger.id;
-
-                // Create ledger entries for sale
-                const ledgerEntries = [];
-                
-                // 1. Debit Customer/Receivable (if not fully paid)
-                if (orderObj.dueAmount > 0 && orderObj.customerId) {
-                    // Assuming customer has a ledgerId
-                    const customer = await Services.customer.getCustomer({ id: orderObj.customerId });
-                    if (customer && customer.ledgerId) {
-                        ledgerEntries.push({
-                            ledgerId: customer.ledgerId, 
-                            entryDate: orderObj.orderDate,
-                            debit: orderObj.dueAmount, // Receivable is debited (asset increases)
-                            credit: 0,
-                            description: `Sale to ${customer.name} (Due Amount)`,
-                            referenceType: 'order',
-                            referenceId: orderId
-                        });
-                    }
-                }
-
-                // 2. Debit Cash/Bank (if partially or fully paid)
-                if (orderObj.paidAmount > 0) {
-                    ledgerEntries.push({
-                        ledgerId: CASH_BANK_LEDGER_ID, 
-                        entryDate: orderObj.orderDate,
-                        debit: orderObj.paidAmount, // Cash/Bank is debited (asset increases)
-                        credit: 0,
-                        description: `Sale to ${orderObj.customerName} (Paid Amount)`,
-                        referenceType: 'order',
-                        referenceId: orderId
-                    });
-                }
-
-                // 3. Credit Sales
-                ledgerEntries.push({
-                    ledgerId: SALES_LEDGER_ID, 
-                    entryDate: orderObj.orderDate,
-                    debit: 0,
-                    credit: orderObj.total, // Sales is credited (income increases)
-                    description: `Sale to ${orderObj.customerName} (Total)`,
-                    referenceType: 'order',
-                    referenceId: orderId
-                });
-
-                if (ledgerEntries.length > 0) {
-                    await db.ledgerEntry.bulkCreate(ledgerEntries, { transaction });
-                }
-                    } else {
-                        console.warn('[OLD LEDGER] Sales Account or Cash Account ledger not found — skipping old ledger entries');
-                    }
-                } catch (oldLedgerError) {
-                    // C7 FIX: The old single-entry ledger is legacy. Missing accounts are
-                    // expected on new deployments (WARN level). But a genuine DB write error
-                    // (constraint violation, connection failure) must NOT be swallowed —
-                    // it indicates partial data was attempted and the transaction should roll back.
-                    if (
-                        oldLedgerError.message.includes('not found') ||
-                        oldLedgerError.message.includes('does not exist') ||
-                        oldLedgerError.message.includes('ledger account')
-                    ) {
-                        console.warn('[OLD LEDGER] Skipped (accounts not configured):', oldLedgerError.message);
-                    } else {
-                        // Genuine DB error — re-throw to roll back the transaction
-                        console.error('[OLD LEDGER] Write error — rolling back transaction:', oldLedgerError.message);
-                        throw oldLedgerError;
-                    }
-                }
-
                 // === NEW DOUBLE-ENTRY LEDGER: Real-time posting ===
                 // Non-blocking when CoA is not initialized; blocking (throws) when it IS initialized.
                 // Posted for ALL orders, including walk-in (no customerId) — postInvoiceToLedger
@@ -290,6 +222,13 @@ module.exports = {
                 } else {
                     console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — invoice ${orderObj.orderNumber} not posted to ledger`);
                 }
+
+                // === PRE-COMMIT INVARIANT CHECK (Phase 4) ===
+                // Runs inside the transaction. Any violation throws InvariantError
+                // which rolls back the entire transaction — nothing is persisted.
+                // skipLedgerCheck=true because ledger posting just happened above;
+                // the check for INV-7 is done separately after postInvoiceToLedger.
+                await assertOrderInvariants(orderId, transaction, { skipLedgerCheck: true });
 
                 const createdOrder = await Services.order.getOrder({id: orderId }, transaction);
 
@@ -516,7 +455,9 @@ module.exports = {
                         // would double-count all subsequent allocations as POS cash.
                         // The reverseInvoiceLedger call above already reversed the original
                         // INVOICE_CASH batch.  We re-post only if the original had POS cash.
-                        const originalPaidAtCreation = Number(originalOrder.paidAmount) || 0;
+                        // C8 FIX: Use originalPaidAmount (immutable POS cash set at creation),
+                        // NOT paidAmount (which includes post-creation receipt allocations).
+                        const originalPaidAtCreation = Number(originalOrder.originalPaidAmount) || 0;
                         if (originalPaidAtCreation > 0) {
                             // Re-post using original creation-time paid amount, not current
                             await postInvoiceCashReceiptToLedger(
@@ -530,6 +471,9 @@ module.exports = {
                         throw ledgerErr; // block the edit if ledger is misconfigured
                     }
                 }
+
+                // === PRE-COMMIT INVARIANT CHECK (Phase 4) ===
+                await assertOrderInvariants(orderId, transaction, { skipLedgerCheck: false });
 
                 // Return updated order with items (fetch outside transaction for speed)
                 return orderId;

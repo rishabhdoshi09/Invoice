@@ -44,6 +44,19 @@ module.exports = (sequelize, Sequelize) => {
             taxPercent: {
                 type: Sequelize.DECIMAL(15, 2)
             },
+            // ── IMMUTABLE field: set ONCE at invoice creation, never written again ──
+            // This is the cash collected at the POS counter at the moment of sale.
+            // It is the ground-truth anchor for all paidAmount calculations.
+            // paidAmount (the display field) is ALWAYS derived:
+            //   paidAmount = originalPaidAmount + SUM(active receipt_allocations)
+            // Nothing in the application should ever write to originalPaidAmount after
+            // the row is first inserted.
+            originalPaidAmount: {
+                type: Sequelize.DECIMAL(15, 2),
+                defaultValue: 0,
+                allowNull: false,
+                comment: 'Immutable POS cash captured at invoice creation. Never modified after insert.'
+            },
             paidAmount: {
                 type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
