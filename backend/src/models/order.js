@@ -65,6 +65,15 @@ module.exports = (sequelize, Sequelize) => {
                 type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
+            // Overpayment / advance credit for future invoices.
+            // Exactly one of dueAmount or advanceAmount will be > 0 at any time.
+            //   dueAmount    = MAX(0, total - paidAmount)
+            //   advanceAmount = MAX(0, paidAmount - total)
+            advanceAmount: {
+                type: Sequelize.DECIMAL(15, 2),
+                defaultValue: 0,
+                allowNull: false
+            },
             paymentStatus: {
                 type: Sequelize.ENUM('paid', 'partial', 'unpaid'),
                 defaultValue: 'paid'

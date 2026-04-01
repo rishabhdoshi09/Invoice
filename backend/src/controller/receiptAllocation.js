@@ -71,14 +71,15 @@ async function computeDerivedPaymentFields(orderId, transaction) {
     const allocTotal = Number(rows[0].alloc_total) || 0;
 
     const round2 = (n) => Math.round(n * 100) / 100;
-    const paidAmount = round2(originalPaid + allocTotal);
-    const dueAmount  = round2(total - paidAmount); // allow negative for overpayment
+    const paidAmount    = round2(originalPaid + allocTotal);
+    const dueAmount     = round2(Math.max(0, total - paidAmount));
+    const advanceAmount = round2(Math.max(0, paidAmount - total));
 
     let paymentStatus = 'unpaid';
     if (paidAmount >= total - 0.01) paymentStatus = 'paid';
     else if (paidAmount > 0.01)     paymentStatus = 'partial';
 
-    return { paidAmount, dueAmount, paymentStatus };
+    return { paidAmount, dueAmount, advanceAmount, paymentStatus };
 }
 
 /**
@@ -91,6 +92,7 @@ async function applyDerivedPaymentFields(orderId, transaction) {
         {
             paidAmount:    fields.paidAmount,
             dueAmount:     fields.dueAmount,
+            advanceAmount: fields.advanceAmount,
             paymentStatus: fields.paymentStatus
         },
         { where: { id: orderId }, transaction }

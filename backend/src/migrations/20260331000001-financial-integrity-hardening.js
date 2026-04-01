@@ -111,41 +111,68 @@ module.exports = {
             END $$;
         `);
 
-        // ── 4. Order financial invariant: paid + due ≈ total ─────────────────────
-        // Step 4a: Drop the old chk_orders_dueAmount_gte_0 constraint if it exists.
-        // Overpayments are valid (paidAmount > total → dueAmount < 0) so this
-        // constraint is too strict.  The new chk_orders_paid_due_balance (Step 4b)
-        // replaces it with the correct invariant: ABS(paid + due - total) < 0.02.
+        // ── 4. advanceAmount column + order payment field repair ─────────────────
+        // Step 4a: Add advanceAmount column (overpayment credit, always >= 0).
         await queryInterface.sequelize.query(`
             ALTER TABLE orders
-                DROP CONSTRAINT IF EXISTS "chk_orders_dueAmount_gte_0";
+                ADD COLUMN IF NOT EXISTS "advanceAmount" DECIMAL(15,2) NOT NULL DEFAULT 0;
         `);
 
-        // Step 4b: Repair existing rows where paid + due ≠ total BEFORE adding
-        // the constraint.  dueAmount is the derived field — recompute it from
-        // total - paidAmount.  paidAmount and total are never touched here.
-        // dueAmount CAN be negative for overpaid orders (paidAmount > total).
+        // Step 4b: Drop legacy constraint that blocked negative dueAmount.
+        // We now use advanceAmount for overpayments so dueAmount is always >= 0.
+        await queryInterface.sequelize.query(`
+            ALTER TABLE orders DROP CONSTRAINT IF EXISTS "chk_orders_dueAmount_gte_0";
+        `);
+
+        // Step 4c: Repair all rows — recompute dueAmount / advanceAmount / paymentStatus
+        // from the authoritative paidAmount and total.  Neither paidAmount nor total
+        // is ever modified here.
+        //   dueAmount     = MAX(0, total - paidAmount)   → customer still owes
+        //   advanceAmount = MAX(0, paidAmount - total)   → excess becomes advance credit
         await queryInterface.sequelize.query(`
             UPDATE orders
             SET
-                "dueAmount" = ROUND(
-                    CAST(total AS NUMERIC) - CAST("paidAmount" AS NUMERIC),
-                    2
-                ),
+                "dueAmount" = GREATEST(0, ROUND(
+                    CAST(total AS NUMERIC) - CAST("paidAmount" AS NUMERIC), 2
+                )),
+                "advanceAmount" = GREATEST(0, ROUND(
+                    CAST("paidAmount" AS NUMERIC) - CAST(total AS NUMERIC), 2
+                )),
                 "paymentStatus" = CASE
                     WHEN CAST("paidAmount" AS NUMERIC) >= CAST(total AS NUMERIC) - 0.01 THEN 'paid'
                     WHEN CAST("paidAmount" AS NUMERIC) > 0.01 THEN 'partial'
                     ELSE 'unpaid'
-                END
-            WHERE
-                ABS(
-                    CAST("paidAmount" AS NUMERIC) +
-                    CAST("dueAmount"  AS NUMERIC) -
-                    CAST(total AS NUMERIC)
-                ) >= 0.02;
+                END;
         `);
 
-        // Step 4b: Now add the CHECK constraint — all rows should satisfy it.
+        // Step 4d: Add CHECK constraints — all rows are now clean.
+        await queryInterface.sequelize.query(`
+            DO $$ BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint
+                    WHERE conname = 'chk_orders_due_gte_0'
+                      AND conrelid = 'orders'::regclass
+                ) THEN
+                    ALTER TABLE orders
+                        ADD CONSTRAINT chk_orders_due_gte_0
+                        CHECK ("dueAmount" >= 0);
+                END IF;
+            END $$;
+        `);
+        await queryInterface.sequelize.query(`
+            DO $$ BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint
+                    WHERE conname = 'chk_orders_advance_gte_0'
+                      AND conrelid = 'orders'::regclass
+                ) THEN
+                    ALTER TABLE orders
+                        ADD CONSTRAINT chk_orders_advance_gte_0
+                        CHECK ("advanceAmount" >= 0);
+                END IF;
+            END $$;
+        `);
+        // The unified invariant: paid = total - due + advance  (within ₹0.02)
         await queryInterface.sequelize.query(`
             DO $$ BEGIN
                 IF NOT EXISTS (
@@ -157,9 +184,10 @@ module.exports = {
                         ADD CONSTRAINT chk_orders_paid_due_balance
                         CHECK (
                             ABS(
-                                CAST("paidAmount" AS NUMERIC) +
-                                CAST("dueAmount"  AS NUMERIC) -
-                                CAST(total AS NUMERIC)
+                                CAST("paidAmount"    AS NUMERIC) -
+                                CAST(total           AS NUMERIC) +
+                                CAST("dueAmount"     AS NUMERIC) -
+                                CAST("advanceAmount" AS NUMERIC)
                             ) < 0.02
                         );
                 END IF;
@@ -185,6 +213,9 @@ module.exports = {
     async down(queryInterface, Sequelize) {
         // Drop in reverse order
         await queryInterface.sequelize.query(`ALTER TABLE orders DROP CONSTRAINT IF EXISTS chk_orders_paid_due_balance`);
+        await queryInterface.sequelize.query(`ALTER TABLE orders DROP CONSTRAINT IF EXISTS chk_orders_advance_gte_0`);
+        await queryInterface.sequelize.query(`ALTER TABLE orders DROP CONSTRAINT IF EXISTS chk_orders_due_gte_0`);
+        await queryInterface.sequelize.query(`ALTER TABLE orders DROP COLUMN IF EXISTS "advanceAmount"`);
         await queryInterface.sequelize.query(`ALTER TABLE ledger_entries DROP CONSTRAINT IF EXISTS chk_ledger_entries_nonzero`);
         await queryInterface.sequelize.query(`ALTER TABLE ledger_entries DROP CONSTRAINT IF EXISTS chk_ledger_entries_nonnegative`);
         await queryInterface.sequelize.query(`ALTER TABLE journal_batches DROP CONSTRAINT IF EXISTS chk_journal_batches_balanced`);

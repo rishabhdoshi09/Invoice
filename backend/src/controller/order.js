@@ -73,8 +73,11 @@ module.exports = {
             // erase the POS cash component.
             orderObj.originalPaidAmount = orderObj.paidAmount;
 
-            // dueAmount: allow negative (overpayment) — business may accept advance/excess payments
-            orderObj.dueAmount = round2(orderObj.total - orderObj.paidAmount);
+            // dueAmount / advanceAmount: mutually exclusive, both always >= 0
+            //   dueAmount     = MAX(0, total - paidAmount)  → customer still owes us
+            //   advanceAmount = MAX(0, paidAmount - total)  → excess becomes advance credit
+            orderObj.dueAmount     = round2(Math.max(0, orderObj.total - orderObj.paidAmount));
+            orderObj.advanceAmount = round2(Math.max(0, orderObj.paidAmount - orderObj.total));
 
             if (orderObj.paidAmount === 0) {
                 orderObj.paymentStatus = 'unpaid';
@@ -415,9 +418,10 @@ module.exports = {
                     updateFields.subTotal = computedSubTotal;
                     updateFields.tax = computedTax;
                     updateFields.total = computedTotal;
-                    // Recalculate dueAmount (paidAmount stays unchanged — only receipt/toggle can change it)
+                    // Recalculate dueAmount / advanceAmount (paidAmount stays — only receipt/toggle can change it)
                     const currentPaid = Number(originalOrder.paidAmount) || 0;
-                    updateFields.dueAmount = round2(Math.max(0, computedTotal - currentPaid));
+                    updateFields.dueAmount     = round2(Math.max(0, computedTotal - currentPaid));
+                    updateFields.advanceAmount = round2(Math.max(0, currentPaid - computedTotal));
 
                     financialFieldsChanged = Math.abs(computedTotal - Number(originalOrder.total)) > 0.001;
 

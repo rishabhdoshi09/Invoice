@@ -60,6 +60,7 @@ async function assertOrderInvariants(orderId, transaction, options = {}) {
     const tax           = round2(Number(order.tax)           || 0);
     const paidAmount    = round2(Number(order.paidAmount)    || 0);
     const dueAmount     = round2(Number(order.dueAmount)     || 0);
+    const advanceAmount = round2(Number(order.advanceAmount) || 0);
     const paymentStatus = order.paymentStatus;
     const orderNumber   = order.orderNumber;
     const items         = order.orderItems || [];
@@ -88,13 +89,29 @@ async function assertOrderInvariants(orderId, transaction, options = {}) {
         );
     }
 
-    // ── INV-3: paidAmount + dueAmount = total ─────────────────────────────────
-    const paymentSum = round2(paidAmount + dueAmount);
-    if (Math.abs(paymentSum - total) > TOLERANCE) {
+    // ── INV-3: payment fields are internally consistent ───────────────────────
+    // dueAmount and advanceAmount are mutually exclusive (both >= 0, at most one > 0)
+    // paidAmount + dueAmount = total + advanceAmount  ← the unified invariant
+    if (dueAmount < -TOLERANCE) {
         throw new InvariantError(
-            `INV-3 [${orderNumber}]: paid+due≠total. ` +
-            `paid=${paidAmount}, due=${dueAmount}, sum=${paymentSum}, total=${total}`,
-            'INV_PAID_DUE_TOTAL_MISMATCH'
+            `INV-3a [${orderNumber}]: dueAmount is negative (${dueAmount}). Use advanceAmount for overpayments.`,
+            'INV_DUE_NEGATIVE'
+        );
+    }
+    if (advanceAmount < -TOLERANCE) {
+        throw new InvariantError(
+            `INV-3b [${orderNumber}]: advanceAmount is negative (${advanceAmount}).`,
+            'INV_ADVANCE_NEGATIVE'
+        );
+    }
+    // paidAmount = total - dueAmount + advanceAmount
+    const expectedPaid = round2(total - dueAmount + advanceAmount);
+    if (Math.abs(expectedPaid - paidAmount) > TOLERANCE) {
+        throw new InvariantError(
+            `INV-3c [${orderNumber}]: payment fields inconsistent. ` +
+            `paid=${paidAmount}, total=${total}, due=${dueAmount}, advance=${advanceAmount} ` +
+            `(expected paid=${expectedPaid})`,
+            'INV_PAYMENT_FIELDS_INCONSISTENT'
         );
     }
 
