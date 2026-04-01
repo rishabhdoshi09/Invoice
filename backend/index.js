@@ -1,3 +1,6 @@
+// ─── LOAD .env FIRST — must be before ANY other require ──────────────────────
+require('dotenv').config();
+
 // ─── STARTUP ENV VALIDATION ──────────────────────────────────────────────────
 // Fail fast if required environment variables are missing or obviously insecure.
 // This runs before any module that imports from src/ so auth.js also gets the
