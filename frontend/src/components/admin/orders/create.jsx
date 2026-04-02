@@ -716,7 +716,10 @@ export const CreateOrder = () => {
     return true;
   }, [dispatch, formik]);
 
-  // Helper: focus main price input, with 2xx last-two-digit selection
+  // Helper: focus main price input, with 2xx tens-digit selection
+  // For 200-299: select only the TENS digit (index 1) so keypad digit replaces just that one char.
+  // e.g. "250" → selects "5" → click 7 → "270" ✓
+  // Selecting 2 chars would replace "50" with "7" → "27" (wrong — 2 digits, breaks keypad).
   const focusMainPriceInput = useCallback(() => {
     try {
       setTimeout(() => {
@@ -724,11 +727,12 @@ export const CreateOrder = () => {
         if (!el || typeof el.focus !== 'function') return;
         el.focus();
         const val = String(el.value || '');
-               const len = val.length;
+        const len = val.length;
         if (typeof el.setSelectionRange === 'function') {
           const num = Number(val);
           if (Number.isFinite(num) && num >= 200 && num <= 299 && len >= 3) {
-            el.setSelectionRange(len - 2, len);
+            // Select only the tens digit (position 1), preserving the units digit
+            el.setSelectionRange(len - 2, len - 1);
           } else {
             el.setSelectionRange(0, len);
           }

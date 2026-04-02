@@ -73,7 +73,7 @@ module.exports = (sequelize, Sequelize) => {
             tableName: 'products',
             timestamps: true,
             indexes: [
-                { fields: ['hsnCode'], where: { hsnCode: { [Sequelize.Op ? Sequelize.Op.ne : 'ne']: null } } },
+                { fields: ['hsnCode'] },
                 { fields: ['isActive'] }
             ]
         }
