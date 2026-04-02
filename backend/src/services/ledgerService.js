@@ -373,7 +373,8 @@ class LedgerService {
                 createdBy: batchData.createdBy || null
             }, { transaction });
 
-            // Create entries
+            // Create entries — stamp transactionDate from batch for fast date queries
+            const entryDate = batch.transactionDate || null;
             const entries = [];
             for (const entry of batchData.entries) {
                 const ledgerEntry = await db.ledgerEntry.create({
@@ -381,7 +382,8 @@ class LedgerService {
                     accountId: entry.accountId,
                     debit: Number(entry.debit) || 0,
                     credit: Number(entry.credit) || 0,
-                    narration: entry.narration || null
+                    narration: entry.narration || null,
+                    transactionDate: entryDate
                 }, { transaction });
                 entries.push(ledgerEntry);
             }

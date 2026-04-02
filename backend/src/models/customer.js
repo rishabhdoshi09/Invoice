@@ -12,29 +12,53 @@ module.exports = (sequelize, Sequelize) => {
                 type: Sequelize.STRING,
                 allowNull: false
             },
-            mobile: {
-                type: Sequelize.STRING
+            mobile: { type: Sequelize.STRING },
+            email:  { type: Sequelize.STRING },
+            address: { type: Sequelize.TEXT },
+
+            // GST fields
+            gstin: { type: Sequelize.STRING(20), allowNull: true },
+            gstType: {
+                type: Sequelize.ENUM('REGISTERED', 'UNREGISTERED', 'CONSUMER', 'COMPOSITION'),
+                allowNull: false,
+                defaultValue: 'UNREGISTERED'
             },
-            email: {
-                type: Sequelize.STRING
-            },
-            address: {
-                type: Sequelize.TEXT
-            },
-            gstin: {
-                type: Sequelize.STRING
-            },
+            stateCode:  { type: Sequelize.STRING(5),  allowNull: true },
+            stateName:  { type: Sequelize.STRING(50), allowNull: true },
+            panNumber:  { type: Sequelize.STRING(20), allowNull: true },
+
+            // Balances
             openingBalance: {
-                type: Sequelize.DECIMAL(15, 2)
+                type: Sequelize.DECIMAL(15, 2),
+                allowNull: false,
+                defaultValue: 0,
+                comment: 'Positive = customer owes us (receivable). Negative = we owe customer (advance).'
             },
-            currentBalance: {
-                type: Sequelize.DECIMAL(15, 2)
+            openingBalanceDate: { type: Sequelize.DATEONLY, allowNull: true },
+
+            // Credit control
+            creditLimit: {
+                type: Sequelize.DECIMAL(15, 2),
+                allowNull: false,
+                defaultValue: 0
             },
-            notes: {
-                type: Sequelize.TEXT,
-                allowNull: true,
-                defaultValue: null
-            }
+            creditDays: {
+                type: Sequelize.INTEGER,
+                allowNull: false,
+                defaultValue: 0
+            },
+
+            notes:    { type: Sequelize.TEXT, allowNull: true, defaultValue: null },
+            isActive: { type: Sequelize.BOOLEAN, allowNull: false, defaultValue: true }
+        },
+        {
+            tableName: 'customers',
+            timestamps: true,
+            indexes: [
+                { fields: ['mobile'] },
+                { fields: ['gstin']  },
+                { fields: ['isActive'], where: { isActive: true } }
+            ]
         }
     );
 
