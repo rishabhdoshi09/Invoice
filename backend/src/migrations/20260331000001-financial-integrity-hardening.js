@@ -138,11 +138,11 @@ module.exports = {
                 "advanceAmount" = GREATEST(0, ROUND(
                     CAST("paidAmount" AS NUMERIC) - CAST(total AS NUMERIC), 2
                 )),
-                "paymentStatus" = CASE
+                "paymentStatus" = (CASE
                     WHEN CAST("paidAmount" AS NUMERIC) >= CAST(total AS NUMERIC) - 0.01 THEN 'paid'
                     WHEN CAST("paidAmount" AS NUMERIC) > 0.01 THEN 'partial'
                     ELSE 'unpaid'
-                END;
+                END)::"enum_orders_paymentStatus";
         `);
 
         // Step 4d: Add CHECK constraints — all rows are now clean.
