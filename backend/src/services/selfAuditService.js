@@ -499,14 +499,15 @@ class SelfAuditService {
         // Silently skip if table doesn't exist yet.
         try {
             const { randomUUID } = require('crypto');
+            const now = new Date();
             await this.db.sequelize.query(`
                 INSERT INTO reconciliation_runs
                   (id, "triggeredBy", "startedAt", "finishedAt", "durationMs",
                    "overallStatus", "passCount", "failCount", "skipCount", "errorCount",
-                   "haltCount", "criticalCount", "warningCount", results)
+                   "haltCount", "criticalCount", "warningCount", results, "createdAt", "updatedAt")
                 VALUES (:id, :triggeredBy, :startedAt, :finishedAt, :durationMs,
                         :overallStatus, :passCount, :failCount, :skipCount, :errorCount,
-                        :haltCount, :criticalCount, :warningCount, :results)
+                        :haltCount, :criticalCount, :warningCount, :results, :createdAt, :updatedAt)
             `, {
                 replacements: {
                     id: randomUUID(),
@@ -522,7 +523,9 @@ class SelfAuditService {
                     haltCount: report.summary.sevCounts.HALT || 0,
                     criticalCount: report.summary.sevCounts.CRITICAL || 0,
                     warningCount: report.summary.sevCounts.WARNING || 0,
-                    results: JSON.stringify(report.results)
+                    results: JSON.stringify(report.results),
+                    createdAt: now,
+                    updatedAt: now
                 }
             });
         } catch (e) {
