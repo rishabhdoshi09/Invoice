@@ -24,23 +24,77 @@ if (process.env.JWT_SECRET.length < 32) {
     process.exit(1);
 }
 
-const express = require('express');
-const router = express.Router();
-const logger = require('morgan');
-const cors = require('cors');
-const db = require('./src/models');
-const compression = require('compression');
+const express    = require('express');
+const router     = express.Router();
+const logger     = require('morgan');
+const cors       = require('cors');
+const helmet     = require('helmet');
+const rateLimit  = require('express-rate-limit');
+const db         = require('./src/models');
+const compression  = require('compression');
 const cookieParser = require('cookie-parser');
-const bodyParser = require('body-parser');
-const path = require('path');
+const bodyParser   = require('body-parser');
+const path         = require('path');
 
 const app = express();
 
-app.use(cors());
+// ─── Security headers ─────────────────────────────────────────────────────────
+// helmet sets X-Content-Type-Options, X-Frame-Options, HSTS, etc.
+app.use(helmet({
+    // CSP is intentionally left to application teams; skip for now to avoid
+    // breaking the embedded React frontend.
+    contentSecurityPolicy: false
+}));
+
+// ─── CORS — restrict to approved origins ─────────────────────────────────────
+// Set CORS_ORIGINS in .env as a comma-separated list of allowed origins.
+// Example: CORS_ORIGINS=http://localhost:3000,https://invoice.example.com
+// Falls back to localhost:3000 in development when env var is absent.
+const allowedOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
+    : ['http://localhost:3000', `http://localhost:${process.env.PORT || 8001}`];
+
+app.use(cors({
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, server-to-server)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin)) return callback(null, true);
+        callback(new Error(`CORS: Origin '${origin}' is not allowed`));
+    },
+    credentials: true
+}));
+
+// ─── Rate limiting ────────────────────────────────────────────────────────────
+// Strict limit on authentication endpoints to block brute-force and credential
+// stuffing attacks. 10 attempts per 15 minutes per IP.
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { status: 429, message: 'Too many login attempts. Please try again after 15 minutes.' }
+});
+
+// Broad API rate limit — 300 requests per minute per IP to prevent DoS.
+const apiLimiter = rateLimit({
+    windowMs: 60 * 1000,        // 1 minute
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { status: 429, message: 'Too many requests. Please slow down.' }
+});
+
 app.use(logger('dev'));
 
 app.use(bodyParser.json({ limit: '100mb'}));
 app.use(bodyParser.urlencoded({ limit: '100mb', extended: false }));
+
+// Apply auth rate limiter before route registration
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/setup', authLimiter);
+
+// Apply broad API limiter
+app.use('/api', apiLimiter);
 
 require('./src/routes')(router);
 app.use('/api', router);
@@ -66,61 +120,10 @@ app.listen(PORT, async () => {
     await db.sequelize.authenticate();
     console.log('Connection has been established successfully.');
 
-    await db.sequelize.sync({ force: false });
-    console.log('Database Synced Successfully');
-
-    // Safe column migrations — adds missing columns without breaking existing ones
-    try {
-      await db.sequelize.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT NULL`);
-    } catch (e) { /* column may already exist */ }
-
-    // Add paymentMode column to orders (CASH/CREDIT) — prevents double-counting in Day Start
-    try {
-      await db.sequelize.query(`DO $$ BEGIN CREATE TYPE "enum_orders_paymentMode" AS ENUM ('CASH', 'CREDIT'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);
-      await db.sequelize.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS "paymentMode" "enum_orders_paymentMode" NOT NULL DEFAULT 'CREDIT'`);
-
-      // Step 1: Fix misclassified orders — any order with linked customer receipts (non-PAY-TOGGLE) is CREDIT
-      const [fixedToCredit] = await db.sequelize.query(`
-        UPDATE orders SET "paymentMode" = 'CREDIT'
-        WHERE "paymentMode" = 'CASH'
-          AND "isDeleted" = false
-          AND EXISTS (
-            SELECT 1 FROM payments
-            WHERE payments."referenceId"::text = orders.id::text
-              AND payments."referenceType" = 'order'
-              AND payments."partyType" = 'customer'
-              AND (payments."isDeleted" = false OR payments."isDeleted" IS NULL)
-              AND (payments."paymentNumber" IS NULL OR payments."paymentNumber" NOT LIKE 'PAY-TOGGLE-%')
-          )
-        RETURNING id
-      `);
-      if (fixedToCredit.length > 0) console.log(`[MIGRATION] Fixed ${fixedToCredit.length} misclassified CASH→CREDIT orders (had linked receipts)`);
-
-      // Step 2: Backfill remaining CREDIT→CASH for orders that are paid at POS with NO linked receipts
-      const [backfilled] = await db.sequelize.query(`
-        UPDATE orders SET "paymentMode" = 'CASH'
-        WHERE "paymentMode" = 'CREDIT'
-          AND "paymentStatus" = 'paid'
-          AND "paidAmount" >= "total"
-          AND "isDeleted" = false
-          AND NOT EXISTS (
-            SELECT 1 FROM payments
-            WHERE payments."referenceId"::text = orders.id::text
-              AND payments."referenceType" = 'order'
-              AND payments."partyType" = 'customer'
-              AND (payments."isDeleted" = false OR payments."isDeleted" IS NULL)
-              AND (payments."paymentNumber" IS NULL OR payments."paymentNumber" NOT LIKE 'PAY-TOGGLE-%')
-          )
-        RETURNING id
-      `);
-      if (backfilled.length > 0) console.log(`[MIGRATION] Backfilled ${backfilled.length} orders as CASH mode (paid at POS, no receipts)`);
-    } catch (e) { console.warn('[MIGRATION] paymentMode:', e.message); }
-
-    // Add ORDER_PAYMENT_STATUS and CONFIRM_LINK to audit_logs action enum
-    try {
-      await db.sequelize.query("ALTER TYPE enum_audit_logs_action ADD VALUE IF NOT EXISTS 'ORDER_PAYMENT_STATUS'");
-      await db.sequelize.query("ALTER TYPE enum_audit_logs_action ADD VALUE IF NOT EXISTS 'CONFIRM_LINK'");
-    } catch (e) { /* values may already exist */ }
+    // Schema changes are managed exclusively through versioned migrations.
+    // Run: npx sequelize-cli db:migrate
+    // Do NOT call sequelize.sync() here — it bypasses migration history and
+    // causes non-deterministic schema drift across environments.
 
     // Start scheduled jobs (async, non-blocking)
     try {

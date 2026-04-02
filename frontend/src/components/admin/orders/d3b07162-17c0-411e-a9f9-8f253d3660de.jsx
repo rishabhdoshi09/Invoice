@@ -1,5 +1,7 @@
 import moment from 'moment/moment';
 import { useEffect, useState } from 'react';
+// round2 matches the backend's rounding contract: 2 decimal places via integer arithmetic
+const round2 = (n) => Math.round(Number(n) * 100) / 100;
 import { useFormik } from "formik";
 import { useDispatch, useSelector } from 'react-redux';
 import { Autocomplete, Box, Button, Card, CardContent, Grid, TextField, Typography, Select, MenuItem } from '@mui/material';
@@ -71,8 +73,8 @@ export const CreateOrder = () => {
         const obj = {};
         if(id === 'taxPercent'){
             obj['taxPercent'] = Number(value);
-            obj['tax'] = Math.round(orderProps.subTotal * ( value / 100));
-            obj['total'] = orderProps.subTotal + obj['tax'];
+            obj['tax'] = round2(orderProps.subTotal * ( value / 100));
+            obj['total'] = round2(orderProps.subTotal + obj['tax']);
         }
 
         setOrderProps((prevProps) => {
@@ -90,8 +92,8 @@ export const CreateOrder = () => {
 
             const item = orderProps.orderItems[index];
 
-            const subTotal = Math.round(orderProps.subTotal - item.totalPrice);
-            const tax = Math.round(subTotal * (orderProps.taxPercent / 100));
+            const subTotal = round2(orderProps.subTotal - item.totalPrice);
+            const tax = round2(subTotal * (orderProps.taxPercent / 100));
 
             const newItem = {
                 subTotal: subTotal,
@@ -159,8 +161,8 @@ export const CreateOrder = () => {
         },
         onSubmit: async (values) => {
 
-            const subTotal = Math.round(orderProps.subTotal + values.totalPrice);
-            const tax = Math.round(subTotal * (orderProps.taxPercent / 100));
+            const subTotal = round2(orderProps.subTotal + values.totalPrice);
+            const tax = round2(subTotal * (orderProps.taxPercent / 100));
 
             const newItem = {
                 subTotal: subTotal,

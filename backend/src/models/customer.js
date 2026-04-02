@@ -35,6 +35,12 @@ module.exports = (sequelize, Sequelize) => {
                 comment: 'Positive = customer owes us (receivable). Negative = we owe customer (advance).'
             },
             openingBalanceDate: { type: Sequelize.DATEONLY, allowNull: true },
+            currentBalance: {
+                type: Sequelize.DECIMAL(15, 2),
+                allowNull: false,
+                defaultValue: 0,
+                comment: 'Running receivable balance. Updated on every invoice creation, payment, and reversal.'
+            },
 
             // Credit control
             creditLimit: {

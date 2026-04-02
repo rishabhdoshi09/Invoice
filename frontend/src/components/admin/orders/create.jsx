@@ -218,10 +218,12 @@ const isRestrictedPrice = (price) => {
 ------------------------- */
 function toNumber(n){ const x = Number(n); return Number.isFinite(x) ? x : 0; }
 // eslint-disable-next-line no-unused-vars
+// round2 mirrors the backend's rounding contract (Math.round to 2 decimal places)
+function round2(n) { return Math.round(Number(n) * 100) / 100; }
 function recomputeTotals(order) {
-  const sub = (order.orderItems || []).reduce((s, it) => s + toNumber(it.totalPrice), 0);
-  const tax = Math.round(sub * (toNumber(order.taxPercent) / 100));
-  const total = sub + tax;
+  const sub = round2((order.orderItems || []).reduce((s, it) => s + toNumber(it.totalPrice), 0));
+  const tax = round2(sub * (toNumber(order.taxPercent) / 100));
+  const total = round2(sub + tax);
   return { subTotal: sub, tax, total };
 }
 // eslint-disable-next-line no-unused-vars
@@ -1930,7 +1932,7 @@ export const CreateOrder = () => {
                 <TextField size="small" id="customerMobile" name="customerMobile" label="Customer Mobile" value={orderProps.customerMobile} onChange={(e)=>{ const { id, value } = e.target; setOrderProps((prevProps) => ({ ...prevProps, [id]: value })); }} fullWidth />
               </Grid>
               <Grid item xs={12} md={4}>
-                <TextField size="small" type='number' id="taxPercent" name="taxPercent" label="Tax Percentage" value={orderProps.taxPercent} onChange={(e)=>{ const { id, value } = e.target; const obj = {}; if (id === 'taxPercent') { const taxPct = Number(value) || 0; obj['taxPercent'] = taxPct; const subTotal = orderProps.subTotal; obj['tax'] = Math.round(subTotal * (taxPct / 100)); obj['total'] = subTotal + obj['tax']; } setOrderProps((prevProps) => ({ ...prevProps, [id]: value, ...obj })); }} required fullWidth />
+                <TextField size="small" type='number' id="taxPercent" name="taxPercent" label="Tax Percentage" value={orderProps.taxPercent} onChange={(e)=>{ const { id, value } = e.target; const obj = {}; if (id === 'taxPercent') { const taxPct = Number(value) || 0; obj['taxPercent'] = taxPct; const subTotal = orderProps.subTotal; obj['tax'] = round2(subTotal * (taxPct / 100)); obj['total'] = round2(subTotal + obj['tax']); } setOrderProps((prevProps) => ({ ...prevProps, [id]: value, ...obj })); }} required fullWidth />
               </Grid>
 
               <Grid item xs={12} md={6} mt={2}>
