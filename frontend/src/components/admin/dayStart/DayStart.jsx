@@ -80,6 +80,7 @@ export const DayStart = () => {
         data: realTimeSummary,  // Already transformed by RTK Query (response.data)
         isLoading: loadingRealTime,
         isFetching: fetchingRealTime,
+        isError: realTimeError,
         refetch: refetchRealTime
     } = useGetRealTimeSummaryQuery(selectedDate, {
         refetchOnFocus: true,
@@ -184,6 +185,13 @@ export const DayStart = () => {
 
     return (
         <Box sx={{ p: 2 }}>
+            {realTimeError && (
+                <Alert severity="error" sx={{ mb: 2 }} action={
+                    <Button size="small" onClick={handleRefreshAll}>Retry</Button>
+                }>
+                    Failed to load today's data from server. Check if the backend is running and try Refresh.
+                </Alert>
+            )}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h4" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <AccountBalance color="primary" />
