@@ -45,14 +45,37 @@ read -r confirm
 
 # ── Find USB drive with InvoiceBackups ───────────────────────
 step "Finding USB drive"
-SYSTEM_VOLS="Macintosh HD|Recovery|VM|Preboot|Update|Data|com.apple"
-USB_DRIVES=()
-while IFS= read -r vol; do
-    [[ "$(basename "$vol")" =~ $SYSTEM_VOLS ]] && continue
-    [ -d "$vol/InvoiceBackups" ] && USB_DRIVES+=("$vol")
-done < <(find /Volumes -maxdepth 1 -mindepth 1 -type d 2>/dev/null)
 
-[ ${#USB_DRIVES[@]} -gt 0 ] || die "No USB drive with InvoiceBackups found. Insert your pendrive."
+ALL_USB=()
+while IFS= read -r line; do
+    [[ "$line" =~ ^(/dev/disk[0-9]+)[[:space:]]*\(external.*physical ]]] || continue
+    disk="${BASH_REMATCH[1]}"
+    while IFS= read -r vol; do
+        [ -d "$vol" ] && ALL_USB+=("$vol")
+    done < <(diskutil list "$disk" 2>/dev/null \
+             | awk '/Apple_HFS|Windows_NTFS|ExFAT|DOS_FAT|Apple_APFS/{print $NF}' \
+             | while read -r id; do
+                 mp=$(diskutil info "$id" 2>/dev/null | awk -F': +' '/Mount Point/{print $2}')
+                 echo "$mp"
+               done)
+done < <(diskutil list external physical 2>/dev/null)
+
+if [ ${#ALL_USB[@]} -eq 0 ]; then
+    while IFS= read -r vol; do
+        protocol=$(diskutil info "$vol" 2>/dev/null | awk -F': +' '/Protocol/{print $2}')
+        removable=$(diskutil info "$vol" 2>/dev/null | awk -F': +' '/Removable Media/{print $2}')
+        if [[ "$protocol" =~ USB|SD|Thunderbolt ]] || [[ "$removable" =~ Removable|Yes ]]; then
+            ALL_USB+=("$vol")
+        fi
+    done < <(find /Volumes -maxdepth 1 -mindepth 1 -type d 2>/dev/null)
+fi
+
+USB_DRIVES=()
+for vol in "${ALL_USB[@]}"; do
+    [ -d "$vol/InvoiceBackups" ] && USB_DRIVES+=("$vol")
+done
+
+[ ${#USB_DRIVES[@]} -gt 0 ] || die "No USB pendrive with InvoiceBackups found.\nInsert the pendrive you used for backup and try again."
 
 if [ ${#USB_DRIVES[@]} -eq 1 ]; then
     PENDRIVE="${USB_DRIVES[0]}"

@@ -55,16 +55,45 @@ DB_PASS="${PASSWORD:-}"
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-5432}"
 
-# ── Auto-detect USB drive ─────────────────────────────────────
+# ── Auto-detect USB drive (Mac: physical external disks only) ─
 step "Detecting USB drive"
-SYSTEM_VOLS="Macintosh HD|Recovery|VM|Preboot|Update|Data|com.apple"
-USB_DRIVES=()
-while IFS= read -r vol; do
-    [[ "$(basename "$vol")" =~ $SYSTEM_VOLS ]] && continue
-    USB_DRIVES+=("$vol")
-done < <(find /Volumes -maxdepth 1 -mindepth 1 -type d 2>/dev/null)
 
-[ ${#USB_DRIVES[@]} -gt 0 ] || die "No USB drive found. Insert your pendrive and try again."
+# diskutil list external physical gives ONLY real USB/SD/external disks
+# — excludes DMG disk images, network drives, Recovery, VM, etc.
+USB_DRIVES=()
+while IFS= read -r line; do
+    # Lines like: /dev/disk4 (external, physical):
+    [[ "$line" =~ ^(/dev/disk[0-9]+)[[:space:]]*\(external.*physical ]]] || continue
+    disk="${BASH_REMATCH[1]}"
+    # Find all mounted volumes on this physical disk
+    while IFS= read -r vol; do
+        [ -d "$vol" ] && [ -w "$vol" ] && USB_DRIVES+=("$vol")
+    done < <(diskutil list "$disk" 2>/dev/null \
+             | awk '/Apple_HFS|Windows_NTFS|ExFAT|DOS_FAT|Apple_APFS/{print $NF}' \
+             | while read -r id; do
+                 mp=$(diskutil info "$id" 2>/dev/null | awk -F': +' '/Mount Point/{print $2}')
+                 echo "$mp"
+               done)
+done < <(diskutil list external physical 2>/dev/null)
+
+# Fallback: if diskutil found no mounted writable volumes, list all /Volumes
+# entries that are NOT disk images (no corresponding .dmg source)
+if [ ${#USB_DRIVES[@]} -eq 0 ]; then
+    while IFS= read -r vol; do
+        # Check via diskutil that this volume is on a removable/external disk
+        protocol=$(diskutil info "$vol" 2>/dev/null \
+                   | awk -F': +' '/Protocol/{print $2}')
+        removable=$(diskutil info "$vol" 2>/dev/null \
+                    | awk -F': +' '/Removable Media/{print $2}')
+        if [[ "$protocol" =~ USB|SD|Thunderbolt ]] || [[ "$removable" =~ Removable|Yes ]]; then
+            [ -w "$vol" ] && USB_DRIVES+=("$vol")
+        fi
+    done < <(find /Volumes -maxdepth 1 -mindepth 1 -type d 2>/dev/null)
+fi
+
+if [ ${#USB_DRIVES[@]} -eq 0 ]; then
+    die "No USB pendrive found. Insert your pendrive and try again.\n\n  (Disk images and Chrome DMGs are not pendrives)"
+fi
 
 if [ ${#USB_DRIVES[@]} -eq 1 ]; then
     PENDRIVE="${USB_DRIVES[0]}"
@@ -72,14 +101,14 @@ if [ ${#USB_DRIVES[@]} -eq 1 ]; then
 else
     echo -e "${YELLOW}Multiple drives found — pick one:${NC}"
     for i in "${!USB_DRIVES[@]}"; do
-        echo "  [$((i+1))] ${USB_DRIVES[$i]}"
+        sz=$(df -h "${USB_DRIVES[$i]}" | awk 'NR==2{print $2}')
+        free=$(df -h "${USB_DRIVES[$i]}" | awk 'NR==2{print $4}')
+        echo "  [$((i+1))] $(basename "${USB_DRIVES[$i]}")  (size: $sz, free: $free)"
     done
     echo -n "Enter number: "
     read -r choice
     PENDRIVE="${USB_DRIVES[$((choice-1))]}"
 fi
-
-[ -w "$PENDRIVE" ] || die "Drive is not writable. Check if it is locked."
 
 # ── Check free space ──────────────────────────────────────────
 AVAIL_MB=$(df -m "$PENDRIVE" | awk 'NR==2{print $4}')
