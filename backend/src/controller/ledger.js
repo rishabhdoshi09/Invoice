@@ -1,6 +1,7 @@
 const db = require('../models');
 const LedgerService = require('../services/ledgerService');
 const LedgerMigrationService = require('../services/ledgerMigrationService');
+const { ensureGSTAccounts } = require('../services/accountingEngine');
 
 const ledgerService = new LedgerService(db);
 const migrationService = new LedgerMigrationService(db);
@@ -14,6 +15,8 @@ module.exports = {
     initializeAccounts: async (req, res) => {
         try {
             const result = await ledgerService.initializeChartOfAccounts();
+            // Also seed GST sub-accounts (CGST/SGST/IGST payable + input credit)
+            await ensureGSTAccounts().catch(e => console.warn('[LEDGER] GST accounts seed failed:', e.message));
             return res.json({ status: 200, message: 'Chart of accounts initialized', data: result });
         } catch (error) {
             console.error('Error initializing accounts:', error);

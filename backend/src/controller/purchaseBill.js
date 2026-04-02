@@ -3,6 +3,7 @@ const Services = require('../services');
 const Validations = require('../validations');
 const db = require('../models');
 const { postPurchaseToLedger, reversePurchaseLedger } = require('../services/realTimeLedger');
+const { updateStock } = require('../services/accountingEngine');
 
 module.exports = {
     createPurchaseBill: async (req, res) => {
@@ -40,6 +41,21 @@ module.exports = {
 
                 purchaseItems = purchaseItems.map(item => { return {...item, purchaseBillId: purchaseBillId } });
                 await Services.purchaseItem.addPurchaseItems(purchaseItems, transaction);
+
+                // Increase stock for each item that has a linked product
+                for (const item of purchaseItems) {
+                    if (item.productId) {
+                        await updateStock(
+                            item.productId,
+                            Number(item.quantity),
+                            'IN',
+                            purchaseBillId,
+                            'purchase',
+                            transaction,
+                            purchaseObj.billDate || new Date()
+                        );
+                    }
+                }
 
                 // Update supplier balance
                 const supplier = await Services.supplier.getSupplier({ id: purchaseObj.supplierId });
@@ -91,19 +107,16 @@ module.exports = {
                 }
 
                 // === NEW DOUBLE-ENTRY LEDGER: Real-time posting ===
+                // Throws on failure → rolls back entire transaction (same as order.js)
                 if (purchaseObj.supplierId) {
-                    try {
-                        const accountsExist = await db.account.count({ transaction });
-                        if (accountsExist > 0) {
-                            await postPurchaseToLedger(
-                                { ...purchaseObj, id: purchaseBillId, billNumber, supplierName: supplier?.name || 'Unknown Supplier', createdAt: new Date() },
-                                transaction
-                            );
-                        } else {
-                            console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — purchase ${billNumber} not posted to ledger`);
-                        }
-                    } catch (ledgerError) {
-                        console.error(`[LEDGER] Failed to post purchase ${billNumber}:`, ledgerError.message);
+                    const accountsExist = await db.account.count({ transaction });
+                    if (accountsExist > 0) {
+                        await postPurchaseToLedger(
+                            { ...purchaseObj, id: purchaseBillId, billNumber, supplierName: supplier?.name || 'Unknown Supplier', createdAt: new Date() },
+                            transaction
+                        );
+                    } else {
+                        console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — purchase ${billNumber} not posted to ledger`);
                     }
                 }
 

@@ -6,6 +6,7 @@ const db = require('../models');
 const { createAuditLog } = require('../middleware/auditLogger');
 const { postInvoiceToLedger, reverseInvoiceLedger, postPaymentStatusToggleToLedger, postInvoiceCashReceiptToLedger } = require('../services/realTimeLedger');
 const { assertOrderInvariants } = require('../services/orderInvariants');
+const { updateStock } = require('../services/accountingEngine');
 const telegram = require('../services/telegramAlert');
 
 // Helper to get client IP
@@ -193,6 +194,21 @@ module.exports = {
                     }; 
                 });
                 await Services.orderItems.addOrderItems(orderItems, transaction);
+
+                // Deduct stock for each item that has a linked product
+                for (const item of orderItems) {
+                    if (item.productId) {
+                        await updateStock(
+                            item.productId,
+                            Number(item.quantity),
+                            'OUT',
+                            orderId,
+                            'sale',
+                            transaction,
+                            orderObj.orderDate || new Date()
+                        );
+                    }
+                }
 
                 // Update daily summary
                 try {

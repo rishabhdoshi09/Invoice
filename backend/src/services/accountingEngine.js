@@ -535,31 +535,41 @@ async function ensureGSTAccounts() {
 //  10. STOCK UPDATE — update product.currentStock within a transaction
 //      direction: 'IN' (purchase) | 'OUT' (sale) | 'ADJUSTMENT'
 // ══════════════════════════════════════════════════════════════════════════
-async function updateStock(productId, quantity, direction, referenceId, referenceType, transaction) {
+async function updateStock(productId, quantity, direction, referenceId, referenceType, transaction, txDate = null) {
     if (!productId || !quantity) return { skipped: true, reason: 'no_product_or_qty' };
 
-    const product = await db.product.findByPk(productId, { transaction, lock: transaction.LOCK.UPDATE });
-    if (!product) return { skipped: true, reason: 'product_not_found' };
+    try {
+        const product = await db.product.findByPk(productId, { transaction, lock: transaction.LOCK.UPDATE });
+        if (!product) return { skipped: true, reason: 'product_not_found' };
+        // If product model doesn't have currentStock yet (migration pending), skip gracefully
+        if (product.currentStock === undefined) return { skipped: true, reason: 'currentStock_column_missing' };
 
-    const prev = Number(product.currentStock) || 0;
-    let next;
-    if (direction === 'IN')         next = prev + Number(quantity);
-    else if (direction === 'OUT')   next = prev - Number(quantity);
-    else                            next = Number(quantity); // ADJUSTMENT = set absolute
+        const prev = Number(product.currentStock) || 0;
+        let next;
+        if (direction === 'IN')       next = prev + Number(quantity);
+        else if (direction === 'OUT') next = prev - Number(quantity);
+        else                          next = Number(quantity); // ADJUSTMENT = set absolute
 
-    await product.update({ currentStock: next }, { transaction });
+        await product.update({ currentStock: next }, { transaction });
 
-    await db.stockTransaction.create({
-        productId,
-        type:            direction === 'IN' ? 'in' : direction === 'OUT' ? 'out' : 'adjustment',
-        quantity:        Math.abs(Number(quantity)),
-        previousStock:   prev,
-        newStock:        next,
-        referenceId:     referenceId || null,
-        referenceType:   referenceType || null
-    }, { transaction });
+        const date = txDate ? new Date(txDate) : new Date();
+        await db.stockTransaction.create({
+            productId,
+            type:            direction === 'IN' ? 'in' : direction === 'OUT' ? 'out' : 'adjustment',
+            quantity:        Math.abs(Number(quantity)),
+            previousStock:   prev,
+            newStock:        next,
+            referenceId:     referenceId || null,
+            referenceType:   referenceType || null,
+            transactionDate: date.toISOString().slice(0, 10)
+        }, { transaction });
 
-    return { updated: true, previousStock: prev, newStock: next };
+        return { updated: true, previousStock: prev, newStock: next };
+    } catch (err) {
+        // Non-fatal: stock tracking should not block order/purchase creation
+        console.error(`[AE] updateStock failed for product ${productId}: ${err.message}`);
+        return { skipped: true, reason: err.message };
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
