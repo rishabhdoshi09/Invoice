@@ -2766,6 +2766,7 @@ export const CreateOrder = () => {
         onClose={() => setEditNoteDialog({ open: false, index: -1, value: '' })}
         maxWidth="xs"
         fullWidth
+        TransitionProps={{ onEntered: () => document.getElementById('edit-display-name-input')?.focus() }}
       >
         <DialogTitle>Edit Display Name</DialogTitle>
         <DialogContent>
@@ -2774,6 +2775,7 @@ export const CreateOrder = () => {
           </DialogContentText>
           <TextField
             autoFocus
+            id="edit-display-name-input"
             fullWidth
             size="small"
             label="Display name / note"
