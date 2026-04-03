@@ -21,33 +21,52 @@
 
 module.exports = {
     up: async (queryInterface, Sequelize) => {
+        // ========= HELPERS (no transaction — used both inside and outside) =========
+        const tableExists = async (name, t) => {
+            const [results] = await queryInterface.sequelize.query(
+                `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = '${name}')`,
+                t ? { transaction: t } : {}
+            );
+            return results[0].exists;
+        };
+
+        const columnExists = async (table, column, t) => {
+            const [results] = await queryInterface.sequelize.query(
+                `SELECT EXISTS (SELECT FROM information_schema.columns WHERE table_name = '${table}' AND column_name = '${column}')`,
+                t ? { transaction: t } : {}
+            );
+            return results[0].exists;
+        };
+
+        const enumValueExists = async (typeName, value) => {
+            const [results] = await queryInterface.sequelize.query(
+                `SELECT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = '${value}' AND enumtypid = (SELECT oid FROM pg_type WHERE typname = '${typeName}'))`
+            );
+            return results[0].exists;
+        };
+
+        // ========= 8. NEW ENUM VALUES — must run OUTSIDE transaction in PostgreSQL =========
+        // ALTER TYPE ... ADD VALUE cannot execute inside a transaction block.
+        const enumTypeName = 'enum_journal_batches_referenceType';
+        const typeExists = async (name) => {
+            const [r] = await queryInterface.sequelize.query(
+                `SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = '${name}')`
+            );
+            return r[0].exists;
+        };
+        if (await typeExists(enumTypeName)) {
+            for (const val of ['PAYMENT_TOGGLE', 'INVOICE_CASH']) {
+                if (!(await enumValueExists(enumTypeName, val))) {
+                    await queryInterface.sequelize.query(
+                        `ALTER TYPE "${enumTypeName}" ADD VALUE IF NOT EXISTS '${val}'`
+                    );
+                }
+            }
+        }
+
         const transaction = await queryInterface.sequelize.transaction();
 
         try {
-            // ========= HELPER: Check if table/column exists =========
-            const tableExists = async (name) => {
-                const [results] = await queryInterface.sequelize.query(
-                    `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = '${name}')`,
-                    { transaction }
-                );
-                return results[0].exists;
-            };
-
-            const columnExists = async (table, column) => {
-                const [results] = await queryInterface.sequelize.query(
-                    `SELECT EXISTS (SELECT FROM information_schema.columns WHERE table_name = '${table}' AND column_name = '${column}')`,
-                    { transaction }
-                );
-                return results[0].exists;
-            };
-
-            const enumValueExists = async (typeName, value) => {
-                const [results] = await queryInterface.sequelize.query(
-                    `SELECT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = '${value}' AND enumtypid = (SELECT oid FROM pg_type WHERE typname = '${typeName}'))`,
-                    { transaction }
-                );
-                return results[0].exists;
-            };
 
             // ========= 1. ACCOUNTS TABLE =========
             if (!(await tableExists('accounts'))) {
@@ -176,18 +195,6 @@ module.exports = {
             }
             if (!(await columnExists('orders', 'notes'))) {
                 await queryInterface.addColumn('orders', 'notes', { type: Sequelize.TEXT, allowNull: true }, { transaction });
-            }
-
-            // ========= 8. NEW ENUM VALUES FOR journal_batches.referenceType =========
-            const enumTypeName = 'enum_journal_batches_referenceType';
-            const newValues = ['PAYMENT_TOGGLE', 'INVOICE_CASH'];
-            for (const val of newValues) {
-                if (!(await enumValueExists(enumTypeName, val))) {
-                    await queryInterface.sequelize.query(
-                        `ALTER TYPE "${enumTypeName}" ADD VALUE IF NOT EXISTS '${val}'`,
-                        { transaction }
-                    );
-                }
             }
 
             // ========= 9. INDEXES =========
