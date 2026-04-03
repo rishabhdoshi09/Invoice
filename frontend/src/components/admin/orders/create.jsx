@@ -2783,6 +2783,7 @@ export const CreateOrder = () => {
             onChange={(e) => setEditNoteDialog(prev => ({ ...prev, value: e.target.value }))}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
+                e.preventDefault();
                 const idx = editNoteDialog.index;
                 const newNote = editNoteDialog.value;
                 setOrderProps((prev) => {
