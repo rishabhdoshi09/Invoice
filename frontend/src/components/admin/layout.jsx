@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { styled, useTheme } from '@mui/material/styles';
 import { Box, CssBaseline, Divider, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, AppBar as MuiAppBar, Drawer as MuiDrawer, Toolbar, Typography, Button, Chip, Menu, MenuItem, Tooltip } from '@mui/material';
-import { ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, Folder as FolderIcon, Menu as MenuIcon, Shop, People, ShoppingCart, Payment, Assessment, CloudDownload, Dashboard, Logout, AccountCircle, Group, Today, AccountBalance, Calculate, Inventory, Search, Keyboard, Book, Security } from '@mui/icons-material';
+import { ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, Folder as FolderIcon, Menu as MenuIcon, Shop, People, ShoppingCart, Payment, Assessment, CloudDownload, Dashboard, Logout, AccountCircle, Group, Today, AccountBalance, Calculate, Inventory, Search, Keyboard, Book, Security, BackupOutlined } from '@mui/icons-material';
 import { GlobalSearch } from '../common/GlobalSearch';
 import { NotificationBell } from '../common/SmartNotifications';
 import { KeyboardShortcutsHelp } from '../common/KeyboardShortcuts';
@@ -229,9 +229,15 @@ export const Layout = () =>  {
         });
         pages.push({
             key: 'bill-audit',
-            label: 'Bill Audit', 
+            label: 'Bill Audit',
             icon: <Security />,
             path: 'bill-audit'
+        });
+        pages.push({
+            key: 'backup',
+            label: 'Database Backup',
+            icon: <BackupOutlined />,
+            path: 'backup'
         });
     }
 

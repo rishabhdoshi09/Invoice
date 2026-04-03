@@ -19,6 +19,7 @@ import { DailyPayments } from "./components/admin/dailyPayments/DailyPayments";
 import { OutstandingReports } from "./components/admin/reports/outstanding";
 import { TallyExport } from "./components/admin/tally/export";
 import { AdminDashboard } from "./components/admin/dashboard/AdminDashboard";
+import { DatabaseBackup } from "./components/admin/backup/DatabaseBackup";
 import { UserManagement } from "./components/admin/users/UserManagement";
 import { DayStart } from "./components/admin/dayStart/DayStart";
 import { GstExportTool } from "./components/admin/gstExport/GstExportTool";
@@ -185,6 +186,7 @@ const AppContent = () => {
           <Route path="day-start" element={<DayStart />} />
           <Route path="ledger" element={<ProtectedRoute adminOnly><LedgerModule /></ProtectedRoute>} />
           <Route path="bill-audit" element={<ProtectedRoute adminOnly><BillAuditLogs /></ProtectedRoute>} />
+          <Route path="backup" element={<ProtectedRoute adminOnly><DatabaseBackup /></ProtectedRoute>} />
           <Route 
             path="admin-dashboard" 
             element={
