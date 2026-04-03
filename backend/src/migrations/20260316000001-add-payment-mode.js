@@ -16,15 +16,16 @@ module.exports = {
             console.log('paymentMode column already exists, skipping...');
         });
 
-        // Step 3: Backfill existing orders — only if paymentStatus column exists
-        // (on fresh installs it may not exist yet; the consolidated migration adds it later)
-        const [colCheck] = await queryInterface.sequelize.query(
-            `SELECT EXISTS (
-                SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'orders' AND column_name = 'paymentStatus'
-            )`
-        );
-        if (colCheck[0].exists) {
+        // Step 3: Backfill existing orders — only if all referenced columns exist.
+        // On fresh installs paymentStatus/paidAmount/total are added by the
+        // consolidated migration which runs after this one.
+        const columnsNeeded = ['paymentStatus', 'paidAmount', 'total', 'modifiedByName', 'isDeleted'];
+        const colChecks = await Promise.all(columnsNeeded.map(col =>
+            queryInterface.sequelize.query(
+                `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = '${col}')`
+            ).then(([rows]) => rows[0].exists)
+        ));
+        if (colChecks.every(Boolean)) {
             await queryInterface.sequelize.query(`
                 UPDATE orders
                 SET "paymentMode" = 'CASH'
