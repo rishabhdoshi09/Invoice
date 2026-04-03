@@ -16,17 +16,24 @@ module.exports = {
             console.log('paymentMode column already exists, skipping...');
         });
 
-        // Step 3: Backfill existing orders
-        // Orders that were CREATED as paid (paidAmount = total, no modifiedByName) → CASH
-        // Everything else → CREDIT (default)
-        await queryInterface.sequelize.query(`
-            UPDATE orders 
-            SET "paymentMode" = 'CASH' 
-            WHERE "paymentStatus" = 'paid' 
-              AND "paidAmount" >= "total" 
-              AND ("modifiedByName" IS NULL OR "modifiedByName" = '')
-              AND "isDeleted" = false;
-        `);
+        // Step 3: Backfill existing orders — only if paymentStatus column exists
+        // (on fresh installs it may not exist yet; the consolidated migration adds it later)
+        const [colCheck] = await queryInterface.sequelize.query(
+            `SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'orders' AND column_name = 'paymentStatus'
+            )`
+        );
+        if (colCheck[0].exists) {
+            await queryInterface.sequelize.query(`
+                UPDATE orders
+                SET "paymentMode" = 'CASH'
+                WHERE "paymentStatus" = 'paid'
+                  AND "paidAmount" >= "total"
+                  AND ("modifiedByName" IS NULL OR "modifiedByName" = '')
+                  AND "isDeleted" = false;
+            `);
+        }
 
         console.log('[MIGRATION] paymentMode column added and backfilled');
     },
