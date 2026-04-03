@@ -198,12 +198,16 @@ module.exports = {
             }
 
             // ========= 9. INDEXES =========
-            // Safe index creation (ignore if already exists)
+            // Check existence BEFORE creating — catching errors inside a PG transaction
+            // marks the whole transaction aborted even if the JS catch succeeds.
             const createIndexSafe = async (table, columns, options = {}) => {
-                try {
+                const indexName = options.name || `${table}_${columns.join('_')}`;
+                const [rows] = await queryInterface.sequelize.query(
+                    `SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = '${table}' AND indexname = '${indexName}')`,
+                    { transaction }
+                );
+                if (!rows[0].exists) {
                     await queryInterface.addIndex(table, columns, { ...options, transaction });
-                } catch (e) {
-                    if (!e.message.includes('already exists')) throw e;
                 }
             };
 
