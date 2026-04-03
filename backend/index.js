@@ -64,6 +64,11 @@ app.use(cors({
     credentials: true
 }));
 
+// Trust the first proxy hop (nginx / load balancer) so rate-limit can read
+// the real client IP from X-Forwarded-For instead of throwing a validation error.
+// Set to false or adjust the hop count if not behind a reverse proxy.
+app.set('trust proxy', 1);
+
 // ─── Rate limiting ────────────────────────────────────────────────────────────
 // Strict limit on authentication endpoints to block brute-force and credential
 // stuffing attacks. 10 attempts per 15 minutes per IP.
