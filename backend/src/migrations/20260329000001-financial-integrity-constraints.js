@@ -41,15 +41,15 @@ module.exports = {
                 return rows.length > 0;
             };
 
-            // ── orders: CHECK constraints (no paidAmount <= total — legacy overpayments allowed) ──
+            // ── orders: CHECK constraints — only add if the referenced column exists ──
             const orderChecks = [
-                { name: 'chk_orders_paidAmount_gte_0', sql: '"paidAmount" >= 0' },
-                { name: 'chk_orders_dueAmount_gte_0',  sql: '"dueAmount"  >= 0' },
-                { name: 'chk_orders_total_gt_0',       sql: '"total"      >  0' },
-                { name: 'chk_orders_subTotal_gt_0',    sql: '"subTotal"   >  0' },
+                { name: 'chk_orders_paidAmount_gte_0', col: 'paidAmount', sql: '"paidAmount" >= 0' },
+                { name: 'chk_orders_dueAmount_gte_0',  col: 'dueAmount',  sql: '"dueAmount"  >= 0' },
+                { name: 'chk_orders_total_gt_0',       col: 'total',      sql: '"total"      >  0' },
+                { name: 'chk_orders_subTotal_gt_0',    col: 'subTotal',   sql: '"subTotal"   >  0' },
             ];
-            for (const { name, sql } of orderChecks) {
-                if (!(await constraintExists('orders', name))) {
+            for (const { name, col, sql } of orderChecks) {
+                if ((await columnExists('orders', col)) && !(await constraintExists('orders', name))) {
                     await queryInterface.sequelize.query(
                         `ALTER TABLE "orders" ADD CONSTRAINT "${name}" CHECK (${sql})`,
                         { transaction }
