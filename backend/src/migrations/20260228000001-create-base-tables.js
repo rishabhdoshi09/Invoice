@@ -337,6 +337,31 @@ module.exports = {
             });
         }
 
+        // ── orders: missing columns not in initial 20240907 migration ────────
+        // These were previously added by sequelize.sync(); now explicitly managed.
+        const orderCols = [
+            ['paidAmount',           { type: Sequelize.DECIMAL(15,2), defaultValue: 0 }],
+            ['dueAmount',            { type: Sequelize.DECIMAL(15,2), defaultValue: 0 }],
+            ['advanceAmount',        { type: Sequelize.DECIMAL(15,2), defaultValue: 0, allowNull: false }],
+            ['originalPaidAmount',   { type: Sequelize.DECIMAL(15,2), defaultValue: 0, allowNull: false }],
+            ['paymentStatus',        { type: Sequelize.ENUM('paid','partial','unpaid'), defaultValue: 'paid' }],
+            ['customerGstin',        { type: Sequelize.STRING, allowNull: true }],
+            ['placeOfSupply',        { type: Sequelize.STRING, allowNull: true, defaultValue: '27-Maharashtra' }],
+            ['createdByName',        { type: Sequelize.STRING, allowNull: true }],
+            ['staffNotes',           { type: Sequelize.TEXT, allowNull: true }],
+            ['staffNotesUpdatedAt',  { type: Sequelize.DATE, allowNull: true }],
+            ['staffNotesUpdatedBy',  { type: Sequelize.STRING, allowNull: true }],
+            ['notes',                { type: Sequelize.TEXT, allowNull: true }],
+        ];
+        for (const [col, def] of orderCols) {
+            const [rows] = await queryInterface.sequelize.query(
+                `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = '${col}')`
+            );
+            if (!rows[0].exists) {
+                await queryInterface.addColumn('orders', col, def);
+            }
+        }
+
         console.log('[MIGRATION] Base tables created successfully.');
     },
 
