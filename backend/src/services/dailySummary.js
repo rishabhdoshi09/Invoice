@@ -390,8 +390,12 @@ module.exports = {
         const unpaidOrders = orders.filter(o => o.paymentStatus === 'unpaid');
         const partialOrders = orders.filter(o => o.paymentStatus === 'partial');
         
-        // Cash Sales = total from CASH orders ONLY (paid at POS, not from paidAmount)
-        const cashFromTodaysOrders = cashOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+        // Cash Sales = CASH mode orders that are still 'paid'.
+        // If a CASH order is toggled to 'unpaid'/'partial', it moves to credit outstanding
+        // and must no longer appear in cash sales.
+        const cashFromTodaysOrders = cashOrders
+            .filter(o => o.paymentStatus === 'paid')
+            .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
         
         // Credit outstanding (what customers still owe from today)
         const creditOutstanding = orders.reduce((sum, o) => sum + (Number(o.dueAmount) || 0), 0);
@@ -414,8 +418,11 @@ module.exports = {
         
         console.log(`[getRealTimeSummary] Date: ${dateDDMMYYYY}, Orders: ${orders.length} (CASH: ${cashOrders.length}, CREDIT: ${creditOrders.length}), Payments: ${payments.length}`);
         
-        // IDs of today's CASH orders — payments linked to these are ALREADY counted in Cash Sales
-        const todaysCashOrderIds = cashOrders.map(o => String(o.id));
+        // IDs of today's PAID CASH orders — payments linked to these are ALREADY counted in Cash Sales.
+        // Unpaid/partial CASH orders are no longer in cashSales, so their payments should NOT be excluded.
+        const todaysCashOrderIds = cashOrders
+            .filter(o => o.paymentStatus === 'paid')
+            .map(o => String(o.id));
         
         // Customer Receipts = customer payments EXCEPT:
         //   1. PAY-TOGGLE-* (legacy synthetic markers)
