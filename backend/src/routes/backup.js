@@ -1,6 +1,8 @@
 const { authenticate, authorize } = require('../middleware/auth');
 const { spawn } = require('child_process');
 const zlib = require('zlib');
+const fs = require('fs');
+const path = require('path');
 const multer = require('multer');
 
 // Store uploaded backup in memory (max 500 MB)
@@ -160,4 +162,98 @@ module.exports = (router) => {
             });
         }
     );
+
+    /**
+     * GET /api/backup/usb-drives
+     * Lists external USB drives mounted at /Volumes (macOS).
+     * Admin-only.
+     */
+    router.get('/backup/usb-drives', authenticate, authorize('admin'), (req, res) => {
+        const volumesDir = '/Volumes';
+        try {
+            if (!fs.existsSync(volumesDir)) {
+                return res.json({ drives: [] });
+            }
+            const entries = fs.readdirSync(volumesDir);
+            // Filter out macOS system volumes
+            const systemVolumes = ['Macintosh HD', 'Macintosh HD - Data', 'Recovery', 'VM', 'Preboot', 'Update'];
+            const drives = entries
+                .filter(name => !systemVolumes.includes(name))
+                .map(name => ({
+                    name,
+                    path: path.join(volumesDir, name)
+                }))
+                .filter(d => {
+                    try { fs.accessSync(d.path, fs.constants.W_OK); return true; }
+                    catch { return false; }
+                });
+            res.json({ drives });
+        } catch (err) {
+            res.status(500).json({ message: 'Could not list USB drives: ' + err.message });
+        }
+    });
+
+    /**
+     * POST /api/backup/save-to-usb
+     * Runs pg_dump and saves the .sql.gz file directly to a connected USB drive.
+     * Body: { drivePath: '/Volumes/MyDrive' }
+     * Admin-only.
+     */
+    router.post('/backup/save-to-usb', authenticate, authorize('admin'), (req, res) => {
+        const { drivePath } = req.body;
+        if (!drivePath || !drivePath.startsWith('/Volumes/')) {
+            return res.status(400).json({ status: 400, message: 'Invalid drive path.' });
+        }
+
+        // Safety: path must resolve inside /Volumes/
+        const resolved = path.resolve(drivePath);
+        if (!resolved.startsWith('/Volumes/')) {
+            return res.status(400).json({ status: 400, message: 'Invalid drive path.' });
+        }
+
+        // Check drive is still mounted and writable
+        try { fs.accessSync(resolved, fs.constants.W_OK); }
+        catch {
+            return res.status(400).json({ status: 400, message: 'Drive is not accessible or not writable.' });
+        }
+
+        const { PASSWORD, DB_USER, DATABASE_NAME, DB_HOST = '127.0.0.1', DB_PORT = '5432' } = process.env;
+        if (!PASSWORD || !DB_USER || !DATABASE_NAME) {
+            return res.status(500).json({ status: 500, message: 'Database credentials not configured.' });
+        }
+
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const filename = `backup_${DATABASE_NAME}_${timestamp}.sql.gz`;
+        const filePath = path.join(resolved, filename);
+
+        const env = { ...process.env, PGPASSWORD: PASSWORD };
+        const pg_dump = spawn('pg_dump', ['-h', DB_HOST, '-p', DB_PORT, '-U', DB_USER, '-d', DATABASE_NAME, '--no-password'], { env });
+        const gzip = zlib.createGzip();
+        const fileStream = fs.createWriteStream(filePath);
+
+        pg_dump.stdout.pipe(gzip).pipe(fileStream);
+
+        pg_dump.stderr.on('data', d => console.error('[USB-BACKUP] pg_dump stderr:', d.toString()));
+
+        pg_dump.on('error', err => {
+            console.error('[USB-BACKUP] pg_dump error:', err.message);
+            if (!res.headersSent) res.status(500).json({ status: 500, message: 'Backup failed: ' + err.message });
+        });
+
+        fileStream.on('error', err => {
+            console.error('[USB-BACKUP] Write error:', err.message);
+            if (!res.headersSent) res.status(500).json({ status: 500, message: 'Could not write to USB drive: ' + err.message });
+        });
+
+        pg_dump.on('close', (code) => {
+            if (code !== 0) {
+                try { fs.unlinkSync(filePath); } catch {}
+                return res.status(500).json({ status: 500, message: `pg_dump failed (exit ${code}).` });
+            }
+            fileStream.on('finish', () => {
+                console.log(`[USB-BACKUP] Saved to ${filePath}`);
+                res.json({ status: 200, message: `Backup saved to USB: ${filename}`, filename, filePath });
+            });
+        });
+    });
 };
