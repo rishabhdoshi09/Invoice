@@ -2769,6 +2769,19 @@ export const CreateOrder = () => {
         TransitionProps={{ onEntered: () => document.getElementById('edit-display-name-input')?.focus() }}
       >
         <DialogTitle>Edit Display Name</DialogTitle>
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          const idx = editNoteDialog.index;
+          const newNote = editNoteDialog.value;
+          setOrderProps((prev) => {
+            const updated = [...prev.orderItems];
+            updated[idx] = { ...updated[idx], altName: String(newNote).trim() };
+            const nextProps = { ...prev, orderItems: updated };
+            try { generatePdf(nextProps); } catch {}
+            return nextProps;
+          });
+          setEditNoteDialog({ open: false, index: -1, value: '' });
+        }}>
         <DialogContent>
           <DialogContentText sx={{ mb: 2 }}>
             Enter an alternate name to print on the invoice instead of the product name. Leave blank to use the default product name.
@@ -2781,44 +2794,14 @@ export const CreateOrder = () => {
             label="Display name / note"
             value={editNoteDialog.value}
             onChange={(e) => setEditNoteDialog(prev => ({ ...prev, value: e.target.value }))}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                const idx = editNoteDialog.index;
-                const newNote = editNoteDialog.value;
-                setOrderProps((prev) => {
-                  const updated = [...prev.orderItems];
-                  updated[idx] = { ...updated[idx], altName: String(newNote).trim() };
-                  const nextProps = { ...prev, orderItems: updated };
-                  try { generatePdf(nextProps); } catch {}
-                  return nextProps;
-                });
-                setEditNoteDialog({ open: false, index: -1, value: '' });
-              }
-            }}
             placeholder="e.g. 'Thali - Special' or leave blank"
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditNoteDialog({ open: false, index: -1, value: '' })}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={() => {
-              const idx = editNoteDialog.index;
-              const newNote = editNoteDialog.value;
-              setOrderProps((prev) => {
-                const updated = [...prev.orderItems];
-                updated[idx] = { ...updated[idx], altName: String(newNote).trim() };
-                const nextProps = { ...prev, orderItems: updated };
-                try { generatePdf(nextProps); } catch {}
-                return nextProps;
-              });
-              setEditNoteDialog({ open: false, index: -1, value: '' });
-            }}
-          >
-            Save
-          </Button>
+          <Button type="button" onClick={() => setEditNoteDialog({ open: false, index: -1, value: '' })}>Cancel</Button>
+          <Button type="submit" variant="contained">Save</Button>
         </DialogActions>
+        </form>
       </Dialog>
 
       {/* Post-Submit WhatsApp Dialog */}
