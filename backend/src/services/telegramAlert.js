@@ -7,6 +7,8 @@
 
 const https = require('https');
 const dns = require('dns');
+const zlib = require('zlib');
+const { spawn } = require('child_process');
 const db = require('../models');
 const { Op } = require('sequelize');
 
@@ -87,6 +89,117 @@ function sendTelegram(text, parseMode = 'HTML', retries = 3) {
 
         attempt(0);
     });
+}
+
+// ─── Send document (file) via Telegram Bot API ───────────────────
+function sendTelegramDocument(fileBuffer, filename, caption) {
+    return new Promise((resolve, reject) => {
+        if (!BOT_TOKEN || !CHAT_ID) {
+            console.warn('[TELEGRAM] Bot token or chat ID not configured — skipping document send');
+            return resolve({ skipped: true });
+        }
+
+        const boundary = `tgboundary${Date.now()}`;
+        const parts = [];
+
+        // chat_id
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${CHAT_ID}\r\n`));
+        // caption
+        if (caption) {
+            parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${caption.substring(0, 1024)}\r\n`));
+        }
+        // document
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="document"; filename="${filename}"\r\nContent-Type: application/gzip\r\n\r\n`));
+        parts.push(fileBuffer);
+        parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+        const body = Buffer.concat(parts);
+
+        const req = https.request({
+            hostname: 'api.telegram.org',
+            path: `/bot${BOT_TOKEN}/sendDocument`,
+            method: 'POST',
+            family: 4,
+            headers: {
+                'Content-Type': `multipart/form-data; boundary=${boundary}`,
+                'Content-Length': body.length
+            }
+        }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.ok) resolve(parsed);
+                    else reject(new Error(`Telegram sendDocument error: ${parsed.description}`));
+                } catch (e) { reject(e); }
+            });
+        });
+
+        req.on('error', reject);
+        req.setTimeout(60000, () => { req.destroy(); reject(new Error('Telegram sendDocument timeout')); });
+        req.write(body);
+        req.end();
+    });
+}
+
+// ─── Create compressed pg_dump buffer ────────────────────────────
+function createBackupBuffer() {
+    return new Promise((resolve, reject) => {
+        const dbUrl = process.env.DATABASE_URL ||
+            `postgres://${process.env.DB_USER || 'postgres'}:${encodeURIComponent(process.env.DB_PASS || '')}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'postgres'}`;
+
+        const pgDump = spawn('pg_dump', ['--no-owner', '--no-acl', dbUrl], {
+            env: { ...process.env, PGPASSWORD: process.env.DB_PASS || '' }
+        });
+        const gzip = zlib.createGzip({ level: 6 });
+
+        const chunks = [];
+        pgDump.stdout.pipe(gzip);
+        gzip.on('data', chunk => chunks.push(chunk));
+        gzip.on('end', () => resolve(Buffer.concat(chunks)));
+        gzip.on('error', reject);
+
+        let stderrOutput = '';
+        pgDump.stderr.on('data', d => { stderrOutput += d.toString(); });
+        pgDump.on('close', code => {
+            if (code !== 0) {
+                reject(new Error(`pg_dump exited with code ${code}: ${stderrOutput.substring(0, 200)}`));
+            }
+        });
+    });
+}
+
+/**
+ * Run a database backup and send to Telegram as a document.
+ * Called by the nightly cron job at 11 PM IST.
+ */
+async function sendDailyBackup() {
+    const dateStr = new Date().toLocaleDateString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata'
+    });
+    const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
+    const filename = `invoice_backup_${new Date().toISOString().slice(0, 10)}.sql.gz`;
+
+    console.log('[BACKUP] Starting nightly database backup...');
+
+    try {
+        const buf = await createBackupBuffer();
+        const sizeMB = (buf.length / 1048576).toFixed(2);
+
+        await sendTelegramDocument(buf, filename,
+            `📦 Auto Daily Backup — ${dateStr}\nSize: ${sizeMB} MB\nTime: ${timeStr} IST\n✅ Database backup complete`
+        );
+
+        console.log(`[BACKUP] Nightly backup sent to Telegram — ${sizeMB} MB`);
+        return { sent: true, sizeMB };
+    } catch (err) {
+        console.error('[BACKUP] Nightly backup failed:', err.message);
+        // Send a failure alert as text
+        sendTelegram(`❌ <b>NIGHTLY BACKUP FAILED</b>\n<b>Date:</b> ${dateStr}\n<b>Error:</b> ${esc(err.message)}`)
+            .catch(() => {});
+        return { sent: false, error: err.message };
+    }
 }
 
 // ─── Escape HTML special chars in user data ─────────────────────
@@ -633,6 +746,7 @@ async function sendFullAuditReport(options = {}) {
 
 module.exports = {
     sendTelegram,
+    sendTelegramDocument,
     esc,
     alertItemDeleted,
     alertBillDeleted,
@@ -640,5 +754,6 @@ module.exports = {
     alertUnusedWeight,
     alertOrderCreated,
     sendDailySummary,
-    sendFullAuditReport
+    sendFullAuditReport,
+    sendDailyBackup
 };

@@ -23,10 +23,10 @@ import {
     IconButton,
     Collapse
 } from '@mui/material';
-import { 
-    AccountBalance, 
-    Refresh, 
-    TrendingUp, 
+import {
+    AccountBalance,
+    Refresh,
+    TrendingUp,
     TrendingDown,
     People,
     LocalShipping,
@@ -36,8 +36,12 @@ import {
     History,
     ExpandMore,
     ExpandLess,
-    Visibility
+    Visibility,
+    PictureAsPdf
 } from '@mui/icons-material';
+import pdfMake from 'pdfmake/build/pdfmake';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
+pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts;
 import { 
     ResponsiveContainer, 
     BarChart, 
@@ -175,6 +179,141 @@ export const DayStart = () => {
         { name: 'Expected', amount: expectedCash, fill: '#00bcd4' },
     ];
 
+    const downloadDayClosePDF = () => {
+        const fmt = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+        const dateLabel = moment(selectedDate).format('DD MMM YYYY (dddd)');
+        const generatedAt = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+
+        // Top customers from cashOrderRecords
+        const cashRecords = realTimeSummary?.cashOrderRecords || [];
+        const topCustomers = Object.values(
+            cashRecords.reduce((acc, o) => {
+                const name = o.customerName || 'Walk-in';
+                if (!acc[name]) acc[name] = { name, total: 0, orders: 0 };
+                acc[name].total += Number(o.total) || 0;
+                acc[name].orders += 1;
+                return acc;
+            }, {})
+        ).sort((a, b) => b.total - a.total).slice(0, 5);
+
+        const summaryTable = {
+            table: {
+                widths: ['*', 100],
+                body: [
+                    [{ text: 'Description', style: 'th' }, { text: 'Amount (₹)', style: 'th', alignment: 'right' }],
+                    [{ text: 'Opening Balance', color: '#555' }, { text: fmt(openingBalance), alignment: 'right', color: '#9c27b0', bold: true }],
+                    [{ text: '+ Cash Sales', color: '#1565C0' }, { text: fmt(cashSales), alignment: 'right', color: '#1565C0', bold: true }],
+                    [{ text: '+ Customer Receipts (dues collected)', color: '#2E7D32' }, { text: fmt(customerPayments), alignment: 'right', color: '#2E7D32', bold: true }],
+                    [{ text: '− Supplier Payments', color: '#E65100' }, { text: `(${fmt(supplierPayments)})`, alignment: 'right', color: '#E65100' }],
+                    [{ text: '− Expenses', color: '#C62828' }, { text: `(${fmt(expenses)})`, alignment: 'right', color: '#C62828' }],
+                    [{ text: 'Expected Cash in Drawer', bold: true, fontSize: 11 }, { text: fmt(expectedCash), alignment: 'right', bold: true, fontSize: 12, color: expectedCash >= 0 ? '#2E7D32' : '#C62828' }],
+                ]
+            },
+            layout: {
+                hLineColor: (i) => i === 0 || i === 1 || i === 7 ? '#1565C0' : '#ddd',
+                vLineColor: () => '#eee',
+                fillColor: (i) => i === 0 ? '#E3F2FD' : i === 6 ? '#E8F5E9' : i % 2 === 0 ? '#FAFAFA' : null,
+            }
+        };
+
+        const salesTable = {
+            table: {
+                widths: ['*', 80, 80, 80],
+                body: [
+                    [
+                        { text: 'Sales Type', style: 'th' },
+                        { text: 'Orders', style: 'th', alignment: 'right' },
+                        { text: 'Amount (₹)', style: 'th', alignment: 'right' },
+                        { text: 'Status', style: 'th', alignment: 'center' }
+                    ],
+                    [
+                        { text: 'Cash Sales (CASH mode, paid)' },
+                        { text: String(cashOrdersCount), alignment: 'right' },
+                        { text: fmt(cashSales), alignment: 'right', color: '#1565C0', bold: true },
+                        { text: 'In Drawer', alignment: 'center', color: '#2E7D32', italics: true }
+                    ],
+                    [
+                        { text: 'Credit / Outstanding Sales' },
+                        { text: String(creditOrdersCount), alignment: 'right' },
+                        { text: fmt(creditSales), alignment: 'right', color: '#C62828', bold: true },
+                        { text: 'Pending', alignment: 'center', color: '#C62828', italics: true }
+                    ],
+                    [
+                        { text: 'Total Business Done', bold: true },
+                        { text: String(totalOrdersCount), alignment: 'right', bold: true },
+                        { text: fmt(totalBusinessDone), alignment: 'right', bold: true },
+                        { text: '', alignment: 'center' }
+                    ],
+                ]
+            },
+            layout: {
+                hLineColor: (i) => i === 0 || i === 1 ? '#1565C0' : '#ddd',
+                vLineColor: () => '#eee',
+                fillColor: (i) => i === 0 ? '#E3F2FD' : i === 4 ? '#F1F8E9' : null,
+            }
+        };
+
+        const topCustRows = topCustomers.length > 0
+            ? topCustomers.map((c, i) => [
+                { text: `${i + 1}. ${c.name}` },
+                { text: String(c.orders), alignment: 'right' },
+                { text: fmt(c.total), alignment: 'right', bold: true, color: '#1565C0' }
+              ])
+            : [[{ text: 'No cash orders today', colSpan: 3, italics: true, color: '#999' }, {}, {}]];
+
+        const topCustTable = {
+            table: {
+                widths: ['*', 60, 90],
+                body: [
+                    [{ text: 'Customer', style: 'th' }, { text: 'Orders', style: 'th', alignment: 'right' }, { text: 'Cash Amount (₹)', style: 'th', alignment: 'right' }],
+                    ...topCustRows
+                ]
+            },
+            layout: {
+                hLineColor: (i) => i === 0 || i === 1 ? '#1565C0' : '#ddd',
+                vLineColor: () => '#eee',
+                fillColor: (i) => i === 0 ? '#E3F2FD' : i % 2 === 0 ? '#FAFAFA' : null,
+            }
+        };
+
+        const docDef = {
+            pageSize: 'A4',
+            pageMargins: [30, 40, 30, 40],
+            content: [
+                { text: 'RISHABH STEEL CENTRE', style: 'companyName' },
+                { text: 'Specialist in: Wholesale in Utensils and All Items', style: 'companySubtitle' },
+                { text: 'A-22, Sujata Shopping Centre, Navghar Road, Bhayandar (E), Dist. Thane - 401 105', style: 'companyAddress' },
+                { text: 'Mobile: 9322674294 | 9137248501 | 9987798562', style: 'companyAddress' },
+                { canvas: [{ type: 'line', x1: 0, y1: 4, x2: 535, y2: 4, lineWidth: 1 }] },
+                { text: 'DAY CLOSE REPORT', style: 'reportTitle', margin: [0, 10, 0, 2] },
+                { text: dateLabel, style: 'dateLabel', margin: [0, 0, 0, 12] },
+
+                { text: 'Cash Drawer Summary', style: 'sectionTitle' },
+                summaryTable,
+
+                { text: 'Sales Breakdown', style: 'sectionTitle', margin: [0, 14, 0, 4] },
+                salesTable,
+
+                { text: `Top ${topCustomers.length || 0} Cash Customers Today`, style: 'sectionTitle', margin: [0, 14, 0, 4] },
+                topCustTable,
+
+                { text: `Generated: ${generatedAt}`, fontSize: 8, color: '#aaa', margin: [0, 12, 0, 0], alignment: 'right' }
+            ],
+            styles: {
+                companyName:     { fontSize: 16, bold: true, alignment: 'center', color: '#1565C0' },
+                companySubtitle: { fontSize: 9, alignment: 'center', color: '#555', margin: [0, 2, 0, 2] },
+                companyAddress:  { fontSize: 8, alignment: 'center', color: '#777' },
+                reportTitle:     { fontSize: 14, bold: true, alignment: 'center', color: '#1565C0' },
+                dateLabel:       { fontSize: 11, alignment: 'center', color: '#555' },
+                sectionTitle:    { fontSize: 11, bold: true, color: '#1565C0', margin: [0, 4, 0, 4] },
+                th:              { bold: true, fontSize: 9, color: '#1565C0' },
+            },
+            defaultStyle: { fontSize: 9, font: 'Roboto' }
+        };
+
+        pdfMake.createPdf(docDef).download(`day_close_${selectedDate}.pdf`);
+    };
+
     if (loading) {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
@@ -199,6 +338,16 @@ export const DayStart = () => {
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     {fetchingRealTime && <CircularProgress size={20} />}
+                    <Button
+                        startIcon={<PictureAsPdf />}
+                        onClick={downloadDayClosePDF}
+                        variant="contained"
+                        color="error"
+                        disabled={!realTimeSummary}
+                        title="Download Day Close Report PDF"
+                    >
+                        Day Close PDF
+                    </Button>
                     <Button
                         startIcon={<Refresh />}
                         onClick={handleRefreshAll}

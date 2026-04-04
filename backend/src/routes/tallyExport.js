@@ -9,6 +9,11 @@ module.exports = (router) => {
         .post(authenticate, authorize('admin'), Controller.tallyExport.exportSelectedSales);
 
     router
+        .route('/export/tally/sales/xml')
+        .get(authenticate, authorize('admin'), Controller.tallyExport.exportSalesXML)
+        .post(authenticate, authorize('admin'), Controller.tallyExport.exportSalesXML);
+
+    router
         .route('/export/tally/purchases')
         .get(authenticate, authorize('admin'), Controller.tallyExport.exportPurchases)
         .post(authenticate, authorize('admin'), Controller.tallyExport.exportSelectedPurchases);

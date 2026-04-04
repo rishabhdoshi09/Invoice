@@ -4,7 +4,7 @@ import {
     TableCell, TableContainer, TableHead, TableRow, Checkbox, Tabs, Tab, 
     TextField, Alert, Chip, CircularProgress, TablePagination, Paper
 } from '@mui/material';
-import { Download, Refresh, CheckCircle, Receipt } from '@mui/icons-material';
+import { Download, Refresh, CheckCircle, Receipt, Code } from '@mui/icons-material';
 import axios from 'axios';
 import { listPurchases } from '../../../services/purchase';
 
@@ -240,6 +240,38 @@ export const TallyExport = () => {
         window.open(url, '_blank');
     };
 
+    const handleExportXML = async () => {
+        try {
+            setExporting(true);
+            const totalCount = totalSalesCount;
+            const batchSize = 500;
+            let allIds = [];
+            for (let offset = 0; offset < totalCount; offset += batchSize) {
+                const params = { limit: batchSize, offset, ...(dateRange.startDate && dateRange.endDate ? dateRange : {}) };
+                const { data } = await axios.get('/api/orders', { params });
+                allIds = [...allIds, ...(data.data?.rows || []).map(o => o.id)];
+            }
+            const response = await axios.post('/api/export/tally/sales/xml',
+                { ids: allIds },
+                { responseType: 'blob', headers: { 'Content-Type': 'application/json' } }
+            );
+            const blob = new Blob([response.data], { type: 'application/xml' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `tally_sales_import_${new Date().toISOString().split('T')[0]}.xml`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error exporting XML:', error);
+            alert('Error exporting XML. Please try again.');
+        } finally {
+            setExporting(false);
+        }
+    };
+
     const handleRefresh = () => {
         if (activeTab === 0) {
             setSalesPage(0);
@@ -267,7 +299,8 @@ export const TallyExport = () => {
                 Export invoices in GSTR-1 format for GST filing
             </Typography>
             <Alert severity="info" sx={{ mb: 3 }}>
-                <strong>Export Fields:</strong> Invoice Number, Invoice Date, Buyer GSTIN/URP, Place of Supply, HSN (7323), Taxable Value, CGST/SGST/IGST, Invoice Type (B2B/B2C)
+                <strong>CSV Export:</strong> Invoice Number, Date, GSTIN/URP, Place of Supply, HSN (7323), Taxable Value, CGST/SGST/IGST, Invoice Type (B2B/B2C)
+                &nbsp;|&nbsp;<strong>Tally XML:</strong> Direct TallyPrime import — Sales Vouchers with party ledger, CGST/SGST/IGST entries (accountant can import without manual entry)
             </Alert>
 
             <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)} sx={{ mb: 3 }}>
@@ -305,17 +338,27 @@ export const TallyExport = () => {
                                 {loading ? 'Loading...' : 'Refresh'}
                             </Button>
                             <Box sx={{ flexGrow: 1 }} />
-                            <Button 
-                                variant="contained" 
+                            <Button
+                                variant="contained"
                                 color="success"
                                 startIcon={exporting ? <CircularProgress size={16} color="inherit" /> : <Download />}
                                 onClick={() => handleExportAll('sales')}
                                 disabled={totalSalesCount === 0 || exporting}
                             >
-                                {exporting ? 'Exporting...' : `Export ALL (${totalSalesCount})`}
+                                {exporting ? 'Exporting...' : `Export ALL CSV (${totalSalesCount})`}
                             </Button>
-                            <Button 
-                                variant="outlined" 
+                            <Button
+                                variant="contained"
+                                color="warning"
+                                startIcon={exporting ? <CircularProgress size={16} color="inherit" /> : <Code />}
+                                onClick={handleExportXML}
+                                disabled={totalSalesCount === 0 || exporting}
+                                title="Download TallyPrime XML — accountant can directly import this"
+                            >
+                                {exporting ? 'Exporting...' : 'Tally XML'}
+                            </Button>
+                            <Button
+                                variant="outlined"
                                 startIcon={<Download />}
                                 onClick={() => handleExportSelected('sales')}
                                 disabled={selectedSales.length === 0 || exporting}
