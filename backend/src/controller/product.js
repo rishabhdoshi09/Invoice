@@ -2,27 +2,43 @@ const Services = require('../services');
 const Validations = require('../validations');
 
 let weight = 0;
-let connectionStatus = 'disconnected'; // 'connected', 'disconnected', 'error'
-let lastDataReceived = null; // Timestamp of last data received
+let connectionStatus = 'disconnected';
+let lastDataReceived = null;
 
 const fs = require('fs');
 const { SerialPort } = require('serialport');
 const { ReadlineParser } = require('@serialport/parser-readline');
 
-const devPath = '/dev/cu.usbserial-1420';
 let port = null;
 let parser = null;
 
-// SAFE SERIAL INITIALIZATION
-if (fs.existsSync(devPath)) {
-    console.log("Serial device found → opening:", devPath);
-
+// Auto-detect serial device: prefer env var, then scan /dev for usbserial/wchusbserial
+function detectSerialPort() {
+    if (process.env.SERIAL_PORT) return process.env.SERIAL_PORT;
     try {
-        port = new SerialPort({
-            path: devPath,
-            baudRate: 9600
-        });
+        const devDir = fs.readdirSync('/dev');
+        const match = devDir.find(f =>
+            f.startsWith('cu.usbserial') ||
+            f.startsWith('cu.wchusbserial') ||
+            f.startsWith('cu.SLAB_USBtoUART') ||
+            f.startsWith('ttyUSB') ||
+            f.startsWith('ttyS')
+        );
+        return match ? `/dev/${match}` : null;
+    } catch { return null; }
+}
 
+function initSerial() {
+    const devPath = detectSerialPort();
+    if (!devPath || !fs.existsSync(devPath)) {
+        console.log("Serial device NOT found → skipping serial initialization");
+        connectionStatus = 'disconnected';
+        return;
+    }
+
+    console.log("Serial device found → opening:", devPath);
+    try {
+        port = new SerialPort({ path: devPath, baudRate: 9600 });
         parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
 
         port.on('open', () => {
@@ -47,17 +63,16 @@ if (fs.existsSync(devPath)) {
         port.on('close', () => {
             console.log("Serial port closed");
             connectionStatus = 'disconnected';
+            port = null; parser = null;
         });
 
     } catch (err) {
         console.log("Failed to open serial port:", err.message);
         connectionStatus = 'error';
     }
-
-} else {
-    console.log("Serial device NOT found → skipping serial initialization");
-    connectionStatus = 'disconnected';
 }
+
+initSerial();
 
 
 module.exports = {
