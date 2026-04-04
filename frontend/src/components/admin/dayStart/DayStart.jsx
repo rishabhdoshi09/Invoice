@@ -34,33 +34,33 @@ import {
     Receipt,
     Today,
     History,
-    ExpandMore,
     ExpandLess,
     Visibility,
     PictureAsPdf
 } from '@mui/icons-material';
-import pdfMake from 'pdfmake/build/pdfmake';
-import pdfFonts from 'pdfmake/build/vfs_fonts';
-pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts;
-import { 
-    ResponsiveContainer, 
-    BarChart, 
-    Bar, 
-    XAxis, 
-    YAxis, 
-    CartesianGrid, 
-    Tooltip, 
+import {
+    ResponsiveContainer,
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
     Cell,
     PieChart,
     Pie
 } from 'recharts';
 import { useAuth } from '../../../context/AuthContext';
-import { 
+import {
     useGetSummaryByDateQuery,
     useGetRealTimeSummaryQuery,
-    useSetOpeningBalanceMutation 
+    useSetOpeningBalanceMutation
 } from '../../../store/api';
 import moment from 'moment';
+import pdfMake from 'pdfmake/build/pdfmake';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
+
+pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts;
 
 export const DayStart = () => {
     const { user } = useAuth();
@@ -138,7 +138,6 @@ export const DayStart = () => {
     const cashSales = Number(realTimeSummary?.cashSales) || 0;  // Only CASH mode orders
     const creditSales = Number(realTimeSummary?.creditSales) || 0;  // Outstanding dues
     const totalBusinessDone = Number(realTimeSummary?.totalBusinessDone) || 0;
-    const paidOrdersCount = Number(realTimeSummary?.paidOrdersCount) || 0;
     const totalOrdersCount = Number(realTimeSummary?.totalOrders) || 0;
     const cashOrdersCount = Number(realTimeSummary?.cashOrdersCount) || 0;
     const creditOrdersCount = Number(realTimeSummary?.creditOrdersCount) || 0;

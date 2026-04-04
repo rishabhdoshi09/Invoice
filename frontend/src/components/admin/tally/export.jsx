@@ -4,7 +4,7 @@ import {
     TableCell, TableContainer, TableHead, TableRow, Checkbox, Tabs, Tab, 
     TextField, Alert, Chip, CircularProgress, TablePagination, Paper
 } from '@mui/material';
-import { Download, Refresh, CheckCircle, Receipt, Code } from '@mui/icons-material';
+import { Download, Refresh, Receipt, Code } from '@mui/icons-material';
 import axios from 'axios';
 import { listPurchases } from '../../../services/purchase';
 
