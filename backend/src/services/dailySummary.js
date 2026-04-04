@@ -464,11 +464,14 @@ module.exports = {
             .filter(p => p.partyType === 'expense')
             .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         
+        // Paid CASH orders only — unpaid/partial CASH orders move to credit
+        const paidCashOrders = cashOrders.filter(o => o.paymentStatus === 'paid');
+
         return {
             date: dateDDMMYYYY,
             // Orders breakdown
             totalOrders: orders.length,
-            cashOrdersCount: cashOrders.length,
+            cashOrdersCount: paidCashOrders.length,
             creditOrdersCount: creditOrders.length,
             paidOrdersCount: paidOrders.length,
             unpaidOrdersCount: unpaidOrders.length,
@@ -488,8 +491,8 @@ module.exports = {
             // Expenses (cash going out)
             expensesCount: payments.filter(p => p.partyType === 'expense').length,
             expenses: expensePayments,
-            // Individual records for inline detail view
-            cashOrderRecords: cashOrders.map(o => ({
+            // Individual records for inline detail view (only paid CASH orders)
+            cashOrderRecords: paidCashOrders.map(o => ({
                 id: o.id, orderNumber: o.orderNumber, customerName: o.customerName,
                 total: Number(o.total), paidAmount: Number(o.paidAmount), paymentStatus: o.paymentStatus,
                 paymentMode: o.paymentMode, createdAt: o.createdAt
