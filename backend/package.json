@@ -37,6 +37,7 @@
     "uuid": "^3.3.3",
     "winston": "^3.7.2",
     "winston-loggly-bulk": "^3.2.1",
-    "winston-papertrail": "^1.0.5"
+    "winston-papertrail": "^1.0.5",
+    "xlsx": "^0.18.5"
   }
 }

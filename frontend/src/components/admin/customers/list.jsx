@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { CustomerStatement } from './CustomerStatement';
 import { useNavigate } from 'react-router-dom';
 import { 
     Box, Button, Card, CardContent, Table, TableBody, TableCell, TableContainer, 
@@ -37,6 +38,7 @@ export const ListCustomers = () => {
     const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [detailsDialog, setDetailsDialog] = useState({ open: false, customer: null, tab: 0 });
+    const [statementCustomer, setStatementCustomer] = useState(null);
     
     // Search and Filter
     const [searchTerm, setSearchTerm] = useState('');
@@ -1116,6 +1118,11 @@ export const ListCustomers = () => {
                                                         <Visibility fontSize="small" />
                                                     </Button>
                                                 </Tooltip>
+                                                <Tooltip title="Ledger Statement">
+                                                    <IconButton size="small" onClick={() => setStatementCustomer(customer)}>
+                                                        <AccountBalance fontSize="small" color="primary" />
+                                                    </IconButton>
+                                                </Tooltip>
                                                 <Tooltip title="Delete">
                                                     <IconButton size="small" onClick={() => handleDelete(customer.id, customer.name)}>
                                                         <Delete fontSize="small" color="error" />
@@ -1609,6 +1616,13 @@ export const ListCustomers = () => {
                     )}
                 </DialogContent>
             </Dialog>
+
+            {/* Customer Ledger Statement */}
+            <CustomerStatement
+                customer={statementCustomer}
+                open={!!statementCustomer}
+                onClose={() => setStatementCustomer(null)}
+            />
         </Box>
     );
 };
