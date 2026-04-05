@@ -135,20 +135,33 @@ app.listen(PORT, async () => {
     try {
       const qi = db.sequelize.getQueryInterface();
 
+      // accounts table — add columns introduced in new ledger model
       const accountsCols = await qi.describeTable('accounts').catch(() => null);
-      if (accountsCols && !accountsCols.description) {
-        await qi.addColumn('accounts', 'description', {
-          type: db.Sequelize.TEXT, allowNull: true, defaultValue: null
-        });
-        console.log('[SCHEMA] Added missing description column to accounts table');
+      if (accountsCols) {
+        const accountFixes = [
+          ['description',    { type: db.Sequelize.TEXT,           allowNull: true }],
+          ['subType',        { type: db.Sequelize.STRING(50),      allowNull: true }],
+          ['parentId',       { type: db.Sequelize.UUID,            allowNull: true }],
+          ['partyId',        { type: db.Sequelize.UUID,            allowNull: true }],
+          ['partyType',      { type: db.Sequelize.STRING(20),      allowNull: true }],
+          ['isSystemAccount',{ type: db.Sequelize.BOOLEAN,         allowNull: false, defaultValue: false }],
+          ['isActive',       { type: db.Sequelize.BOOLEAN,         allowNull: false, defaultValue: true }],
+        ];
+        for (const [col, def] of accountFixes) {
+          if (!accountsCols[col]) {
+            await qi.addColumn('accounts', col, def);
+            console.log(`[SCHEMA] Added missing column accounts.${col}`);
+          }
+        }
       }
 
+      // ledger_entries table — add transactionDate denorm column
       const entryCols = await qi.describeTable('ledger_entries').catch(() => null);
       if (entryCols && !entryCols.transactionDate) {
         await qi.addColumn('ledger_entries', 'transactionDate', {
           type: db.Sequelize.DATEONLY, allowNull: true
         });
-        console.log('[SCHEMA] Added missing transactionDate column to ledger_entries table');
+        console.log('[SCHEMA] Added missing column ledger_entries.transactionDate');
       }
     } catch (e) {
       console.warn('[SCHEMA] Column auto-fix skipped:', e.message);
