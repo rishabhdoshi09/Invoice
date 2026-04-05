@@ -18,12 +18,14 @@ const LedgerModule = () => {
 
     // Data states
     const [accounts, setAccounts] = useState([]);
+    const [accountsCount, setAccountsCount] = useState(null); // null = unknown, 0 = not initialized
     const [healthData, setHealthData] = useState(null);
     const [driftData, setDriftData] = useState(null);
     const [trialBalance, setTrialBalance] = useState(null);
     const [profitLoss, setProfitLoss] = useState(null);
     const [balanceSheet, setBalanceSheet] = useState(null);
     const [journalBatches, setJournalBatches] = useState([]);
+    const [migrating, setMigrating] = useState(false);
 
     // Account Ledger states
     const [selectedAccount, setSelectedAccount] = useState(null);
@@ -63,8 +65,32 @@ const LedgerModule = () => {
 
     const fetchDashboard = async () => {
         setLoading(true);
-        try { await Promise.all([fetchHealth(), fetchDrift()]); }
-        finally { setLoading(false); }
+        try {
+            await Promise.all([fetchHealth(), fetchDrift()]);
+            // Also check if accounts are initialized
+            const { data } = await axios.get('/api/ledger/accounts', getAuthHeader());
+            setAccountsCount((data.data || []).length);
+        } catch (err) {
+            // If accounts fails (e.g. description column missing), keep null
+            console.error('Dashboard fetch error:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleImportAllData = async () => {
+        setMigrating(true);
+        setError(null);
+        setSuccess(null);
+        try {
+            await axios.post('/api/ledger/migration/run', {}, getAuthHeader());
+            setSuccess('Ledger initialized and all historical data imported. Refreshing...');
+            await fetchDashboard();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Import failed. Please try again.');
+        } finally {
+            setMigrating(false);
+        }
     };
 
     const fetchAccounts = async () => {
@@ -234,186 +260,116 @@ const LedgerModule = () => {
 
             {/* ── Tab 0: Dashboard ── */}
             {activeTab === 0 && !loading && (
-                <Grid container spacing={2}>
-                    {/* Ledger Health */}
-                    <Grid item xs={12} md={4}>
-                        <Card sx={{
-                            bgcolor: healthData?.isBalanced ? '#0d2818' : '#3b0a0a',
-                            color: '#fff',
-                            border: '1px solid',
-                            borderColor: healthData?.isBalanced ? '#1b5e20' : '#b71c1c',
-                        }}>
-                            <CardContent>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                                    {healthData?.isBalanced
-                                        ? <CheckCircle sx={{ color: '#4caf50' }} />
-                                        : <Error sx={{ color: '#f44336' }} />}
-                                    <Typography variant="subtitle2" sx={{ opacity: 0.8, letterSpacing: 1, textTransform: 'uppercase' }}>
-                                        Ledger Health
-                                    </Typography>
-                                </Box>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                    <Typography variant="body2" sx={{ opacity: 0.7 }}>Total Debits</Typography>
-                                    <Typography variant="body1" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                                        {fmt(healthData?.totalDebits)}
-                                    </Typography>
-                                </Box>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                    <Typography variant="body2" sx={{ opacity: 0.7 }}>Total Credits</Typography>
-                                    <Typography variant="body1" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                                        {fmt(healthData?.totalCredits)}
-                                    </Typography>
-                                </Box>
-                                <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)', my: 1.5 }} />
-                                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                                    <Chip
-                                        icon={healthData?.isBalanced ? <CheckCircle /> : <Error />}
-                                        label={healthData?.isBalanced ? 'BALANCED' : 'UNBALANCED'}
-                                        sx={{
-                                            bgcolor: healthData?.isBalanced ? '#1b5e20' : '#b71c1c',
-                                            color: '#fff', fontWeight: 700, letterSpacing: 1,
-                                            '& .MuiChip-icon': { color: '#fff' }
-                                        }}
-                                    />
-                                </Box>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-
-                    {/* Drift Monitor */}
-                    <Grid item xs={12} md={4}>
-                        <Card sx={{
-                            bgcolor: driftData?.status === 'OK' ? '#0d2818' : driftData ? '#3b0a0a' : '#1a1a2e',
-                            color: '#fff',
-                            border: '1px solid',
-                            borderColor: driftData?.status === 'OK' ? '#1b5e20' : driftData ? '#b71c1c' : '#333',
-                        }}>
-                            <CardContent>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                                    {driftData?.status === 'OK'
-                                        ? <CheckCircle sx={{ color: '#4caf50' }} />
-                                        : <Warning sx={{ color: '#ff9800' }} />}
-                                    <Typography variant="subtitle2" sx={{ opacity: 0.8, letterSpacing: 1, textTransform: 'uppercase' }}>
-                                        Drift Monitor
-                                    </Typography>
-                                </Box>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                    <Typography variant="body2" sx={{ opacity: 0.7 }}>Status</Typography>
-                                    <Chip label={driftData?.status || 'N/A'} size="small"
-                                        sx={{ bgcolor: driftData?.status === 'OK' ? '#1b5e20' : '#b71c1c', color: '#fff', fontWeight: 700, fontSize: '0.7rem' }} />
-                                </Box>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                    <Typography variant="body2" sx={{ opacity: 0.7 }}>Customer Mismatches</Typography>
-                                    <Typography variant="body1" sx={{ fontWeight: 700 }}>
-                                        {driftData?.summary?.customersWithDrift ?? '-'}
-                                    </Typography>
-                                </Box>
-                                <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)', my: 1.5 }} />
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <Typography variant="body2" sx={{ opacity: 0.7 }}>Last Check</Typography>
-                                    <Typography variant="caption" sx={{ fontFamily: 'monospace', opacity: 0.9 }}>
-                                        {driftData?.timestamp ? new Date(driftData.timestamp).toLocaleString('en-IN') : 'Never'}
-                                    </Typography>
-                                </Box>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-
-                    {/* Quick Actions */}
-                    <Grid item xs={12} md={4}>
-                        <Card sx={{ bgcolor: '#1a1a2e', color: '#fff', border: '1px solid #333', height: '100%' }}>
-                            <CardContent>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                                    <AccountBalance sx={{ color: '#90caf9' }} />
-                                    <Typography variant="subtitle2" sx={{ opacity: 0.8, letterSpacing: 1, textTransform: 'uppercase' }}>
-                                        Quick Reports
-                                    </Typography>
-                                </Box>
-                                {[
-                                    { label: 'Trial Balance', tab: 2 },
-                                    { label: 'Profit & Loss', tab: 3 },
-                                    { label: 'Balance Sheet', tab: 4 },
-                                    { label: 'Journal Entries', tab: 5 },
-                                ].map(({ label, tab }) => (
-                                    <Button key={tab} fullWidth variant="outlined" size="small"
-                                        endIcon={<OpenInNew fontSize="small" />}
-                                        onClick={() => setActiveTab(tab)}
-                                        sx={{ mb: 1, borderColor: '#555', color: '#ccc', justifyContent: 'space-between',
-                                              '&:hover': { borderColor: '#90caf9', color: '#90caf9' } }}>
-                                        {label}
-                                    </Button>
-                                ))}
-                            </CardContent>
-                        </Card>
-                    </Grid>
-
-                    {/* System Totals from drift check */}
-                    {driftData?.systemTotals && (
-                        <>
-                            <Grid item xs={12} md={6}>
-                                <Paper sx={{ p: 2, border: '1px solid', borderColor: driftData.systemTotals.sales.isMatched ? '#c8e6c9' : '#ffcdd2' }}>
-                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <Typography variant="subtitle2">Sales Total</Typography>
-                                        <Chip size="small" label={driftData.systemTotals.sales.isMatched ? 'MATCHED' : 'MISMATCH'}
-                                            color={driftData.systemTotals.sales.isMatched ? 'success' : 'error'} />
-                                    </Box>
-                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-                                        <Typography variant="body2" color="text.secondary">Orders: {fmt(driftData.systemTotals.sales.oldSystem)}</Typography>
-                                        <Typography variant="body2" color="text.secondary">Ledger: {fmt(driftData.systemTotals.sales.ledgerCredit)}</Typography>
-                                    </Box>
-                                </Paper>
-                            </Grid>
-                            <Grid item xs={12} md={6}>
-                                <Paper sx={{ p: 2, border: '1px solid', borderColor: driftData.systemTotals.payments.isMatched ? '#c8e6c9' : '#ffcdd2' }}>
-                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <Typography variant="subtitle2">Payments Total</Typography>
-                                        <Chip size="small" label={driftData.systemTotals.payments.isMatched ? 'MATCHED' : 'MISMATCH'}
-                                            color={driftData.systemTotals.payments.isMatched ? 'success' : 'error'} />
-                                    </Box>
-                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-                                        <Typography variant="body2" color="text.secondary">Payments: {fmt(driftData.systemTotals.payments.oldSystem)}</Typography>
-                                        <Typography variant="body2" color="text.secondary">Ledger: {fmt(driftData.systemTotals.payments.ledgerCashDebit)}</Typography>
-                                    </Box>
-                                </Paper>
-                            </Grid>
-                        </>
+                <Box>
+                    {/* Setup required */}
+                    {accountsCount === 0 && (
+                        <Paper sx={{ p: 4, textAlign: 'center', mb: 2 }}>
+                            <AccountBalance sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+                            <Typography variant="h6" gutterBottom>Ledger Not Initialized</Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 480, mx: 'auto' }}>
+                                The double-entry ledger needs to be set up once. This will create the Chart of Accounts
+                                and import all your existing orders, purchases, and payments as journal entries.
+                                Going forward, every new transaction will be posted automatically.
+                            </Typography>
+                            <Button
+                                variant="contained"
+                                size="large"
+                                onClick={handleImportAllData}
+                                disabled={migrating}
+                                startIcon={migrating ? <CircularProgress size={18} color="inherit" /> : null}
+                            >
+                                {migrating ? 'Setting up...' : 'Initialize Ledger & Import All Data'}
+                            </Button>
+                        </Paper>
                     )}
 
-                    {/* Drifted customers */}
-                    {driftData?.customerDrift?.length > 0 && (
-                        <Grid item xs={12}>
-                            <Paper sx={{ p: 2, bgcolor: '#fff8e1', border: '1px solid #ffe082' }}>
-                                <Typography variant="subtitle2" sx={{ mb: 1, color: '#e65100', fontWeight: 700 }}>
-                                    Customers with Balance Drift ({driftData.customerDrift.length})
-                                </Typography>
-                                <TableContainer sx={{ maxHeight: 260 }}>
-                                    <Table size="small" stickyHeader>
-                                        <TableHead>
-                                            <TableRow>
-                                                <TableCell>Customer</TableCell>
-                                                <TableCell align="right">Order System</TableCell>
-                                                <TableCell align="right">Ledger</TableCell>
-                                                <TableCell align="right">Difference</TableCell>
-                                            </TableRow>
-                                        </TableHead>
-                                        <TableBody>
-                                            {driftData.customerDrift.map((c) => (
-                                                <TableRow key={c.customerId}>
-                                                    <TableCell>{c.customerName}</TableCell>
-                                                    <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{fmt(c.oldOutstanding)}</TableCell>
-                                                    <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{fmt(c.ledgerBalance)}</TableCell>
-                                                    <TableCell align="right" sx={{ fontFamily: 'monospace', color: 'error.main', fontWeight: 700 }}>
-                                                        {fmt(c.difference)}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </TableContainer>
-                            </Paper>
+                    {/* Active ledger summary */}
+                    {accountsCount > 0 && (
+                        <Grid container spacing={2}>
+                            {/* Balance status */}
+                            <Grid item xs={12} md={4}>
+                                <Card variant="outlined">
+                                    <CardContent>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                                            {healthData?.isBalanced
+                                                ? <CheckCircle color="success" fontSize="small" />
+                                                : <Error color="error" fontSize="small" />}
+                                            <Typography variant="subtitle1" fontWeight={600}>Ledger Balance</Typography>
+                                        </Box>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                            <Typography variant="body2" color="text.secondary">Total Debits</Typography>
+                                            <Typography variant="body2" fontFamily="monospace" fontWeight={600}>{fmt(healthData?.totalDebits)}</Typography>
+                                        </Box>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                            <Typography variant="body2" color="text.secondary">Total Credits</Typography>
+                                            <Typography variant="body2" fontFamily="monospace" fontWeight={600}>{fmt(healthData?.totalCredits)}</Typography>
+                                        </Box>
+                                        <Divider sx={{ mb: 1.5 }} />
+                                        <Chip
+                                            size="small"
+                                            label={healthData?.isBalanced ? 'Balanced' : 'Not Balanced'}
+                                            color={healthData?.isBalanced ? 'success' : 'error'}
+                                        />
+                                    </CardContent>
+                                </Card>
+                            </Grid>
+
+                            {/* Accounts count */}
+                            <Grid item xs={12} md={4}>
+                                <Card variant="outlined">
+                                    <CardContent>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                                            <AccountBalance color="primary" fontSize="small" />
+                                            <Typography variant="subtitle1" fontWeight={600}>Chart of Accounts</Typography>
+                                        </Box>
+                                        <Typography variant="h4" fontWeight={700} color="primary.main">{accountsCount}</Typography>
+                                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>accounts active</Typography>
+                                        <Divider sx={{ my: 1.5 }} />
+                                        <Button size="small" onClick={() => setActiveTab(1)}>View Accounts</Button>
+                                    </CardContent>
+                                </Card>
+                            </Grid>
+
+                            {/* Reports */}
+                            <Grid item xs={12} md={4}>
+                                <Card variant="outlined">
+                                    <CardContent>
+                                        <Typography variant="subtitle1" fontWeight={600} gutterBottom>Reports</Typography>
+                                        {[
+                                            { label: 'Trial Balance', tab: 2 },
+                                            { label: 'Profit & Loss', tab: 3 },
+                                            { label: 'Balance Sheet', tab: 4 },
+                                            { label: 'Journal Entries', tab: 5 },
+                                        ].map(({ label, tab }) => (
+                                            <Button key={tab} fullWidth variant="text" size="small"
+                                                endIcon={<OpenInNew fontSize="small" />}
+                                                onClick={() => setActiveTab(tab)}
+                                                sx={{ mb: 0.5, justifyContent: 'space-between' }}>
+                                                {label}
+                                            </Button>
+                                        ))}
+                                    </CardContent>
+                                </Card>
+                            </Grid>
+
+                            {/* Re-import option */}
+                            <Grid item xs={12}>
+                                <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                                    <Box>
+                                        <Typography variant="body2" fontWeight={600}>Re-import Historical Data</Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            Run this if you added old orders/payments and want them reflected in the ledger. Safe to run multiple times.
+                                        </Typography>
+                                    </Box>
+                                    <Button variant="outlined" size="small" onClick={handleImportAllData} disabled={migrating}
+                                        startIcon={migrating ? <CircularProgress size={14} color="inherit" /> : null}>
+                                        {migrating ? 'Running...' : 'Re-import'}
+                                    </Button>
+                                </Paper>
+                            </Grid>
                         </Grid>
                     )}
-                </Grid>
+                </Box>
             )}
 
             {/* ── Tab 1: Chart of Accounts ── */}

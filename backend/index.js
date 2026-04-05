@@ -130,6 +130,30 @@ app.listen(PORT, async () => {
     // Do NOT call sequelize.sync() here — it bypasses migration history and
     // causes non-deterministic schema drift across environments.
 
+    // Safe additive column fixes — only add columns that are missing.
+    // These are safe nullable columns that will never break existing data.
+    try {
+      const qi = db.sequelize.getQueryInterface();
+
+      const accountsCols = await qi.describeTable('accounts').catch(() => null);
+      if (accountsCols && !accountsCols.description) {
+        await qi.addColumn('accounts', 'description', {
+          type: db.Sequelize.TEXT, allowNull: true, defaultValue: null
+        });
+        console.log('[SCHEMA] Added missing description column to accounts table');
+      }
+
+      const entryCols = await qi.describeTable('ledger_entries').catch(() => null);
+      if (entryCols && !entryCols.transactionDate) {
+        await qi.addColumn('ledger_entries', 'transactionDate', {
+          type: db.Sequelize.DATEONLY, allowNull: true
+        });
+        console.log('[SCHEMA] Added missing transactionDate column to ledger_entries table');
+      }
+    } catch (e) {
+      console.warn('[SCHEMA] Column auto-fix skipped:', e.message);
+    }
+
     // Start scheduled jobs (async, non-blocking)
     try {
       require('./src/scheduler').init(db);

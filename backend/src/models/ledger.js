@@ -28,9 +28,5 @@ module.exports = (sequelize, Sequelize) => {
         }
     );
 
-    ledger.associate = (models) => {
-        models.ledger.hasMany(models.ledgerEntry, { foreignKey: 'ledgerId' });
-    };
-
     return ledger;
 };
