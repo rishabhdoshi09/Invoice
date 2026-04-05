@@ -1,11 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { styled, useTheme } from '@mui/material/styles';
-import { Box, CssBaseline, Divider, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, AppBar as MuiAppBar, Drawer as MuiDrawer, Toolbar, Typography, Button, Chip, Menu, MenuItem, Tooltip } from '@mui/material';
-import { ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, Folder as FolderIcon, Menu as MenuIcon, Shop, People, ShoppingCart, Payment, Assessment, CloudDownload, Dashboard, Logout, AccountCircle, Group, Today, AccountBalance, Calculate, Inventory, Search, Keyboard, Book, Security, BackupOutlined } from '@mui/icons-material';
+import { Box, CssBaseline, Divider, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, AppBar as MuiAppBar, Drawer as MuiDrawer, Toolbar, Typography, Button, Menu, MenuItem, Tooltip } from '@mui/material';
+import { ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, Folder as FolderIcon, Menu as MenuIcon, Shop, People, ShoppingCart, Payment, Assessment, CloudDownload, Dashboard, Logout, AccountCircle, Group, Today, AccountBalance, Calculate, Inventory, Search, Book, Security, BackupOutlined } from '@mui/icons-material';
 import { GlobalSearch } from '../common/GlobalSearch';
 import { NotificationBell } from '../common/SmartNotifications';
-import { KeyboardShortcutsHelp } from '../common/KeyboardShortcuts';
 import { useSelector, useDispatch } from 'react-redux';
 
 import { Loader } from '../common/loader';
@@ -115,9 +114,6 @@ export const Layout = () =>  {
         navigate('/login');
     };
 
-    // Keyboard shortcuts help dialog
-    const [shortcutsOpen, setShortcutsOpen] = useState(false);
-
     // Global keyboard shortcut for search (Ctrl+K)
     const handleKeyDown = useCallback((e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
@@ -131,115 +127,36 @@ export const Layout = () =>  {
         return () => document.removeEventListener('keydown', handleKeyDown);
     }, [handleKeyDown]);
 
-    const pages = [
-        {
-            key: 'day-start',
-            label: 'Day Start', 
-            icon: <AccountBalance />,
-            path: 'day-start'
-        },
-        {
-            key: 'orders',
-            label: 'Orders', 
-            icon: <Shop />,
-            path: 'orders'
-        },
-        {
-            key: 'products',
-            label: 'Products', 
-            icon: <FolderIcon />,
-            path: 'products'
-        },
-        {
-            key: 'suppliers',
-            label: 'Suppliers', 
-            icon: <People />,
-            path: 'suppliers'
-        },
-        {
-            key: 'customers',
-            label: 'Customers', 
-            icon: <People />,
-            path: 'customers'
-        },
-        {
-            key: 'purchases',
-            label: 'Purchases', 
-            icon: <ShoppingCart />,
-            path: 'purchases'
-        },
-        {
-            key: 'payments',
-            label: 'Payments', 
-            icon: <Payment />,
-            path: 'payments'
-        },
-        {
-            key: 'daily-payments',
-            label: 'Daily Payments', 
-            icon: <Today />,
-            path: 'daily-payments'
-        },
-        {
-            key: 'stock',
-            label: 'Stock', 
-            icon: <Inventory />,
-            path: 'stock'
-        },
-        {
-            key: 'reports',
-            label: 'Reports', 
-            icon: <Assessment />,
-            path: 'reports'
-        },
-        {
-            key: 'tally-export',
-            label: 'Tally Export', 
-            icon: <CloudDownload />,
-            path: 'tally-export'
-        },
-        {
-            key: 'gst-export',
-            label: 'GST Export Tool', 
-            icon: <Calculate />,
-            path: 'gst-export',
-            adminOnly: true
-        },
+    // Core business pages
+    const corePages = [
+        { key: 'day-start',      label: 'Day Start',      icon: <AccountBalance />, path: 'day-start' },
+        { key: 'orders',         label: 'Orders',         icon: <Shop />,           path: 'orders' },
+        { key: 'customers',      label: 'Customers',      icon: <People />,         path: 'customers' },
+        { key: 'suppliers',      label: 'Suppliers',      icon: <People />,         path: 'suppliers' },
+        { key: 'purchases',      label: 'Purchases',      icon: <ShoppingCart />,   path: 'purchases' },
+        { key: 'payments',       label: 'Payments',       icon: <Payment />,        path: 'payments' },
+        { key: 'daily-payments', label: 'Daily Payments', icon: <Today />,          path: 'daily-payments' },
+        { key: 'stock',          label: 'Stock',          icon: <Inventory />,      path: 'stock' },
+        { key: 'products',       label: 'Products',       icon: <FolderIcon />,     path: 'products' },
     ];
 
-    // Add admin dashboard for admins
-    if (isAdmin) {
-        pages.push({
-            key: 'users',
-            label: 'Users', 
-            icon: <Group />,
-            path: 'users'
-        });
-        pages.push({
-            key: 'admin-dashboard',
-            label: 'Admin Dashboard', 
-            icon: <Dashboard />,
-            path: 'admin-dashboard'
-        });
-        pages.push({
-            key: 'ledger',
-            label: 'Ledger Module', 
-            icon: <Book />,
-            path: 'ledger'
-        });
-        pages.push({
-            key: 'bill-audit',
-            label: 'Bill Audit',
-            icon: <Security />,
-            path: 'bill-audit'
-        });
-        pages.push({
-            key: 'backup',
-            label: 'Database Backup',
-            icon: <BackupOutlined />,
-            path: 'backup'
-        });
-    }
+    // Reports & export tools
+    const toolPages = [
+        { key: 'reports',      label: 'Reports',      icon: <Assessment />,    path: 'reports' },
+        { key: 'tally-export', label: 'Tally Export', icon: <CloudDownload />, path: 'tally-export' },
+        ...(isAdmin ? [
+            { key: 'gst-export', label: 'GST Export', icon: <Calculate />, path: 'gst-export' },
+        ] : []),
+    ];
+
+    // Admin-only pages
+    const adminPages = isAdmin ? [
+        { key: 'admin-dashboard', label: 'Dashboard',  icon: <Dashboard />,       path: 'admin-dashboard' },
+        { key: 'ledger',          label: 'Ledger',     icon: <Book />,            path: 'ledger' },
+        { key: 'bill-audit',      label: 'Bill Audit', icon: <Security />,        path: 'bill-audit' },
+        { key: 'users',           label: 'Users',      icon: <Group />,           path: 'users' },
+        { key: 'backup',          label: 'Backup',     icon: <BackupOutlined />,  path: 'backup' },
+    ] : [];
 
     useEffect(()=>{
         dispatch(listProductsAction());
@@ -264,12 +181,12 @@ export const Layout = () =>  {
                     >
                         <MenuIcon />
                     </IconButton>
-                    <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 0, mr: 2 }}>
-                        { "Customer Invoicing".toUpperCase() }
+                    <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 0, mr: 2, fontWeight: 700, letterSpacing: 0.5 }}>
+                        RS Invoice
                     </Typography>
-                    
+
                     {/* Global Search */}
-                    <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', maxWidth: 600, mx: 'auto' }}>
+                    <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', maxWidth: 500, mx: 'auto' }}>
                         {showSearch ? (
                             <GlobalSearch onClose={() => setShowSearch(false)} />
                         ) : (
@@ -287,46 +204,15 @@ export const Layout = () =>  {
                                     startIcon={<Search />}
                                     data-testid="open-search-btn"
                                 >
-                                    Search orders, customers... &nbsp;
-                                    <Chip 
-                                        label="Ctrl+K" 
-                                        size="small" 
-                                        sx={{ 
-                                            height: 20, 
-                                            fontSize: '0.65rem', 
-                                            bgcolor: 'rgba(255,255,255,0.2)',
-                                            color: 'white'
-                                        }} 
-                                    />
+                                    Search orders, customers...
                                 </Button>
                             </Tooltip>
                         )}
                     </Box>
-                    
+
                     {/* User info and logout */}
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {/* Keyboard Shortcuts Help */}
-                        <Tooltip title="Keyboard Shortcuts (?)">
-                            <IconButton 
-                                color="inherit" 
-                                onClick={() => setShortcutsOpen(true)}
-                                sx={{ opacity: 0.8, '&:hover': { opacity: 1 } }}
-                                data-testid="keyboard-shortcuts-btn"
-                            >
-                                <Keyboard />
-                            </IconButton>
-                        </Tooltip>
-                        
-                        {/* Notification Bell */}
                         <NotificationBell />
-                        
-                        <Chip 
-                            label={user?.role === 'admin' ? '👑 Admin' : '👤 Staff'} 
-                            size="small"
-                            color={user?.role === 'admin' ? 'warning' : 'default'}
-                            sx={{ color: 'white', borderColor: 'white' }}
-                            variant="outlined"
-                        />
                         <Button
                             color="inherit"
                             onClick={handleMenuOpen}
@@ -342,12 +228,7 @@ export const Layout = () =>  {
                         >
                             <MenuItem disabled>
                                 <Typography variant="body2" color="text.secondary">
-                                    Logged in as: {user?.username}
-                                </Typography>
-                            </MenuItem>
-                            <MenuItem disabled>
-                                <Typography variant="body2" color="text.secondary">
-                                    Role: {user?.role}
+                                    {user?.username} · {user?.role}
                                 </Typography>
                             </MenuItem>
                             <Divider />
@@ -372,30 +253,57 @@ export const Layout = () =>  {
                     </IconButton>
                 </DrawerHeader>
                 <Divider />
-                <List>
-                    {pages.filter(p => !p.adminOnly || isAdmin).map((pageObj) => (
-                        <ListItem key={pageObj.key} disablePadding sx={{ display: 'block' }} onClick={()=>navigate(`/${pageObj.path}`)}>
-                            <ListItemButton
-                                sx={{
-                                    minHeight: 48,
-                                    justifyContent: open ? 'initial' : 'center',
-                                    px: 2.5,
-                                }}
-                            >
-                                <ListItemIcon
-                                    sx={{
-                                        minWidth: 0,
-                                        mr: open ? 3 : 'auto',
-                                        justifyContent: 'center',
-                                    }}
-                                >
+
+                {/* Core business navigation */}
+                <List disablePadding>
+                    {corePages.map((pageObj) => (
+                        <ListItem key={pageObj.key} disablePadding sx={{ display: 'block' }} onClick={() => navigate(`/${pageObj.path}`)}>
+                            <ListItemButton sx={{ minHeight: 44, justifyContent: open ? 'initial' : 'center', px: 2.5 }}>
+                                <ListItemIcon sx={{ minWidth: 0, mr: open ? 3 : 'auto', justifyContent: 'center' }}>
                                     {pageObj.icon}
                                 </ListItemIcon>
-                                <ListItemText primary={pageObj.label.toUpperCase()} sx={{ opacity: open ? 1 : 0 }} />
+                                <ListItemText primary={pageObj.label} sx={{ opacity: open ? 1 : 0 }} />
                             </ListItemButton>
                         </ListItem>
                     ))}
                 </List>
+
+                <Divider sx={{ my: 0.5 }} />
+
+                {/* Reports & tools */}
+                {open && <Typography variant="caption" sx={{ px: 2.5, py: 0.5, color: 'text.secondary', display: 'block', textTransform: 'uppercase', fontSize: '0.68rem', letterSpacing: 1 }}>Tools</Typography>}
+                <List disablePadding>
+                    {toolPages.map((pageObj) => (
+                        <ListItem key={pageObj.key} disablePadding sx={{ display: 'block' }} onClick={() => navigate(`/${pageObj.path}`)}>
+                            <ListItemButton sx={{ minHeight: 44, justifyContent: open ? 'initial' : 'center', px: 2.5 }}>
+                                <ListItemIcon sx={{ minWidth: 0, mr: open ? 3 : 'auto', justifyContent: 'center' }}>
+                                    {pageObj.icon}
+                                </ListItemIcon>
+                                <ListItemText primary={pageObj.label} sx={{ opacity: open ? 1 : 0 }} />
+                            </ListItemButton>
+                        </ListItem>
+                    ))}
+                </List>
+
+                {/* Admin section */}
+                {adminPages.length > 0 && (
+                    <>
+                        <Divider sx={{ my: 0.5 }} />
+                        {open && <Typography variant="caption" sx={{ px: 2.5, py: 0.5, color: 'text.secondary', display: 'block', textTransform: 'uppercase', fontSize: '0.68rem', letterSpacing: 1 }}>Admin</Typography>}
+                        <List disablePadding>
+                            {adminPages.map((pageObj) => (
+                                <ListItem key={pageObj.key} disablePadding sx={{ display: 'block' }} onClick={() => navigate(`/${pageObj.path}`)}>
+                                    <ListItemButton sx={{ minHeight: 44, justifyContent: open ? 'initial' : 'center', px: 2.5 }}>
+                                        <ListItemIcon sx={{ minWidth: 0, mr: open ? 3 : 'auto', justifyContent: 'center' }}>
+                                            {pageObj.icon}
+                                        </ListItemIcon>
+                                        <ListItemText primary={pageObj.label} sx={{ opacity: open ? 1 : 0 }} />
+                                    </ListItemButton>
+                                </ListItem>
+                            ))}
+                        </List>
+                    </>
+                )}
             </Drawer>
             <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
                 <DrawerHeader />
@@ -404,9 +312,7 @@ export const Layout = () =>  {
                 <Outlet />
             </Box>
         </Box>
-        
-        {/* Keyboard Shortcuts Help Dialog */}
-        <KeyboardShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+
         </>
     );
 }

@@ -99,7 +99,7 @@ export const Login = () => {
                 <Card sx={{ maxWidth: 450, width: '100%', mx: 2 }}>
                     <CardContent sx={{ p: 4 }}>
                         <Typography variant="h4" gutterBottom align="center" sx={{ mb: 1 }}>
-                            🔐 Initial Setup
+                            Initial Setup
                         </Typography>
                         <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
                             Create your administrator account
@@ -198,8 +198,8 @@ export const Login = () => {
         >
             <Card sx={{ maxWidth: 400, width: '100%', mx: 2 }}>
                 <CardContent sx={{ p: 4 }}>
-                    <Typography variant="h4" gutterBottom align="center" sx={{ mb: 1 }}>
-                        📋 Invoice System
+                    <Typography variant="h4" gutterBottom align="center" sx={{ mb: 1, fontWeight: 700 }}>
+                        RS Invoice
                     </Typography>
                     <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
                         Sign in to continue
