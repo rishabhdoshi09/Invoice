@@ -316,7 +316,8 @@ module.exports = {
                             { where: { id: payment.referenceId }, transaction }
                         );
 
-                        // Restore supplier outstanding balance (atomic, inside transaction)
+                        // Restore supplier outstanding balance atomically (HIGH-06).
+                        // Atomic SQL increment — eliminates lost-update race under concurrent deletes.
                         if (purchase.supplierId) {
                             await db.supplier.update(
                                 { currentBalance: db.sequelize.literal(`"currentBalance" + ${Number(payment.amount)}`) },
@@ -325,25 +326,23 @@ module.exports = {
                         }
                     }
                 }
-                
-                // Reverse customer balance if this was a customer payment
+
+                // Reverse customer balance if this was a customer payment.
+                // Atomic SQL increment — no read-modify-write race under concurrent deletes (HIGH-06).
                 if (payment.partyType === 'customer' && payment.partyId) {
-                    const customer = await db.customer.findByPk(payment.partyId);
-                    if (customer) {
-                        await customer.update({
-                            currentBalance: (Number(customer.currentBalance) || 0) + Number(payment.amount)
-                        }, { transaction });
-                    }
+                    await db.customer.update(
+                        { currentBalance: db.sequelize.literal(`"currentBalance" + ${Number(payment.amount)}`) },
+                        { where: { id: payment.partyId }, transaction }
+                    );
                 }
 
-                // Reverse supplier balance for standalone supplier payments (advance, etc.)
+                // Reverse supplier balance for standalone supplier payments (advance, etc.).
+                // Purchase-linked reversals are handled above via the purchase block (HIGH-06).
                 if (payment.partyType === 'supplier' && payment.partyId && payment.referenceType !== 'purchase') {
-                    const supplier = await db.supplier.findByPk(payment.partyId);
-                    if (supplier) {
-                        await supplier.update({
-                            currentBalance: (Number(supplier.currentBalance) || 0) + Number(payment.amount)
-                        }, { transaction });
-                    }
+                    await db.supplier.update(
+                        { currentBalance: db.sequelize.literal(`"currentBalance" + ${Number(payment.amount)}`) },
+                        { where: { id: payment.partyId }, transaction }
+                    );
                 }
 
                 // Create REVERSAL journal batch in the new ledger (swap debit/credit)

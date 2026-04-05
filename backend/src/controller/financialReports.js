@@ -655,6 +655,9 @@ const getRatioAnalysis = async (req, res) => {
             GROUP BY a.type, a."subType"
         `, { replacements: { asOf } });
 
+        // HIGH-07: fetch P&L with subType so we can separate sales revenue from COGS.
+        // Gross Margin = (Sales Revenue - COGS) / Sales Revenue × 100
+        // Net Profit Margin = Net Profit / Total Revenue × 100  (different denominators)
         const [pl] = await db.sequelize.query(`
             SELECT a.type, a."subType",
                    COALESCE(SUM(le.debit),  0) AS total_dr,
@@ -682,19 +685,20 @@ const getRatioAnalysis = async (req, res) => {
             }, 0);
         };
 
-        const currentAssets     = get('ASSET', 'CURRENT', 'dr') - get('ASSET', 'CURRENT', 'cr');
-        const currentLiabilities= get('LIABILITY', 'CURRENT', 'cr') - get('LIABILITY', 'CURRENT', 'dr');
-        const totalRevenue       = getPL('INCOME');
-        const totalExpenses      = getPL('EXPENSE');
-        const netProfit          = totalRevenue - totalExpenses;
-        // grossProfit = SALES revenue minus COGS only (not all expenses)
-        const salesRevenue       = getPL('INCOME', 'SALES') || totalRevenue;
-        const cogsExpense        = getPL('EXPENSE', 'COGS');
-        const grossProfit        = salesRevenue - cogsExpense;
+        const currentAssets      = get('ASSET', 'CURRENT', 'dr') - get('ASSET', 'CURRENT', 'cr');
+        const currentLiabilities = get('LIABILITY', 'CURRENT', 'cr') - get('LIABILITY', 'CURRENT', 'dr');
+        const totalRevenue        = getPL('INCOME');
+        const totalExpenses       = getPL('EXPENSE');
+        const netProfit           = totalRevenue - totalExpenses;
+        // salesRevenue = SALES sub-type income (or fall back to all income if no sub-type set)
+        const salesRevenue        = getPL('INCOME', 'SALES') || totalRevenue;
+        const cogsExpense         = getPL('EXPENSE', 'COGS');
+        const grossProfit         = salesRevenue - cogsExpense;
 
         const ratios = {
             currentRatio:   currentLiabilities > 0 ? (currentAssets / currentLiabilities).toFixed(2) : 'N/A',
-            grossMargin:    totalRevenue > 0 ? ((grossProfit / totalRevenue) * 100).toFixed(2) + '%' : 'N/A',
+            // HIGH-07: grossMargin uses salesRevenue denominator, NOT totalRevenue
+            grossMargin:    salesRevenue > 0 ? ((grossProfit / salesRevenue) * 100).toFixed(2) + '%' : 'N/A',
             netProfitMargin:totalRevenue > 0 ? ((netProfit  / totalRevenue) * 100).toFixed(2) + '%' : 'N/A',
             revenueGrowth:  'N/A' // requires prior period comparison
         };
