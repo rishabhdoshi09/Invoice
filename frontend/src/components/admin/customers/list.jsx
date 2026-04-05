@@ -65,14 +65,6 @@ export const ListCustomers = () => {
     const [newCustomerName, setNewCustomerName] = useState('');
     const [newCustomerMobile, setNewCustomerMobile] = useState('');
 
-    // Quick Add Sale
-    const [saleCustomer, setSaleCustomer] = useState(null);
-    const [saleDate, setSaleDate] = useState(moment().format('YYYY-MM-DD'));
-    const [saleItems, setSaleItems] = useState([{ name: '', qty: '', price: '', total: 0 }]);
-    const [salePaid, setSalePaid] = useState(true);
-    const [saleNotes, setSaleNotes] = useState('');
-    const saleItemRef = useRef(null);
-    
     // Expanded rows
     const [expandedOrder, setExpandedOrder] = useState(null);
     
@@ -360,96 +352,9 @@ export const ListCustomers = () => {
 
     // Quick receipt from table
     const handleQuickReceiptFromTable = (customer) => {
-        setActiveTab(2);
+        setActiveTab(1);
         setSelectedCustomer(customer);
         setReceiptAmount(customer.balance > 0 ? customer.balance.toString() : '');
-    };
-
-    // ========== QUICK ADD SALE ==========
-    const saleTotal = saleItems.reduce((s, i) => s + (i.total || 0), 0);
-
-    const handleSaleItemChange = (idx, field, value) => {
-        const updated = [...saleItems];
-        updated[idx][field] = value;
-        if (field === 'qty' || field === 'price') {
-            const q = parseFloat(updated[idx].qty) || 0;
-            const p = parseFloat(updated[idx].price) || 0;
-            updated[idx].total = Math.round(q * p * 100) / 100;
-        }
-        setSaleItems(updated);
-    };
-
-    const addSaleItem = () => {
-        setSaleItems([...saleItems, { name: '', qty: '', price: '', total: 0 }]);
-    };
-
-    const removeSaleItem = (idx) => {
-        if (saleItems.length <= 1) return;
-        setSaleItems(saleItems.filter((_, i) => i !== idx));
-    };
-
-    const handleQuickSale = async () => {
-        if (!saleCustomer) { alert('Select a customer'); return; }
-        const validItems = saleItems.filter(i => i.name.trim() && i.total > 0);
-        if (validItems.length === 0) { alert('Add at least one item with name and amount'); return; }
-
-        setSaving(true);
-        try {
-            const token = localStorage.getItem('token');
-            const total = validItems.reduce((s, i) => s + i.total, 0);
-            const paid = salePaid ? total : 0;
-
-            await axios.post('/api/orders', {
-                orderDate: moment(saleDate).format('DD-MM-YYYY'),
-                customerName: saleCustomer.name,
-                customerMobile: saleCustomer.mobile || '',
-                subTotal: total,
-                total: total,
-                paidAmount: paid,
-                dueAmount: total - paid,
-                paymentStatus: salePaid ? 'paid' : 'unpaid',
-                notes: saleNotes,
-                orderItems: validItems.map((item, idx) => ({
-                    name: item.name.trim(),
-                    quantity: parseFloat(item.qty) || 1,
-                    productPrice: parseFloat(item.price) || item.total,
-                    totalPrice: item.total,
-                    type: 'non-weighted',
-                    sortOrder: idx
-                }))
-            }, { headers: { Authorization: `Bearer ${token}` } });
-
-            showSuccess(`Sale ₹${total.toLocaleString('en-IN')} → ${saleCustomer.name} (${moment(saleDate).format('DD/MM/YY')})`);
-            // Offer WhatsApp send if customer has mobile
-            if (saleCustomer.mobile) {
-                const orderData = {
-                    orderDate: moment(saleDate).format('DD-MM-YYYY'),
-                    customerName: saleCustomer.name,
-                    total, paidAmount: paid, dueAmount: total - paid,
-                    paymentStatus: salePaid ? 'paid' : 'unpaid',
-                    items: validItems
-                };
-                setTimeout(() => {
-                    if (window.confirm(`Send invoice (₹${total.toLocaleString('en-IN')}) to ${saleCustomer.name} via WhatsApp?`)) {
-                        sendInvoiceViaWhatsApp(saleCustomer.mobile, orderData);
-                    }
-                }, 300);
-            }
-            // Batch mode: keep customer & date, clear items
-            setSaleItems([{ name: '', qty: '', price: '', total: 0 }]);
-            setSaleNotes('');
-            fetchCustomers();
-            setTimeout(() => saleItemRef.current?.focus(), 100);
-        } catch (error) {
-            alert('Error: ' + (error.response?.data?.message || error.message));
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleQuickSaleFromTable = (customer) => {
-        setActiveTab(1);
-        setSaleCustomer(customer);
     };
 
     // Navigate to create order
@@ -564,7 +469,6 @@ export const ListCustomers = () => {
             <Paper sx={{ mb: 2 }}>
                 <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
                     <Tab icon={<PersonAdd />} label="Add Customer" iconPosition="start" sx={{ minHeight: 48 }} data-testid="tab-add-customer" />
-                    <Tab icon={<ShoppingCart />} label="Quick Sale" iconPosition="start" sx={{ minHeight: 48, color: 'success.main' }} data-testid="tab-quick-sale" />
                     <Tab icon={<Badge badgeContent={customersWithDue} color="success"><Receipt /></Badge>} label="Receive Payment" iconPosition="start" sx={{ minHeight: 48 }} data-testid="tab-receive-payment" />
                     <Tab icon={<Badge badgeContent={customers.filter(c => c.balance < 0).length} color="warning"><AccountBalance /></Badge>} label="Advances" iconPosition="start" sx={{ minHeight: 48 }} data-testid="tab-advances" />
                     <Tab icon={<History />} label="Recent" iconPosition="start" sx={{ minHeight: 48 }} data-testid="tab-recent" />
@@ -665,125 +569,8 @@ export const ListCustomers = () => {
                         </Box>
                     )}
 
-                    {/* Tab 1: Quick Add Sale */}
+                    {/* Tab 1: Receive Payment */}
                     {activeTab === 1 && (
-                        <Box>
-                            <Grid container spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
-                                <Grid item xs={12} sm={3}>
-                                    <Autocomplete
-                                        size="small"
-                                        options={customers}
-                                        getOptionLabel={(o) => o.name || ''}
-                                        value={saleCustomer}
-                                        onChange={(e, v) => setSaleCustomer(v)}
-                                        renderInput={(params) => <TextField {...params} label="Customer *" data-testid="sale-customer-input" />}
-                                        renderOption={(props, option) => (
-                                            <li {...props}>
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                                                    <Typography variant="body2">{option.name}</Typography>
-                                                    {option.balance > 0 && <Chip label={`Due ₹${option.balance.toLocaleString('en-IN')}`} size="small" color="warning" sx={{ height: 18, fontSize: '0.65rem' }} />}
-                                                </Box>
-                                            </li>
-                                        )}
-                                    />
-                                </Grid>
-                                <Grid item xs={6} sm={2}>
-                                    <TextField
-                                        fullWidth size="small" type="date" label="Sale Date"
-                                        value={saleDate}
-                                        onChange={(e) => setSaleDate(e.target.value)}
-                                        InputLabelProps={{ shrink: true }}
-                                        data-testid="sale-date-input"
-                                    />
-                                </Grid>
-                                <Grid item xs={6} sm={2}>
-                                    <FormControlLabel
-                                        control={<Switch size="small" checked={salePaid} onChange={(e) => setSalePaid(e.target.checked)} data-testid="sale-paid-switch" />}
-                                        label={<Typography variant="body2" sx={{ fontWeight: 500, color: salePaid ? 'success.main' : 'warning.main' }}>{salePaid ? 'Cash (Paid)' : 'Credit (Due)'}</Typography>}
-                                    />
-                                </Grid>
-                                <Grid item xs={6} sm={2}>
-                                    <TextField fullWidth size="small" label="Notes" value={saleNotes} onChange={(e) => setSaleNotes(e.target.value)} placeholder="Optional" data-testid="sale-notes-input" />
-                                </Grid>
-                                <Grid item xs={6} sm={3}>
-                                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                        <Typography variant="h6" sx={{ fontWeight: 700, color: 'success.dark', whiteSpace: 'nowrap' }}>
-                                            ₹{saleTotal.toLocaleString('en-IN')}
-                                        </Typography>
-                                        <Button
-                                            fullWidth variant="contained" color="success"
-                                            onClick={handleQuickSale} disabled={saving}
-                                            startIcon={saving ? <CircularProgress size={16} /> : <ShoppingCart />}
-                                            data-testid="sale-submit-btn"
-                                        >
-                                            Add Sale
-                                        </Button>
-                                    </Box>
-                                </Grid>
-                            </Grid>
-
-                            {/* Item rows */}
-                            <Paper variant="outlined" sx={{ p: 1.5 }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>ITEMS ({saleItems.length})</Typography>
-                                    <Button size="small" startIcon={<Add />} onClick={addSaleItem} data-testid="sale-add-item-btn">Add Row</Button>
-                                </Box>
-                                {saleItems.map((item, idx) => (
-                                    <Grid container spacing={1} key={idx} alignItems="center" sx={{ mb: 0.5 }}>
-                                        <Grid item xs={5} sm={4}>
-                                            <TextField
-                                                fullWidth size="small" placeholder="Item name"
-                                                value={item.name}
-                                                onChange={(e) => handleSaleItemChange(idx, 'name', e.target.value)}
-                                                inputRef={idx === 0 ? saleItemRef : null}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' && idx === saleItems.length - 1 && item.name) addSaleItem();
-                                                }}
-                                                data-testid={`sale-item-name-${idx}`}
-                                            />
-                                        </Grid>
-                                        <Grid item xs={2} sm={2}>
-                                            <TextField
-                                                fullWidth size="small" placeholder="Qty" type="number"
-                                                value={item.qty}
-                                                onChange={(e) => handleSaleItemChange(idx, 'qty', e.target.value)}
-                                                data-testid={`sale-item-qty-${idx}`}
-                                            />
-                                        </Grid>
-                                        <Grid item xs={2} sm={2}>
-                                            <TextField
-                                                fullWidth size="small" placeholder="Price" type="number"
-                                                value={item.price}
-                                                onChange={(e) => handleSaleItemChange(idx, 'price', e.target.value)}
-                                                InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
-                                                data-testid={`sale-item-price-${idx}`}
-                                            />
-                                        </Grid>
-                                        <Grid item xs={2} sm={3}>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 70 }}>
-                                                    = ₹{(item.total || 0).toLocaleString('en-IN')}
-                                                </Typography>
-                                                {saleItems.length > 1 && (
-                                                    <IconButton size="small" onClick={() => removeSaleItem(idx)} data-testid={`sale-item-remove-${idx}`}>
-                                                        <Close fontSize="small" color="error" />
-                                                    </IconButton>
-                                                )}
-                                            </Box>
-                                        </Grid>
-                                    </Grid>
-                                ))}
-                            </Paper>
-                            {saleCustomer && (
-                                <Alert severity="info" sx={{ mt: 1, py: 0 }}>
-                                    Batch mode: After submission, customer &amp; date stay selected. Keep adding sales!
-                                </Alert>
-                            )}
-                        </Box>
-                    )}
-
-                    {/* Tab 2: Receive Payment */}
-                    {activeTab === 2 && (
                         <Box>
                             <Grid container spacing={2} alignItems="center">
                                 <Grid item xs={12} sm={4}>
@@ -904,8 +691,8 @@ export const ListCustomers = () => {
                         </Box>
                     )}
 
-                    {/* Tab 4: Recent Activity */}
-                    {activeTab === 4 && (
+                    {/* Tab 3: Recent Activity */}
+                    {activeTab === 3 && (
                         <Box>
                             <Typography variant="subtitle2" sx={{ mb: 1 }}>Recent Customer Receipts</Typography>
                             {recentReceipts.length === 0 ? (
@@ -928,8 +715,8 @@ export const ListCustomers = () => {
                         </Box>
                     )}
 
-                    {/* Tab 3: Advances */}
-                    {activeTab === 3 && (
+                    {/* Tab 2: Advances */}
+                    {activeTab === 2 && (
                         <Box>
                             <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <AccountBalance color="warning" fontSize="small" />
@@ -1085,12 +872,12 @@ export const ListCustomers = () => {
                                         </TableCell>
                                         <TableCell align="center">
                                             <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-                                                <Tooltip title="Quick Sale">
+                                                <Tooltip title="New Sale">
                                                     <Button
                                                         size="small"
                                                         variant="outlined"
                                                         color="primary"
-                                                        onClick={() => handleQuickSaleFromTable(customer)}
+                                                        onClick={() => handleCreateSale(customer)}
                                                         sx={{ minWidth: 40, px: 1 }}
                                                         data-testid={`quick-sale-${customer.id}`}
                                                     >
