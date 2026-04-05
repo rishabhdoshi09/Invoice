@@ -178,7 +178,7 @@ module.exports = {
     authenticate,
     authorize,
     canModify,
-    optionalAuth,
-    JWT_SECRET,
-    JWT_EXPIRES_IN
+    optionalAuth
+    // JWT_SECRET intentionally NOT exported — exporting the signing secret
+    // would allow any module that imports auth.js to forge tokens.
 };

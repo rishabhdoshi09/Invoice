@@ -255,7 +255,7 @@ class SelfAuditService {
             id: 'INV-07',
             name: "status='unpaid' ⟹ paidAmount=0",
             status: ok ? 'PASS' : 'FAIL',
-            severity: ok ? 'INFO' : 'WARNING',
+            severity: ok ? 'INFO' : 'CRITICAL',
             count: rows.length,
             detail: ok ? 'All unpaid invoices consistent' : rows.map(r =>
                 `${r.orderNumber}: status=unpaid but paidAmount=${r.paidAmount}`
@@ -276,7 +276,7 @@ class SelfAuditService {
             id: 'INV-08',
             name: 'No invoice overpayment (paidAmount ≤ total)',
             status: ok ? 'PASS' : 'FAIL',
-            severity: ok ? 'INFO' : 'WARNING', // overpayments are allowed business data
+            severity: ok ? 'INFO' : 'CRITICAL',
             count: rows.length,
             detail: ok ? 'No overpayments found' : rows.map(r =>
                 `${r.orderNumber}: paidAmount(${r.paidAmount}) > total(${r.total})`
@@ -484,7 +484,11 @@ class SelfAuditService {
         const sevCounts = { INFO: 0, WARNING: 0, CRITICAL: 0, HALT: 0 };
         for (const r of results) {
             counts[r.status] = (counts[r.status] || 0) + 1;
-            if (r.severity) sevCounts[r.severity] = (sevCounts[r.severity] || 0) + 1;
+            // Only count severity for failed/errored results — PASS results always carry 'INFO'
+            // and including them inflates the INFO count without indicating a real issue.
+            if (r.severity && r.status !== 'PASS' && r.status !== 'SKIP') {
+                sevCounts[r.severity] = (sevCounts[r.severity] || 0) + 1;
+            }
         }
         const overallStatus =
             sevCounts.HALT > 0     ? 'HALT' :

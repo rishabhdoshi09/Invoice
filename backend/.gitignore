@@ -3,7 +3,9 @@
 .vscode/
 node_modules/
 .vscode
-.env-prod
+.env
+.env.*
+!.env.example
 package-lock.json
 *.csv
 *.sql

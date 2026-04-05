@@ -127,61 +127,56 @@ module.exports = {
                 const hasCustomerMobile = orderObj.customerMobile && orderObj.customerMobile.trim();
                 
                 if (orderObj.customerId) {
-                    // Frontend explicitly passed customerId — user confirmed the link
-                    const confirmed = await db.customer.findByPk(orderObj.customerId, { transaction });
-                    if (confirmed && orderObj.dueAmount > 0) {
-                        await confirmed.update({
-                            currentBalance: (Number(confirmed.currentBalance) || 0) + orderObj.dueAmount
-                        }, { transaction });
+                    // Frontend explicitly passed customerId — user confirmed the link.
+                    // Use atomic increment to avoid lost-update under concurrent orders (CRIT-06).
+                    if (orderObj.dueAmount > 0) {
+                        await db.customer.update(
+                            { currentBalance: db.sequelize.literal(`"currentBalance" + ${orderObj.dueAmount}`) },
+                            { where: { id: orderObj.customerId }, transaction }
+                        );
                     }
                     console.log(`Order: CONFIRMED link to customer ID ${orderObj.customerId}`);
                 } else if (hasCustomerName || hasCustomerMobile) {
-                    try {
-                        // Search for existing match
-                        let existingCustomer = null;
-                        if (hasCustomerMobile) {
-                            existingCustomer = await db.customer.findOne({
-                                where: { mobile: orderObj.customerMobile.trim() },
-                                transaction
-                            });
-                        }
-                        if (!existingCustomer && hasCustomerName) {
-                            existingCustomer = await db.customer.findOne({
-                                where: db.Sequelize.where(
-                                    db.Sequelize.fn('LOWER', db.Sequelize.fn('TRIM', db.Sequelize.col('name'))),
-                                    orderObj.customerName.trim().toLowerCase()
-                                ),
-                                transaction
-                            });
-                        }
+                    // Search for existing match — propagate errors so the transaction rolls back (MED-05)
+                    let existingCustomer = null;
+                    if (hasCustomerMobile) {
+                        existingCustomer = await db.customer.findOne({
+                            where: { mobile: orderObj.customerMobile.trim() },
+                            transaction
+                        });
+                    }
+                    if (!existingCustomer && hasCustomerName) {
+                        existingCustomer = await db.customer.findOne({
+                            where: db.Sequelize.where(
+                                db.Sequelize.fn('LOWER', db.Sequelize.fn('TRIM', db.Sequelize.col('name'))),
+                                orderObj.customerName.trim().toLowerCase()
+                            ),
+                            transaction
+                        });
+                    }
 
-                        if (existingCustomer) {
-                            // Match found — DON'T auto-link. Order created with customerName only.
-                            // Return suggestion for frontend to prompt user.
-                            linkSuggestion = {
-                                customerId: existingCustomer.id,
-                                name: existingCustomer.name,
-                                mobile: existingCustomer.mobile,
-                                currentBalance: existingCustomer.currentBalance
-                            };
-                            // Order stays with customerName but NO customerId until user confirms
-                            console.log(`Order: Match found "${existingCustomer.name}" — NOT auto-linked. Awaiting user confirmation.`);
-                        } else {
-                            // No match — create new customer
-                            const customerName = hasCustomerName ? orderObj.customerName.trim() : orderObj.customerMobile.trim();
-                            const newCustomer = await db.customer.create({
-                                id: uuidv4(),
-                                name: customerName,
-                                mobile: hasCustomerMobile ? orderObj.customerMobile.trim() : null,
-                                address: orderObj.customerAddress || null,
-                                openingBalance: 0,
-                                currentBalance: orderObj.dueAmount > 0 ? orderObj.dueAmount : 0
-                            }, { transaction });
-                            orderObj.customerId = newCustomer.id;
-                            console.log(`Order: CREATED new customer "${customerName}" (ID: ${newCustomer.id})`);
-                        }
-                    } catch (customerError) {
-                        console.error('Failed to handle customer:', customerError);
+                    if (existingCustomer) {
+                        // Match found — DON'T auto-link. Return suggestion for frontend.
+                        linkSuggestion = {
+                            customerId: existingCustomer.id,
+                            name: existingCustomer.name,
+                            mobile: existingCustomer.mobile,
+                            currentBalance: existingCustomer.currentBalance
+                        };
+                        console.log(`Order: Match found "${existingCustomer.name}" — NOT auto-linked. Awaiting user confirmation.`);
+                    } else {
+                        // No match — create new customer. Error propagates to roll back the transaction.
+                        const customerName = hasCustomerName ? orderObj.customerName.trim() : orderObj.customerMobile.trim();
+                        const newCustomer = await db.customer.create({
+                            id: uuidv4(),
+                            name: customerName,
+                            mobile: hasCustomerMobile ? orderObj.customerMobile.trim() : null,
+                            address: orderObj.customerAddress || null,
+                            openingBalance: 0,
+                            currentBalance: orderObj.dueAmount > 0 ? orderObj.dueAmount : 0
+                        }, { transaction });
+                        orderObj.customerId = newCustomer.id;
+                        console.log(`Order: CREATED new customer "${customerName}" (ID: ${newCustomer.id})`);
                     }
                 }
                 
@@ -495,37 +490,38 @@ module.exports = {
                 // === PRE-COMMIT INVARIANT CHECK (Phase 4) ===
                 await assertOrderInvariants(orderId, transaction, { skipLedgerCheck: false });
 
-                // Return updated order with items (fetch outside transaction for speed)
+                // Audit log INSIDE transaction — failure rolls back the order update (HIGH-11)
+                const updatedForAudit = await db.order.findOne({ where: { id: orderId }, transaction });
+                await createAuditLog({
+                    userId:     req.user?.id,
+                    userName:   req.user?.name || req.user?.username || 'Anonymous',
+                    userRole:   req.user?.role || 'unknown',
+                    action:     'UPDATE',
+                    entityType: 'ORDER',
+                    entityId:   orderId,
+                    entityName: originalOrder.orderNumber,
+                    oldValues: {
+                        total:         originalOrder.total,
+                        customerName:  originalOrder.customerName,
+                        paymentStatus: originalOrder.paymentStatus
+                    },
+                    newValues: {
+                        total:         updatedForAudit?.total,
+                        customerName:  updatedForAudit?.customerName,
+                        paymentStatus: updatedForAudit?.paymentStatus
+                    },
+                    description: `Updated order ${originalOrder.orderNumber}`,
+                    ipAddress:   getClientIP(req),
+                    userAgent:   req.headers['user-agent'],
+                    transaction
+                });
+
                 return orderId;
             });
-            
+
             // Fetch complete order data after transaction
             const completeOrder = await Services.order.getOrder({ id: result });
-            
-            // Audit log for order update
-            await createAuditLog({
-                userId: req.user?.id,
-                userName: req.user?.name || req.user?.username || 'Anonymous',
-                userRole: req.user?.role || 'unknown',
-                action: 'UPDATE',
-                entityType: 'ORDER',
-                entityId: orderId,
-                entityName: originalOrder.orderNumber,
-                oldValues: {
-                    total: originalOrder.total,
-                    customerName: originalOrder.customerName,
-                    paymentStatus: originalOrder.paymentStatus
-                },
-                newValues: {
-                    total: completeOrder.total,
-                    customerName: completeOrder.customerName,
-                    paymentStatus: completeOrder.paymentStatus
-                },
-                description: `Updated order ${originalOrder.orderNumber}`,
-                ipAddress: getClientIP(req),
-                userAgent: req.headers['user-agent']
-            });
-            
+
             console.log(`Order ${orderId} updated successfully`);
             
             return res.status(200).send({
@@ -581,19 +577,29 @@ module.exports = {
                     console.error('Failed to update daily summary for deletion:', summaryError);
                 }
 
-                // CRITICAL: Reverse customer balance if this was a credit sale
-                if (order.customerId && order.paymentStatus !== 'paid') {
-                    try {
-                        const customer = await db.customer.findByPk(order.customerId);
-                        if (customer) {
-                            const dueAmount = Number(order.dueAmount) || Number(order.total) || 0;
-                            await customer.update({
-                                currentBalance: (Number(customer.currentBalance) || 0) - dueAmount
-                            }, { transaction });
-                            console.log(`Reversed customer ${customer.name} balance by ${dueAmount}`);
+                // Reverse customer balance — use dueAmount for all non-paid invoices.
+                // Atomic decrement prevents lost-update races (CRIT-07 + MED-01).
+                if (order.customerId && order.dueAmount > 0) {
+                    await db.customer.update(
+                        { currentBalance: db.sequelize.literal(`"currentBalance" - ${Number(order.dueAmount)}`) },
+                        { where: { id: order.customerId }, transaction }
+                    );
+                    console.log(`Reversed customer balance by due amount ${order.dueAmount} for order ${order.orderNumber}`);
+                }
+
+                // Reverse stock: add back the units deducted when this order was created
+                if (order.orderItems && order.orderItems.length > 0) {
+                    for (const item of order.orderItems) {
+                        if (item.productId) {
+                            await updateStock(
+                                item.productId,
+                                Number(item.quantity),
+                                'IN',
+                                order.id,
+                                'sale_reversal',
+                                transaction
+                            );
                         }
-                    } catch (custError) {
-                        console.error('Failed to reverse customer balance:', custError);
                     }
                 }
 

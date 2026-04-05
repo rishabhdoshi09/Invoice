@@ -382,41 +382,63 @@ async function postExpense(expense, transaction) {
 //     paid→unpaid:  DR Customer A/R (total), CR Cash (total)
 // ══════════════════════════════════════════════════════════════════════════
 async function postPaymentStatusToggle(order, oldStatus, newStatus, changedBy, transaction) {
-    const total = Number(order.total) || 0;
-    if (total <= 0) return { skipped: true, reason: 'zero_total' };
     if (!order.customerId) return { skipped: true, reason: 'no_customer_id' };
+
+    // Use dueAmount for unpaid→paid (only collect what is still owed, not the full total
+    // which may have been partially paid already via receipt allocations — MED-06).
+    // Use paidAmount for paid→unpaid (reverse exactly what was previously marked paid).
+    const dueAmount  = Number(order.dueAmount)  || 0;
+    const paidAmount = Number(order.paidAmount) || 0;
+
+    if (oldStatus === 'unpaid' && dueAmount <= 0) return { skipped: true, reason: 'zero_due' };
+    if (oldStatus === 'paid'   && paidAmount <= 0) return { skipped: true, reason: 'zero_paid' };
+
+    // HIGH-04: Idempotency guard — use a direction-stamped key so each distinct
+    // toggle direction (unpaid→paid, paid→unpaid) is only posted once.
+    // Multiple toggles are legitimate, so we include direction in the referenceType.
+    const toggleRefType = `PAYMENT_TOGGLE_${oldStatus.toUpperCase()}_${newStatus.toUpperCase()}`;
+    const dup = await db.journalBatch.findOne({
+        where: { referenceType: toggleRefType, referenceId: order.id, isReversed: false },
+        transaction
+    });
+    if (dup) {
+        console.log(`[AE] SKIP TOGGLE: ${order.orderNumber} ${oldStatus}→${newStatus} already posted (${dup.batchNumber})`);
+        return { skipped: true, batchNumber: dup.batchNumber };
+    }
 
     const [cashAcct, customerAcct] = await Promise.all([
         _cashOrBank(order.bankAccountId, transaction),
         _partyAccount('customer', order.customerId, order.customerName || 'Unknown', transaction)
     ]);
 
-    let entries, description;
+    let entries, description, amount;
     if (oldStatus === 'unpaid' && newStatus === 'paid') {
+        amount = dueAmount; // collect only what is outstanding
         description = `Payment received (toggle) for ${order.orderNumber} [${changedBy}]`;
         entries = [
-            { accountId: cashAcct.id,     debit: total, credit: 0,     narration: `Toggle paid: ${order.orderNumber}` },
-            { accountId: customerAcct.id, debit: 0,     credit: total, narration: `Toggle paid: ${order.orderNumber}` }
+            { accountId: cashAcct.id,     debit: amount, credit: 0,      narration: `Toggle paid: ${order.orderNumber}` },
+            { accountId: customerAcct.id, debit: 0,      credit: amount, narration: `Toggle paid: ${order.orderNumber}` }
         ];
     } else if (oldStatus === 'paid' && newStatus === 'unpaid') {
+        amount = paidAmount; // reverse the amount that was marked as paid
         description = `Payment reversed (toggle) for ${order.orderNumber} [${changedBy}]`;
         entries = [
-            { accountId: customerAcct.id, debit: total, credit: 0,     narration: `Toggle unpaid: ${order.orderNumber}` },
-            { accountId: cashAcct.id,     debit: 0,     credit: total, narration: `Toggle unpaid: ${order.orderNumber}` }
+            { accountId: customerAcct.id, debit: amount, credit: 0,      narration: `Toggle unpaid: ${order.orderNumber}` },
+            { accountId: cashAcct.id,     debit: 0,      credit: amount, narration: `Toggle unpaid: ${order.orderNumber}` }
         ];
     } else {
         return { skipped: true, reason: 'noop' };
     }
 
     const result = await ledgerService.createJournalBatch({
-        referenceType: 'PAYMENT_TOGGLE',
+        referenceType: toggleRefType,
         referenceId:   order.id,
         description,
         transactionDate: new Date(),
         entries
     }, transaction);
 
-    console.log(`[AE] TOGGLE ${order.orderNumber} ${oldStatus}→${newStatus} → ${result.batch.batchNumber}`);
+    console.log(`[AE] TOGGLE ${order.orderNumber} ${oldStatus}→${newStatus} → ${result.batch.batchNumber} (₹${amount})`);
     return { posted: true, batchNumber: result.batch.batchNumber, batchId: result.batch.id };
 }
 

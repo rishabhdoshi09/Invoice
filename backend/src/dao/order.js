@@ -32,9 +32,15 @@ module.exports = {
             throw new Error(error);
         }
     },
-    deleteOrder: async (filterObj) => {
+    deleteOrder: async (filterObj, transaction = null) => {
         try {
-            const res = await db.order.destroy({ where: { id: filterObj.id }});
+            const options = { where: { id: filterObj.id } };
+            if (transaction) options.transaction = transaction;
+            // Soft delete — preserves the record for audit/ledger reversal
+            const res = await db.order.update(
+                { isDeleted: true, deletedAt: new Date() },
+                options
+            );
             return res;
         } catch (error) {
             console.log(error);

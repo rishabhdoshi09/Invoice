@@ -4,6 +4,15 @@ const Validations = require('../validations');
 const db = require('../models');
 const { postPurchaseToLedger, reversePurchaseLedger } = require('../services/realTimeLedger');
 const { updateStock } = require('../services/accountingEngine');
+const { createAuditLog } = require('../middleware/auditLogger');
+
+const round2 = (n) => Math.round(n * 100) / 100;
+
+const getClientIP = (req) =>
+    req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+    req.headers['x-real-ip'] ||
+    req.connection?.remoteAddress ||
+    'unknown';
 
 module.exports = {
     createPurchaseBill: async (req, res) => {
@@ -22,27 +31,39 @@ module.exports = {
 
             let { purchaseItems, ...purchaseObj } = value;
 
-            // Calculate payment status
+            // === SERVER-SIDE MATH: recompute totals from line items (never trust client) ===
+            purchaseItems = purchaseItems.map(item => ({
+                ...item,
+                totalPrice: round2(Number(item.quantity) * Number(item.price))
+            }));
+            purchaseObj.subTotal = round2(purchaseItems.reduce((s, i) => s + i.totalPrice, 0));
+            const taxPercent = typeof purchaseObj.taxPercent === 'number' ? purchaseObj.taxPercent : 0;
+            purchaseObj.tax      = round2(purchaseObj.subTotal * taxPercent / 100);
+            purchaseObj.taxPercent = taxPercent;
+            purchaseObj.total    = round2(purchaseObj.subTotal + purchaseObj.tax);
+
+            // Payment state: overpayment becomes advanceAmount (shown as advance to supplier)
             if (!purchaseObj.paidAmount) purchaseObj.paidAmount = 0;
-            purchaseObj.dueAmount = purchaseObj.total - purchaseObj.paidAmount;
-            
-            if (purchaseObj.paidAmount === 0) {
+            purchaseObj.paidAmount     = round2(purchaseObj.paidAmount);
+            purchaseObj.dueAmount      = round2(Math.max(0, purchaseObj.total - purchaseObj.paidAmount));
+            purchaseObj.advanceAmount  = round2(Math.max(0, purchaseObj.paidAmount - purchaseObj.total));
+
+            if (purchaseObj.paidAmount <= 0.01) {
                 purchaseObj.paymentStatus = 'unpaid';
-            } else if (purchaseObj.paidAmount >= purchaseObj.total) {
+            } else if (purchaseObj.paidAmount >= purchaseObj.total - 0.01) {
                 purchaseObj.paymentStatus = 'paid';
             } else {
                 purchaseObj.paymentStatus = 'partial';
             }
 
             const result = await db.sequelize.transaction(async (transaction) => {
-                
                 const response = await Services.purchaseBill.createPurchaseBill(purchaseObj, transaction);
                 const purchaseBillId = response.id;
 
-                purchaseItems = purchaseItems.map(item => { return {...item, purchaseBillId: purchaseBillId } });
+                purchaseItems = purchaseItems.map(item => ({ ...item, purchaseBillId }));
                 await Services.purchaseItem.addPurchaseItems(purchaseItems, transaction);
 
-                // Increase stock for each item that has a linked product
+                // Increase stock for each item with a linked product (inside transaction)
                 for (const item of purchaseItems) {
                     if (item.productId) {
                         await updateStock(
@@ -57,60 +78,22 @@ module.exports = {
                     }
                 }
 
-                // Update supplier balance
-                const supplier = await Services.supplier.getSupplier({ id: purchaseObj.supplierId });
-
-                // Create ledger entries for purchase (only if ledger system is set up)
-                // Dynamically get or create the Purchase Ledger
-                let purchaseLedger = await Services.ledger.getLedgerByName('Purchase Account');
-                if (!purchaseLedger) {
-                    // Auto-create the Purchase Account ledger
-                    purchaseLedger = await db.ledger.create({
-                        ledgerName: 'Purchase Account',
-                        ledgerType: 'expense',
-                        openingBalance: 0,
-                        currentBalance: 0
-                    }, { transaction });
-                }
-                const PURCHASE_LEDGER_ID = purchaseLedger.id;
-                
-                // Only create ledger entries if supplier has a ledgerId
-                if (supplier && supplier.ledgerId) {
-                    const ledgerEntries = [
-                        {
-                            ledgerId: supplier.ledgerId, 
-                            entryDate: purchaseObj.billDate,
-                            debit: 0,
-                            credit: purchaseObj.total, // Supplier is credited (liability increases)
-                            referenceType: 'purchase',
-                            referenceId: purchaseBillId
-                        },
-                        {
-                            ledgerId: PURCHASE_LEDGER_ID, 
-                            entryDate: purchaseObj.billDate,
-                            debit: purchaseObj.total, // Purchase is debited (expense/asset increases)
-                            credit: 0,
-                            referenceType: 'purchase',
-                            referenceId: purchaseBillId
-                        }
-                    ];
-                    await db.ledgerEntry.bulkCreate(ledgerEntries, { transaction });
-                }
-
-                // Update supplier balance
-                if (supplier) {
-                    const newBalance = (supplier.currentBalance || 0) + purchaseObj.dueAmount;
-                    await Services.supplier.updateSupplier(
-                        { id: purchaseObj.supplierId },
-                        { currentBalance: newBalance }
-                    );
-                }
-
-                // === NEW DOUBLE-ENTRY LEDGER: Real-time posting ===
-                // Throws on failure → rolls back entire transaction (same as order.js)
+                // Update supplier outstanding balance atomically inside the transaction.
+                // dueAmount = what we still owe; advanceAmount = excess we paid.
+                // Balance increases by dueAmount (we owe more), decreases by advanceAmount (we over-paid).
                 if (purchaseObj.supplierId) {
+                    const balanceDelta = purchaseObj.dueAmount - purchaseObj.advanceAmount;
+                    if (balanceDelta !== 0) {
+                        await db.supplier.update(
+                            { currentBalance: db.sequelize.literal(`"currentBalance" + ${balanceDelta}`) },
+                            { where: { id: purchaseObj.supplierId }, transaction }
+                        );
+                    }
+
+                    // === DOUBLE-ENTRY LEDGER: AccountingEngine is the sole ledger source ===
                     const accountsExist = await db.account.count({ transaction });
                     if (accountsExist > 0) {
+                        const supplier = await db.supplier.findByPk(purchaseObj.supplierId, { transaction });
                         await postPurchaseToLedger(
                             { ...purchaseObj, id: purchaseBillId, billNumber, supplierName: supplier?.name || 'Unknown Supplier', createdAt: new Date() },
                             transaction
@@ -120,7 +103,7 @@ module.exports = {
                     }
                 }
 
-                return await Services.purchaseBill.getPurchaseBill({id: purchaseBillId });
+                return await Services.purchaseBill.getPurchaseBill({ id: purchaseBillId });
             });
 
             return res.status(200).send({
@@ -210,28 +193,49 @@ module.exports = {
             }
 
             await db.sequelize.transaction(async (transaction) => {
-                // Soft delete instead of hard delete
+                // Soft delete — preserves record for audit trail
                 await db.purchaseBill.update(
                     {
                         isDeleted: true,
                         deletedAt: new Date(),
                         deletedBy: req.user?.id || null,
-                        deletedByName: req.user?.name || null
+                        deletedByName: req.user?.name || req.user?.username || null
                     },
                     { where: { id: req.params.purchaseId }, transaction }
                 );
 
-                // Update supplier balance
-                const supplier = await Services.supplier.getSupplier({ id: purchase.supplierId });
-                if (supplier) {
-                    const newBalance = (supplier.currentBalance || 0) - purchase.dueAmount;
-                    await Services.supplier.updateSupplier(
-                        { id: purchase.supplierId },
-                        { currentBalance: newBalance }
-                    );
+                // Reverse stock: remove the units that were added when this purchase was created
+                const purchaseItems = await db.purchaseItem.findAll({
+                    where: { purchaseBillId: req.params.purchaseId },
+                    transaction
+                });
+                for (const item of purchaseItems) {
+                    if (item.productId) {
+                        await updateStock(
+                            item.productId,
+                            Number(item.quantity),
+                            'OUT',
+                            req.params.purchaseId,
+                            'purchase_reversal',
+                            transaction
+                        );
+                    }
                 }
 
-                // Reverse ledger entry if accounts exist
+                // Reverse supplier outstanding balance atomically (inside transaction).
+                // dueAmount was added on create; advanceAmount was deducted on create.
+                // Reversal: subtract dueAmount, add back advanceAmount.
+                if (purchase.supplierId) {
+                    const balanceDelta = (Number(purchase.dueAmount) || 0) - (Number(purchase.advanceAmount) || 0);
+                    if (balanceDelta !== 0) {
+                        await db.supplier.update(
+                            { currentBalance: db.sequelize.literal(`"currentBalance" - ${balanceDelta}`) },
+                            { where: { id: purchase.supplierId }, transaction }
+                        );
+                    }
+                }
+
+                // Reverse double-entry ledger batches
                 try {
                     const accountsExist = await db.account.count({ transaction });
                     if (accountsExist > 0) {
@@ -239,8 +243,31 @@ module.exports = {
                     }
                 } catch (ledgerError) {
                     console.error(`[LEDGER] Failed to reverse purchase ${purchase.billNumber}:`, ledgerError.message);
+                    throw ledgerError;
                 }
             });
+
+            // Audit log for purchase bill deletion (MED-07)
+            await createAuditLog({
+                userId:     req.user?.id,
+                userName:   req.user?.name || req.user?.username || 'Anonymous',
+                userRole:   req.user?.role || 'unknown',
+                action:     'DELETE',
+                entityType: 'PURCHASE_BILL',
+                entityId:   purchase.id,
+                entityName: purchase.billNumber,
+                oldValues: {
+                    billNumber:    purchase.billNumber,
+                    total:         Number(purchase.total),
+                    paidAmount:    Number(purchase.paidAmount),
+                    dueAmount:     Number(purchase.dueAmount),
+                    paymentStatus: purchase.paymentStatus
+                },
+                newValues: null,
+                description: `DELETED purchase bill ${purchase.billNumber} (₹${purchase.total})`,
+                ipAddress:  getClientIP(req),
+                userAgent:  req.headers['user-agent']
+            }).catch(e => console.warn('[AUDIT] Purchase bill delete log failed:', e.message));
 
             return res.status(200).send({
                 status: 200,

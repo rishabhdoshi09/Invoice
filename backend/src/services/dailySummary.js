@@ -96,7 +96,10 @@ module.exports = {
     // IMPORTANT: totalSales only tracks PAID orders (cash sales)
     // Unpaid/credit sales are tracked via totalReceivables calculated dynamically
     recordOrderCreated: async (order, transaction = null) => {
-        const today = moment().format('YYYY-MM-DD');
+        // Use the order's own date so backdated orders go to the right summary row
+        const today = order.orderDate
+            ? moment(order.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('YYYY-MM-DD')
+            : moment().format('YYYY-MM-DD');
         const options = transaction ? { transaction } : {};
         
         let summary = await db.dailySummary.findOne({
@@ -390,12 +393,11 @@ module.exports = {
         const unpaidOrders = orders.filter(o => o.paymentStatus === 'unpaid');
         const partialOrders = orders.filter(o => o.paymentStatus === 'partial');
         
-        // Cash Sales = CASH mode orders that are still 'paid'.
-        // If a CASH order is toggled to 'unpaid'/'partial', it moves to credit outstanding
-        // and must no longer appear in cash sales.
+        // Cash Sales = cash actually received from CASH mode orders.
+        // Use paidAmount (not total) so partial CASH orders contribute their collected portion.
+        // Unpaid CASH orders contribute 0 (paidAmount=0); fully-paid contribute their total.
         const cashFromTodaysOrders = cashOrders
-            .filter(o => o.paymentStatus === 'paid')
-            .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+            .reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
         
         // Credit outstanding (what customers still owe from today)
         const creditOutstanding = orders.reduce((sum, o) => sum + (Number(o.dueAmount) || 0), 0);

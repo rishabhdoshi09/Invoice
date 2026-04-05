@@ -399,12 +399,20 @@ const getReceivablesAgeing = async (req, res) => {
                 CASE
                     WHEN o."dueDate" IS NOT NULL
                     THEN :asOf::date - o."dueDate"::date
-                    ELSE :asOf::date - o."orderDate"::date
+                    ELSE :asOf::date - CASE
+                        WHEN o."orderDate" ~ '^\d{2}-\d{2}-\d{4}$'
+                        THEN TO_DATE(o."orderDate", 'DD-MM-YYYY')
+                        ELSE o."orderDate"::date
+                    END
                 END AS days_overdue
             FROM orders o
             WHERE o."isDeleted" = false
               AND o."dueAmount" > 0.01
-              AND o."orderDate"::date <= :asOf::date
+              AND CASE
+                    WHEN o."orderDate" ~ '^\d{2}-\d{2}-\d{4}$'
+                    THEN TO_DATE(o."orderDate", 'DD-MM-YYYY')
+                    ELSE o."orderDate"::date
+                  END <= :asOf::date
             ORDER BY days_overdue DESC
         `, { replacements: { asOf } });
 
@@ -456,13 +464,21 @@ const getPayablesAgeing = async (req, res) => {
                 CASE
                     WHEN pb."dueDate" IS NOT NULL
                     THEN :asOf::date - pb."dueDate"::date
-                    ELSE :asOf::date - pb."billDate"::date
+                    ELSE :asOf::date - CASE
+                        WHEN pb."billDate" ~ '^\d{2}-\d{2}-\d{4}$'
+                        THEN TO_DATE(pb."billDate", 'DD-MM-YYYY')
+                        ELSE pb."billDate"::date
+                    END
                 END AS days_overdue
             FROM purchase_bills pb
             LEFT JOIN suppliers s ON s.id = pb."supplierId"
             WHERE pb."isDeleted" = false
               AND pb."dueAmount" > 0.01
-              AND pb."billDate"::date <= :asOf::date
+              AND CASE
+                    WHEN pb."billDate" ~ '^\d{2}-\d{2}-\d{4}$'
+                    THEN TO_DATE(pb."billDate", 'DD-MM-YYYY')
+                    ELSE pb."billDate"::date
+                  END <= :asOf::date
             ORDER BY days_overdue DESC
         `, { replacements: { asOf } });
 
@@ -547,8 +563,12 @@ const getSalesRegister = async (req, res) => {
                 o."reverseCharge", o."customerGstin"
             FROM orders o
             WHERE o."isDeleted" = false
-              AND o."orderDate" >= :from
-              AND o."orderDate" <= :to
+              AND CASE WHEN o."orderDate" ~ '^\d{2}-\d{2}-\d{4}$'
+                       THEN TO_DATE(o."orderDate", 'DD-MM-YYYY')
+                       ELSE o."orderDate"::date END >= :from::date
+              AND CASE WHEN o."orderDate" ~ '^\d{2}-\d{2}-\d{4}$'
+                       THEN TO_DATE(o."orderDate", 'DD-MM-YYYY')
+                       ELSE o."orderDate"::date END <= :to::date
             ORDER BY o."orderDate", o."orderNumber"
         `, { replacements: { from, to } });
 
@@ -588,8 +608,12 @@ const getPurchaseRegister = async (req, res) => {
             FROM purchase_bills pb
             LEFT JOIN suppliers s ON s.id = pb."supplierId"
             WHERE pb."isDeleted" = false
-              AND pb."billDate" >= :from
-              AND pb."billDate" <= :to
+              AND CASE WHEN pb."billDate" ~ '^\d{2}-\d{2}-\d{4}$'
+                       THEN TO_DATE(pb."billDate", 'DD-MM-YYYY')
+                       ELSE pb."billDate"::date END >= :from::date
+              AND CASE WHEN pb."billDate" ~ '^\d{2}-\d{2}-\d{4}$'
+                       THEN TO_DATE(pb."billDate", 'DD-MM-YYYY')
+                       ELSE pb."billDate"::date END <= :to::date
             ORDER BY pb."billDate", pb."billNumber"
         `, { replacements: { from, to } });
 
@@ -632,7 +656,7 @@ const getRatioAnalysis = async (req, res) => {
         `, { replacements: { asOf } });
 
         const [pl] = await db.sequelize.query(`
-            SELECT a.type,
+            SELECT a.type, a."subType",
                    COALESCE(SUM(le.debit),  0) AS total_dr,
                    COALESCE(SUM(le.credit), 0) AS total_cr
             FROM accounts a
@@ -641,7 +665,7 @@ const getRatioAnalysis = async (req, res) => {
             WHERE jb."isPosted" = true AND jb."isReversed" = false
               AND a.type IN ('INCOME','EXPENSE')
               AND jb."transactionDate" BETWEEN :from AND :to
-            GROUP BY a.type
+            GROUP BY a.type, a."subType"
         `, { replacements: { from, to } });
 
         const get = (type, subType, side) => {
@@ -649,11 +673,13 @@ const getRatioAnalysis = async (req, res) => {
             if (!row) return 0;
             return side === 'dr' ? Number(row.total_dr) : Number(row.total_cr);
         };
-        const getPL = (type) => {
-            const row = pl.find(r => r.type === type);
-            if (!row) return 0;
-            return type === 'INCOME' ? Number(row.total_cr) - Number(row.total_dr)
-                                     : Number(row.total_dr) - Number(row.total_cr);
+        const getPL = (type, subType = null) => {
+            const rows = pl.filter(r => r.type === type && (!subType || r.subType === subType));
+            return rows.reduce((sum, r) => {
+                return sum + (type === 'INCOME'
+                    ? Number(r.total_cr) - Number(r.total_dr)
+                    : Number(r.total_dr) - Number(r.total_cr));
+            }, 0);
         };
 
         const currentAssets     = get('ASSET', 'CURRENT', 'dr') - get('ASSET', 'CURRENT', 'cr');
@@ -661,11 +687,15 @@ const getRatioAnalysis = async (req, res) => {
         const totalRevenue       = getPL('INCOME');
         const totalExpenses      = getPL('EXPENSE');
         const netProfit          = totalRevenue - totalExpenses;
+        // grossProfit = SALES revenue minus COGS only (not all expenses)
+        const salesRevenue       = getPL('INCOME', 'SALES') || totalRevenue;
+        const cogsExpense        = getPL('EXPENSE', 'COGS');
+        const grossProfit        = salesRevenue - cogsExpense;
 
         const ratios = {
             currentRatio:   currentLiabilities > 0 ? (currentAssets / currentLiabilities).toFixed(2) : 'N/A',
-            grossMargin:    totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(2) + '%' : 'N/A',
-            netProfitMargin:totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(2) + '%' : 'N/A',
+            grossMargin:    totalRevenue > 0 ? ((grossProfit / totalRevenue) * 100).toFixed(2) + '%' : 'N/A',
+            netProfitMargin:totalRevenue > 0 ? ((netProfit  / totalRevenue) * 100).toFixed(2) + '%' : 'N/A',
             revenueGrowth:  'N/A' // requires prior period comparison
         };
 

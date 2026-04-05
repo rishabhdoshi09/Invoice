@@ -25,7 +25,24 @@ module.exports = {
 
         const schema = Joi.object().keys({
             orderNumber: Joi.string().trim().optional(), // generated server-side
-            orderDate: Joi.string().trim().required(),
+            orderDate: Joi.string().trim().required().max(10)
+                .regex(/^\d{2}-\d{2}-\d{4}$|^\d{4}-\d{2}-\d{2}$/, 'date format')
+                .custom((value, helpers) => {
+                    // Parse both DD-MM-YYYY and YYYY-MM-DD
+                    let d;
+                    if (/^\d{2}-\d{2}-\d{4}$/.test(value)) {
+                        const [dd, mm, yyyy] = value.split('-');
+                        d = new Date(`${yyyy}-${mm}-${dd}`);
+                    } else {
+                        d = new Date(value);
+                    }
+                    if (isNaN(d.getTime())) return helpers.error('any.invalid');
+                    // Reject future dates (allow same-day entries)
+                    const today = new Date();
+                    today.setHours(23, 59, 59, 999);
+                    if (d > today) return helpers.error('date.max', { limit: 'today' });
+                    return value;
+                }),
             customerName: Joi.string().trim().allow('').optional(),
             customerMobile: Joi.string().trim().allow('').optional(),
             customerAddress: Joi.string().trim().allow('').optional(),
