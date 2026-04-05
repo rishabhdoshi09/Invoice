@@ -8,7 +8,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { Note, Warning, Clear, Refresh, SwapHoriz, PersonAdd, Person, Print, Visibility, WhatsApp } from '@mui/icons-material';
 import axios from 'axios';
 import pdfMake from 'pdfmake/build/pdfmake';
-import { generatePdfDefinition } from './helper';
+import { generatePdfDefinition, generatePdfDefinition2 } from './helper';
 import { sendInvoiceViaWhatsApp } from '../../../utils/whatsapp';
 
 // Load pdfMake fonts safely
@@ -76,8 +76,9 @@ export const ListOrders = () => {
     
     // Print state
     const [printingInvoice, setPrintingInvoice] = useState(null);
+    const [printingReceipt, setPrintingReceipt] = useState(null);
 
-    // Print Invoice function
+    // Print GST Tax Invoice (Template 1)
     const handlePrintInvoice = async (orderId, e) => {
         e.stopPropagation();
         setPrintingInvoice(orderId);
@@ -93,6 +94,24 @@ export const ListOrders = () => {
             alert('Failed to print invoice. Please try again.');
         } finally {
             setPrintingInvoice(null);
+        }
+    };
+
+    // Print simple receipt (Template 2 — no GST breakdown, customer-facing)
+    const handlePrintReceipt = async (orderId, e) => {
+        e.stopPropagation();
+        setPrintingReceipt(orderId);
+        try {
+            const orderData = await dispatch(getOrderAction(orderId));
+            if (orderData) {
+                const pdfDefinition = generatePdfDefinition2(orderData);
+                pdfMake.createPdf(pdfDefinition).print();
+            }
+        } catch (error) {
+            console.error('Error printing receipt:', error);
+            alert('Failed to print receipt. Please try again.');
+        } finally {
+            setPrintingReceipt(null);
         }
     };
 
@@ -560,9 +579,9 @@ export const ListOrders = () => {
                                                             View
                                                         </Button>
                                                     </Tooltip>
-                                                    <Tooltip title="Print Invoice">
-                                                        <Button 
-                                                            size="small" 
+                                                    <Tooltip title="Print GST Tax Invoice">
+                                                        <Button
+                                                            size="small"
                                                             variant="outlined"
                                                             color="secondary"
                                                             onClick={(e) => handlePrintInvoice(row.id, e)}
@@ -570,7 +589,19 @@ export const ListOrders = () => {
                                                             startIcon={printingInvoice === row.id ? <CircularProgress size={14} /> : <Print fontSize="small" />}
                                                             data-testid={`print-invoice-${row.id}`}
                                                         >
-                                                            Print
+                                                            Invoice
+                                                        </Button>
+                                                    </Tooltip>
+                                                    <Tooltip title="Print simple receipt (no GST) — for customer">
+                                                        <Button
+                                                            size="small"
+                                                            variant="outlined"
+                                                            onClick={(e) => handlePrintReceipt(row.id, e)}
+                                                            disabled={printingReceipt === row.id}
+                                                            startIcon={printingReceipt === row.id ? <CircularProgress size={14} /> : <Print fontSize="small" />}
+                                                            data-testid={`print-receipt-${row.id}`}
+                                                        >
+                                                            Receipt
                                                         </Button>
                                                     </Tooltip>
                                                     <Tooltip title="Send via WhatsApp">
