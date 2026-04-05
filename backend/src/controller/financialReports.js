@@ -692,9 +692,13 @@ const getRatioAnalysis = async (req, res) => {
         const cogsExpense        = getPL('EXPENSE', 'COGS');
         const grossProfit        = salesRevenue - cogsExpense;
 
+        // HIGH-07: grossMargin denominator must be salesRevenue (the revenue base that
+        // corresponds to COGS), not totalRevenue which may include non-trading income.
+        // Standard formula: Gross Margin % = (Gross Profit / Net Sales Revenue) × 100
+        // Net Profit Margin % = (Net Profit / Total Revenue) × 100  ← totalRevenue is correct here
         const ratios = {
             currentRatio:   currentLiabilities > 0 ? (currentAssets / currentLiabilities).toFixed(2) : 'N/A',
-            grossMargin:    totalRevenue > 0 ? ((grossProfit / totalRevenue) * 100).toFixed(2) + '%' : 'N/A',
+            grossMargin:    salesRevenue > 0 ? ((grossProfit / salesRevenue) * 100).toFixed(2) + '%' : 'N/A',
             netProfitMargin:totalRevenue > 0 ? ((netProfit  / totalRevenue) * 100).toFixed(2) + '%' : 'N/A',
             revenueGrowth:  'N/A' // requires prior period comparison
         };

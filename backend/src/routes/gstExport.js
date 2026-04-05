@@ -36,33 +36,61 @@ module.exports = (router) => {
 
             const rows = [];
 
-            // GST Rate constants (5% total = 2.5% CGST + 2.5% SGST)
-            const GST_RATE = 0.05;
-            const CGST_RATE = 2.5;
-            const SGST_RATE = 2.5;
-
             for (const order of orders) {
                 // Use adjusted items if available, otherwise original
-                const items = useAdjusted && order.adjustedItems 
-                    ? order.adjustedItems 
+                const items = useAdjusted && order.adjustedItems
+                    ? order.adjustedItems
                     : order.orderItems || [];
 
                 for (const item of items) {
                     const lineTotal = Number(item.totalPrice || 0);
-                    
-                    // Use pre-calculated GST values from frontend if available
-                    let baseAmount, cgstAmount, sgstAmount;
-                    if (item.baseAmount && item.cgstAmount && item.sgstAmount) {
-                        baseAmount = Number(item.baseAmount);
-                        cgstAmount = Number(item.cgstAmount);
-                        sgstAmount = Number(item.sgstAmount);
+
+                    // HIGH-03: Derive GST rates from per-item database fields, not a
+                    // hardcoded 5% constant.  Priority:
+                    //   1. Pre-calculated values from the item record (cgstAmount, sgstAmount)
+                    //   2. Rate fields on the item (cgstRate, sgstRate, gstRate)
+                    //   3. Order-level GST amounts split proportionally across items
+                    //   4. Zero (no silent fabrication of tax figures)
+                    let baseAmount, cgstAmount, sgstAmount, cgstRate, sgstRate;
+
+                    if (item.baseAmount != null && item.cgstAmount != null && item.sgstAmount != null) {
+                        // Fully pre-calculated — trust the database values
+                        baseAmount  = Number(item.baseAmount);
+                        cgstAmount  = Number(item.cgstAmount);
+                        sgstAmount  = Number(item.sgstAmount);
+                        cgstRate    = baseAmount > 0 ? (cgstAmount / baseAmount * 100) : 0;
+                        sgstRate    = baseAmount > 0 ? (sgstAmount / baseAmount * 100) : 0;
+                    } else if (item.cgstRate != null || item.sgstRate != null || item.gstRate != null) {
+                        // Per-item rate fields are present — derive amounts
+                        // gstRate is total inclusive rate; cgstRate/sgstRate are halves
+                        const totalGstRate = Number(item.gstRate || 0) / 100;
+                        cgstRate   = Number(item.cgstRate || (Number(item.gstRate || 0) / 2));
+                        sgstRate   = Number(item.sgstRate || (Number(item.gstRate || 0) / 2));
+                        if (totalGstRate > 0) {
+                            // Price may be GST-inclusive — extract base
+                            baseAmount = lineTotal / (1 + totalGstRate);
+                        } else {
+                            baseAmount = lineTotal;
+                        }
+                        cgstAmount = baseAmount * (cgstRate / 100);
+                        sgstAmount = baseAmount * (sgstRate / 100);
+                    } else if (order.cgst != null && order.sgst != null && order.subTotal > 0) {
+                        // Fall back to order-level GST split proportionally by line value
+                        const shareRatio = lineTotal / Number(order.subTotal || lineTotal || 1);
+                        cgstAmount  = Number(order.cgst) * shareRatio;
+                        sgstAmount  = Number(order.sgst) * shareRatio;
+                        baseAmount  = lineTotal - cgstAmount - sgstAmount;
+                        cgstRate    = baseAmount > 0 ? (cgstAmount / baseAmount * 100) : 0;
+                        sgstRate    = baseAmount > 0 ? (sgstAmount / baseAmount * 100) : 0;
                     } else {
-                        // Calculate GST (price is inclusive, so extract base)
-                        baseAmount = lineTotal / (1 + GST_RATE);
-                        cgstAmount = baseAmount * (CGST_RATE / 100);
-                        sgstAmount = baseAmount * (SGST_RATE / 100);
+                        // No GST data available — report zero rather than fabricate
+                        baseAmount = lineTotal;
+                        cgstAmount = 0;
+                        sgstAmount = 0;
+                        cgstRate   = 0;
+                        sgstRate   = 0;
                     }
-                    
+
                     const totalTax = cgstAmount + sgstAmount;
 
                     // Clean row - just the final values
@@ -72,15 +100,15 @@ module.exports = (router) => {
                         order.customerName || 'Walk-in Customer',
                         order.customerGstin || 'URP',
                         order.placeOfSupply || '27-Maharashtra',
-                        '7323',
+                        item.hsnCode || '7323',
                         item.name || '',
                         item.productPrice,                    // Rate (final price)
                         Number(item.quantity).toFixed(3),     // Weight (final quantity)
                         item.type === 'weighted' ? 'KG' : 'PCS',
                         baseAmount.toFixed(2),
-                        CGST_RATE.toFixed(2),
+                        cgstRate.toFixed(2),
                         cgstAmount.toFixed(2),
-                        SGST_RATE.toFixed(2),
+                        sgstRate.toFixed(2),
                         sgstAmount.toFixed(2),
                         totalTax.toFixed(2),
                         lineTotal.toFixed(2),
