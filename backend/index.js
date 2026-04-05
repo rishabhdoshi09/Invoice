@@ -155,6 +155,19 @@ app.listen(PORT, async () => {
         }
       }
 
+      // accounts.type enum — the old enum only has lowercase values.
+      // Add uppercase + EQUITY so the new ledger model can insert correctly.
+      const enumFix = [
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='ASSET'    AND enumtypid='enum_accounts_type'::regtype) THEN ALTER TYPE enum_accounts_type ADD VALUE 'ASSET';    END IF; END $$;",
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='LIABILITY' AND enumtypid='enum_accounts_type'::regtype) THEN ALTER TYPE enum_accounts_type ADD VALUE 'LIABILITY'; END IF; END $$;",
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='INCOME'   AND enumtypid='enum_accounts_type'::regtype) THEN ALTER TYPE enum_accounts_type ADD VALUE 'INCOME';   END IF; END $$;",
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='EXPENSE'  AND enumtypid='enum_accounts_type'::regtype) THEN ALTER TYPE enum_accounts_type ADD VALUE 'EXPENSE';  END IF; END $$;",
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='EQUITY'   AND enumtypid='enum_accounts_type'::regtype) THEN ALTER TYPE enum_accounts_type ADD VALUE 'EQUITY';   END IF; END $$;",
+      ];
+      for (const sql of enumFix) {
+        await db.sequelize.query(sql).catch(e => console.warn('[SCHEMA] Enum fix skipped:', e.message));
+      }
+
       // ledger_entries table — add transactionDate denorm column
       const entryCols = await qi.describeTable('ledger_entries').catch(() => null);
       if (entryCols && !entryCols.transactionDate) {
