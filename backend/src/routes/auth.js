@@ -18,4 +18,7 @@ module.exports = (router) => {
     router.get('/users/:userId', authenticate, authorize('admin'), Controller.getUser);
     router.put('/users/:userId', authenticate, authorize('admin'), Controller.updateUser);
     router.delete('/users/:userId', authenticate, authorize('admin'), Controller.deleteUser);
+
+    // Admin: force-expire all active sessions for a user (suspected compromise, offboarding)
+    router.post('/users/:userId/force-logout', authenticate, authorize('admin'), Controller.forceLogoutUser);
 };

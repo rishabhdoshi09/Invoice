@@ -1,5 +1,5 @@
 const Controller = require('../controller');
-const { authenticate, optionalAuth, canModify } = require('../middleware/auth');
+const { authenticate, canModify } = require('../middleware/auth');
 const { auditMiddleware, captureOriginal } = require('../middleware/auditLogger');
 const { makeFinancialWriteGuard } = require('../middleware/financialGuard');
 const db = require('../models');
@@ -39,6 +39,7 @@ module.exports = (router) => {
         .delete(
             authenticate,
             canModify,              // Admin only for deletion
+            financialWriteGuard,    // Deletion reverses ledger entries — block during HALT
             captureOriginal(db.order, 'orderId'),
             auditMiddleware('ORDER'),
             Controller.order.deleteOrder
