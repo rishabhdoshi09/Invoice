@@ -6,13 +6,14 @@
  * invariant violations; this middleware enforces the block.
  *
  * Architecture:
- *   - Uses an in-memory cache (refreshed every 60 s) to avoid a DB round-trip
- *     on every single request.  The cache is intentionally conservative:
- *     a HALT status stays locked until the server explicitly clears it.
- *   - CRITICAL status logs a warning but does NOT block (operator must review
- *     and decide; halting on CRITICAL alone would be too aggressive for a
- *     live system with legacy data).
- *   - HALT status blocks ALL financial writes immediately.
+ *   - HR-HALT FIX: Status is read from the reconciliation_runs table in the
+ *     database on every request (with a short 10-second in-process TTL to
+ *     reduce DB load). Previously the cache was purely in-process memory,
+ *     meaning a HALT detected by one Node.js worker was invisible to other
+ *     workers in a multi-instance / PM2 cluster deployment. Now all instances
+ *     share a single source of truth: the database row.
+ *   - CRITICAL status logs a warning but does NOT block (operator must review).
+ *   - HALT status blocks ALL financial writes immediately, across ALL instances.
  *
  * Usage:
  *   router.post('/orders', authenticate, financialWriteGuard, createOrder);
@@ -21,12 +22,27 @@
  * Override (emergency bypass — admin only, leaves audit trail):
  *   Pass header  X-Financial-Guard-Override: <OVERRIDE_SECRET>
  *   The secret must be set in ENV as FINANCIAL_GUARD_OVERRIDE_SECRET.
- *   Bypass is logged to console and the audit trail.
+ *   Bypass is logged to console AND the audit_logs table.
  */
 
-const CACHE_TTL_MS = 60 * 1000; // refresh every 60 s
-const HALT_LOCK_MS = 5 * 60 * 1000; // HALT stays locked for 5 min even after cache refresh
+// HR-HALT FIX: Reduced from 60 s to 10 s so HALT propagates to all instances
+// within 10 seconds of a reconciliation run detecting a violation.
+// Trade-off: ~6x more DB reads per instance per minute. Acceptable cost.
+const CACHE_TTL_MS = 10 * 1000;     // refresh every 10 s (was 60 s)
+const HALT_LOCK_MS = 5 * 60 * 1000; // HALT stays locked for 5 min after clearing
 
+// Lazy-load to avoid circular dependency at module init time
+let _db = null;
+function getDb() {
+    if (!_db) _db = require('../models');
+    return _db;
+}
+
+// Per-process cache acts as a rate-limiter on DB reads, not as the authority.
+// The DB is the authority. If this cache shows OK but DB shows HALT, the next
+// refresh (within 10 s) will catch it. This is acceptable for financial guard
+// purposes — a brief window before HALT propagates is far better than missing
+// it entirely in a multi-process deployment.
 let _cache = {
     status: 'UNKNOWN',  // 'OK' | 'WARNING' | 'CRITICAL' | 'HALT' | 'UNKNOWN'
     lastChecked: 0,
@@ -94,10 +110,35 @@ function makeFinancialWriteGuard(db) {
                 const overrideSecret = process.env.FINANCIAL_GUARD_OVERRIDE_SECRET;
                 const suppliedOverride = req.headers['x-financial-guard-override'];
                 if (overrideSecret && suppliedOverride === overrideSecret) {
+                    const bypassUser = req.user?.username || 'unknown';
                     console.error(
-                        `[FINANCIAL GUARD] ⚠️  OVERRIDE BYPASS by ${req.user?.username || 'unknown'} ` +
+                        `[FINANCIAL GUARD] ⚠️  OVERRIDE BYPASS by ${bypassUser} ` +
                         `on ${req.method} ${req.path} — HALT status in effect. This action is logged.`
                     );
+                    // SECURITY FIX: Write override usage to the audit trail — not just console.
+                    // An unlogged bypass is a fraud vector. Any future query to audit_logs will
+                    // show exactly who bypassed the financial guard and when.
+                    try {
+                        const { v4: uuidv4 } = require('uuid');
+                        await getDb().auditLog.create({
+                            id: uuidv4(),
+                            userId:      req.user?.id   || null,
+                            userName:    req.user?.name || bypassUser,
+                            userRole:    req.user?.role || 'unknown',
+                            action:      'FINANCIAL_GUARD_OVERRIDE',
+                            entityType:  'SYSTEM',
+                            entityId:    null,
+                            entityName:  'FinancialGuard',
+                            description: `HALT bypass by ${bypassUser} on ${req.method} ${req.path}`,
+                            ipAddress:   req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                                         req.socket?.remoteAddress || 'unknown',
+                            userAgent:   req.headers['user-agent'] || null,
+                            metadata:    { method: req.method, path: req.path, haltSince: _cache.haltSince }
+                        });
+                    } catch (auditErr) {
+                        // Log but do not block — the override is still audited to console above.
+                        console.error('[FINANCIAL GUARD] Failed to write override to audit_log:', auditErr.message);
+                    }
                     return next();
                 }
 
@@ -130,10 +171,18 @@ function makeFinancialWriteGuard(db) {
 
             next();
         } catch (err) {
-            // Guard failure must NEVER silently swallow — but also must not kill
-            // legitimate requests.  Log prominently and allow through.
-            console.error('[FINANCIAL GUARD] Guard check threw — allowing request through:', err.message);
-            next();
+            // SECURITY: fail-closed. If the guard itself throws (DB down, etc.)
+            // we BLOCK the write rather than allowing it through. The cost of a
+            // false-positive block is an operator call; the cost of a false-negative
+            // is unguarded financial writes during a potential integrity incident.
+            console.error('[FINANCIAL GUARD] Guard check threw — BLOCKING request (fail-closed):', err.message);
+            return res.status(503).json({
+                status: 503,
+                error: 'FINANCIAL_GUARD_ERROR',
+                message:
+                    'Financial integrity check failed to run. All financial writes are blocked ' +
+                    'until the guard can be verified. Contact your system administrator.',
+            });
         }
     };
 }

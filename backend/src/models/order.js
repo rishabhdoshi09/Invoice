@@ -78,6 +78,15 @@ module.exports = (sequelize, Sequelize) => {
                 type: Sequelize.ENUM('paid', 'partial', 'unpaid'),
                 defaultValue: 'paid'
             },
+            // Incremented atomically on every payment status toggle.
+            // Used to build a unique ledger batch referenceId per toggle event,
+            // preventing the idempotency-key collision that caused ledger corruption
+            // on the 3rd+ toggle of the same direction.
+            paymentToggleSequence: {
+                type: Sequelize.INTEGER,
+                allowNull: false,
+                defaultValue: 0
+            },
             // CASH = paid at POS, CREDIT = unpaid/due at creation. NEVER changes after creation.
             paymentMode: {
                 type: Sequelize.ENUM('CASH', 'CREDIT'),

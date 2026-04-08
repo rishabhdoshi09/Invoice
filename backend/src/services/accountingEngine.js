@@ -43,23 +43,27 @@ const ledgerService = new LedgerService(db);
 
 // ─── account-code constants ───────────────────────────────────────────────
 const CODE = {
-    CASH:            '1100',
-    BANK:            '1200',
-    RECEIVABLE:      '1300',  // parent; individual sub-accounts under 1300-xxx
-    INVENTORY:       '1400',
-    PAYABLE:         '2100',  // parent; individual sub-accounts under 2100-xxx
-    GST_PAYABLE:     '2200',  // parent for output GST
-    CGST_PAYABLE:    '2201',
-    SGST_PAYABLE:    '2202',
-    IGST_PAYABLE:    '2203',
-    GST_INPUT:       '1500',  // parent for input GST credit
-    CGST_INPUT:      '1501',
-    SGST_INPUT:      '1502',
-    IGST_INPUT:      '1503',
-    SALES:           '4100',
-    COGS:            '5100',
-    PURCHASE:        '5300',
-    OPERATING_EXP:   '5200',
+    CASH:              '1100',
+    BANK:              '1200',
+    RECEIVABLE:        '1300',  // parent; individual sub-accounts under 1300-xxx
+    INVENTORY:         '1400',
+    PAYABLE:           '2100',  // parent; individual sub-accounts under 2100-xxx
+    GST_PAYABLE:       '2200',  // parent for output GST
+    CGST_PAYABLE:      '2201',
+    SGST_PAYABLE:      '2202',
+    IGST_PAYABLE:      '2203',
+    GST_INPUT:         '1500',  // parent for input GST credit
+    CGST_INPUT:        '1501',
+    SGST_INPUT:        '1502',
+    IGST_INPUT:        '1503',
+    SALES:             '4100',
+    COGS:              '5100',
+    PURCHASE:          '5300',
+    OPERATING_EXP:     '5200',
+    // CR-ADVANCE: Customer advances are a liability — money received before an invoice
+    // exists, or in excess of the current invoice total. Must be journaled as a
+    // LIABILITY (not as negative A/R) so the balance sheet is correct.
+    CUSTOMER_ADVANCES: '2300',
 };
 
 // ─── helper: get required account by code (throws if missing) ─────────────
@@ -168,8 +172,18 @@ async function postSalesInvoice(order, transaction) {
 
 // ══════════════════════════════════════════════════════════════════════════
 //  2. CASH RECEIPT AT INVOICE (when order is created as partly/fully paid)
+//
+//  Normal case (no overpayment):
 //     DR Cash / Bank (paidAmount)
 //     CR Customer A/R (paidAmount)
+//
+//  Overpayment case (paidAmount > total) — CR-ADVANCE FIX:
+//  Previously ALL of paidAmount was credited to A/R, making A/R go negative
+//  (representing a liability on the wrong side of the balance sheet).
+//  Now the excess is split to a proper liability account:
+//     DR Cash / Bank    (paidAmount)
+//     CR Customer A/R   (total)            — clears the receivable exactly
+//     CR Customer Advances (paidAmount-total) — records the liability correctly
 // ══════════════════════════════════════════════════════════════════════════
 async function postCashReceiptForInvoice(order, transaction) {
     const paidAmount = Number(order.originalPaidAmount ?? order.paidAmount) || 0;
@@ -181,23 +195,42 @@ async function postCashReceiptForInvoice(order, transaction) {
         return { skipped: true, batchNumber: dup.batchNumber };
     }
 
+    const total         = Number(order.total) || 0;
+    const advanceAmount = +(Math.max(0, paidAmount - total)).toFixed(2);
+    const arCredit      = +(Math.min(paidAmount, total)).toFixed(2);
+
     const [cashAcct, customerAcct] = await Promise.all([
         _cashOrBank(order.bankAccountId, transaction),
         _partyAccount('customer', order.customerId || null, order.customerName || 'Walk-in Customer', transaction)
     ]);
 
+    const entries = [
+        { accountId: cashAcct.id,     debit: paidAmount, credit: 0,        narration: `Cash: Invoice ${order.orderNumber}` },
+        { accountId: customerAcct.id, debit: 0,          credit: arCredit, narration: `Cash: Invoice ${order.orderNumber}` }
+    ];
+
+    // CR-ADVANCE: Post the overpayment to Customer Advances (LIABILITY 2300).
+    // This keeps A/R non-negative and properly reflects the money owed BACK to the customer.
+    if (advanceAmount > 0) {
+        const advanceAcct = await _acct(CODE.CUSTOMER_ADVANCES, transaction);
+        entries.push({
+            accountId: advanceAcct.id,
+            debit:     0,
+            credit:    advanceAmount,
+            narration: `Customer Advance: Invoice ${order.orderNumber}`
+        });
+        console.log(`[AE] INVOICE_CASH ${order.orderNumber}: overpayment ₹${advanceAmount} → Customer Advances (2300)`);
+    }
+
     const result = await ledgerService.createJournalBatch({
-        referenceType: 'INVOICE_CASH',
-        referenceId:   order.id,
-        description:   `Cash received for Invoice ${order.orderNumber}`,
+        referenceType:   'INVOICE_CASH',
+        referenceId:     order.id,
+        description:     `Cash received for Invoice ${order.orderNumber}`,
         transactionDate: _txDate(order.orderDate || order.createdAt),
-        entries: [
-            { accountId: cashAcct.id,     debit: paidAmount, credit: 0,          narration: `Cash: Invoice ${order.orderNumber}` },
-            { accountId: customerAcct.id, debit: 0,          credit: paidAmount, narration: `Cash: Invoice ${order.orderNumber}` }
-        ]
+        entries
     }, transaction);
 
-    console.log(`[AE] INVOICE_CASH ${order.orderNumber} → ${result.batch.batchNumber} (DR Cash ${paidAmount})`);
+    console.log(`[AE] INVOICE_CASH ${order.orderNumber} → ${result.batch.batchNumber} (DR Cash ${paidAmount}, CR A/R ${arCredit}${advanceAmount > 0 ? ` + Advance ${advanceAmount}` : ''})`);
     return { posted: true, batchNumber: result.batch.batchNumber, batchId: result.batch.id };
 }
 
@@ -377,32 +410,53 @@ async function postExpense(expense, transaction) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-//  7. PAYMENT STATUS TOGGLE (legacy: mark invoice paid/unpaid manually)
-//     unpaid→paid:  DR Cash (total), CR Customer A/R (total)
-//     paid→unpaid:  DR Customer A/R (total), CR Cash (total)
+//  7. PAYMENT STATUS TOGGLE (mark invoice paid/unpaid manually)
+//     unpaid→paid:  DR Cash (dueAmount), CR Customer A/R (dueAmount)
+//     paid→unpaid:  DR Customer A/R (dueAmount), CR Cash (dueAmount)
+//
+//  IDEMPOTENCY FIX (audit finding CR-TOGGLE):
+//  Previous implementation used a direction-stamped referenceType
+//  (PAYMENT_TOGGLE_UNPAID_PAID / PAYMENT_TOGGLE_PAID_UNPAID) with a
+//  static referenceId = order.id.  On the 3rd toggle of the same
+//  direction the dedup check found the existing batch and silently
+//  skipped posting — leaving the ledger out of sync with the orders table.
+//
+//  Fix: the caller increments order.paymentToggleSequence atomically
+//  BEFORE calling this function.  We embed the sequence in referenceId:
+//    referenceType: 'PAYMENT_TOGGLE'
+//    referenceId:   '<order-uuid>_<sequence>'
+//  Each distinct toggle event is now guaranteed a unique referenceId.
+//  A same-event retry (same sequence) is still deduplicated correctly.
 // ══════════════════════════════════════════════════════════════════════════
-async function postPaymentStatusToggle(order, oldStatus, newStatus, changedBy, transaction) {
+async function postPaymentStatusToggle(order, oldStatus, newStatus, changedBy, transaction, toggleSeq) {
     if (!order.customerId) return { skipped: true, reason: 'no_customer_id' };
 
-    // Use dueAmount for unpaid→paid (only collect what is still owed, not the full total
-    // which may have been partially paid already via receipt allocations — MED-06).
-    // Use paidAmount for paid→unpaid (reverse exactly what was previously marked paid).
-    const dueAmount  = Number(order.dueAmount)  || 0;
-    const paidAmount = Number(order.paidAmount) || 0;
+    // Use dueAmount for unpaid→paid (collect only what is still owed).
+    // Use dueAmount snapshot at time of call — caller has already locked the row.
+    const dueAmount = Number(order.dueAmount) || 0;
 
     if (oldStatus === 'unpaid' && dueAmount <= 0) return { skipped: true, reason: 'zero_due' };
-    if (oldStatus === 'paid'   && paidAmount <= 0) return { skipped: true, reason: 'zero_paid' };
+    if (oldStatus === 'paid') {
+        // When reversing to unpaid, the amount being reversed is what was previously
+        // cleared — which is the total minus the original POS cash.
+        const originalPaid = Number(order.originalPaidAmount) || 0;
+        const totalAmt     = Number(order.total) || 0;
+        const togglePaid   = Math.max(0, totalAmt - originalPaid);
+        if (togglePaid <= 0) return { skipped: true, reason: 'zero_toggle_amount' };
+    }
 
-    // HIGH-04: Idempotency guard — use a direction-stamped key so each distinct
-    // toggle direction (unpaid→paid, paid→unpaid) is only posted once.
-    // Multiple toggles are legitimate, so we include direction in the referenceType.
-    const toggleRefType = `PAYMENT_TOGGLE_${oldStatus.toUpperCase()}_${newStatus.toUpperCase()}`;
+    // Build a unique referenceId by embedding the toggle sequence.
+    // Format: '<order-uuid>_toggle_<seq>'  — unique per event, stable on retry.
+    const seq           = Number(toggleSeq) || 0;
+    const toggleRefId   = `${order.id}_toggle_${seq}`;
+    const toggleRefType = 'PAYMENT_TOGGLE';
+
     const dup = await db.journalBatch.findOne({
-        where: { referenceType: toggleRefType, referenceId: order.id, isReversed: false },
+        where: { referenceType: toggleRefType, referenceId: toggleRefId, isReversed: false },
         transaction
     });
     if (dup) {
-        console.log(`[AE] SKIP TOGGLE: ${order.orderNumber} ${oldStatus}→${newStatus} already posted (${dup.batchNumber})`);
+        console.log(`[AE] SKIP TOGGLE: ${order.orderNumber} seq=${seq} already posted (${dup.batchNumber})`);
         return { skipped: true, batchNumber: dup.batchNumber };
     }
 
@@ -412,15 +466,20 @@ async function postPaymentStatusToggle(order, oldStatus, newStatus, changedBy, t
     ]);
 
     let entries, description, amount;
+
     if (oldStatus === 'unpaid' && newStatus === 'paid') {
-        amount = dueAmount; // collect only what is outstanding
+        amount = dueAmount;
         description = `Payment received (toggle) for ${order.orderNumber} [${changedBy}]`;
         entries = [
             { accountId: cashAcct.id,     debit: amount, credit: 0,      narration: `Toggle paid: ${order.orderNumber}` },
             { accountId: customerAcct.id, debit: 0,      credit: amount, narration: `Toggle paid: ${order.orderNumber}` }
         ];
     } else if (oldStatus === 'paid' && newStatus === 'unpaid') {
-        amount = paidAmount; // reverse the amount that was marked as paid
+        // Reverse only the toggle-induced cash: total - originalPaidAmount.
+        // originalPaidAmount was already posted via INVOICE_CASH at creation.
+        const originalPaid = Number(order.originalPaidAmount) || 0;
+        const totalAmt     = Number(order.total) || 0;
+        amount = Math.max(0, totalAmt - originalPaid);
         description = `Payment reversed (toggle) for ${order.orderNumber} [${changedBy}]`;
         entries = [
             { accountId: customerAcct.id, debit: amount, credit: 0,      narration: `Toggle unpaid: ${order.orderNumber}` },
@@ -431,14 +490,14 @@ async function postPaymentStatusToggle(order, oldStatus, newStatus, changedBy, t
     }
 
     const result = await ledgerService.createJournalBatch({
-        referenceType: toggleRefType,
-        referenceId:   order.id,
+        referenceType:   toggleRefType,
+        referenceId:     toggleRefId,
         description,
         transactionDate: new Date(),
         entries
     }, transaction);
 
-    console.log(`[AE] TOGGLE ${order.orderNumber} ${oldStatus}→${newStatus} → ${result.batch.batchNumber} (₹${amount})`);
+    console.log(`[AE] TOGGLE ${order.orderNumber} ${oldStatus}→${newStatus} seq=${seq} → ${result.batch.batchNumber} (₹${amount})`);
     return { posted: true, batchNumber: result.batch.batchNumber, batchId: result.batch.id };
 }
 
@@ -504,15 +563,17 @@ async function reverseExpense(expense, transaction) {
 async function ensureGSTAccounts() {
     const gstAccounts = [
         // Output GST (liabilities)
-        { code: '2200', name: 'GST Payable',       type: 'LIABILITY', subType: 'TAX',      parentCode: '2000', isSystemAccount: true },
-        { code: '2201', name: 'CGST Payable',      type: 'LIABILITY', subType: 'TAX',      parentCode: '2200', isSystemAccount: true },
-        { code: '2202', name: 'SGST Payable',      type: 'LIABILITY', subType: 'TAX',      parentCode: '2200', isSystemAccount: true },
-        { code: '2203', name: 'IGST Payable',      type: 'LIABILITY', subType: 'TAX',      parentCode: '2200', isSystemAccount: true },
+        { code: '2200', name: 'GST Payable',         type: 'LIABILITY', subType: 'TAX',      parentCode: '2000', isSystemAccount: true },
+        { code: '2201', name: 'CGST Payable',        type: 'LIABILITY', subType: 'TAX',      parentCode: '2200', isSystemAccount: true },
+        { code: '2202', name: 'SGST Payable',        type: 'LIABILITY', subType: 'TAX',      parentCode: '2200', isSystemAccount: true },
+        { code: '2203', name: 'IGST Payable',        type: 'LIABILITY', subType: 'TAX',      parentCode: '2200', isSystemAccount: true },
         // Input GST credit (assets)
-        { code: '1500', name: 'GST Input Credit',  type: 'ASSET',     subType: 'TAX',      parentCode: '1000', isSystemAccount: true },
-        { code: '1501', name: 'CGST Input Credit', type: 'ASSET',     subType: 'TAX',      parentCode: '1500', isSystemAccount: true },
-        { code: '1502', name: 'SGST Input Credit', type: 'ASSET',     subType: 'TAX',      parentCode: '1500', isSystemAccount: true },
-        { code: '1503', name: 'IGST Input Credit', type: 'ASSET',     subType: 'TAX',      parentCode: '1500', isSystemAccount: true },
+        { code: '1500', name: 'GST Input Credit',    type: 'ASSET',     subType: 'TAX',      parentCode: '1000', isSystemAccount: true },
+        { code: '1501', name: 'CGST Input Credit',   type: 'ASSET',     subType: 'TAX',      parentCode: '1500', isSystemAccount: true },
+        { code: '1502', name: 'SGST Input Credit',   type: 'ASSET',     subType: 'TAX',      parentCode: '1500', isSystemAccount: true },
+        { code: '1503', name: 'IGST Input Credit',   type: 'ASSET',     subType: 'TAX',      parentCode: '1500', isSystemAccount: true },
+        // Customer Advances — liability for overpayments at invoice creation (CR-ADVANCE)
+        { code: '2300', name: 'Customer Advances',   type: 'LIABILITY', subType: 'PAYABLE',  parentCode: '2000', isSystemAccount: true },
     ];
 
     const t = await db.sequelize.transaction();
@@ -560,38 +621,53 @@ async function ensureGSTAccounts() {
 async function updateStock(productId, quantity, direction, referenceId, referenceType, transaction, txDate = null) {
     if (!productId || !quantity) return { skipped: true, reason: 'no_product_or_qty' };
 
-    try {
-        const product = await db.product.findByPk(productId, { transaction, lock: transaction.LOCK.UPDATE });
-        if (!product) return { skipped: true, reason: 'product_not_found' };
-        // If product model doesn't have currentStock yet (migration pending), skip gracefully
-        if (product.currentStock === undefined) return { skipped: true, reason: 'currentStock_column_missing' };
-
-        const prev = Number(product.currentStock) || 0;
-        let next;
-        if (direction === 'IN')       next = prev + Number(quantity);
-        else if (direction === 'OUT') next = prev - Number(quantity);
-        else                          next = Number(quantity); // ADJUSTMENT = set absolute
-
-        await product.update({ currentStock: next }, { transaction });
-
-        const date = txDate ? new Date(txDate) : new Date();
-        await db.stockTransaction.create({
-            productId,
-            type:            direction === 'IN' ? 'in' : direction === 'OUT' ? 'out' : 'adjustment',
-            quantity:        Math.abs(Number(quantity)),
-            previousStock:   prev,
-            newStock:        next,
-            referenceId:     referenceId || null,
-            referenceType:   referenceType || null,
-            transactionDate: date.toISOString().slice(0, 10)
-        }, { transaction });
-
-        return { updated: true, previousStock: prev, newStock: next };
-    } catch (err) {
-        // Non-fatal: stock tracking should not block order/purchase creation
-        console.error(`[AE] updateStock failed for product ${productId}: ${err.message}`);
-        return { skipped: true, reason: err.message };
+    // HR-STOCK: Stock update failures MUST propagate to the caller so the outer
+    // Sequelize transaction rolls back entirely. Previously this was wrapped in a
+    // try/catch that returned { skipped: true } — allowing the invoice to be saved
+    // and the ledger to be posted while inventory remained unchanged. Over time this
+    // creates a permanent, undetectable divergence between financial records and stock.
+    //
+    // The only acceptable reason to skip a stock update is if the product genuinely
+    // has no currentStock column yet (migration not run). Every other error is fatal.
+    const product = await db.product.findByPk(productId, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!product) {
+        // Product record deleted between validation and write — this is a data integrity
+        // problem that should bubble up and roll back the containing transaction.
+        throw new Error(`[AE] updateStock: product ${productId} not found — transaction rolled back`);
     }
+
+    // Graceful skip ONLY for missing column (migration not yet applied in dev/staging).
+    if (product.currentStock === undefined) {
+        console.warn(`[AE] updateStock: currentStock column missing for product ${productId} — skipping (run migrations)`);
+        return { skipped: true, reason: 'currentStock_column_missing' };
+    }
+
+    const prev = Number(product.currentStock) || 0;
+    let next;
+    if (direction === 'IN')       next = prev + Number(quantity);
+    else if (direction === 'OUT') next = prev - Number(quantity);
+    else                          next = Number(quantity); // ADJUSTMENT = set absolute
+
+    // Prevent negative stock on OUT movements (optional: can be relaxed for backorder support).
+    if (direction === 'OUT' && next < 0) {
+        throw new Error(`[AE] updateStock: insufficient stock for product ${productId} — available: ${prev}, requested: ${quantity}`);
+    }
+
+    await product.update({ currentStock: next }, { transaction });
+
+    const date = txDate ? new Date(txDate) : new Date();
+    await db.stockTransaction.create({
+        productId,
+        type:            direction === 'IN' ? 'in' : direction === 'OUT' ? 'out' : 'adjustment',
+        quantity:        Math.abs(Number(quantity)),
+        previousStock:   prev,
+        newStock:        next,
+        referenceId:     referenceId || null,
+        referenceType:   referenceType || null,
+        transactionDate: date.toISOString().slice(0, 10)
+    }, { transaction });
+
+    return { updated: true, previousStock: prev, newStock: next };
 }
 
 // ══════════════════════════════════════════════════════════════════════════

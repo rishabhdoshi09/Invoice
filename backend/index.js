@@ -41,9 +41,26 @@ const app = express();
 // ─── Security headers ─────────────────────────────────────────────────────────
 // helmet sets X-Content-Type-Options, X-Frame-Options, HSTS, etc.
 app.use(helmet({
-    // CSP is intentionally left to application teams; skip for now to avoid
-    // breaking the embedded React frontend.
-    contentSecurityPolicy: false
+    // CSP: allow same-origin scripts (React bundle), block everything else.
+    // Extend script-src if CDN assets are added in the future.
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc:     ["'self'"],
+            scriptSrc:      ["'self'"],
+            styleSrc:       ["'self'", "'unsafe-inline'"], // MUI requires inline styles
+            imgSrc:         ["'self'", 'data:'],
+            fontSrc:        ["'self'"],
+            objectSrc:      ["'none'"],
+            baseUri:        ["'self'"],
+            frameAncestors: ["'none'"],
+            formAction:     ["'self'"],
+        },
+    },
+    // HSTS: enforce HTTPS for 1 year once TLS is enabled on the reverse proxy.
+    strictTransportSecurity: {
+        maxAge: 31536000,
+        includeSubDomains: true,
+    },
 }));
 
 // ─── CORS — restrict to approved origins ─────────────────────────────────────
@@ -64,10 +81,12 @@ app.use(cors({
     credentials: true
 }));
 
-// Trust the first proxy hop (nginx / load balancer) so rate-limit can read
-// the real client IP from X-Forwarded-For instead of throwing a validation error.
-// Set to false or adjust the hop count if not behind a reverse proxy.
-app.set('trust proxy', 1);
+// Trust the configured number of proxy hops so rate-limit reads the real
+// client IP from X-Forwarded-For correctly.  Default=1 (one nginx hop).
+// Set TRUST_PROXY_HOPS=0 if not behind a reverse proxy — otherwise an
+// attacker can spoof X-Forwarded-For to bypass IP-based rate limiting.
+const trustProxyHops = parseInt(process.env.TRUST_PROXY_HOPS || '1', 10);
+app.set('trust proxy', trustProxyHops);
 
 // ─── Rate limiting ────────────────────────────────────────────────────────────
 // Strict limit on authentication endpoints to block brute-force and credential
@@ -89,24 +108,29 @@ const apiLimiter = rateLimit({
     message: { status: 429, message: 'Too many requests. Please slow down.' }
 });
 
-app.use(logger('dev'));
+// ─── Request logging ───────────────────────────────────────────────────────────
+// Use 'combined' format in production for Apache-compatible access logs.
+// 'dev' is verbose coloured output suitable only for local development.
+app.use(logger(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-app.use(bodyParser.json({ limit: '100mb'}));
-app.use(bodyParser.urlencoded({ limit: '100mb', extended: false }));
-
-// Apply auth rate limiter before route registration
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/setup', authLimiter);
-
-// Apply broad API limiter
-app.use('/api', apiLimiter);
-
-require('./src/routes')(router);
-app.use('/api', router);
-app.use(express.json({limit: '100mb'}));
-app.use(express.urlencoded({ limit: '100mb', extended: false, parameterLimit: 5000 }));
+// ─── Body parsing ──────────────────────────────────────────────────────────────
+// SECURITY: 1 MB limit. The largest legitimate API payload (50-line invoice) is
+// under 50 KB. A 100 MB limit is a trivial denial-of-service vector — one request
+// can exhaust Node.js heap and crash the server for all users.
+app.use(bodyParser.json({ limit: '1mb' }));
+app.use(bodyParser.urlencoded({ limit: '1mb', extended: false }));
 app.use(cookieParser());
 app.use(compression());
+
+// ─── Rate limiting ────────────────────────────────────────────────────────────
+// Apply BEFORE routes so every request, including un-authenticated ones, is limited.
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/setup', authLimiter);
+app.use('/api', apiLimiter);
+
+// ─── API routes ───────────────────────────────────────────────────────────────
+require('./src/routes')(router);
+app.use('/api', router);
 
 // Serve static files from the React app
 app.use(express.static(path.resolve(__dirname, '..', 'frontend', 'build')));
@@ -129,56 +153,8 @@ app.listen(PORT, async () => {
     // Run: npx sequelize-cli db:migrate
     // Do NOT call sequelize.sync() here — it bypasses migration history and
     // causes non-deterministic schema drift across environments.
-
-    // Safe additive column fixes — only add columns that are missing.
-    // These are safe nullable columns that will never break existing data.
-    try {
-      const qi = db.sequelize.getQueryInterface();
-
-      // accounts table — add columns introduced in new ledger model
-      const accountsCols = await qi.describeTable('accounts').catch(() => null);
-      if (accountsCols) {
-        const accountFixes = [
-          ['description',    { type: db.Sequelize.TEXT,           allowNull: true }],
-          ['subType',        { type: db.Sequelize.STRING(50),      allowNull: true }],
-          ['parentId',       { type: db.Sequelize.UUID,            allowNull: true }],
-          ['partyId',        { type: db.Sequelize.UUID,            allowNull: true }],
-          ['partyType',      { type: db.Sequelize.STRING(20),      allowNull: true }],
-          ['isSystemAccount',{ type: db.Sequelize.BOOLEAN,         allowNull: false, defaultValue: false }],
-          ['isActive',       { type: db.Sequelize.BOOLEAN,         allowNull: false, defaultValue: true }],
-        ];
-        for (const [col, def] of accountFixes) {
-          if (!accountsCols[col]) {
-            await qi.addColumn('accounts', col, def);
-            console.log(`[SCHEMA] Added missing column accounts.${col}`);
-          }
-        }
-      }
-
-      // accounts.type enum — the old enum only has lowercase values.
-      // Add uppercase + EQUITY so the new ledger model can insert correctly.
-      const enumFix = [
-        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='ASSET'    AND enumtypid='enum_accounts_type'::regtype) THEN ALTER TYPE enum_accounts_type ADD VALUE 'ASSET';    END IF; END $$;",
-        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='LIABILITY' AND enumtypid='enum_accounts_type'::regtype) THEN ALTER TYPE enum_accounts_type ADD VALUE 'LIABILITY'; END IF; END $$;",
-        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='INCOME'   AND enumtypid='enum_accounts_type'::regtype) THEN ALTER TYPE enum_accounts_type ADD VALUE 'INCOME';   END IF; END $$;",
-        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='EXPENSE'  AND enumtypid='enum_accounts_type'::regtype) THEN ALTER TYPE enum_accounts_type ADD VALUE 'EXPENSE';  END IF; END $$;",
-        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='EQUITY'   AND enumtypid='enum_accounts_type'::regtype) THEN ALTER TYPE enum_accounts_type ADD VALUE 'EQUITY';   END IF; END $$;",
-      ];
-      for (const sql of enumFix) {
-        await db.sequelize.query(sql).catch(e => console.warn('[SCHEMA] Enum fix skipped:', e.message));
-      }
-
-      // ledger_entries table — add transactionDate denorm column
-      const entryCols = await qi.describeTable('ledger_entries').catch(() => null);
-      if (entryCols && !entryCols.transactionDate) {
-        await qi.addColumn('ledger_entries', 'transactionDate', {
-          type: db.Sequelize.DATEONLY, allowNull: true
-        });
-        console.log('[SCHEMA] Added missing column ledger_entries.transactionDate');
-      }
-    } catch (e) {
-      console.warn('[SCHEMA] Column auto-fix skipped:', e.message);
-    }
+    // HR-SCHEMA FIX: The ad-hoc qi.addColumn / ALTER TYPE blocks that previously
+    // ran here have been moved into migration 20260408000005. Run db:migrate once.
 
     // Start scheduled jobs (async, non-blocking)
     try {
