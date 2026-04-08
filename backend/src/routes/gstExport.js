@@ -45,45 +45,36 @@ module.exports = (router) => {
                 for (const item of items) {
                     const lineTotal = Number(item.totalPrice || 0);
 
-                    // HIGH-03: Derive GST rates from per-item database fields, not a
-                    // hardcoded 5% constant.  Priority:
-                    //   1. Pre-calculated values from the item record (cgstAmount, sgstAmount)
-                    //   2. Rate fields on the item (cgstRate, sgstRate, gstRate)
-                    //   3. Order-level GST amounts split proportionally across items
-                    //   4. Zero (no silent fabrication of tax figures)
+                    // HIGH-03: Derive GST from per-item database fields — never a hardcoded rate.
+                    // Priority:
+                    //   1. Pre-calculated item amounts (cgstAmount, sgstAmount)
+                    //   2. Per-item rate fields (cgstRate, sgstRate, gstRate)
+                    //   3. Order-level GST split proportionally by line share
+                    //   4. Zero — no silent fabrication of tax figures
                     let baseAmount, cgstAmount, sgstAmount, cgstRate, sgstRate;
 
                     if (item.baseAmount != null && item.cgstAmount != null && item.sgstAmount != null) {
-                        // Fully pre-calculated — trust the database values
-                        baseAmount  = Number(item.baseAmount);
-                        cgstAmount  = Number(item.cgstAmount);
-                        sgstAmount  = Number(item.sgstAmount);
-                        cgstRate    = baseAmount > 0 ? (cgstAmount / baseAmount * 100) : 0;
-                        sgstRate    = baseAmount > 0 ? (sgstAmount / baseAmount * 100) : 0;
+                        baseAmount = Number(item.baseAmount);
+                        cgstAmount = Number(item.cgstAmount);
+                        sgstAmount = Number(item.sgstAmount);
+                        cgstRate   = baseAmount > 0 ? (cgstAmount / baseAmount * 100) : 0;
+                        sgstRate   = baseAmount > 0 ? (sgstAmount / baseAmount * 100) : 0;
                     } else if (item.cgstRate != null || item.sgstRate != null || item.gstRate != null) {
-                        // Per-item rate fields are present — derive amounts
-                        // gstRate is total inclusive rate; cgstRate/sgstRate are halves
                         const totalGstRate = Number(item.gstRate || 0) / 100;
                         cgstRate   = Number(item.cgstRate || (Number(item.gstRate || 0) / 2));
                         sgstRate   = Number(item.sgstRate || (Number(item.gstRate || 0) / 2));
-                        if (totalGstRate > 0) {
-                            // Price may be GST-inclusive — extract base
-                            baseAmount = lineTotal / (1 + totalGstRate);
-                        } else {
-                            baseAmount = lineTotal;
-                        }
+                        baseAmount = totalGstRate > 0 ? lineTotal / (1 + totalGstRate) : lineTotal;
                         cgstAmount = baseAmount * (cgstRate / 100);
                         sgstAmount = baseAmount * (sgstRate / 100);
                     } else if (order.cgst != null && order.sgst != null && order.subTotal > 0) {
-                        // Fall back to order-level GST split proportionally by line value
                         const shareRatio = lineTotal / Number(order.subTotal || lineTotal || 1);
-                        cgstAmount  = Number(order.cgst) * shareRatio;
-                        sgstAmount  = Number(order.sgst) * shareRatio;
-                        baseAmount  = lineTotal - cgstAmount - sgstAmount;
-                        cgstRate    = baseAmount > 0 ? (cgstAmount / baseAmount * 100) : 0;
-                        sgstRate    = baseAmount > 0 ? (sgstAmount / baseAmount * 100) : 0;
+                        cgstAmount = Number(order.cgst) * shareRatio;
+                        sgstAmount = Number(order.sgst) * shareRatio;
+                        baseAmount = lineTotal - cgstAmount - sgstAmount;
+                        cgstRate   = baseAmount > 0 ? (cgstAmount / baseAmount * 100) : 0;
+                        sgstRate   = baseAmount > 0 ? (sgstAmount / baseAmount * 100) : 0;
                     } else {
-                        // No GST data available — report zero rather than fabricate
+                        // No GST data — report zero rather than fabricate
                         baseAmount = lineTotal;
                         cgstAmount = 0;
                         sgstAmount = 0;

@@ -13,8 +13,8 @@ module.exports = {
     },
     getPurchaseBill: async (filterObj) => {
         try {
-            const res = await db.purchaseBill.findOne({ 
-                where: filterObj,
+            const res = await db.purchaseBill.findOne({
+                where: { ...filterObj, isDeleted: false },
                 include: [
                     { model: db.purchaseItem },
                     { model: db.supplier }
@@ -37,7 +37,11 @@ module.exports = {
     },
     deletePurchaseBill: async (filterObj) => {
         try {
-            const res = await db.purchaseBill.destroy({ where: filterObj });
+            // Soft delete — never hard-delete financial records (preserves audit trail)
+            const res = await db.purchaseBill.update(
+                { isDeleted: true, deletedAt: new Date() },
+                { where: filterObj }
+            );
             return res;
         } catch (error) {
             console.log(error);
@@ -46,19 +50,17 @@ module.exports = {
     },
     listPurchaseBills: async (filterObj) => {
         try {
-            const res = await db.purchaseBill.findAndCountAll({ 
-                ...( filterObj.q && filterObj.q !== "" ? {
-                    where: {
-                        billNumber: {
-                            [db.Sequelize.Op.iLike]: `%${filterObj.q}%`
-                        }
-                    }}
-                : {}),
-                order: [['createdAt', 'DESC']], 
+            const whereClause = { isDeleted: false };
+            if (filterObj.q && filterObj.q !== '') {
+                whereClause.billNumber = { [db.Sequelize.Op.iLike]: `%${filterObj.q}%` };
+            }
+            const res = await db.purchaseBill.findAndCountAll({
+                where: whereClause,
+                order: [['createdAt', 'DESC']],
                 include: [
                     { model: db.purchaseItem },
                     { model: db.supplier }
-                ], 
+                ],
                 distinct: true,
                 limit: filterObj.limit ?? 25,
                 offset: filterObj.offset ?? 0

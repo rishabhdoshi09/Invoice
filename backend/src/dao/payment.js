@@ -23,7 +23,7 @@ module.exports = {
     },
     getPayment: async (filterObj) => {
         try {
-            const res = await db.payment.findOne({ where: filterObj });
+            const res = await db.payment.findOne({ where: { ...filterObj, isDeleted: false } });
             return res;
         } catch (error) {
             console.log(error);
@@ -104,7 +104,11 @@ module.exports = {
     },
     deletePayment: async (filterObj) => {
         try {
-            const res = await db.payment.destroy({ where: filterObj });
+            // Soft delete — never hard-delete financial records (preserves audit trail)
+            const res = await db.payment.update(
+                { isDeleted: true, deletedAt: new Date() },
+                { where: filterObj }
+            );
             return res;
         } catch (error) {
             console.log(error);

@@ -1,67 +1,59 @@
 'use strict';
 
 /**
- * Migration: add advanceAmount to purchase_bills
- *
- * HIGH-02 — Supplier Advance System
- * When paidAmount > total on a purchase bill the excess must be stored as
- * advanceAmount (not silently dropped or allowed to make dueAmount negative).
- *
- * Invariants enforced here:
- *   advanceAmount >= 0
- *   dueAmount     >= 0
- *   at most one of the two is > 0 at any time
- *
- * Existing rows are repaired so that:
- *   dueAmount     = GREATEST(0, total - paidAmount)
- *   advanceAmount = GREATEST(0, paidAmount - total)
+ * Adds advanceAmount column to purchaseBills table.
+ * Invariant: advanceAmount = MAX(0, paidAmount - total), dueAmount = MAX(0, total - paidAmount)
+ * At most one of dueAmount/advanceAmount is > 0 at any time.
  */
 module.exports = {
-    async up(queryInterface, Sequelize) {
-        // 1. Add column (idempotent — IF NOT EXISTS)
-        await queryInterface.sequelize.query(`
-            ALTER TABLE purchase_bills
-            ADD COLUMN IF NOT EXISTS "advanceAmount" NUMERIC(15,2) NOT NULL DEFAULT 0;
-        `);
+    up: async (queryInterface, Sequelize) => {
+        const tableDesc = await queryInterface.describeTable('purchaseBills');
 
-        // 2. Add non-negative constraint (idempotent — named constraint)
-        await queryInterface.sequelize.query(`
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint
-                    WHERE conname = 'purchase_bills_advance_amount_non_negative'
-                ) THEN
-                    ALTER TABLE purchase_bills
-                    ADD CONSTRAINT purchase_bills_advance_amount_non_negative
-                    CHECK ("advanceAmount" >= 0);
-                END IF;
-            END;
-            $$;
-        `);
+        // 1. Add advanceAmount column if missing
+        if (!tableDesc.advanceAmount) {
+            await queryInterface.addColumn('purchaseBills', 'advanceAmount', {
+                type: Sequelize.DECIMAL(15, 2),
+                defaultValue: 0,
+                allowNull: false
+            });
+        }
 
-        // 3. Repair existing rows — recompute dueAmount / advanceAmount from totals
+        // 2. Repair existing rows: recalculate dueAmount and advanceAmount from total/paidAmount
         await queryInterface.sequelize.query(`
-            UPDATE purchase_bills
+            UPDATE "purchaseBills"
             SET
-                "dueAmount"     = GREATEST(0, ROUND(CAST("total" AS NUMERIC) - CAST("paidAmount" AS NUMERIC), 2)),
-                "advanceAmount" = GREATEST(0, ROUND(CAST("paidAmount" AS NUMERIC) - CAST("total" AS NUMERIC), 2))
-            WHERE
-                "isDeleted" = false;
+                "dueAmount"     = GREATEST(0, COALESCE("total", 0) - COALESCE("paidAmount", 0)),
+                "advanceAmount" = GREATEST(0, COALESCE("paidAmount", 0) - COALESCE("total", 0))
         `);
 
-        console.log('[Migration] purchase_bills.advanceAmount added and rows repaired.');
+        // 3. Add CHECK constraints
+        await queryInterface.sequelize.query(`
+            ALTER TABLE "purchaseBills"
+                ADD CONSTRAINT IF NOT EXISTS "chk_purchaseBills_advanceAmount_gte_zero"
+                CHECK ("advanceAmount" >= 0)
+        `).catch(() => {
+            // constraint may already exist — ignore
+        });
+
+        await queryInterface.sequelize.query(`
+            ALTER TABLE "purchaseBills"
+                ADD CONSTRAINT IF NOT EXISTS "chk_purchaseBills_dueOrAdvance"
+                CHECK ("dueAmount" = 0 OR "advanceAmount" = 0)
+        `).catch(() => {});
     },
 
-    async down(queryInterface, Sequelize) {
-        // Remove constraint first, then column
+    down: async (queryInterface) => {
         await queryInterface.sequelize.query(`
-            ALTER TABLE purchase_bills
-            DROP CONSTRAINT IF EXISTS purchase_bills_advance_amount_non_negative;
+            ALTER TABLE "purchaseBills"
+                DROP CONSTRAINT IF EXISTS "chk_purchaseBills_dueOrAdvance"
         `);
         await queryInterface.sequelize.query(`
-            ALTER TABLE purchase_bills
-            DROP COLUMN IF EXISTS "advanceAmount";
+            ALTER TABLE "purchaseBills"
+                DROP CONSTRAINT IF EXISTS "chk_purchaseBills_advanceAmount_gte_zero"
         `);
+        const tableDesc = await queryInterface.describeTable('purchaseBills');
+        if (tableDesc.advanceAmount) {
+            await queryInterface.removeColumn('purchaseBills', 'advanceAmount');
+        }
     }
 };

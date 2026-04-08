@@ -45,7 +45,7 @@ module.exports = (sequelize, Sequelize) => {
                 type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
-            // Advance: when paidAmount > total the excess is stored here (never negative).
+            // HIGH-02: Advance system — when paidAmount > total the excess is stored here.
             // Invariant: dueAmount >= 0 AND advanceAmount >= 0 AND at most one > 0.
             //   advanceAmount = MAX(0, paidAmount - total)
             //   dueAmount     = MAX(0, total - paidAmount)

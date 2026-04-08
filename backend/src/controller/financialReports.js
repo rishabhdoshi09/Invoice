@@ -17,10 +17,23 @@ function currentFinancialYear() {
 
 function parseDateRange(req) {
     const fy = currentFinancialYear();
-    return {
-        from: req.query.from || fy.start,
-        to:   req.query.to   || fy.end
-    };
+    const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+    const fromRaw = req.query.from || fy.start;
+    const toRaw   = req.query.to   || fy.end;
+
+    if (!ISO_DATE.test(fromRaw) || !ISO_DATE.test(toRaw)) {
+        throw Object.assign(new Error('Date parameters must be in YYYY-MM-DD format'), { statusCode: 400 });
+    }
+
+    const from = fromRaw;
+    const to   = toRaw;
+
+    if (from > to) {
+        throw Object.assign(new Error('"from" date must not be after "to" date'), { statusCode: 400 });
+    }
+
+    return { from, to };
 }
 
 // ─── TRIAL BALANCE ───────────────────────────────────────────────────────────
@@ -80,7 +93,8 @@ const getTrialBalance = async (req, res) => {
         return res.json({ status: 200, data: { period: { from, to }, accounts, totals } });
     } catch (err) {
         console.error('Trial balance error:', err);
-        return res.status(500).json({ status: 500, message: err.message });
+        const sc = err.statusCode || 500;
+        return res.status(sc).json({ status: sc, message: err.message });
     }
 };
 
@@ -145,7 +159,8 @@ const getProfitAndLoss = async (req, res) => {
         });
     } catch (err) {
         console.error('P&L error:', err);
-        return res.status(500).json({ status: 500, message: err.message });
+        const sc = err.statusCode || 500;
+        return res.status(sc).json({ status: sc, message: err.message });
     }
 };
 
@@ -220,7 +235,8 @@ const getBalanceSheet = async (req, res) => {
         });
     } catch (err) {
         console.error('Balance sheet error:', err);
-        return res.status(500).json({ status: 500, message: err.message });
+        const sc = err.statusCode || 500;
+        return res.status(sc).json({ status: sc, message: err.message });
     }
 };
 
@@ -283,7 +299,8 @@ const getDaybook = async (req, res) => {
         });
     } catch (err) {
         console.error('Daybook error:', err);
-        return res.status(500).json({ status: 500, message: err.message });
+        const sc = err.statusCode || 500;
+        return res.status(sc).json({ status: sc, message: err.message });
     }
 };
 
@@ -332,7 +349,8 @@ const getCashBook = async (req, res) => {
         });
     } catch (err) {
         console.error('Cash book error:', err);
-        return res.status(500).json({ status: 500, message: err.message });
+        const sc = err.statusCode || 500;
+        return res.status(sc).json({ status: sc, message: err.message });
     }
 };
 
@@ -374,7 +392,8 @@ const getLedgerStatement = async (req, res) => {
         });
     } catch (err) {
         console.error('Ledger statement error:', err);
-        return res.status(500).json({ status: 500, message: err.message });
+        const sc = err.statusCode || 500;
+        return res.status(sc).json({ status: sc, message: err.message });
     }
 };
 
@@ -446,7 +465,8 @@ const getReceivablesAgeing = async (req, res) => {
         });
     } catch (err) {
         console.error('Receivables ageing error:', err);
-        return res.status(500).json({ status: 500, message: err.message });
+        const sc = err.statusCode || 500;
+        return res.status(sc).json({ status: sc, message: err.message });
     }
 };
 
@@ -511,7 +531,8 @@ const getPayablesAgeing = async (req, res) => {
         });
     } catch (err) {
         console.error('Payables ageing error:', err);
-        return res.status(500).json({ status: 500, message: err.message });
+        const sc = err.statusCode || 500;
+        return res.status(sc).json({ status: sc, message: err.message });
     }
 };
 
@@ -523,19 +544,19 @@ const getStockSummary = async (req, res) => {
             SELECT
                 p.id, p.name, p.type, p."pricePerKg",
                 p."hsnCode", p.unit,
-                COALESCE(s."currentStock", 0) AS currentStock,
-                COALESCE(s."minStockLevel", 0) AS minStockLevel,
-                COALESCE(s."currentStock", 0) * COALESCE(p."pricePerKg", 0) AS stockValue,
+                COALESCE(s."currentStock", 0)                                        AS "currentStock",
+                COALESCE(s."minStockLevel", 0)                                       AS "minStockLevel",
+                COALESCE(s."currentStock", 0) * COALESCE(p."pricePerKg", 0)         AS "stockValue",
                 CASE WHEN COALESCE(s."currentStock", 0) <= COALESCE(s."minStockLevel", 0)
-                     THEN true ELSE false END AS belowReorder
+                     THEN true ELSE false END                                        AS "belowReorder"
             FROM products p
             LEFT JOIN stocks s ON s."productId" = p.id
             WHERE COALESCE(p."isActive", true) = true
             ORDER BY p.name
         `);
 
-        const totalValue = rows.reduce((s, r) => s + Number(r.stockvalue || 0), 0);
-        const belowReorder = rows.filter(r => r.belowreorder);
+        const totalValue = rows.reduce((s, r) => s + Number(r.stockValue || 0), 0);
+        const belowReorder = rows.filter(r => r.belowReorder);
 
         return res.json({
             status: 200,
@@ -543,7 +564,8 @@ const getStockSummary = async (req, res) => {
         });
     } catch (err) {
         console.error('Stock summary error:', err);
-        return res.status(500).json({ status: 500, message: err.message });
+        const sc = err.statusCode || 500;
+        return res.status(sc).json({ status: sc, message: err.message });
     }
 };
 
@@ -587,7 +609,8 @@ const getSalesRegister = async (req, res) => {
         });
     } catch (err) {
         console.error('Sales register error:', err);
-        return res.status(500).json({ status: 500, message: err.message });
+        const sc = err.statusCode || 500;
+        return res.status(sc).json({ status: sc, message: err.message });
     }
 };
 
@@ -631,7 +654,8 @@ const getPurchaseRegister = async (req, res) => {
         });
     } catch (err) {
         console.error('Purchase register error:', err);
-        return res.status(500).json({ status: 500, message: err.message });
+        const sc = err.statusCode || 500;
+        return res.status(sc).json({ status: sc, message: err.message });
     }
 };
 
@@ -655,6 +679,9 @@ const getRatioAnalysis = async (req, res) => {
             GROUP BY a.type, a."subType"
         `, { replacements: { asOf } });
 
+        // HIGH-07: fetch P&L with subType so we can separate sales revenue from COGS.
+        // Gross Margin = (Sales Revenue - COGS) / Sales Revenue × 100
+        // Net Profit Margin = Net Profit / Total Revenue × 100  (different denominators)
         const [pl] = await db.sequelize.query(`
             SELECT a.type, a."subType",
                    COALESCE(SUM(le.debit),  0) AS total_dr,
@@ -682,15 +709,15 @@ const getRatioAnalysis = async (req, res) => {
             }, 0);
         };
 
-        const currentAssets     = get('ASSET', 'CURRENT', 'dr') - get('ASSET', 'CURRENT', 'cr');
-        const currentLiabilities= get('LIABILITY', 'CURRENT', 'cr') - get('LIABILITY', 'CURRENT', 'dr');
-        const totalRevenue       = getPL('INCOME');
-        const totalExpenses      = getPL('EXPENSE');
-        const netProfit          = totalRevenue - totalExpenses;
-        // grossProfit = SALES revenue minus COGS only (not all expenses)
-        const salesRevenue       = getPL('INCOME', 'SALES') || totalRevenue;
-        const cogsExpense        = getPL('EXPENSE', 'COGS');
-        const grossProfit        = salesRevenue - cogsExpense;
+        const currentAssets      = get('ASSET', 'CURRENT', 'dr') - get('ASSET', 'CURRENT', 'cr');
+        const currentLiabilities = get('LIABILITY', 'CURRENT', 'cr') - get('LIABILITY', 'CURRENT', 'dr');
+        const totalRevenue        = getPL('INCOME');
+        const totalExpenses       = getPL('EXPENSE');
+        const netProfit           = totalRevenue - totalExpenses;
+        // salesRevenue = SALES sub-type income (or fall back to all income if no sub-type set)
+        const salesRevenue        = getPL('INCOME', 'SALES') || totalRevenue;
+        const cogsExpense         = getPL('EXPENSE', 'COGS');
+        const grossProfit         = salesRevenue - cogsExpense;
 
         // HIGH-07: grossMargin denominator must be salesRevenue (the revenue base that
         // corresponds to COGS), not totalRevenue which may include non-trading income.
@@ -698,6 +725,7 @@ const getRatioAnalysis = async (req, res) => {
         // Net Profit Margin % = (Net Profit / Total Revenue) × 100  ← totalRevenue is correct here
         const ratios = {
             currentRatio:   currentLiabilities > 0 ? (currentAssets / currentLiabilities).toFixed(2) : 'N/A',
+            // HIGH-07: grossMargin uses salesRevenue denominator, NOT totalRevenue
             grossMargin:    salesRevenue > 0 ? ((grossProfit / salesRevenue) * 100).toFixed(2) + '%' : 'N/A',
             netProfitMargin:totalRevenue > 0 ? ((netProfit  / totalRevenue) * 100).toFixed(2) + '%' : 'N/A',
             revenueGrowth:  'N/A' // requires prior period comparison
@@ -706,7 +734,8 @@ const getRatioAnalysis = async (req, res) => {
         return res.json({ status: 200, data: { period: { from, to, asOf }, ratios, summary: { currentAssets, currentLiabilities, totalRevenue, totalExpenses, netProfit } } });
     } catch (err) {
         console.error('Ratio analysis error:', err);
-        return res.status(500).json({ status: 500, message: err.message });
+        const sc = err.statusCode || 500;
+        return res.status(sc).json({ status: sc, message: err.message });
     }
 };
 

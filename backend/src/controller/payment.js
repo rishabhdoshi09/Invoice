@@ -316,7 +316,8 @@ module.exports = {
                             { where: { id: payment.referenceId }, transaction }
                         );
 
-                        // Restore supplier outstanding balance (atomic, inside transaction)
+                        // Restore supplier outstanding balance atomically (HIGH-06).
+                        // Atomic SQL increment — eliminates lost-update race under concurrent deletes.
                         if (purchase.supplierId) {
                             await db.supplier.update(
                                 { currentBalance: db.sequelize.literal(`"currentBalance" + ${Number(payment.amount)}`) },
@@ -325,9 +326,9 @@ module.exports = {
                         }
                     }
                 }
-                
+
                 // Reverse customer balance if this was a customer payment.
-                // Atomic SQL increment — no read-modify-write race under concurrent deletes.
+                // Atomic SQL increment — no read-modify-write race under concurrent deletes (HIGH-06).
                 if (payment.partyType === 'customer' && payment.partyId) {
                     await db.customer.update(
                         { currentBalance: db.sequelize.literal(`"currentBalance" + ${Number(payment.amount)}`) },
@@ -336,8 +337,7 @@ module.exports = {
                 }
 
                 // Reverse supplier balance for standalone supplier payments (advance, etc.).
-                // Purchase-linked reversals are handled above via the purchase bill block.
-                // Atomic SQL increment — no read-modify-write race under concurrent deletes.
+                // Purchase-linked reversals are handled above via the purchase block (HIGH-06).
                 if (payment.partyType === 'supplier' && payment.partyId && payment.referenceType !== 'purchase') {
                     await db.supplier.update(
                         { currentBalance: db.sequelize.literal(`"currentBalance" + ${Number(payment.amount)}`) },

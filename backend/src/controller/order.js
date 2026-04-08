@@ -577,14 +577,16 @@ module.exports = {
                     console.error('Failed to update daily summary for deletion:', summaryError);
                 }
 
-                // Reverse customer balance — use dueAmount for all non-paid invoices.
-                // Atomic decrement prevents lost-update races (CRIT-07 + MED-01).
-                if (order.customerId && order.dueAmount > 0) {
+                // Reverse customer balance atomically.
+                // On create: currentBalance += dueAmount (if dueAmount > 0).
+                // On delete: reverse that — currentBalance -= dueAmount.
+                // advanceAmount (overpayment) never affected currentBalance on create, so nothing to reverse there.
+                if (order.customerId && Number(order.dueAmount) > 0) {
                     await db.customer.update(
                         { currentBalance: db.sequelize.literal(`"currentBalance" - ${Number(order.dueAmount)}`) },
                         { where: { id: order.customerId }, transaction }
                     );
-                    console.log(`Reversed customer balance by due amount ${order.dueAmount} for order ${order.orderNumber}`);
+                    console.log(`[DELETE] Reversed customer balance by ₹${order.dueAmount} for order ${order.orderNumber}`);
                 }
 
                 // Reverse stock: add back the units deducted when this order was created
@@ -904,19 +906,19 @@ module.exports = {
                 // Update daily summary when payment status changes
                 await Services.dailySummary.recordPaymentStatusChange(order, oldStatus, newStatus, transaction);
 
-                // Update customer balance if customer exists
+                // Update customer balance atomically if customer exists.
+                // Atomic SQL avoids lost-update races under concurrent toggle requests.
                 if (customerIdToUpdate) {
-                    const customer = await db.customer.findByPk(customerIdToUpdate, { transaction });
-                    if (customer) {
-                        // If marking as paid, reduce customer balance
-                        // If marking as unpaid, increase customer balance
-                        const balanceChange = newStatus === 'paid' 
-                            ? -Number(order.total)  // Reduce balance when paid
-                            : Number(order.total);  // Increase balance when unpaid
-                        
-                        await customer.update({
-                            currentBalance: (Number(customer.currentBalance) || 0) + balanceChange
-                        }, { transaction });
+                    // If marking as paid, reduce balance by dueAmount (what was owed before this toggle)
+                    // If marking as unpaid, increase balance by total (creating the receivable)
+                    const balanceChange = newStatus === 'paid'
+                        ? -Number(lockedOrder.dueAmount)
+                        : Number(lockedOrder.total);
+                    if (balanceChange !== 0) {
+                        await db.customer.update(
+                            { currentBalance: db.sequelize.literal(`"currentBalance" + ${balanceChange}`) },
+                            { where: { id: customerIdToUpdate }, transaction }
+                        );
                     }
                 }
 
@@ -1016,11 +1018,12 @@ module.exports = {
                 // Link order to existing customer
                 await order.update({ customerId: customer.id }, { transaction });
 
-                // Update customer balance
+                // Update customer balance atomically
                 if (Number(order.dueAmount) > 0) {
-                    await customer.update({
-                        currentBalance: (Number(customer.currentBalance) || 0) + Number(order.dueAmount)
-                    }, { transaction });
+                    await db.customer.update(
+                        { currentBalance: db.sequelize.literal(`"currentBalance" + ${Number(order.dueAmount)}`) },
+                        { where: { id: customer.id }, transaction }
+                    );
                 }
             });
 
