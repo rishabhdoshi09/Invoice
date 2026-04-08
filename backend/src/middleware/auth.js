@@ -15,14 +15,17 @@ if (!process.env.JWT_SECRET) {
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
-// Generate JWT token
+// Generate JWT token.
+// HR-JWT: tokenVersion is embedded so we can invalidate ALL tokens for a user
+// by incrementing their tokenVersion in the DB (e.g. on password change).
 const generateToken = (user) => {
     return jwt.sign(
         {
-            id: user.id,
-            username: user.username,
-            name: user.name,
-            role: user.role
+            id:           user.id,
+            username:     user.username,
+            name:         user.name,
+            role:         user.role,
+            tokenVersion: user.tokenVersion || 0
         },
         JWT_SECRET,
         { expiresIn: JWT_EXPIRES_IN }
@@ -76,6 +79,17 @@ const authenticate = async (req, res, next) => {
             });
         }
 
+        // HR-JWT: Validate tokenVersion. If the user changed their password or was
+        // force-logged-out, their tokenVersion was incremented in the DB. Any token
+        // issued before that increment carries a lower version and is rejected here,
+        // even if the JWT signature and expiry are still valid.
+        if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== user.tokenVersion) {
+            return res.status(401).json({
+                status: 401,
+                message: 'Session has been invalidated. Please login again.'
+            });
+        }
+
         // Attach user to request
         req.user = {
             id: user.id,
@@ -100,15 +114,17 @@ const authorize = (...allowedRoles) => {
     return (req, res, next) => {
         if (!req.user) {
             return res.status(401).json({
-                status: 401,
+                status:  401,
                 message: 'Authentication required'
             });
         }
 
         if (!allowedRoles.includes(req.user.role)) {
+            // LR-ROLE: Do NOT disclose the required role or the user's current role
+            // in the error response — this assists privilege-escalation reconnaissance.
             return res.status(403).json({
-                status: 403,
-                message: `Access denied. Required role: ${allowedRoles.join(' or ')}. Your role: ${req.user.role}`
+                status:  403,
+                message: 'Access denied. You do not have permission to perform this action.'
             });
         }
 
@@ -120,15 +136,16 @@ const authorize = (...allowedRoles) => {
 const canModify = (req, res, next) => {
     if (!req.user) {
         return res.status(401).json({
-            status: 401,
+            status:  401,
             message: 'Authentication required'
         });
     }
 
     if (req.user.role !== 'admin') {
+        // LR-ROLE: Do not disclose the user's current role in the error response.
         return res.status(403).json({
-            status: 403,
-            message: 'Only administrators can edit or delete records. Your role: ' + req.user.role
+            status:  403,
+            message: 'Access denied. Administrator privileges are required to edit or delete records.'
         });
     }
 

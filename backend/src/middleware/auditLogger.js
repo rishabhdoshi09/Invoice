@@ -1,5 +1,5 @@
 const db = require('../models');
-const uuidv4 = require('uuid/v4');
+const { v4: uuidv4 } = require('uuid');
 
 // Helper to get client IP
 const getClientIP = (req) => {

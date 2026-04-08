@@ -48,20 +48,33 @@ module.exports = (sequelize, Sequelize) => {
                 allowNull: true
             },
             isDeleted: {
-                type: Sequelize.BOOLEAN,
+                type:         Sequelize.BOOLEAN,
                 defaultValue: false
+            },
+            deletedAt: {
+                type:      Sequelize.DATE,
+                allowNull: true
+            },
+            deletedBy: {
+                type:      Sequelize.UUID,
+                allowNull: true
             }
         },
         {
-            tableName: 'receipt_allocations',
+            tableName:  'receipt_allocations',
             timestamps: true,
             indexes: [
-                { fields: ['paymentId'] },
-                { fields: ['orderId'] },
-                { fields: ['paymentId', 'orderId'] }
+                { fields: ['paymentId', 'isDeleted'], name: 'idx_ra_payment_active' },
+                { fields: ['orderId',   'isDeleted'], name: 'idx_ra_order_active'   },
+                { fields: ['paymentId', 'orderId'],  name: 'idx_ra_payment_order_unique', unique: true }
             ]
         }
     );
+
+    receiptAllocation.associate = (models) => {
+        receiptAllocation.belongsTo(models.payment, { foreignKey: 'paymentId', as: 'payment' });
+        receiptAllocation.belongsTo(models.order,   { foreignKey: 'orderId',   as: 'order'   });
+    };
 
     return receiptAllocation;
 };

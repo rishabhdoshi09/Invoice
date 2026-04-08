@@ -24,25 +24,34 @@ module.exports = {
         });
 
         const schema = Joi.object().keys({
-            orderNumber: Joi.string().trim().optional(), // generated server-side
-            orderDate: Joi.string().trim().required().max(10)
+            orderNumber:     Joi.string().trim().optional(), // generated server-side
+            orderDate:       Joi.string().trim().required().max(10)
                 .regex(/^\d{2}-\d{2}-\d{4}$|^\d{4}-\d{2}-\d{2}$/, 'date format'),
-            customerName: Joi.string().trim().allow('').optional(),
-            customerMobile: Joi.string().trim().allow('').optional(),
+            customerName:    Joi.string().trim().allow('').optional(),
+            customerMobile:  Joi.string().trim().allow('').optional(),
             customerAddress: Joi.string().trim().allow('').optional(),
-            customerId: Joi.string().trim().allow('', null).optional(),
-            subTotal: Joi.number().greater(0).max(MAX_UNIT_PRICE * MAX_QUANTITY).required(),
-            total: Joi.number().greater(0).max(MAX_UNIT_PRICE * MAX_QUANTITY).required(),
-            // tax and taxPercent: server recomputes from taxPercent, these are hints
-            tax: Joi.number().min(0).max(MAX_UNIT_PRICE * MAX_QUANTITY).optional().default(0),
-            taxPercent: Joi.number().min(MIN_TAX_PERCENT).max(MAX_TAX_PERCENT).optional().default(0),
-            paidAmount: Joi.number().min(0).max(MAX_UNIT_PRICE * MAX_QUANTITY).optional(),
-            dueAmount: Joi.number().optional(), // can be negative (overpayment)
-            paymentStatus: Joi.string().trim().valid('paid', 'partial', 'unpaid').optional(),
-            notes: Joi.string().trim().allow('').optional(),
-            paymentMode: Joi.string().trim().valid('CASH', 'CREDIT').optional(),
-            idempotencyKey: Joi.string().trim().max(128).allow('', null).optional(),
-            orderItems: Joi.array().items(orderItems).min(1).required()
+            customerId:      Joi.string().trim().allow('', null).optional(),
+            subTotal:        Joi.number().greater(0).max(MAX_UNIT_PRICE * MAX_QUANTITY).required(),
+            total:           Joi.number().greater(0).max(MAX_UNIT_PRICE * MAX_QUANTITY).required(),
+            // tax and taxPercent: server recomputes from taxPercent.
+            tax:             Joi.number().min(0).max(MAX_UNIT_PRICE * MAX_QUANTITY).optional().default(0),
+            taxPercent:      Joi.number().min(MIN_TAX_PERCENT).max(MAX_TAX_PERCENT).optional().default(0),
+            // HR-GST: Accept GST component splits from the frontend but validate their sum.
+            // The server will cross-check: cgst + sgst + igst must equal the computed tax
+            // (within 0.01 paisa tolerance). Prevents incorrect GST account postings.
+            cgst:            Joi.number().min(0).max(MAX_UNIT_PRICE * MAX_QUANTITY).optional().default(0),
+            sgst:            Joi.number().min(0).max(MAX_UNIT_PRICE * MAX_QUANTITY).optional().default(0),
+            igst:            Joi.number().min(0).max(MAX_UNIT_PRICE * MAX_QUANTITY).optional().default(0),
+            // CGST+SGST and IGST are mutually exclusive (intra-state vs inter-state).
+            // Validation: if igst > 0, then cgst and sgst must both be 0 (and vice-versa).
+            // This is enforced below in the controller after Joi passes.
+            paidAmount:      Joi.number().min(0).max(MAX_UNIT_PRICE * MAX_QUANTITY).optional(),
+            dueAmount:       Joi.number().min(0).optional(), // always non-negative; advance handled separately
+            paymentStatus:   Joi.string().trim().valid('paid', 'partial', 'unpaid').optional(),
+            notes:           Joi.string().trim().allow('').optional(),
+            paymentMode:     Joi.string().trim().valid('CASH', 'CREDIT').optional(),
+            idempotencyKey:  Joi.string().trim().max(128).allow('', null).optional(),
+            orderItems:      Joi.array().items(orderItems).min(1).required()
         });
         return Joi.validate(orderObj, schema, { convert: true });
     },

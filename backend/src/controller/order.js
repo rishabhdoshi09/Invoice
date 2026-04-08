@@ -1,5 +1,5 @@
 
-const uuidv4 = require('uuid/v4');
+const { v4: uuidv4 } = require('uuid');
 const Services = require('../services');
 const Validations = require('../validations');
 const db = require('../models');
@@ -36,6 +36,29 @@ module.exports = {
             // === SERVER-SIDE MATH: Ignore client totals entirely ===
             // Recalculate every monetary field from the raw line items.
             const round2 = (n) => Math.round(n * 100) / 100;
+
+            // === HR-GST: Server-side GST split cross-validation ===
+            // Reject requests where the client-supplied GST components are inconsistent
+            // with each other or with the declared tax amount.
+            // Rule 1: IGST is inter-state; CGST+SGST is intra-state. They are mutually exclusive.
+            const clientCgst  = Number(req.body.cgst || 0);
+            const clientSgst  = Number(req.body.sgst || 0);
+            const clientIgst  = Number(req.body.igst || 0);
+            if (clientIgst > 0 && (clientCgst > 0 || clientSgst > 0)) {
+                return res.status(400).send({
+                    status:  400,
+                    message: 'GST validation error: IGST (inter-state) and CGST/SGST (intra-state) cannot both be non-zero on the same invoice.'
+                });
+            }
+            // Rule 2: declared GST splits must sum to the declared tax amount.
+            const clientTax   = Number(req.body.tax || 0);
+            const clientSplit = round2(clientCgst + clientSgst + clientIgst);
+            if (clientTax > 0 && Math.abs(clientSplit - clientTax) > 0.02) {
+                return res.status(400).send({
+                    status:  400,
+                    message: `GST validation error: cgst(${clientCgst}) + sgst(${clientSgst}) + igst(${clientIgst}) = ${clientSplit}, but tax = ${clientTax}. Splits must sum to tax.`
+                });
+            }
 
             // 1. Recompute each line total (qty × rate)
             orderItems = orderItems.map(item => ({
@@ -923,16 +946,35 @@ module.exports = {
                 }
 
                 // === DOUBLE-ENTRY LEDGER: Post payment toggle ===
-                // Non-blocking when CoA is not initialized; blocking when it IS initialized.
+                // SEQUENCE FIX (CR-TOGGLE): atomically increment paymentToggleSequence
+                // BEFORE posting so every toggle event gets a unique ledger referenceId.
+                // This prevents the idempotency-key collision that caused silent ledger
+                // corruption on the 3rd+ toggle of the same direction.
                 if (customerIdToUpdate) {
                     const accountsExist = await db.account.count({ transaction });
                     if (accountsExist > 0) {
+                        // Step 1: Atomically increment the sequence counter on the locked row.
+                        await db.order.update(
+                            { paymentToggleSequence: db.sequelize.literal('"paymentToggleSequence" + 1') },
+                            { where: { id: orderId }, transaction }
+                        );
+                        // Step 2: Re-read the row to get the new sequence value.
+                        const freshOrder = await db.order.findByPk(orderId, { transaction });
+                        const toggleSeq  = freshOrder.paymentToggleSequence;
+
                         await postPaymentStatusToggleToLedger(
-                            { ...order.toJSON ? order.toJSON() : order, customerId: customerIdToUpdate },
+                            {
+                                ...(order.toJSON ? order.toJSON() : order),
+                                customerId:        customerIdToUpdate,
+                                dueAmount:         lockedOrder.dueAmount,
+                                originalPaidAmount: lockedOrder.originalPaidAmount,
+                                total:             lockedOrder.total
+                            },
                             oldStatus,
                             newStatus,
                             changedByTrimmed,
-                            transaction
+                            transaction,
+                            toggleSeq   // <-- unique per toggle event
                         );
                     } else {
                         console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — toggle for ${order.orderNumber} not posted to ledger`);

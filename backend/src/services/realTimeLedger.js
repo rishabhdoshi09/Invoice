@@ -25,9 +25,11 @@ const postPurchaseToLedger = (purchase, tx) => ae.postPurchaseBill(purchase, tx)
 const postSupplierPaymentToLedger = (payment, supplierId, supplierName, tx) =>
     ae.postSupplierPayment(payment, supplierId, supplierName, tx);
 
-// ── Legacy payment-status toggle ─────────────────────────────────────────
-const postPaymentStatusToggleToLedger = (order, oldStatus, newStatus, changedBy, tx) =>
-    ae.postPaymentStatusToggle(order, oldStatus, newStatus, changedBy, tx);
+// ── Payment-status toggle ────────────────────────────────────────────────
+// toggleSeq MUST be the atomically incremented paymentToggleSequence value
+// fetched from the locked order row inside the caller's transaction.
+const postPaymentStatusToggleToLedger = (order, oldStatus, newStatus, changedBy, tx, toggleSeq) =>
+    ae.postPaymentStatusToggle(order, oldStatus, newStatus, changedBy, tx, toggleSeq);
 
 // ── Reversals ────────────────────────────────────────────────────────────
 const reverseInvoiceLedger  = (order, tx)   => ae.reverseInvoice(order, tx);

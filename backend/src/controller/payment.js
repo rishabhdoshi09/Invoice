@@ -1,4 +1,4 @@
-const uuidv4 = require('uuid/v4');
+const { v4: uuidv4 } = require('uuid');
 const Services = require('../services');
 const Validations = require('../validations');
 const db = require('../models');
@@ -75,7 +75,7 @@ module.exports = {
                             transaction
                         });
                         if (!customer) {
-                            const uuidv4 = require('uuid/v4');
+                            const { v4: uuidv4 } = require('uuid');
                             customer = await db.customer.create({
                                 id: uuidv4(),
                                 name: value.partyName.trim(),
@@ -99,7 +99,7 @@ module.exports = {
                             transaction
                         });
                         if (!supplier) {
-                            const uuidv4 = require('uuid/v4');
+                            const { v4: uuidv4 } = require('uuid');
                             supplier = await db.supplier.create({
                                 id: uuidv4(),
                                 name: value.partyName.trim(),

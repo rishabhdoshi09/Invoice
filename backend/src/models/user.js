@@ -52,6 +52,14 @@ module.exports = (sequelize, Sequelize) => {
             deletedBy: {
                 type: Sequelize.UUID,
                 allowNull: true
+            },
+            // HR-JWT: Token revocation without a blacklist.
+            // Increment this value to immediately invalidate all existing JWTs for this user.
+            // Useful after: password change, suspected compromise, admin forced logout.
+            tokenVersion: {
+                type:         Sequelize.INTEGER,
+                allowNull:    false,
+                defaultValue: 0
             }
         },
         {
