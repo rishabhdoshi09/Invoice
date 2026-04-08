@@ -37,6 +37,7 @@ module.exports = (router) => {
         .delete(
             authenticate,
             canModify,
+            financialWriteGuard,    // Deletion reverses ledger entries — block during HALT
             captureOriginal(db.payment, 'paymentId'),
             auditMiddleware('PAYMENT'),
             Controller.payment.deletePayment

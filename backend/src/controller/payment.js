@@ -75,7 +75,6 @@ module.exports = {
                             transaction
                         });
                         if (!customer) {
-                            const { v4: uuidv4 } = require('uuid');
                             customer = await db.customer.create({
                                 id: uuidv4(),
                                 name: value.partyName.trim(),
@@ -99,7 +98,6 @@ module.exports = {
                             transaction
                         });
                         if (!supplier) {
-                            const { v4: uuidv4 } = require('uuid');
                             supplier = await db.supplier.create({
                                 id: uuidv4(),
                                 name: value.partyName.trim(),

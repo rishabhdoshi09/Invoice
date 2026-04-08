@@ -142,7 +142,7 @@ app.get('*', (req, res) => {
   }
 });
 
-const PORT = 8001;
+const PORT = process.env.PORT || 8001;
 
 app.listen(PORT, async () => {
   try {

@@ -13,7 +13,7 @@ if (!process.env.JWT_SECRET) {
 }
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '2h';
 
 // Generate JWT token.
 // HR-JWT: tokenVersion is embedded so we can invalidate ALL tokens for a user
@@ -83,7 +83,11 @@ const authenticate = async (req, res, next) => {
         // force-logged-out, their tokenVersion was incremented in the DB. Any token
         // issued before that increment carries a lower version and is rejected here,
         // even if the JWT signature and expiry are still valid.
-        if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== user.tokenVersion) {
+        // Use ?? 0 so pre-migration tokens (no tokenVersion in payload) are treated
+        // as version 0. If the user has since changed their password (tokenVersion > 0),
+        // the old token is correctly rejected instead of bypassing the check.
+        const tokenVer = decoded.tokenVersion ?? 0;
+        if (tokenVer !== user.tokenVersion) {
             return res.status(401).json({
                 status: 401,
                 message: 'Session has been invalidated. Please login again.'
@@ -170,7 +174,10 @@ const optionalAuth = async (req, res, next) => {
                     }
                 });
 
-                if (user) {
+                    // HR-JWT: same tokenVersion check as authenticate — a revoked
+                    // token must not attach user context even on optional-auth routes.
+                    const tokenVer = decoded.tokenVersion ?? 0;
+                if (user && tokenVer === user.tokenVersion) {
                     req.user = {
                         id: user.id,
                         username: user.username,

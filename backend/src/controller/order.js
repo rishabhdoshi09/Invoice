@@ -421,7 +421,28 @@ module.exports = {
                     message: `Cannot directly edit payment fields (${attemptedFinancialChanges.join(', ')}). Use "Record Payment" or adjustment entries instead.`
                 });
             }
-            
+
+            // HR-GST: Same cross-validation as createOrder — prevent inconsistent GST splits
+            // being injected via an edit even though createOrder would have rejected them.
+            const round2 = (n) => Math.round(n * 100) / 100;
+            const editCgst = Number(req.body.cgst || 0);
+            const editSgst = Number(req.body.sgst || 0);
+            const editIgst = Number(req.body.igst || 0);
+            if (editIgst > 0 && (editCgst > 0 || editSgst > 0)) {
+                return res.status(400).send({
+                    status: 400,
+                    message: 'GST validation error: IGST (inter-state) and CGST/SGST (intra-state) cannot both be non-zero on the same invoice.'
+                });
+            }
+            const editTax = Number(req.body.tax || 0);
+            const editSplit = round2(editCgst + editSgst + editIgst);
+            if (editTax > 0 && Math.abs(editSplit - editTax) > 0.02) {
+                return res.status(400).send({
+                    status: 400,
+                    message: `GST validation error: cgst(${editCgst}) + sgst(${editSgst}) + igst(${editIgst}) = ${editSplit}, but tax = ${editTax}. Splits must sum to tax.`
+                });
+            }
+
             // Update order in transaction
             const result = await db.sequelize.transaction(async (transaction) => {
                 // Update order basic info (exclude orderItems from update)
@@ -434,7 +455,6 @@ module.exports = {
                 }
 
                 // === SERVER-SIDE MATH: Recalculate totals if line items are being edited ===
-                const round2 = (n) => Math.round(n * 100) / 100;
                 let financialFieldsChanged = false;
 
                 if (orderItems && orderItems.length > 0) {
