@@ -171,18 +171,9 @@ module.exports = {
             DEFERRABLE INITIALLY DEFERRED
         `));
 
-        // journal_batches → orders  (RESTRICT: don't allow deleting an order that
-        // still has un-reversed journal batches — forces proper reversal workflow)
-        // NOTE: uses soft-delete pattern; hard deletes should be impossible in app code.
-        await safe(() => q.sequelize.query(`
-            ALTER TABLE journal_batches
-            ADD CONSTRAINT fk_jb_order_reference
-            FOREIGN KEY ("referenceId")
-            REFERENCES orders(id)
-            ON UPDATE CASCADE
-            ON DELETE RESTRICT
-            DEFERRABLE INITIALLY DEFERRED
-        `));
+        // journal_batches.referenceId is a POLYMORPHIC column (can point to orders,
+        // payments, or purchases depending on referenceType). A single-table FK is
+        // not safe here and was removed — integrity is enforced at the app layer.
 
         // ledger_entries → journal_batches  (CASCADE: entries belong to their batch)
         await safe(() => q.sequelize.query(`
@@ -234,7 +225,6 @@ module.exports = {
         // Drop FKs
         const fks = [
             ['orderItems',          'fk_orderitems_order'],
-            ['journal_batches',     'fk_jb_order_reference'],
             ['ledger_entries',      'fk_le_batch'],
             ['receipt_allocations', 'fk_ra_payment'],
             ['receipt_allocations', 'fk_ra_order'],
