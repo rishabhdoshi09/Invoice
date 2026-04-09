@@ -5,7 +5,8 @@ require('dotenv').config();
 // Fail fast if required environment variables are missing or obviously insecure.
 // This runs before any module that imports from src/ so auth.js also gets the
 // populated process.env before its module-level code executes.
-const REQUIRED_ENV = ['DATABASE_NAME', 'DB_USER', 'PASSWORD', 'DB_HOST', 'JWT_SECRET'];
+// PASSWORD is intentionally excluded — empty string is valid for local PostgreSQL installs
+const REQUIRED_ENV = ['DATABASE_NAME', 'DB_USER', 'DB_HOST', 'JWT_SECRET'];
 const missingEnv = REQUIRED_ENV.filter(k => !process.env[k]);
 if (missingEnv.length > 0) {
     console.error(`[STARTUP] FATAL: Missing required environment variables: ${missingEnv.join(', ')}`);
