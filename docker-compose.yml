@@ -1,0 +1,64 @@
+version: '3.9'
+
+# ─── One-command setup ────────────────────────────────────────────────────────
+# 1. Copy .env.example to .env and fill in JWT_SECRET and PASSWORD
+# 2. docker compose up --build
+# The app will be available at http://localhost:8001
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL database ─────────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${DATABASE_NAME:-customerInvoice}
+      POSTGRES_USER:     ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DATABASE_NAME:-customerInvoice}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # ── Application (backend + built frontend) ──────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8001}:${PORT:-8001}"
+    environment:
+      # Database — point to the compose service, not localhost
+      DB_HOST:       db
+      DB_PORT:       5432
+      DATABASE_NAME: ${DATABASE_NAME:-customerInvoice}
+      DB_USER:       ${DB_USER:-postgres}
+      PASSWORD:      ${PASSWORD}
+      # Server
+      PORT:          ${PORT:-8001}
+      NODE_ENV:      production
+      IS_DEV:        "false"
+      # Security — MUST be set in .env before first run
+      JWT_SECRET:    ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-2h}
+      # CORS: allow requests from the same origin (port 8001 serves everything)
+      CORS_ORIGINS:  ${CORS_ORIGINS:-http://localhost:8001}
+      # Optional — leave blank to disable
+      FINANCIAL_GUARD_OVERRIDE_SECRET: ${FINANCIAL_GUARD_OVERRIDE_SECRET:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID:   ${TELEGRAM_CHAT_ID:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Persist database backups across container restarts
+      - backups:/app/backups
+
+volumes:
+  pgdata:    # PostgreSQL data — persisted between restarts
+  backups:   # Database backup files

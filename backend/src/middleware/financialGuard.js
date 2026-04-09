@@ -120,7 +120,7 @@ function makeFinancialWriteGuard(db) {
                     // show exactly who bypassed the financial guard and when.
                     try {
                         const { v4: uuidv4 } = require('uuid');
-                        await getDb().auditLog.create({
+                        await db.auditLog.create({
                             id: uuidv4(),
                             userId:      req.user?.id   || null,
                             userName:    req.user?.name || bypassUser,
