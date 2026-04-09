@@ -134,16 +134,15 @@ class LedgerService {
         if (account) return account;
 
         // ── Code generation: atomic MAX() inside the lock ────────────────────
-        // Use a regex-safe MAX on the numeric suffix to avoid non-numeric codes
-        // (e.g. '1300-WALKIN') corrupting the sequence.
+        // Scan ALL accounts with 1300-xxx codes (regardless of partyType) so we
+        // never collide with accounts that were created without a partyType set.
         const [codeRows] = await db.sequelize.query(`
             SELECT COALESCE(
                 MAX(CAST(SPLIT_PART(code, '-', 2) AS INTEGER)),
                 0
             ) + 1 AS next_num
             FROM accounts
-            WHERE "partyType" = 'customer'
-              AND code ~ '^1300-[0-9]+$'
+            WHERE code ~ '^1300-[0-9]+$'
         `, { transaction });
         const nextNum = Number(codeRows[0].next_num) || 1;
         const newCode = `1300-${String(nextNum).padStart(3, '0')}`;
@@ -151,6 +150,11 @@ class LedgerService {
         const arAccount = await db.account.findOne({ where: { code: '1300' }, transaction });
 
         // ── Layer 3: handle residual unique-constraint races defensively ──────
+        // Use a SAVEPOINT so a unique-constraint violation doesn't abort the whole
+        // outer transaction — PostgreSQL requires ROLLBACK TO SAVEPOINT before any
+        // further queries can run after a constraint error.
+        const spName = `sp_cust_${(resolvedCustomerId || 'walkin').toString().replace(/\W/g, '').slice(0, 20)}`;
+        await db.sequelize.query(`SAVEPOINT ${spName}`, { transaction });
         try {
             account = await db.account.create({
                 code: newCode,
@@ -162,9 +166,11 @@ class LedgerService {
                 partyType: 'customer',
                 isSystemAccount: false
             }, { transaction });
+            await db.sequelize.query(`RELEASE SAVEPOINT ${spName}`, { transaction });
         } catch (err) {
-            if (err.name === 'SequelizeUniqueConstraintError') {
-                // DB constraint caught a duplicate — return the winner
+            await db.sequelize.query(`ROLLBACK TO SAVEPOINT ${spName}`, { transaction });
+            if (err.name === 'SequelizeUniqueConstraintError' || err.parent?.code === '23505') {
+                // Code collision — find the existing account (any partyType)
                 account = await db.account.findOne({
                     where: { partyId: resolvedCustomerId, partyType: 'customer' },
                     transaction
@@ -208,21 +214,23 @@ class LedgerService {
         if (account) return account;
 
         // ── Code generation inside lock ──────────────────────────────────────
+        // Scan ALL 2100-xxx codes regardless of partyType to avoid collisions.
         const [codeRows] = await db.sequelize.query(`
             SELECT COALESCE(
                 MAX(CAST(SPLIT_PART(code, '-', 2) AS INTEGER)),
                 0
             ) + 1 AS next_num
             FROM accounts
-            WHERE "partyType" = 'supplier'
-              AND code ~ '^2100-[0-9]+$'
+            WHERE code ~ '^2100-[0-9]+$'
         `, { transaction });
         const nextNum = Number(codeRows[0].next_num) || 1;
         const newCode = `2100-${String(nextNum).padStart(3, '0')}`;
 
         const apAccount = await db.account.findOne({ where: { code: '2100' }, transaction });
 
-        // ── Layer 3: constraint-error fallback ───────────────────────────────
+        // ── Layer 3: constraint-error fallback (with SAVEPOINT) ───────────────
+        const spName = `sp_supp_${(supplierId || 'unknown').toString().replace(/\W/g, '').slice(0, 20)}`;
+        await db.sequelize.query(`SAVEPOINT ${spName}`, { transaction });
         try {
             account = await db.account.create({
                 code: newCode,
@@ -234,8 +242,10 @@ class LedgerService {
                 partyType: 'supplier',
                 isSystemAccount: false
             }, { transaction });
+            await db.sequelize.query(`RELEASE SAVEPOINT ${spName}`, { transaction });
         } catch (err) {
-            if (err.name === 'SequelizeUniqueConstraintError') {
+            await db.sequelize.query(`ROLLBACK TO SAVEPOINT ${spName}`, { transaction });
+            if (err.name === 'SequelizeUniqueConstraintError' || err.parent?.code === '23505') {
                 account = await db.account.findOne({
                     where: { partyId: supplierId, partyType: 'supplier' },
                     transaction
