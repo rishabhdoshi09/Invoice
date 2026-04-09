@@ -648,10 +648,7 @@ async function updateStock(productId, quantity, direction, referenceId, referenc
     else if (direction === 'OUT') next = prev - Number(quantity);
     else                          next = Number(quantity); // ADJUSTMENT = set absolute
 
-    // Prevent negative stock on OUT movements (optional: can be relaxed for backorder support).
-    if (direction === 'OUT' && next < 0) {
-        throw new Error(`[AE] updateStock: insufficient stock for product ${productId} — available: ${prev}, requested: ${quantity}`);
-    }
+    // Negative stock allowed — user will reconcile stock quantities later.
 
     await product.update({ currentStock: next }, { transaction });
 
