@@ -11,7 +11,9 @@ root.render(
   </React.StrictMode>
 );
 
-// Register PWA service worker for offline support and "Add to Home Screen"
-serviceWorkerRegistration.register();
+// Register PWA service worker only in production — dev mode causes reload loops
+if (process.env.NODE_ENV === 'production') {
+    serviceWorkerRegistration.register();
+}
 
 reportWebVitals();
