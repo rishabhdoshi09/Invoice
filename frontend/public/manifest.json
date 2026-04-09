@@ -1,25 +1,31 @@
 {
-  "short_name": "Customer Invoicing",
-  "name": "Customer Invoicing Application",
+  "short_name": "RS Invoice",
+  "name": "RS Invoice — Billing & Accounting",
+  "description": "GST-compliant invoicing, payments, and accounting for Indian businesses",
   "icons": [
     {
       "src": "logo.png",
       "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "logo.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
       "src": "logo.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "orientation": "portrait-primary",
+  "theme_color": "#063970",
+  "background_color": "#063970"
 }
