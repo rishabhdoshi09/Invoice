@@ -99,6 +99,62 @@ module.exports = {
         }));
 
         // ══════════════════════════════════════════════════════════════════
+        //  PRE-FLIGHT: NULL OUT ORPHANED REFERENCES
+        //  Before adding FK constraints, remove any rows that would violate
+        //  them. These are genuinely orphaned records — their parent rows
+        //  (orders, products) no longer exist and cannot be recovered.
+        //  Ledger entries are deleted cascade-style (entries without a batch
+        //  are meaningless). Stock transactions whose product was deleted are
+        //  nullified so the historical quantity record is preserved.
+        // ══════════════════════════════════════════════════════════════════
+
+        // 1. Delete ledger_entries whose batch references a non-existent order
+        await safe(() => q.sequelize.query(`
+            DELETE FROM ledger_entries
+            WHERE "batchId" IN (
+                SELECT id FROM journal_batches
+                WHERE "referenceId" IS NOT NULL
+                  AND "referenceId" NOT IN (SELECT id FROM orders)
+            )
+        `));
+
+        // 2. Delete the orphaned journal_batches themselves
+        await safe(() => q.sequelize.query(`
+            DELETE FROM journal_batches
+            WHERE "referenceId" IS NOT NULL
+              AND "referenceId" NOT IN (SELECT id FROM orders)
+        `));
+
+        // 3. Delete receipt_allocations whose order no longer exists
+        await safe(() => q.sequelize.query(`
+            DELETE FROM receipt_allocations
+            WHERE "orderId" IS NOT NULL
+              AND "orderId" NOT IN (SELECT id FROM orders)
+        `));
+
+        // 4. Delete receipt_allocations whose payment no longer exists
+        await safe(() => q.sequelize.query(`
+            DELETE FROM receipt_allocations
+            WHERE "paymentId" IS NOT NULL
+              AND "paymentId" NOT IN (SELECT id FROM payments)
+        `));
+
+        // 5. Delete orderItems whose order no longer exists
+        await safe(() => q.sequelize.query(`
+            DELETE FROM "orderItems"
+            WHERE "orderId" IS NOT NULL
+              AND "orderId" NOT IN (SELECT id FROM orders)
+        `));
+
+        // 6. Delete stock_transactions whose product was deleted
+        //    (productId is NOT NULL so these rows cannot be preserved meaningfully)
+        await safe(() => q.sequelize.query(`
+            DELETE FROM stock_transactions
+            WHERE "productId" IS NOT NULL
+              AND "productId" NOT IN (SELECT id FROM products)
+        `));
+
+        // ══════════════════════════════════════════════════════════════════
         //  FOREIGN KEY CONSTRAINTS (MR-FK)
         //  Added with DEFERRABLE INITIALLY DEFERRED so bulk imports that
         //  temporarily violate order don't fail mid-batch.
