@@ -146,11 +146,15 @@ function sendTelegramDocument(fileBuffer, filename, caption) {
 // ─── Create compressed pg_dump buffer ────────────────────────────
 function createBackupBuffer() {
     return new Promise((resolve, reject) => {
+        // Use the same env var names as docker-compose and the rest of the app:
+        //   PASSWORD (not DB_PASS) and DATABASE_NAME (not DB_NAME).
+        // Previously these were wrong, causing pg_dump to connect to the default
+        // 'postgres' db with no password — producing an empty/wrong backup.
         const dbUrl = process.env.DATABASE_URL ||
-            `postgres://${process.env.DB_USER || 'postgres'}:${encodeURIComponent(process.env.DB_PASS || '')}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'postgres'}`;
+            `postgres://${process.env.DB_USER || 'postgres'}:${encodeURIComponent(process.env.PASSWORD || '')}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DATABASE_NAME || 'postgres'}`;
 
         const pgDump = spawn('pg_dump', ['--no-owner', '--no-acl', dbUrl], {
-            env: { ...process.env, PGPASSWORD: process.env.DB_PASS || '' }
+            env: { ...process.env, PGPASSWORD: process.env.PASSWORD || '' }
         });
         const gzip = zlib.createGzip({ level: 6 });
 
@@ -170,36 +174,127 @@ function createBackupBuffer() {
     });
 }
 
+// ─── Local backup directory inside the Docker 'backups' volume ───────────
+const LOCAL_BACKUP_DIR = process.env.BACKUP_DIR || '/app/backups';
+const LOCAL_BACKUP_RETAIN_DAYS = parseInt(process.env.BACKUP_RETAIN_DAYS || '30', 10);
+
+/**
+ * Write the backup buffer to the local filesystem.
+ * Always runs regardless of Telegram configuration.
+ * Returns the file path on success, or throws on write failure.
+ */
+function writeLocalBackup(buf, filename) {
+    const fs = require('fs');
+    const path = require('path');
+    try {
+        if (!fs.existsSync(LOCAL_BACKUP_DIR)) {
+            fs.mkdirSync(LOCAL_BACKUP_DIR, { recursive: true });
+        }
+        const filePath = path.join(LOCAL_BACKUP_DIR, filename);
+        fs.writeFileSync(filePath, buf);
+        console.log(`[BACKUP] Local backup written: ${filePath} (${(buf.length / 1048576).toFixed(2)} MB)`);
+        return filePath;
+    } catch (err) {
+        throw new Error(`[BACKUP] Failed to write local backup: ${err.message}`);
+    }
+}
+
+/**
+ * Delete local backup files older than LOCAL_BACKUP_RETAIN_DAYS days.
+ * Errors are logged but do not abort the backup process.
+ */
+function pruneOldLocalBackups() {
+    const fs = require('fs');
+    const path = require('path');
+    try {
+        if (!fs.existsSync(LOCAL_BACKUP_DIR)) return;
+        const cutoffMs = Date.now() - LOCAL_BACKUP_RETAIN_DAYS * 24 * 3600 * 1000;
+        const files = fs.readdirSync(LOCAL_BACKUP_DIR);
+        for (const file of files) {
+            if (!file.startsWith('invoice_backup_') && !file.startsWith('backup_')) continue;
+            const filePath = path.join(LOCAL_BACKUP_DIR, file);
+            try {
+                const stat = fs.statSync(filePath);
+                if (stat.mtimeMs < cutoffMs) {
+                    fs.unlinkSync(filePath);
+                    console.log(`[BACKUP] Pruned old backup: ${file}`);
+                }
+            } catch (e) {
+                console.warn(`[BACKUP] Could not prune ${file}: ${e.message}`);
+            }
+        }
+    } catch (err) {
+        console.warn('[BACKUP] Prune step failed:', err.message);
+    }
+}
+
 /**
  * Run a database backup and send to Telegram as a document.
  * Called by the nightly cron job at 11 PM IST.
+ *
+ * Strategy (fail-safe ordering):
+ *   1. Create the backup buffer (pg_dump | gzip).
+ *   2. Write to LOCAL filesystem — this ALWAYS runs. If it fails, abort and alert.
+ *   3. Send to Telegram — best-effort. If Telegram fails (network, >50 MB limit,
+ *      bot not configured), the local copy is still intact and an alert is sent.
+ *   4. Prune local backups older than BACKUP_RETAIN_DAYS days.
  */
 async function sendDailyBackup() {
     const dateStr = new Date().toLocaleDateString('en-IN', {
         day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata'
     });
     const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
-    const filename = `invoice_backup_${new Date().toISOString().slice(0, 10)}.sql.gz`;
+    const isoDate = new Date().toISOString().slice(0, 10);
+    const filename = `invoice_backup_${isoDate}.sql.gz`;
 
     console.log('[BACKUP] Starting nightly database backup...');
 
+    let buf;
     try {
-        const buf = await createBackupBuffer();
-        const sizeMB = (buf.length / 1048576).toFixed(2);
+        buf = await createBackupBuffer();
+    } catch (err) {
+        console.error('[BACKUP] pg_dump failed:', err.message);
+        sendTelegram(`❌ <b>NIGHTLY BACKUP FAILED — pg_dump error</b>\n<b>Date:</b> ${dateStr}\n<b>Error:</b> ${esc(err.message)}`)
+            .catch(() => {});
+        return { sent: false, localWritten: false, error: err.message };
+    }
 
+    const sizeMB = (buf.length / 1048576).toFixed(2);
+
+    // Step 2: Write local copy — primary backup, must succeed.
+    let localPath;
+    try {
+        localPath = writeLocalBackup(buf, filename);
+    } catch (err) {
+        console.error('[BACKUP] Local write failed:', err.message);
+        sendTelegram(`❌ <b>NIGHTLY BACKUP FAILED — local write error</b>\n<b>Date:</b> ${dateStr}\n<b>Error:</b> ${esc(err.message)}`)
+            .catch(() => {});
+        return { sent: false, localWritten: false, error: err.message };
+    }
+
+    // Step 3: Send to Telegram — best-effort secondary copy.
+    let telegramSent = false;
+    try {
         await sendTelegramDocument(buf, filename,
             `📦 Auto Daily Backup — ${dateStr}\nSize: ${sizeMB} MB\nTime: ${timeStr} IST\n✅ Database backup complete`
         );
-
+        telegramSent = true;
         console.log(`[BACKUP] Nightly backup sent to Telegram — ${sizeMB} MB`);
-        return { sent: true, sizeMB };
     } catch (err) {
-        console.error('[BACKUP] Nightly backup failed:', err.message);
-        // Send a failure alert as text
-        sendTelegram(`❌ <b>NIGHTLY BACKUP FAILED</b>\n<b>Date:</b> ${dateStr}\n<b>Error:</b> ${esc(err.message)}`)
-            .catch(() => {});
-        return { sent: false, error: err.message };
+        // Telegram failure is non-fatal — local backup is already written.
+        console.error('[BACKUP] Telegram send failed (local backup still intact):', err.message);
+        sendTelegram(
+            `⚠️ <b>BACKUP: Telegram upload failed</b>\n` +
+            `<b>Date:</b> ${dateStr}\n` +
+            `<b>Local copy:</b> ✅ written (${sizeMB} MB)\n` +
+            `<b>Telegram:</b> ❌ ${esc(err.message)}`
+        ).catch(() => {});
     }
+
+    // Step 4: Prune stale local backups.
+    pruneOldLocalBackups();
+
+    return { sent: telegramSent, localWritten: true, sizeMB, localPath };
 }
 
 // ─── Escape HTML special chars in user data ─────────────────────

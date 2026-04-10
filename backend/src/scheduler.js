@@ -23,11 +23,38 @@ function init(db) {
     cron.schedule('0 * * * *', async () => {
         try {
             const report = await selfAuditService.run({ writeHistory: true, triggeredBy: 'scheduler' });
-            if (report.summary.overallStatus !== 'OK') {
-                console.error(`[SCHEDULER] Self-audit ALERT: ${report.summary.overallStatus} — ` +
-                    `HALT=${report.summary.sevCounts.HALT} ` +
-                    `CRITICAL=${report.summary.sevCounts.CRITICAL} ` +
-                    `WARNING=${report.summary.sevCounts.WARNING}`);
+            const { overallStatus, sevCounts } = report.summary;
+
+            if (overallStatus !== 'OK') {
+                console.error(`[SCHEDULER] Self-audit ALERT: ${overallStatus} — ` +
+                    `HALT=${sevCounts.HALT} ` +
+                    `CRITICAL=${sevCounts.CRITICAL} ` +
+                    `WARNING=${sevCounts.WARNING}`);
+            }
+
+            // Alert owner immediately via Telegram for HALT or CRITICAL.
+            // WARNING is logged only — it does not block writes.
+            if (overallStatus === 'HALT' || overallStatus === 'CRITICAL') {
+                const failLines = report.results
+                    .filter(r => r.status === 'FAIL')
+                    .map(r => {
+                        const detail = Array.isArray(r.detail)
+                            ? r.detail.slice(0, 3).join('; ')
+                            : r.detail;
+                        return `• ${r.id} (${r.severity}): ${detail}`;
+                    })
+                    .join('\n');
+
+                const blockedMsg = overallStatus === 'HALT'
+                    ? '🔴 All financial writes are BLOCKED.'
+                    : '🟠 Writes allowed but integrity issues found.';
+
+                await telegram.sendTelegram(
+                    `🚨 <b>FINANCIAL INTEGRITY ${overallStatus}</b>\n\n` +
+                    `${blockedMsg}\n\n` +
+                    `<b>Violations:</b>\n${failLines || 'See server logs'}\n\n` +
+                    `<b>Action:</b> Log into the system and run the Data Integrity Audit to investigate.`
+                ).catch(e => console.error('[SCHEDULER] Failed to send HALT alert via Telegram:', e.message));
             }
         } catch (err) {
             console.error(`[SCHEDULER] Self-audit failed: ${err.message}`);

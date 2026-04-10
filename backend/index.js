@@ -145,7 +145,7 @@ app.get('*', (req, res) => {
 
 const PORT = process.env.PORT || 8001;
 
-app.listen(PORT, async () => {
+const server = app.listen(PORT, async () => {
   try {
     await db.sequelize.authenticate();
     console.log('Connection has been established successfully.');
@@ -154,8 +154,6 @@ app.listen(PORT, async () => {
     // Run: npx sequelize-cli db:migrate
     // Do NOT call sequelize.sync() here — it bypasses migration history and
     // causes non-deterministic schema drift across environments.
-    // HR-SCHEMA FIX: The ad-hoc qi.addColumn / ALTER TYPE blocks that previously
-    // ran here have been moved into migration 20260408000005. Run db:migrate once.
 
     // Start scheduled jobs (async, non-blocking)
     try {
@@ -164,9 +162,55 @@ app.listen(PORT, async () => {
       console.warn('[SCHEDULER] Skipped — ' + e.message);
     }
 
+    // Run a self-audit shortly after startup so the financialGuard has a fresh
+    // reconciliation_runs row within the first 10 seconds, rather than waiting
+    // up to 1 hour for the next cron tick.
+    setTimeout(async () => {
+      try {
+        const SelfAuditService = require('./src/services/selfAuditService');
+        const report = await new SelfAuditService(db).run({ writeHistory: true, triggeredBy: 'startup' });
+        console.log(`[STARTUP AUDIT] Status: ${report.summary.overallStatus} — ` +
+          `PASS=${report.summary.counts.PASS} FAIL=${report.summary.counts.FAIL} ` +
+          `SKIP=${report.summary.counts.SKIP} (${report.durationMs}ms)`);
+      } catch (e) {
+        console.warn('[STARTUP AUDIT] Failed (non-fatal):', e.message);
+      }
+    }, 5000);
+
     console.log(`Server started on port: ${PORT}`);
   } catch (err) {
     console.error('Error during server startup:', err);
     process.exit(1);
   }
 });
+
+// ─── Graceful shutdown ────────────────────────────────────────────────────────
+// On SIGTERM (docker stop / docker-compose down) we stop accepting new requests
+// and let in-flight requests finish, then close the DB pool cleanly.
+// Without this, Node is killed mid-request by SIGKILL after the Docker 10 s
+// timeout, leaving users with confusing disconnection errors.
+const SHUTDOWN_TIMEOUT_MS = 12000; // stay under Docker's 10s SIGKILL + 2s buffer
+
+function gracefulShutdown(signal) {
+  console.log(`[SHUTDOWN] ${signal} received — draining in-flight requests...`);
+
+  server.close(async () => {
+    console.log('[SHUTDOWN] HTTP server closed. Closing DB pool...');
+    try {
+      await db.sequelize.close();
+      console.log('[SHUTDOWN] DB pool closed. Clean exit.');
+    } catch (e) {
+      console.error('[SHUTDOWN] DB pool close error:', e.message);
+    }
+    process.exit(0);
+  });
+
+  // Force exit if draining takes too long (prevents hanging on stuck requests)
+  setTimeout(() => {
+    console.error('[SHUTDOWN] Forced exit after timeout.');
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));

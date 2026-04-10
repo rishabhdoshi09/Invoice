@@ -231,13 +231,11 @@ module.exports = {
                     }
                 }
 
-                // Update daily summary
-                try {
-                    await Services.dailySummary.recordOrderCreated(response, transaction);
-                } catch (summaryError) {
-                    console.error('Failed to update daily summary:', summaryError);
-                    // Don't fail the order creation for summary issues
-                }
+                // Update daily summary — intentionally NOT wrapped in try/catch.
+                // If this fails (e.g. day is closed, DB constraint), the error
+                // propagates and rolls back the entire order creation. Silent drift
+                // in the summary table is worse than a visible failure.
+                await Services.dailySummary.recordOrderCreated(response, transaction);
 
                 // === NEW DOUBLE-ENTRY LEDGER: Real-time posting ===
                 // Non-blocking when CoA is not initialized; blocking (throws) when it IS initialized.
@@ -410,9 +408,24 @@ module.exports = {
             
             console.log(`Updating order ${orderId}...`);
 
-            // INVOICE IMMUTABILITY GUARD: Prevent direct mutation of financial fields
-            // These fields can only change through proper receipt/adjustment entries
-            const IMMUTABLE_FINANCIAL_FIELDS = ['paidAmount', 'dueAmount', 'paymentStatus'];
+            // INVOICE IMMUTABILITY GUARD: Prevent direct mutation of financial fields.
+            // These fields can only change through proper receipt/adjustment entries.
+            //
+            // originalPaidAmount — write-once POS cash anchor; ledger re-posting after
+            //   an edit depends on this value. Zeroing it causes INVOICE_CASH batch to
+            //   be skipped on repost, breaking global DR=CR and triggering a HALT.
+            // paymentMode — determines CASH vs CREDIT in getRealTimeSummary cash drawer.
+            //   Changing it retroactively moves an order between cash/credit buckets.
+            // paymentToggleSequence — monotonic counter; going backward would collide
+            //   ledger referenceIds and corrupt the toggle idempotency guard.
+            const IMMUTABLE_FINANCIAL_FIELDS = [
+                'paidAmount',
+                'dueAmount',
+                'paymentStatus',
+                'originalPaidAmount',
+                'paymentMode',
+                'paymentToggleSequence',
+            ];
             const attemptedFinancialChanges = IMMUTABLE_FINANCIAL_FIELDS.filter(f => orderData[f] !== undefined);
             if (attemptedFinancialChanges.length > 0) {
                 console.warn(`[IMMUTABILITY] Blocked direct edit of financial fields: ${attemptedFinancialChanges.join(', ')} on order ${orderId}`);
