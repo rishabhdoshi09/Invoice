@@ -5,7 +5,7 @@ const common = {
   port: parseInt(process.env.DB_PORT || '5432', 10),
   dialect: 'postgres',
   dialectOptions: {
-    ssl: process.env.NODE_ENV === 'production'
+    ssl: process.env.DB_SSL === 'true'
       ? { rejectUnauthorized: false }
       : false
   }
