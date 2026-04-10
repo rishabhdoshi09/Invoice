@@ -33,7 +33,7 @@ module.exports = (router) => {
             DB_PORT = '5432'
         } = process.env;
 
-        if (!PASSWORD || !DB_USER || !DATABASE_NAME) {
+        if (PASSWORD === undefined || !DB_USER || !DATABASE_NAME) {
             return res.status(500).json({
                 status: 500,
                 message: 'Database credentials not configured in environment.'
@@ -103,7 +103,7 @@ module.exports = (router) => {
                 DB_PORT = '5432'
             } = process.env;
 
-            if (!PASSWORD || !DB_USER || !DATABASE_NAME) {
+            if (PASSWORD === undefined || !DB_USER || !DATABASE_NAME) {
                 return res.status(500).json({
                     status: 500,
                     message: 'Database credentials not configured in environment.'
@@ -218,7 +218,7 @@ module.exports = (router) => {
         }
 
         const { PASSWORD, DB_USER, DATABASE_NAME, DB_HOST = '127.0.0.1', DB_PORT = '5432' } = process.env;
-        if (!PASSWORD || !DB_USER || !DATABASE_NAME) {
+        if (PASSWORD === undefined || !DB_USER || !DATABASE_NAME) {
             return res.status(500).json({ status: 500, message: 'Database credentials not configured.' });
         }
 
