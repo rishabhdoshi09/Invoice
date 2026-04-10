@@ -360,29 +360,32 @@ module.exports = {
                     },
                     { where: { id: req.params.paymentId }, transaction }
                 );
-            });
 
-            // Audit trail — payment deleted
-            await createAuditLog({
-                userId: req.user?.id,
-                userName: req.user?.name || req.user?.username || 'System',
-                userRole: req.user?.role || 'unknown',
-                action: 'DELETE',
-                entityType: 'PAYMENT',
-                entityId: payment.id,
-                entityName: payment.paymentNumber,
-                oldValues: {
-                    paymentNumber: payment.paymentNumber,
-                    amount: Number(payment.amount),
-                    partyType: payment.partyType,
-                    partyName: payment.partyName,
-                    paymentDate: payment.paymentDate
-                },
-                newValues: null,
-                description: `Payment deleted: ${payment.paymentNumber} | ₹${payment.amount} | ${payment.partyName} (${payment.partyType})`,
-                ipAddress: getClientIP(req),
-                userAgent: req.headers['user-agent']
-            }).catch(e => console.warn('[AUDIT] Payment delete log failed:', e.message));
+                // Audit log INSIDE the transaction — if this write fails the entire
+                // deletion rolls back. A deleted payment with no audit trail is
+                // indistinguishable from money that was never received.
+                await createAuditLog({
+                    userId: req.user?.id,
+                    userName: req.user?.name || req.user?.username || 'System',
+                    userRole: req.user?.role || 'unknown',
+                    action: 'DELETE',
+                    entityType: 'PAYMENT',
+                    entityId: payment.id,
+                    entityName: payment.paymentNumber,
+                    oldValues: {
+                        paymentNumber: payment.paymentNumber,
+                        amount: Number(payment.amount),
+                        partyType: payment.partyType,
+                        partyName: payment.partyName,
+                        paymentDate: payment.paymentDate
+                    },
+                    newValues: null,
+                    description: `Payment deleted: ${payment.paymentNumber} | ₹${payment.amount} | ${payment.partyName} (${payment.partyType})`,
+                    ipAddress: getClientIP(req),
+                    userAgent: req.headers['user-agent'],
+                    transaction
+                });
+            });
 
             return res.status(200).send({
                 status: 200,
@@ -402,65 +405,80 @@ module.exports = {
     getDailySummary: async (req, res) => {
         try {
             const date = req.query.date || new Date().toISOString().split('T')[0];
-            
-            // Get all payments for the specific date
-            const { rows: payments } = await Services.payment.listPayments({
-                date: date,
-                limit: 1000,
-                offset: 0
-            });
 
-            // Calculate summaries — force Number() since Sequelize may return strings
-            const totalAmount = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-            const customerPayments = payments.filter(p => p.partyType === 'customer');
-            const supplierPayments = payments.filter(p => p.partyType === 'supplier');
-            const expensePayments = payments.filter(p => p.partyType === 'expense');
-            
-            const customerTotal = customerPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-            const supplierTotal = supplierPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-            const expenseTotal = expensePayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            // Use SQL aggregation — accurate at any volume, no 1000-record cap.
+            // Previously this fetched up to 1000 payment rows and summed them in JS,
+            // which silently truncated totals on busy days.
+            const [aggRows] = await db.sequelize.query(`
+                SELECT
+                    "partyType",
+                    "referenceType",
+                    COUNT(*)                                       AS cnt,
+                    COALESCE(SUM(CAST(amount AS NUMERIC)), 0)      AS total
+                FROM payments
+                WHERE "isDeleted" = false
+                  AND (
+                      "paymentDate" = :date
+                      OR "paymentDate" = TO_CHAR(TO_DATE(:date, 'YYYY-MM-DD'), 'DD-MM-YYYY')
+                      OR "paymentDate" = TO_CHAR(TO_DATE(:date, 'YYYY-MM-DD'), 'DD/MM/YYYY')
+                  )
+                GROUP BY "partyType", "referenceType"
+            `, { replacements: { date } });
 
-            // Group by reference type
-            const orderPayments = payments.filter(p => p.referenceType === 'order');
-            const purchasePayments = payments.filter(p => p.referenceType === 'purchase');
-            const advancePayments = payments.filter(p => p.referenceType === 'advance');
+            // Fold aggregate rows into summary buckets
+            const sum = (partyType, referenceType) => {
+                const row = aggRows.find(r =>
+                    r.partytype === partyType &&
+                    (referenceType === null ? r.referencetype === null : r.referencetype === referenceType)
+                );
+                return row ? { count: Number(row.cnt), amount: Number(row.total) } : { count: 0, amount: 0 };
+            };
+
+            const allPartyTypes = [...new Set(aggRows.map(r => r.partytype))];
+            const totalCount  = aggRows.reduce((s, r) => s + Number(r.cnt),   0);
+            const totalAmount = aggRows.reduce((s, r) => s + Number(r.total), 0);
+
+            const customerRows = aggRows.filter(r => r.partytype === 'customer');
+            const supplierRows = aggRows.filter(r => r.partytype === 'supplier');
+            const expenseRows  = aggRows.filter(r => r.partytype === 'expense');
+
+            const customerTotal = customerRows.reduce((s, r) => s + Number(r.total), 0);
+            const supplierTotal = supplierRows.reduce((s, r) => s + Number(r.total), 0);
+            const expenseTotal  = expenseRows.reduce((s, r)  => s + Number(r.total), 0);
+            const customerCount = customerRows.reduce((s, r) => s + Number(r.cnt),   0);
+            const supplierCount = supplierRows.reduce((s, r) => s + Number(r.cnt),   0);
+            const expenseCount  = expenseRows.reduce((s, r)  => s + Number(r.cnt),   0);
+
+            const orderRows    = aggRows.filter(r => r.referencetype === 'order');
+            const purchaseRows = aggRows.filter(r => r.referencetype === 'purchase');
+            const advanceRows  = aggRows.filter(r => r.referencetype === 'advance');
 
             return res.status(200).send({
                 status: 200,
                 message: 'daily summary fetched successfully',
                 data: {
-                    date: date,
-                    totalCount: payments.length,
-                    totalAmount: totalAmount,
+                    date,
+                    totalCount,
+                    totalAmount,
                     summary: {
-                        customers: {
-                            count: customerPayments.length,
-                            amount: customerTotal
-                        },
-                        suppliers: {
-                            count: supplierPayments.length,
-                            amount: supplierTotal
-                        },
-                        expenses: {
-                            count: expensePayments.length,
-                            amount: expenseTotal
-                        }
+                        customers: { count: customerCount, amount: customerTotal },
+                        suppliers: { count: supplierCount, amount: supplierTotal },
+                        expenses:  { count: expenseCount,  amount: expenseTotal  }
                     },
                     byReferenceType: {
-                        orders: {
-                            count: orderPayments.length,
-                            amount: orderPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+                        orders:    {
+                            count:  orderRows.reduce((s, r) => s + Number(r.cnt),   0),
+                            amount: orderRows.reduce((s, r) => s + Number(r.total), 0)
                         },
                         purchases: {
-                            count: purchasePayments.length,
-                            amount: purchasePayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+                            count:  purchaseRows.reduce((s, r) => s + Number(r.cnt),   0),
+                            amount: purchaseRows.reduce((s, r) => s + Number(r.total), 0)
                         },
-                        advances: {
-                            count: advancePayments.length,
-                            amount: advancePayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+                        advances:  {
+                            count:  advanceRows.reduce((s, r) => s + Number(r.cnt),   0),
+                            amount: advanceRows.reduce((s, r) => s + Number(r.total), 0)
                         }
-                    },
-                    payments: payments
+                    }
                 }
             });
 
