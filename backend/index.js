@@ -51,7 +51,9 @@ app.use(helmet({
             styleSrc:       ["'self'", "'unsafe-inline'"], // MUI requires inline styles
             imgSrc:         ["'self'", 'data:'],
             fontSrc:        ["'self'"],
-            objectSrc:      ["'none'"],
+            objectSrc:      ["'self'", 'blob:'], // pdfMake uses <object blob:> for invoice preview
+            frameSrc:       ["'self'", 'blob:'], // pdfMake uses <iframe blob:> for invoice preview
+            workerSrc:      ["'self'", 'blob:'], // PDF.js worker
             baseUri:        ["'self'"],
             frameAncestors: ["'none'"],
             formAction:     ["'self'"],
