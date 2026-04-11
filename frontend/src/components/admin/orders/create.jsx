@@ -733,8 +733,9 @@ export const CreateOrder = () => {
         if (typeof el.setSelectionRange === 'function') {
           const num = Number(val);
           if (Number.isFinite(num) && num >= 200 && num <= 299 && len >= 3) {
-            // Select only the tens digit (position 1), preserving the units digit
-            el.setSelectionRange(len - 2, len - 1);
+            // Select last 2 digits so typing 2 digits (e.g. "87") replaces them correctly
+            // e.g. "260" → selects "60" → type "87" → "287" ✓
+            el.setSelectionRange(len - 2, len);
           } else {
             el.setSelectionRange(0, len);
           }
