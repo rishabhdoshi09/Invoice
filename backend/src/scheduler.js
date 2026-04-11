@@ -106,8 +106,8 @@ function init(db) {
 
     console.log('[SCHEDULER] Daily fraud summary registered — runs at 9:00 PM IST');
 
-    // ── Nightly Database Backup — every day at 23:00 IST (17:30 UTC) ──
-    cron.schedule('30 17 * * *', async () => {
+    // ── Nightly Database Backup — every day at 19:00 IST (13:30 UTC) ──
+    cron.schedule('30 13 * * *', async () => {
         try {
             console.log('[SCHEDULER] Running nightly database backup...');
             await telegram.sendDailyBackup();
@@ -116,7 +116,7 @@ function init(db) {
         }
     });
 
-    console.log('[SCHEDULER] Nightly database backup registered — runs at 11:00 PM IST');
+    console.log('[SCHEDULER] Nightly database backup registered — runs at 7:00 PM IST');
 }
 
 module.exports = { init };
