@@ -179,6 +179,40 @@ const server = app.listen(PORT, async () => {
       }
     }, 5000);
 
+    // ── Today's payment summary on startup ──────────────────────────────────
+    try {
+      const moment = require('moment-timezone');
+      const today    = moment().tz('Asia/Kolkata').format('DD-MM-YYYY');
+      const yyyymmdd = moment().tz('Asia/Kolkata').format('YYYY-MM-DD');
+      const [payments] = await db.sequelize.query(`
+        SELECT "paymentNumber", "partyType", "partyName", "amount", "paymentDate", "referenceNumber"
+        FROM "payments"
+        WHERE "isDeleted" = false
+          AND ("paymentDate" = :dd OR "paymentDate" = :yy)
+        ORDER BY "createdAt" DESC
+        LIMIT 20
+      `, { replacements: { dd: today, yy: yyyymmdd } });
+
+      if (payments.length === 0) {
+        console.log('[PAYMENT SUMMARY] No payments recorded today.');
+      } else {
+        const inPayments  = payments.filter(p => p.partyType === 'customer');
+        const outPayments = payments.filter(p => p.partyType === 'supplier');
+        const totalIn  = inPayments.reduce((s, p)  => s + Number(p.amount), 0);
+        const totalOut = outPayments.reduce((s, p) => s + Number(p.amount), 0);
+        console.log(`[PAYMENT SUMMARY] Today (${today}): ${payments.length} payments | IN ₹${totalIn.toFixed(2)} (${inPayments.length}) | OUT ₹${totalOut.toFixed(2)} (${outPayments.length})`);
+        for (const p of payments) {
+          const arrow = p.partyType === 'customer' ? '→ IN ' : '← OUT';
+          const party = p.partyType === 'customer' ? 'Customer' : 'Supplier';
+          const ref   = p.referenceNumber ? ` | ${p.referenceNumber}` : '';
+          const amt   = `₹${Number(p.amount).toFixed(2)}`;
+          console.log(`  [PAYMENT] ${arrow} ${p.paymentNumber} ${amt} | ${party}: ${p.partyName}${ref}`);
+        }
+      }
+    } catch (e) {
+      console.warn('[PAYMENT SUMMARY] Could not load today\'s payments:', e.message);
+    }
+
     console.log(`Server started on port: ${PORT}`);
   } catch (err) {
     console.error('Error during server startup:', err);

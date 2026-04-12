@@ -201,6 +201,13 @@ module.exports = {
                 return response;
             });
 
+            // ── Human-readable log line for every payment ─────────────────────
+            const arrow  = value.partyType === 'customer' ? '→ IN ' : '← OUT';
+            const party  = value.partyType === 'customer' ? 'Customer' : 'Supplier';
+            const amt    = `₹${Number(value.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            const ref    = value.referenceId ? ` | Ref: ${value.referenceNumber || value.referenceId}` : '';
+            console.log(`[PAYMENT] ${arrow} ${result.paymentNumber} ${amt} | ${party}: ${value.partyName}${ref} | ${value.paymentDate}`);
+
             return res.status(200).send({
                 status: 200,
                 message: 'payment recorded successfully',
