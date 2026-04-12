@@ -182,6 +182,15 @@ module.exports = {
                 return res.status(400).send({ status: 400, message: "customer doesn't exist" });
             }
 
+            // Block deletion if customer has outstanding balance
+            const balance = Number(customer.currentBalance) || 0;
+            if (balance > 0) {
+                return res.status(400).send({
+                    status: 400,
+                    message: `Cannot delete "${customer.name}" — outstanding balance of ₹${balance.toLocaleString('en-IN')} exists. Clear the balance first.`
+                });
+            }
+
             await db.sequelize.transaction(async (transaction) => {
                 // Unlink orders (set customerId to null, keep customerName for reference)
                 await db.sequelize.query(`
