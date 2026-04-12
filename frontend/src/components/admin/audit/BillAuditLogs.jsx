@@ -5,7 +5,7 @@ import {
     InputLabel, Grid, IconButton, Tooltip, Dialog, DialogTitle, DialogContent,
     DialogActions, Button, Alert, Tabs, Tab
 } from '@mui/material';
-import { Visibility, Warning, Delete, RemoveCircle, HighlightOff, Refresh, Scale, FitnessCenter, Telegram } from '@mui/icons-material';
+import { Visibility, Warning, Delete, RemoveCircle, HighlightOff, Refresh, Scale, FitnessCenter, Telegram, PersonOff } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
 
@@ -61,9 +61,11 @@ export const BillAuditLogs = () => {
             <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
                 <Tab label="Item Deletions" icon={<Delete fontSize="small" />} iconPosition="start" />
                 <Tab label="Weight Fetches" icon={<FitnessCenter fontSize="small" />} iconPosition="start" />
+                <Tab label="Customer Deleted" icon={<PersonOff fontSize="small" />} iconPosition="start" />
             </Tabs>
             {activeTab === 0 && <DeletionLogs />}
             {activeTab === 1 && <WeightLogs />}
+            {activeTab === 2 && <CustomerDeleteLogs />}
         </Box>
     );
 };
@@ -571,6 +573,88 @@ const WeightLogs = () => {
                                 </TableRow>
                             ))
                         )}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
+    );
+};
+
+const CustomerDeleteLogs = () => {
+    const [logs, setLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchLogs = useCallback(async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get('/api/dashboard/audit-logs?entityType=CUSTOMER&action=DELETE&limit=200', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setLogs(res.data?.data?.rows || res.data?.rows || []);
+        } catch (err) {
+            console.error('Failed to fetch customer delete logs:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="subtitle1" fontWeight={700} color="error.main">
+                    Customer Deletion History
+                </Typography>
+                <IconButton size="small" onClick={fetchLogs}><Refresh fontSize="small" /></IconButton>
+            </Box>
+
+            {logs.length === 0 && !loading && (
+                <Alert severity="success">No customer deletions recorded.</Alert>
+            )}
+
+            <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                <Table stickyHeader size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Time</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Customer Name</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Balance at Deletion</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Deleted By</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Description</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
+                        ) : logs.map((log) => {
+                            const old = log.oldValues || {};
+                            const balance = Number(old.currentBalance) || 0;
+                            return (
+                                <TableRow key={log.id} hover sx={{ bgcolor: balance > 0 ? '#fff3e0' : 'inherit' }}>
+                                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                        {moment(log.createdAt).format('DD-MM-YYYY HH:mm')}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Typography variant="body2" fontWeight={600}>{log.entityName || old.name || '—'}</Typography>
+                                        {old.mobile && <Typography variant="caption" color="text.secondary">{old.mobile}</Typography>}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Chip
+                                            size="small"
+                                            label={balance > 0 ? `₹${balance.toLocaleString('en-IN')}` : '₹0'}
+                                            color={balance > 0 ? 'error' : 'default'}
+                                            variant={balance > 0 ? 'filled' : 'outlined'}
+                                        />
+                                    </TableCell>
+                                    <TableCell>{log.userName || '—'}</TableCell>
+                                    <TableCell sx={{ maxWidth: 300 }}>
+                                        <Typography variant="caption" color="text.secondary">{log.description || '—'}</Typography>
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })}
                     </TableBody>
                 </Table>
             </TableContainer>
