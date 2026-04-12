@@ -94,8 +94,8 @@ function init(db) {
 
     console.log('[SCHEDULER] Daily drift check registered — runs at 02:00 server time');
 
-    // ── Daily Fraud Summary — every day at 21:00 IST (15:30 UTC) ──
-    cron.schedule('30 15 * * *', async () => {
+    // ── Daily Fraud Summary — every day at 21:00 IST ──
+    cron.schedule('30 21 * * *', async () => {
         try {
             console.log('[SCHEDULER] Running daily fraud summary...');
             await telegram.sendDailySummary();
@@ -106,8 +106,8 @@ function init(db) {
 
     console.log('[SCHEDULER] Daily fraud summary registered — runs at 9:00 PM IST');
 
-    // ── Nightly Database Backup — every day at 19:00 IST (13:30 UTC) ──
-    cron.schedule('30 13 * * *', async () => {
+    // ── Nightly Database Backup — every day at 19:00 IST ──
+    cron.schedule('30 19 * * *', async () => {
         try {
             console.log('[SCHEDULER] Running nightly database backup...');
             await telegram.sendDailyBackup();
