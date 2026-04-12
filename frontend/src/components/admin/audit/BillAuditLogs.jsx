@@ -63,11 +63,13 @@ export const BillAuditLogs = () => {
                 <Tab label="Weight Fetches" icon={<FitnessCenter fontSize="small" />} iconPosition="start" />
                 <Tab label="Customer Deleted" icon={<PersonOff fontSize="small" />} iconPosition="start" />
                 <Tab label="Customer Payments" icon={<Payment fontSize="small" />} iconPosition="start" />
+                <Tab label="Supplier Payments" icon={<Payment fontSize="small" />} iconPosition="start" />
             </Tabs>
             {activeTab === 0 && <DeletionLogs />}
             {activeTab === 1 && <WeightLogs />}
             {activeTab === 2 && <CustomerDeleteLogs />}
             {activeTab === 3 && <CustomerPaymentLogs />}
+            {activeTab === 4 && <SupplierPaymentLogs />}
         </Box>
     );
 };
@@ -759,6 +761,114 @@ const CustomerPaymentLogs = () => {
                                     {p.referenceNumber
                                         ? <Chip size="small" label={p.referenceNumber} variant="outlined" />
                                         : <Typography variant="caption" color="text.secondary">On Account</Typography>}
+                                </TableCell>
+                                <TableCell sx={{ maxWidth: 200 }}>
+                                    <Typography variant="caption" color="text.secondary">{p.notes || '—'}</Typography>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
+    );
+};
+
+const SupplierPaymentLogs = () => {
+    const [payments, setPayments] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [date, setDate] = useState(moment().format('YYYY-MM-DD'));
+    const [totalOut, setTotalOut] = useState(0);
+
+    const fetchPayments = useCallback(async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`/api/payments?partyType=supplier&date=${date}&limit=200`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const rows = res.data?.data?.rows || res.data?.rows || [];
+            setPayments(rows);
+            setTotalOut(rows.reduce((s, p) => s + Number(p.amount || 0), 0));
+        } catch (err) {
+            console.error('Failed to fetch supplier payments:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [date]);
+
+    useEffect(() => { fetchPayments(); }, [fetchPayments]);
+
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Typography variant="subtitle1" fontWeight={700} color="error.main">
+                        Supplier Payments Made
+                    </Typography>
+                    {!loading && (
+                        <Chip
+                            label={`Total OUT: ₹${totalOut.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                            color="error"
+                            size="small"
+                            variant="filled"
+                        />
+                    )}
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <TextField
+                        type="date"
+                        size="small"
+                        label="Date"
+                        value={date}
+                        onChange={e => setDate(e.target.value)}
+                        InputLabelProps={{ shrink: true }}
+                        sx={{ width: 160 }}
+                    />
+                    <IconButton size="small" onClick={fetchPayments}><Refresh fontSize="small" /></IconButton>
+                </Box>
+            </Box>
+
+            {!loading && payments.length === 0 && (
+                <Alert severity="info">No supplier payments recorded on {moment(date).format('DD-MM-YYYY')}.</Alert>
+            )}
+
+            <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                <Table stickyHeader size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Time</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Payment No.</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Supplier</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }} align="right">Amount</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Reference</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Notes</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
+                        ) : payments.map((p) => (
+                            <TableRow key={p.id} hover>
+                                <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                    {moment(p.createdAt).format('HH:mm')}
+                                </TableCell>
+                                <TableCell>
+                                    <Typography variant="body2" fontFamily="monospace" fontSize={12}>{p.paymentNumber}</Typography>
+                                </TableCell>
+                                <TableCell>
+                                    <Typography variant="body2" fontWeight={600}>{p.partyName || '—'}</Typography>
+                                    {p.partyMobile && <Typography variant="caption" color="text.secondary">{p.partyMobile}</Typography>}
+                                </TableCell>
+                                <TableCell align="right">
+                                    <Typography variant="body2" fontWeight={700} color="error.main">
+                                        ₹{Number(p.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </Typography>
+                                </TableCell>
+                                <TableCell>
+                                    {p.referenceNumber
+                                        ? <Chip size="small" label={p.referenceNumber} variant="outlined" />
+                                        : <Typography variant="caption" color="text.secondary">Advance</Typography>}
                                 </TableCell>
                                 <TableCell sx={{ maxWidth: 200 }}>
                                     <Typography variant="caption" color="text.secondary">{p.notes || '—'}</Typography>
