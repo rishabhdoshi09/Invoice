@@ -652,7 +652,26 @@ async function updateStock(productId, quantity, direction, referenceId, referenc
 
     await product.update({ currentStock: next }, { transaction });
 
-    const date = txDate ? new Date(txDate) : new Date();
+    // Parse txDate safely — handles DD-MM-YYYY, YYYY-MM-DD, Date objects, and undefined.
+    let date;
+    if (!txDate) {
+        date = new Date();
+    } else if (txDate instanceof Date) {
+        date = isNaN(txDate.getTime()) ? new Date() : txDate;
+    } else {
+        const s = String(txDate).trim();
+        // DD-MM-YYYY → YYYY-MM-DD
+        const ddmmyyyy = s.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+        const ddmmyyyySlash = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (ddmmyyyy) {
+            date = new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`);
+        } else if (ddmmyyyySlash) {
+            date = new Date(`${ddmmyyyySlash[3]}-${ddmmyyyySlash[2]}-${ddmmyyyySlash[1]}`);
+        } else {
+            date = new Date(s);
+        }
+        if (isNaN(date.getTime())) date = new Date();
+    }
     await db.stockTransaction.create({
         productId,
         type:            direction === 'IN' ? 'in' : direction === 'OUT' ? 'out' : 'adjustment',
