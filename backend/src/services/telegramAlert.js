@@ -8,6 +8,7 @@
 const https = require('https');
 const dns = require('dns');
 const zlib = require('zlib');
+const path = require('path');
 const { spawn } = require('child_process');
 const db = require('../models');
 const { Op } = require('sequelize');
@@ -174,8 +175,10 @@ function createBackupBuffer() {
     });
 }
 
-// ─── Local backup directory inside the Docker 'backups' volume ───────────
-const LOCAL_BACKUP_DIR = process.env.BACKUP_DIR || '/app/backups';
+// ─── Local backup directory — works in Docker (/app/backups) and locally ─────
+// In Docker, set BACKUP_DIR=/app/backups in your env. Locally it falls back
+// to Invoice/backups/ which is always writable without special permissions.
+const LOCAL_BACKUP_DIR = process.env.BACKUP_DIR || path.join(__dirname, '../../../backups');
 const LOCAL_BACKUP_RETAIN_DAYS = parseInt(process.env.BACKUP_RETAIN_DAYS || '30', 10);
 
 /**
@@ -839,6 +842,177 @@ async function sendFullAuditReport(options = {}) {
     }
 }
 
+// ─── Today's payment status (for /status command) ────────────────
+async function sendTodayStatus() {
+    try {
+        const moment = require('moment-timezone');
+        const todayDDMMYYYY = moment().tz('Asia/Kolkata').format('DD-MM-YYYY');
+        const todayYYYYMMDD = moment().tz('Asia/Kolkata').format('YYYY-MM-DD');
+
+        const payments = await db.payment.findAll({
+            where: {
+                isDeleted: false,
+                paymentDate: { [Op.in]: [todayDDMMYYYY, todayYYYYMMDD] }
+            },
+            order: [['createdAt', 'DESC']]
+        });
+
+        const inPay  = payments.filter(p => p.partyType === 'customer');
+        const outPay = payments.filter(p => p.partyType === 'supplier');
+        const totalIn  = inPay.reduce((s, p)  => s + Number(p.amount), 0);
+        const totalOut = outPay.reduce((s, p) => s + Number(p.amount), 0);
+
+        const orders = await db.order.findAll({
+            where: { isDeleted: false, orderDate: todayDDMMYYYY }
+        });
+        const totalSales = orders.reduce((s, o) => s + Number(o.total || 0), 0);
+
+        let msg = [
+            `📊 <b>TODAY'S STATUS — ${todayDDMMYYYY}</b>`,
+            ``,
+            `🧾 <b>Orders:</b> ${orders.length} | ₹${totalSales.toLocaleString('en-IN')}`,
+            `💰 <b>Received (Customer):</b> ${inPay.length} | ₹${totalIn.toLocaleString('en-IN')}`,
+            `💸 <b>Paid Out (Supplier):</b> ${outPay.length} | ₹${totalOut.toLocaleString('en-IN')}`,
+        ];
+
+        if (inPay.length > 0) {
+            msg.push(``, `<b>Customer Payments:</b>`);
+            for (const p of inPay.slice(0, 10)) {
+                msg.push(`• ${esc(p.paymentNumber)} — ₹${Number(p.amount).toLocaleString('en-IN')} — ${esc(p.partyName)}`);
+            }
+            if (inPay.length > 10) msg.push(`  <i>...and ${inPay.length - 10} more</i>`);
+        }
+        if (outPay.length > 0) {
+            msg.push(``, `<b>Supplier Payments:</b>`);
+            for (const p of outPay.slice(0, 10)) {
+                msg.push(`• ${esc(p.paymentNumber)} — ₹${Number(p.amount).toLocaleString('en-IN')} — ${esc(p.partyName)}`);
+            }
+            if (outPay.length > 10) msg.push(`  <i>...and ${outPay.length - 10} more</i>`);
+        }
+
+        msg.push(``, `<i>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</i>`);
+        await sendTelegram(msg.join('\n'));
+    } catch (e) {
+        console.error('[TELEGRAM] sendTodayStatus failed:', e.message);
+        await sendTelegram(`❌ Status fetch failed: ${esc(e.message)}`).catch(() => {});
+    }
+}
+
+// ─── Telegram Command Polling ─────────────────────────────────────
+// Polls getUpdates every 5 seconds to receive commands from Telegram.
+// Supported commands:
+//   /backup  — run database backup now
+//   /status  — today's payment & order summary
+//   /audit   — full bill audit report
+//   /help    — list available commands
+
+let _lastUpdateId = 0;
+let _pollingActive = false;
+
+function _getUpdates() {
+    return new Promise((resolve) => {
+        if (!BOT_TOKEN) return resolve([]);
+        const req = https.request({
+            hostname: 'api.telegram.org',
+            path: `/bot${BOT_TOKEN}/getUpdates?offset=${_lastUpdateId + 1}&timeout=0&allowed_updates=%5B%22message%22%5D`,
+            method: 'GET',
+            family: 4,
+        }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.ok && parsed.result.length > 0) {
+                        _lastUpdateId = parsed.result[parsed.result.length - 1].update_id;
+                        resolve(parsed.result);
+                    } else {
+                        resolve([]);
+                    }
+                } catch (e) { resolve([]); }
+            });
+        });
+        req.on('error', () => resolve([]));
+        req.setTimeout(15000, () => { req.destroy(); resolve([]); });
+        req.end();
+    });
+}
+
+async function _handleCommand(text) {
+    const cmd = (text || '').trim().split(/\s+/)[0].toLowerCase().split('@')[0];
+    console.log(`[TELEGRAM] Command: ${cmd}`);
+
+    if (cmd === '/backup') {
+        await sendTelegram('⏳ <b>Backup started...</b> This may take up to a minute.').catch(() => {});
+        try {
+            const result = await sendDailyBackup();
+            if (!result.sent && !result.localWritten) {
+                await sendTelegram(`❌ <b>Backup failed:</b> ${esc(result.error)}`).catch(() => {});
+            }
+        } catch (e) {
+            await sendTelegram(`❌ <b>Backup error:</b> ${esc(e.message)}`).catch(() => {});
+        }
+    } else if (cmd === '/status') {
+        await sendTodayStatus().catch(e =>
+            sendTelegram(`❌ Status error: ${esc(e.message)}`).catch(() => {})
+        );
+    } else if (cmd === '/audit') {
+        await sendTelegram('⏳ <b>Generating audit report...</b>').catch(() => {});
+        await sendFullAuditReport().catch(e =>
+            sendTelegram(`❌ Audit error: ${esc(e.message)}`).catch(() => {})
+        );
+    } else if (cmd === '/help') {
+        await sendTelegram(
+            `📱 <b>Dexter's Lab — Bot Commands</b>\n\n` +
+            `/backup — Take database backup now\n` +
+            `/status — Today's orders &amp; payments\n` +
+            `/audit  — Full bill audit report\n` +
+            `/help   — Show this message`
+        ).catch(() => {});
+    }
+}
+
+function startPolling() {
+    if (!BOT_TOKEN || !CHAT_ID) {
+        console.log('[TELEGRAM] Polling skipped — TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set');
+        return;
+    }
+    if (_pollingActive) return;
+    _pollingActive = true;
+    console.log('[TELEGRAM] Command polling started (every 5s)');
+
+    const poll = async () => {
+        if (!_pollingActive) return;
+        try {
+            const updates = await _getUpdates();
+            for (const update of updates) {
+                const msg = update.message;
+                if (!msg || !msg.text) continue;
+                // Only respond to the configured chat
+                if (String(msg.chat.id) !== String(CHAT_ID)) {
+                    console.warn(`[TELEGRAM] Ignoring update from unauthorized chat ${msg.chat.id}`);
+                    continue;
+                }
+                if (msg.text.startsWith('/')) {
+                    _handleCommand(msg.text).catch(e =>
+                        console.error('[TELEGRAM] Command handler error:', e.message)
+                    );
+                }
+            }
+        } catch (e) {
+            console.error('[TELEGRAM] Poll error:', e.message);
+        }
+        setTimeout(poll, 5000);
+    };
+
+    setTimeout(poll, 3000); // slight delay so DB is ready before first poll
+}
+
+function stopPolling() {
+    _pollingActive = false;
+    console.log('[TELEGRAM] Command polling stopped');
+}
+
 module.exports = {
     sendTelegram,
     sendTelegramDocument,
@@ -850,5 +1024,8 @@ module.exports = {
     alertOrderCreated,
     sendDailySummary,
     sendFullAuditReport,
-    sendDailyBackup
+    sendDailyBackup,
+    sendTodayStatus,
+    startPolling,
+    stopPolling
 };

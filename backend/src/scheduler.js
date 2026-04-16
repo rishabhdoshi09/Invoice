@@ -117,6 +117,10 @@ function init(db) {
     });
 
     console.log('[SCHEDULER] Nightly database backup registered — runs at 7:00 PM IST');
+
+    // ── Telegram command polling (/backup /status /audit /help) ──────────────
+    // Must start AFTER cron jobs are registered so sendDailyBackup etc. are ready.
+    telegram.startPolling();
 }
 
 module.exports = { init };
