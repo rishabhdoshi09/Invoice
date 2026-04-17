@@ -50,18 +50,31 @@ export const EditProduct = ({ productId }) => {
                     alignItems: 'center'
                 }}
             >
-                {/* Product Name - Large and Clear */}
-                <Typography 
-                    variant="h4" 
-                    sx={{ 
-                        mb: 4, 
-                        fontWeight: 500,
-                        color: '#333',
-                        textAlign: 'center'
-                    }}
-                >
-                    {rows[productId].name}
-                </Typography>
+                {/* Product Name - Editable */}
+                <Box sx={{ width: '100%', maxWidth: 500, mb: 4 }}>
+                    <TextField
+                        fullWidth
+                        id="name"
+                        name="name"
+                        label="Product Name"
+                        value={formik.values.name}
+                        onChange={formik.handleChange}
+                        required
+                        error={Boolean(formik.errors.name)}
+                        helperText={formik.errors.name}
+                        inputProps={{ style: { fontSize: '1.4rem', textAlign: 'center', fontWeight: 500 } }}
+                        sx={{
+                            '& .MuiOutlinedInput-root': {
+                                '& fieldset': {
+                                    borderWidth: '2px',
+                                    borderColor: formik.values.name !== rows[productId].name ? '#1976d2' : '#ccc'
+                                },
+                                '&:hover fieldset': { borderColor: '#1976d2' },
+                                '&.Mui-focused fieldset': { borderColor: '#1976d2' }
+                            }
+                        }}
+                    />
+                </Box>
 
                 {/* Current Price Display */}
                 <Typography 
@@ -158,7 +171,7 @@ export const EditProduct = ({ productId }) => {
                     variant="contained" 
                     size="large"
                     onClick={formik.handleSubmit}
-                    disabled={formik.values.pricePerKg === rows[productId].pricePerKg}
+                    disabled={formik.values.pricePerKg === rows[productId].pricePerKg && formik.values.name === rows[productId].name}
                     sx={{ 
                         minWidth: 200,
                         fontSize: '1.1rem',
@@ -166,7 +179,7 @@ export const EditProduct = ({ productId }) => {
                         mt: 2
                     }}
                 >
-                    Update Price
+                    Update Product
                 </Button>
             </Box>
         );
