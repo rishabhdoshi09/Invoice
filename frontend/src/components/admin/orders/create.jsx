@@ -978,12 +978,17 @@ export const CreateOrder = () => {
     }
     // For 200-299: auto-select last 2 digits so user can type 2 digits to update price
     // e.g. "295" → selects "95" → type "87" → "287"
+    // Uses 80ms delay (same as focusMainPriceInput) so MUI finishes its own focus handling first.
     const num = Number(val);
     if (Number.isFinite(num) && num >= 200 && num <= 299 && val.length >= 3) {
-      const el = e.target;
+      const selEnd = val.length;
+      const selStart = val.length - 2;
       setTimeout(() => {
-        try { el.setSelectionRange(val.length - 2, val.length); } catch {}
-      }, 0);
+        try {
+          const el = priceInputRef && priceInputRef.current;
+          if (el) el.setSelectionRange(selStart, selEnd);
+        } catch {}
+      }, 80);
     }
   };
 
