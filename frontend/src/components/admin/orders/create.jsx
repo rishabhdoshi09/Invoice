@@ -89,6 +89,7 @@ const fromInputDate = (yyyymmdd) => {
 };
 // Format DD-MM-YYYY → "DD MMM YYYY" for display
 const MONTHS_SHORT_CREATE = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+// eslint-disable-next-line no-unused-vars
 const formatDateDisplay = (ddmmyyyy) => {
   if (!ddmmyyyy || !String(ddmmyyyy).match(/^\d{2}-\d{2}-\d{4}$/)) return ddmmyyyy || '';
   const [d, m, y] = String(ddmmyyyy).split('-');
@@ -374,7 +375,7 @@ export const CreateOrder = () => {
   const [recentlySubmittedOrder, setRecentlySubmittedOrder] = useState(null);
 
   const [lastSubmitError, setLastSubmitError] = useState(null);
-  const [lastSubmitResponse, setLastSubmitResponse] = useState(null);
+  const [lastSubmitResponse, setLastSubmitResponse] = useState(null); // eslint-disable-line no-unused-vars
   const [lastInvoiceTotal, setLastInvoiceTotal] = useState(null);
   
   // Post-submit WhatsApp dialog
@@ -747,6 +748,7 @@ export const CreateOrder = () => {
   }, []);
 
   // Helper: focus altName input (called on product selection so user can immediately type alt name)
+  // eslint-disable-next-line no-unused-vars
   const focusAltNameInput = useCallback(() => {
     try {
       setTimeout(() => {
@@ -947,7 +949,7 @@ export const CreateOrder = () => {
       maxPriceDigitsRef.current = null;
       clearQuickHighlight();
     }
-  }, [selectedProduct, formik, rows, weighingScaleHandler, allowAddProductName, modalOpen, focusMainPriceInput]);
+  }, [selectedProduct, formik, rows, allowAddProductName, modalOpen, focusMainPriceInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const attemptProductChange = useCallback(async (value) => {
     // Whenever user tries to change product, allow modal to show again for the new selection
