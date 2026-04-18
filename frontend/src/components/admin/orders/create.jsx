@@ -974,6 +974,15 @@ export const CreateOrder = () => {
     } else {
       try { firstDigitLockRef.current = String(val || '').charAt(0) || firstDigitLockRef.current; } catch {}
     }
+    // For 200-299: auto-select last 2 digits so user can type 2 digits to update price
+    // e.g. "295" → selects "95" → type "87" → "287"
+    const num = Number(val);
+    if (Number.isFinite(num) && num >= 200 && num <= 299 && val.length >= 3) {
+      const el = e.target;
+      setTimeout(() => {
+        try { el.setSelectionRange(val.length - 2, val.length); } catch {}
+      }, 0);
+    }
   };
 
   const onPriceKeyDown = (e) => {
@@ -2183,7 +2192,7 @@ export const CreateOrder = () => {
                     )
                   }}
                 />
-                {/* Virtual keypad for 200–299 range: digits 6,7,8,9 */}
+                {/* Virtual keypad for 200–299 range: digits 6,7,8,9 replace tens digit */}
                 {show200sKeypad && !modalOpen && (
                   <Box sx={{ mt: 0.5, display: 'flex', gap: 1 }}>
                     {[6, 7, 8, 9].map((d) => (
@@ -2192,7 +2201,23 @@ export const CreateOrder = () => {
                         size="small"
                         variant="outlined"
                         tabIndex={-1}
-                        onClick={() => applyDigitToPrice(d, priceInputRef)}
+                        onClick={() => {
+                          // Directly compute new value: keep hundreds(2) + new tens digit + keep units
+                          // e.g. cur="295", click 6 → "265". Avoids selection-state conflicts.
+                          const cur = String(formik.values.productPrice || '');
+                          if (cur.length === 3 && cur.charAt(0) === '2') {
+                            const newVal = '2' + d + cur.charAt(2);
+                            onPriceChange({ target: { value: newVal }, preventDefault: () => {} });
+                            setTimeout(() => {
+                              try {
+                                const el = priceInputRef.current;
+                                if (el) { el.focus(); el.setSelectionRange(1, 3); }
+                              } catch {}
+                            }, 0);
+                          } else {
+                            applyDigitToPrice(d, priceInputRef);
+                          }
+                        }}
                       >
                         {d}
                       </Button>
