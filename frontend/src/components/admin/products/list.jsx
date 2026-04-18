@@ -1,18 +1,37 @@
-import { Box, Button, Card, CardContent, Modal, Paper, TableContainer, Table, TableHead, TableBody, TableCell, TableRow  } from '@mui/material';
+import { Box, Button, Card, CardContent, Modal, Paper, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, TextField  } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useState, Children } from 'react';
 import { CreateProduct } from './create';
 import { EditProduct } from './edit';
-import { deleteProductAction } from '../../../store/products';
+import { deleteProductAction, updateProductAction } from '../../../store/products';
 
 
 export const ListProjects = () =>  {
-  
+
   const dispatch = useDispatch();
   const [editProductId, setEditProductId] = useState('');
   const [open, setOpen] = useState(false);
-  
+  const [inlineNameId, setInlineNameId] = useState('');
+  const [inlineNameVal, setInlineNameVal] = useState('');
+
   const { products: { rows} } = useSelector(state => state.productState);
+
+  const startInlineName = (productObj) => {
+    setInlineNameId(productObj.id);
+    setInlineNameVal(productObj.name);
+  };
+
+  const commitInlineName = async (productObj) => {
+    const trimmed = inlineNameVal.trim();
+    if (trimmed && trimmed !== productObj.name) {
+      await dispatch(updateProductAction(productObj.id, {
+        name: trimmed,
+        pricePerKg: productObj.pricePerKg,
+        type: productObj.type
+      }));
+    }
+    setInlineNameId('');
+  };
 
   // Check if the product being edited is high-value
   const isHighValueProduct = editProductId && rows[editProductId] && rows[editProductId].pricePerKg >= 300;
@@ -60,7 +79,30 @@ export const ListProjects = () =>  {
               Children.toArray(Object.values(rows).map((productObj) => {
                 return(
                   <TableRow>
-                    <TableCell>{productObj.name}</TableCell>
+                    <TableCell sx={{ minWidth: 160 }}>
+                      {inlineNameId === productObj.id ? (
+                        <TextField
+                          size="small"
+                          autoFocus
+                          value={inlineNameVal}
+                          onChange={(e) => setInlineNameVal(e.target.value)}
+                          onBlur={() => commitInlineName(productObj)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') commitInlineName(productObj);
+                            if (e.key === 'Escape') setInlineNameId('');
+                          }}
+                          sx={{ minWidth: 140 }}
+                        />
+                      ) : (
+                        <Box
+                          onClick={() => startInlineName(productObj)}
+                          sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline', color: '#1976d2' } }}
+                          title="Click to edit name"
+                        >
+                          {productObj.name}
+                        </Box>
+                      )}
+                    </TableCell>
                     <TableCell>{productObj.type.toUpperCase()}</TableCell>
                     <TableCell>{productObj.pricePerKg}</TableCell>
                     <TableCell>
