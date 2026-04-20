@@ -87,14 +87,6 @@ const fromInputDate = (yyyymmdd) => {
   const [y, m, d] = String(yyyymmdd).split('-');
   return `${d}-${m}-${y}`;
 };
-// Format DD-MM-YYYY → "DD MMM YYYY" for display
-const MONTHS_SHORT_CREATE = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-// eslint-disable-next-line no-unused-vars
-const formatDateDisplay = (ddmmyyyy) => {
-  if (!ddmmyyyy || !String(ddmmyyyy).match(/^\d{2}-\d{2}-\d{4}$/)) return ddmmyyyy || '';
-  const [d, m, y] = String(ddmmyyyy).split('-');
-  return `${d} ${MONTHS_SHORT_CREATE[parseInt(m) - 1]} ${y}`;
-};
 
 const getStoredSeries = () => { try { const raw = localStorage.getItem(ORDER_SER_KEY); return raw ? JSON.parse(raw) : {}; } catch { return {}; } };
 const setStoredSeries = (obj) => { try { localStorage.setItem(ORDER_SER_KEY, JSON.stringify(obj)); } catch {} };
@@ -115,25 +107,9 @@ const nextOrderNumberForToday = () => {
 const getStoredDayTotal=()=>{ try{const raw=localStorage.getItem(DAY_TOTAL_KEY); return raw?JSON.parse(raw):{};}catch{return{}} };
 const setStoredDayTotal=(o)=>{ try{localStorage.setItem(DAY_TOTAL_KEY,JSON.stringify(o));}catch{} };
 const ensureTodayRecord=()=>{ const t=getTodayStr(); const d=getStoredDayTotal(); if(!d||d.date!==t){const p={date:t,total:0}; setStoredDayTotal(p); return 0;} return Number(d.total||0); };
-// eslint-disable-next-line no-unused-vars
-const getTodayGrandTotal=()=>ensureTodayRecord();
-// eslint-disable-next-line no-unused-vars
-const addToTodayGrandTotal=(amt)=>{ const t=getTodayStr(); const d=getStoredDayTotal(); const base=(d&&d.date===t)?Number(d.total||0):0; const total=base+Number(amt||0); setStoredDayTotal({date:t,total}); try{window.dispatchEvent(new CustomEvent('DAY_TOTAL_UPDATED',{detail:total}))}catch{}; return total; };
-// eslint-disable-next-line no-unused-vars
 const subtractFromTodayGrandTotal=(amt)=>{ const t=getTodayStr(); const d=getStoredDayTotal(); const base=(d&&d.date===t)?Number(d.total||0):0; const total=Math.max(0,base-Number(amt||0)); setStoredDayTotal({date:t,total}); try{window.dispatchEvent(new CustomEvent('DAY_TOTAL_UPDATED',{detail:total}))}catch{}; return total; };
 const msToNextMidnight=()=>{ const now=new Date(); const next=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1,0,0,0,0); return next.getTime()-now.getTime(); };
 
-const PENDING_INVOICES_KEY = 'pendingInvoices_v1';
-// eslint-disable-next-line no-unused-vars
-const savePendingInvoice = (payload) => {
-  try {
-    const cur = JSON.parse(localStorage.getItem(PENDING_INVOICES_KEY) || '[]');
-    cur.push({ payload, ts: new Date().toISOString() });
-    localStorage.setItem(PENDING_INVOICES_KEY, JSON.stringify(cur));
-  } catch (e) {
-    console.warn('savePendingInvoice failed', e);
-  }
-};
 
 // Classify quick tags for your quick select
 const classifyQuickTag = (raw) => {
@@ -218,38 +194,12 @@ const isRestrictedPrice = (price) => {
   Minimal offline DB (self-contained)
 ------------------------- */
 function toNumber(n){ const x = Number(n); return Number.isFinite(x) ? x : 0; }
-// eslint-disable-next-line no-unused-vars
-// round2 mirrors the backend's rounding contract (Math.round to 2 decimal places)
 function round2(n) { return Math.round(Number(n) * 100) / 100; }
 function recomputeTotals(order) {
   const sub = round2((order.orderItems || []).reduce((s, it) => s + toNumber(it.totalPrice), 0));
   const tax = round2(sub * (toNumber(order.taxPercent) / 100));
   const total = round2(sub + tax);
   return { subTotal: sub, tax, total };
-}
-// eslint-disable-next-line no-unused-vars
-function saveOrderLocal(orderProps) {
-  // Ensure order number + standardize dates
-  const localOrderNo = String(nextOrderNumberForToday());
-  const base = { ...orderProps, orderNumber: localOrderNo, orderDate: getTodayStr() };
-
-  // Normalize items and totals
-  const orderItems = (base.orderItems || []).map(it => ({
-    productId: it.productId || it.id || '',
-    name: it.name || it.altName || '',
-    quantity: toNumber(it.quantity),
-    productPrice: toNumber(it.productPrice),
-    totalPrice: toNumber(it.totalPrice),
-    altName: (it.altName || '').trim(),
-    type: it.type || ''
-  }));
-
-  const withItems = { ...base, orderItems };
-  const totals = recomputeTotals(withItems);
-  const finalObj = { ...withItems, ...totals };
-
-  // Note: Invoices are now stored server-side only
-  return finalObj;
 }
 
 function loadAllInvoices() {
@@ -375,7 +325,6 @@ export const CreateOrder = () => {
   const [recentlySubmittedOrder, setRecentlySubmittedOrder] = useState(null);
 
   const [lastSubmitError, setLastSubmitError] = useState(null);
-  const [lastSubmitResponse, setLastSubmitResponse] = useState(null); // eslint-disable-line no-unused-vars
   const [lastInvoiceTotal, setLastInvoiceTotal] = useState(null);
   
   // Post-submit WhatsApp dialog
@@ -388,8 +337,6 @@ export const CreateOrder = () => {
   const [inlineEditIndex, setInlineEditIndex] = useState(-1);
   const [inlineEditValue, setInlineEditValue] = useState('');
 
-  const [suppressAutoSuggest, setSuppressAutoSuggest] = useState(false);
-
   // NEW: switch to control whether product named "add" is allowed
   const [allowAddProductName, setAllowAddProductName] = useState(false);
 
@@ -398,13 +345,6 @@ export const CreateOrder = () => {
 
   // Admin guide visibility - hidden by default
   const [showAdminGuide, setShowAdminGuide] = useState(false);
-
-  // use suppressAutoSuggest in a small effect so eslint doesn't flag it as assigned but unused
-  useEffect(() => {
-    if (suppressAutoSuggest) {
-      // reserved for future behavior
-    }
-  }, [suppressAutoSuggest]);
 
   // bowl lock only
   const [bowlPriceLock, setBowlPriceLock] = useState(false);
@@ -514,9 +454,7 @@ export const CreateOrder = () => {
   const orderItemsRef = useRef(orderProps.orderItems || []);
   useEffect(() => { orderItemsRef.current = orderProps.orderItems || []; }, [orderProps.orderItems]);
 
-  // eslint-disable-next-line no-unused-vars
-  const [todayGrandTotal, setTodayGrandTotal] = useState(getTodayGrandTotal());
-  const [isSubmitting, setIsSubmitting] = useState(false); // Prevent double submission
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [inputValue, setInputValue] = useState('');
@@ -743,18 +681,6 @@ export const CreateOrder = () => {
         } else if (typeof el.select === 'function') {
           el.select();
         }
-      }, 80);
-    } catch {}
-  }, []);
-
-  // Helper: focus altName input (called on product selection so user can immediately type alt name)
-  // eslint-disable-next-line no-unused-vars
-  const focusAltNameInput = useCallback(() => {
-    try {
-      setTimeout(() => {
-        const el = altNameRef && altNameRef.current;
-        if (!el || typeof el.focus !== 'function') return;
-        el.focus();
       }, 80);
     } catch {}
   }, []);
@@ -1458,11 +1384,7 @@ export const CreateOrder = () => {
 
   // MAIN createOrder — now ONLINE-first (server)
   const createOrder = async () => {
-    // Prevent double submission
-    if (isSubmitting) {
-      console.log('Order submission already in progress, ignoring duplicate click');
-      return;
-    }
+    if (isSubmitting) return;
     
     // Credit sale validation: customer name is mandatory
     if (isCreditSale && !orderProps.customerName?.trim()) {
@@ -1471,14 +1393,11 @@ export const CreateOrder = () => {
     }
     
     setIsSubmitting(true);
-    setSuppressAutoSuggest(true);
     try {
       setLastSubmitError(null);
-      setLastSubmitResponse(null);
 
       if (!orderProps.orderItems || orderProps.orderItems.length === 0) {
         alert("Cannot create invoice: no items in the order.");
-        setSuppressAutoSuggest(false);
         setIsSubmitting(false);
         return;
       }
@@ -1497,7 +1416,6 @@ export const CreateOrder = () => {
         console.error("createOrder: invalid items", invalids);
         setLastSubmitError({ type: "validation", details: invalids });
         alert("Cannot create invoice — some items are invalid. See console or debug area for details.");
-        setSuppressAutoSuggest(false);
         setIsSubmitting(false);
         return;
       }
@@ -1514,14 +1432,6 @@ export const CreateOrder = () => {
         { type: 'Receivables', id: 'LIST' },
         { type: 'Dashboard', id: 'TODAY' }
       ]));
-
-      setLastSubmitResponse({
-        stage: "online_success",
-        note: "Order saved to server",
-        orderNumber: savedOrder.orderNumber,
-        total: savedOrder.total,
-        timestamp: new Date().toISOString(),
-      });
 
       // Note: Daily totals are now tracked server-side only to prevent duplicates
 
@@ -1586,7 +1496,6 @@ export const CreateOrder = () => {
       setLastSubmitError({ type: "unexpected", message: String(err?.message || err), raw: err });
       alert("Something went wrong while creating the order. Check console / debug area.");
     } finally {
-      setSuppressAutoSuggest(false);
       setIsSubmitting(false);
     }
   };
@@ -1655,36 +1564,29 @@ export const CreateOrder = () => {
     return () => window.removeEventListener('keydown', handleShiftD);
   }, [removeItem, orderProps?.orderItems?.length]);
 
-  // Initialize today total and auto rollover at midnight
+  // Ensure today's localStorage total record exists; auto-reset at midnight
   useEffect(() => {
-    setTodayGrandTotal(ensureTodayRecord());
+    ensureTodayRecord();
     let timerId=null;
-    const arm=()=>{ const delay=Math.max(1000, msToNextMidnight()); timerId=setTimeout(()=>{ const t=ensureTodayRecord(); setTodayGrandTotal(t); arm(); }, delay); };
+    const arm=()=>{ const delay=Math.max(1000, msToNextMidnight()); timerId=setTimeout(()=>{ ensureTodayRecord(); arm(); }, delay); };
     arm();
     return () => { if (timerId) clearTimeout(timerId); };
   }, []);
 
-  // React to totals/invoice updates across tabs
+  // React to invoice updates across tabs
   useEffect(() => {
-    const onStorage=(e)=>{ 
-      if(e.key===DAY_TOTAL_KEY) setTodayGrandTotal(ensureTodayRecord());
-      if(e.key===INVOICES_KEY) refreshHistory();
-    };
-    const onInAppTotal=(e)=>{ const next=(e && e.detail!=null)?Number(e.detail):ensureTodayRecord(); setTodayGrandTotal(next); };
+    const onStorage=(e)=>{ if(e.key===INVOICES_KEY) refreshHistory(); };
     const onInAppInvoices=()=>refreshHistory();
     const onInvoiceDeleted=(e)=>{ const d=e?.detail||{}; const today=getTodayStr();
-      if(!d || (d.date && d.date!==today)) { setTodayGrandTotal(ensureTodayRecord()); return; }
-      const next=subtractFromTodayGrandTotal(Number(d.total||0)); setTodayGrandTotal(next);
+      if(d && d.date && d.date===today) subtractFromTodayGrandTotal(Number(d.total||0));
       refreshHistory();
     };
     window.addEventListener('storage', onStorage);
-    window.addEventListener('DAY_TOTAL_UPDATED', onInAppTotal);
     window.addEventListener('INVOICES_UPDATED', onInAppInvoices);
     window.addEventListener('INVOICE_DELETED', onInvoiceDeleted);
-    refreshHistory(); // initial load
+    refreshHistory();
     return () => {
       window.removeEventListener('storage', onStorage);
-      window.removeEventListener('DAY_TOTAL_UPDATED', onInAppTotal);
       window.removeEventListener('INVOICES_UPDATED', onInAppInvoices);
       window.removeEventListener('INVOICE_DELETED', onInvoiceDeleted);
     };
