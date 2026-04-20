@@ -25,6 +25,7 @@ next-env.d.ts
 
 # Production builds
 /build
+build/
 dist/
 
 # Environment files — NEVER commit secrets
