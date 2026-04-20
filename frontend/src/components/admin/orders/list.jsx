@@ -1,4 +1,4 @@
-import { Button, Paper, TextField, Typography, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, Chip, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Box, IconButton, CircularProgress, Autocomplete, Alert } from '@mui/material';
+import { Button, Paper, TextField, Typography, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, Chip, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Box, IconButton, CircularProgress, Autocomplete, Alert, Checkbox } from '@mui/material';
 import { useNavigate } from 'react-router';
 import { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
@@ -74,6 +74,9 @@ export const ListOrders = () => {
     const [loadingCustomers, setLoadingCustomers] = useState(false);
     const [changedByName, setChangedByName] = useState(''); // Mandatory name for audit
     
+    // Manual checkbox state (purely local UI)
+    const [checkedIds, setCheckedIds] = useState(new Set());
+
     // Print state
     const [printingInvoice, setPrintingInvoice] = useState(null);
     const [printingReceipt, setPrintingReceipt] = useState(null);
@@ -471,6 +474,7 @@ export const ListOrders = () => {
                         <Table size="small">
                             <TableHead>
                                 <TableRow>
+                                    <TableCell padding="checkbox" />
                                     <TableCell>Invoice #</TableCell>
                                     <TableCell>Date</TableCell>
                                     <TableCell>Time</TableCell>
@@ -485,7 +489,7 @@ export const ListOrders = () => {
                             <TableBody>
                                 {rows.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={9} align="center">
+                                        <TableCell colSpan={10} align="center">
                                             <Typography color="text.secondary" sx={{ py: 6, fontSize: '1rem' }}>
                                                 No invoices found
                                             </Typography>
@@ -493,12 +497,26 @@ export const ListOrders = () => {
                                     </TableRow>
                                 ) : (
                                     rows.map((row) => (
-                                        <TableRow 
-                                            key={row.id} 
-                                            hover 
+                                        <TableRow
+                                            key={row.id}
+                                            hover
                                             sx={{ cursor: 'pointer' }}
                                             onClick={() => viewOrder(row)}
                                         >
+                                            <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
+                                                <Checkbox
+                                                    size="small"
+                                                    checked={checkedIds.has(row.id)}
+                                                    onChange={() => {
+                                                        setCheckedIds(prev => {
+                                                            const next = new Set(prev);
+                                                            if (next.has(row.id)) next.delete(row.id);
+                                                            else next.add(row.id);
+                                                            return next;
+                                                        });
+                                                    }}
+                                                />
+                                            </TableCell>
                                             <TableCell>
                                                 <Typography variant="body2" fontWeight="bold" color="primary">
                                                     {row.orderNumber}
