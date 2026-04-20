@@ -11,6 +11,7 @@ const { ReadlineParser } = require('@serialport/parser-readline');
 
 let port = null;
 let parser = null;
+let reconnectTimer = null;
 
 // Auto-detect serial device: prefer env var, then scan /dev for usbserial/wchusbserial
 function detectSerialPort() {
@@ -28,11 +29,19 @@ function detectSerialPort() {
     } catch { return null; }
 }
 
+function scheduleReconnect(delaySec = 5) {
+    if (reconnectTimer) return;
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        initSerial();
+    }, delaySec * 1000);
+}
+
 function initSerial() {
     const devPath = detectSerialPort();
     if (!devPath || !fs.existsSync(devPath)) {
-        console.log("Serial device NOT found → skipping serial initialization");
         connectionStatus = 'disconnected';
+        scheduleReconnect(10); // device not plugged in — check again in 10s
         return;
     }
 
@@ -58,17 +67,21 @@ function initSerial() {
         port.on('error', (e) => {
             console.log("SerialPort Error:", e.message);
             connectionStatus = 'error';
+            // 'close' event fires after error, triggering reconnect there
         });
 
         port.on('close', () => {
-            console.log("Serial port closed");
+            console.log("Serial port closed — reconnecting in 5s...");
             connectionStatus = 'disconnected';
             port = null; parser = null;
+            scheduleReconnect(5);
         });
 
     } catch (err) {
         console.log("Failed to open serial port:", err.message);
         connectionStatus = 'error';
+        port = null; parser = null;
+        scheduleReconnect(5);
     }
 }
 
