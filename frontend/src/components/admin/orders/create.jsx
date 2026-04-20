@@ -773,13 +773,10 @@ export const CreateOrder = () => {
 
       onPriceChange({ target: { value: newVal }, preventDefault: () => {} });
 
-      setTimeout(() => {
-        try {
-          el.focus();
-          const pos = start + dStr.length;
-          if (el.setSelectionRange) el.setSelectionRange(pos, pos);
-        } catch {}
-      }, 0);
+      try {
+        const pos = start + dStr.length;
+        if (el.setSelectionRange) el.setSelectionRange(pos, pos);
+      } catch {}
     } else {
       const cur = String(formik.values.productPrice || '');
       const newVal = cur + dStr;
@@ -2208,19 +2205,16 @@ export const CreateOrder = () => {
                         size="small"
                         variant="outlined"
                         tabIndex={-1}
-                        onClick={() => {
-                          // Directly compute new value: keep hundreds(2) + new tens digit + keep units
-                          // e.g. cur="295", click 6 → "265". Avoids selection-state conflicts.
+                        onMouseDown={(e) => {
+                          e.preventDefault(); // keep price input focused
                           const cur = String(formik.values.productPrice || '');
                           if (cur.length === 3 && cur.charAt(0) === '2') {
                             const newVal = '2' + d + cur.charAt(2);
                             onPriceChange({ target: { value: newVal }, preventDefault: () => {} });
-                            setTimeout(() => {
-                              try {
-                                const el = priceInputRef.current;
-                                if (el) { el.focus(); el.setSelectionRange(1, 3); }
-                              } catch {}
-                            }, 0);
+                            try {
+                              const el = priceInputRef.current;
+                              if (el) el.setSelectionRange(1, 3);
+                            } catch {}
                           } else {
                             applyDigitToPrice(d, priceInputRef);
                           }
@@ -2711,7 +2705,7 @@ export const CreateOrder = () => {
                     key={d}
                     size="small"
                     variant="outlined"
-                    onClick={() => applyDigitToPrice(d, modalPriceRef)}
+                    onMouseDown={(e) => { e.preventDefault(); applyDigitToPrice(d, modalPriceRef); }}
                   >
                     {d}
                   </Button>

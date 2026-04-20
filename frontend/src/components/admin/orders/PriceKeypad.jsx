@@ -16,7 +16,7 @@ const PriceKeypad = ({ value, onDigit, onBackspace, onClear }) => {
         <Button
             key={label}
             variant="text"
-            onMouseDown={() => handlePress(label, action)}
+            onMouseDown={(e) => { e.preventDefault(); handlePress(label, action); }}
             sx={{
                 minWidth: 0, width: 60, height: 52,
                 fontSize: '1.35rem', fontWeight: 600,
