@@ -32,7 +32,7 @@ export const ListOrders = () => {
     const dispatch = useDispatch();
     const { isAdmin, isBillingStaff, user } = useAuth();
     const scrollRestoredRef = useRef(false);
-    const isInitialLoadRef = useRef(true);
+    const lastFetchTimeRef = useRef(0);
     
     // Both admin and billing staff can toggle payment status
     const canToggleStatus = isAdmin || isBillingStaff;
@@ -269,12 +269,13 @@ export const ListOrders = () => {
         setChangedByName('');
     };
 
-    // Fetch orders function
+    // Fetch orders function — records timestamp to debounce focus handler
     const fetchOrders = useCallback(() => {
+        lastFetchTimeRef.current = Date.now();
         dispatch(listOrdersAction(filters));
     }, [dispatch, filters]);
 
-    // Fetch on filter change
+    // Fetch on explicit filter change (search, date, pagination)
     useEffect(() => {
         if (refetch) {
             shouldFetch(false);
@@ -282,15 +283,17 @@ export const ListOrders = () => {
         }
     }, [refetch, fetchOrders]);
 
-    // Always fetch fresh data when component mounts
+    // Fetch on mount (initial load or filter-driven remount)
     useEffect(() => {
         fetchOrders();
     }, [fetchOrders]);
 
-    // Refresh data when window gains focus
+    // Refresh when window regains focus — but skip if we just fetched (e.g. back-navigation)
     useEffect(() => {
         const handleFocus = () => {
-            fetchOrders();
+            if (Date.now() - lastFetchTimeRef.current > 30000) {
+                fetchOrders();
+            }
         };
         window.addEventListener('focus', handleFocus);
         return () => window.removeEventListener('focus', handleFocus);
@@ -301,20 +304,17 @@ export const ListOrders = () => {
         sessionStorage.setItem(SCROLL_FILTERS_KEY, JSON.stringify(filters));
     }, [filters]);
 
-    // Restore scroll position after data is loaded
+    // Restore scroll position — fires as soon as rows are available (cached or fresh)
     useLayoutEffect(() => {
-        if (rows.length > 0 && !scrollRestoredRef.current && !isInitialLoadRef.current) {
+        if (rows.length > 0 && !scrollRestoredRef.current) {
+            scrollRestoredRef.current = true;
             const savedPosition = sessionStorage.getItem(SCROLL_POSITION_KEY);
             if (savedPosition) {
+                sessionStorage.removeItem(SCROLL_POSITION_KEY);
                 requestAnimationFrame(() => {
                     window.scrollTo(0, parseInt(savedPosition, 10));
-                    sessionStorage.removeItem(SCROLL_POSITION_KEY);
-                    scrollRestoredRef.current = true;
                 });
             }
-        }
-        if (rows.length > 0) {
-            isInitialLoadRef.current = false;
         }
     }, [rows]);
 
