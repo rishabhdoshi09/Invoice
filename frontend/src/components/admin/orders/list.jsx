@@ -74,8 +74,22 @@ export const ListOrders = () => {
     const [loadingCustomers, setLoadingCustomers] = useState(false);
     const [changedByName, setChangedByName] = useState(''); // Mandatory name for audit
     
-    // Manual checkbox state (purely local UI)
-    const [checkedIds, setCheckedIds] = useState(new Set());
+    // Manual checkbox state — persisted in sessionStorage so navigation doesn't reset it
+    const [checkedIds, setCheckedIds] = useState(() => {
+        try {
+            const saved = sessionStorage.getItem('orders_checked_ids');
+            return saved ? new Set(JSON.parse(saved)) : new Set();
+        } catch { return new Set(); }
+    });
+
+    const toggleChecked = (id) => {
+        setCheckedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            try { sessionStorage.setItem('orders_checked_ids', JSON.stringify([...next])); } catch {}
+            return next;
+        });
+    };
 
     // Print state
     const [printingInvoice, setPrintingInvoice] = useState(null);
@@ -507,14 +521,7 @@ export const ListOrders = () => {
                                                 <Checkbox
                                                     size="small"
                                                     checked={checkedIds.has(row.id)}
-                                                    onChange={() => {
-                                                        setCheckedIds(prev => {
-                                                            const next = new Set(prev);
-                                                            if (next.has(row.id)) next.delete(row.id);
-                                                            else next.add(row.id);
-                                                            return next;
-                                                        });
-                                                    }}
+                                                    onChange={() => toggleChecked(row.id)}
                                                 />
                                             </TableCell>
                                             <TableCell>
