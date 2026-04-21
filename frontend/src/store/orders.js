@@ -36,14 +36,11 @@ export default orderSlice;
 export const listOrdersAction = (payload) => {
     return async(dispatch) => {
         try{
-            dispatch(startLoading());
             const orders = await listOrders(payload);
             dispatch(setOrders(orders));
-            dispatch(stopLoading());
         }
         catch(error){
             console.log(error);
-            dispatch(stopLoading());
             dispatch(setNotification({ open: true, severity: 'error', message: 'Something went wrong, please try again!'}));
         }
     }

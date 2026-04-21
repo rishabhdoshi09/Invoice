@@ -40,7 +40,7 @@ export const ListOrders = () => {
     // Get orders from Redux store
     const { orders } = useSelector((state) => state.orderState);
     const { count = 0, rows = [] } = orders || {};
-    const { loading } = useSelector((state) => state.applicationState);
+    const [loading, setLoading] = useState(false);
 
     // Try to restore filters from sessionStorage on initial load
     const getSavedFilters = () => {
@@ -272,7 +272,8 @@ export const ListOrders = () => {
     // Fetch orders function — records timestamp to debounce focus handler
     const fetchOrders = useCallback(() => {
         lastFetchTimeRef.current = Date.now();
-        dispatch(listOrdersAction(filters));
+        setLoading(true);
+        dispatch(listOrdersAction(filters)).finally(() => setLoading(false));
     }, [dispatch, filters]);
 
     // Fetch on explicit filter change (search, date, pagination)
