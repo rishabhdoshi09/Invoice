@@ -17,9 +17,9 @@ export const api = createApi({
     // Tag types for cache invalidation
     tagTypes: ['Orders', 'Products', 'Payments', 'Customers', 'Suppliers', 'Dashboard', 'Receivables', 'Payables'],
     
-    // Refetch on focus and reconnect for real-time data
-    refetchOnFocus: true,
-    refetchOnReconnect: true,
+    // Don't refetch on every focus/reconnect — components manage their own refresh strategy
+    refetchOnFocus: false,
+    refetchOnReconnect: false,
     
     endpoints: (builder) => ({
         // ==================== ORDERS ====================

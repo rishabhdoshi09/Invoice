@@ -238,16 +238,7 @@ export const CreateOrder = () => {
   const dispatch = useDispatch();
   const { isAdmin, isBillingStaff } = useAuth();
 
-  const rows = useSelector(
-    state => state?.productState?.products?.rows || {},
-    (a, b) => {
-      if (a === b) return true;
-      if (!a || !b) return false;
-      const keysA = Object.keys(a);
-      const keysB = Object.keys(b);
-      return keysA.length === keysB.length && keysA.every(k => a[k] === b[k]);
-    }
-  );
+  const rows = useSelector(state => state?.productState?.products?.rows || {});
   
   // Local state for customers fetched from API
   const [customers, setCustomers] = useState([]);

@@ -1,6 +1,6 @@
 import { Box, Button, Card, CardContent, Modal, Paper, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, TextField  } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
-import { useState, Children } from 'react';
+import { useState, useMemo, Children } from 'react';
 import { CreateProduct } from './create';
 import { EditProduct } from './edit';
 import { deleteProductAction, updateProductAction } from '../../../store/products';
@@ -15,6 +15,7 @@ export const ListProjects = () =>  {
   const [inlineNameVal, setInlineNameVal] = useState('');
 
   const { products: { rows} } = useSelector(state => state.productState);
+  const productList = useMemo(() => Object.values(rows), [rows]);
 
   const startInlineName = (productObj) => {
     setInlineNameId(productObj.id);
@@ -76,7 +77,7 @@ export const ListProjects = () =>  {
           </TableHead>
           <TableBody>
             {
-              Children.toArray(Object.values(rows).map((productObj) => {
+              Children.toArray(productList.map((productObj) => {
                 return(
                   <TableRow>
                     <TableCell sx={{ minWidth: 160 }}>

@@ -86,18 +86,12 @@ export const DayStart = () => {
         isFetching: fetchingRealTime,
         isError: realTimeError,
         refetch: refetchRealTime
-    } = useGetRealTimeSummaryQuery(selectedDate, {
-        refetchOnFocus: true,
-        refetchOnReconnect: true,
-    });
-    
-    // Summary for opening balance (only need this for reading/setting opening balance)
-    const { 
-        data: cachedSummaryData,  // Already transformed by RTK Query
+    } = useGetRealTimeSummaryQuery(selectedDate);
+
+    const {
+        data: cachedSummaryData,
         refetch: refetchCachedSummary
-    } = useGetSummaryByDateQuery(selectedDate, {
-        refetchOnFocus: true,
-    });
+    } = useGetSummaryByDateQuery(selectedDate);
     
     const [setOpeningBalance, { isLoading: savingOpeningBalance }] = useSetOpeningBalanceMutation();
 

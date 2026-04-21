@@ -73,28 +73,19 @@ export const DailyPayments = () => {
         isLoading: loadingSummary,
         isFetching: fetchingSummary,
         refetch: refetchSummary 
-    } = useGetDailySummaryQuery(selectedDate, {
-        refetchOnFocus: true,
-        refetchOnReconnect: true,
-    });
-    
-    const { 
-        data: outstandingReceivables = [], 
+    } = useGetDailySummaryQuery(selectedDate);
+
+    const {
+        data: outstandingReceivables = [],
         isLoading: loadingReceivables,
-        refetch: refetchReceivables 
-    } = useGetOutstandingReceivablesQuery(undefined, {
-        refetchOnFocus: true,
-        refetchOnReconnect: true,
-    });
-    
-    const { 
-        data: outstandingPayables = [], 
+        refetch: refetchReceivables
+    } = useGetOutstandingReceivablesQuery(undefined);
+
+    const {
+        data: outstandingPayables = [],
         isLoading: loadingPayables,
-        refetch: refetchPayables 
-    } = useGetOutstandingPayablesQuery(undefined, {
-        refetchOnFocus: true,
-        refetchOnReconnect: true,
-    });
+        refetch: refetchPayables
+    } = useGetOutstandingPayablesQuery(undefined);
     
     const [createPaymentMutation, { isLoading: isSubmitting }] = useCreatePaymentMutation();
     const [deletePaymentMutation, { isLoading: deletingPayment }] = useDeletePaymentMutation();
