@@ -7,21 +7,24 @@ import { Pagination } from '../../common/pagination';
 import { useAuth } from '../../../context/AuthContext';
 import { Note, Warning, Clear, Refresh, SwapHoriz, PersonAdd, Person, Print, Visibility, WhatsApp } from '@mui/icons-material';
 import axios from 'axios';
-import pdfMake from 'pdfmake/build/pdfmake';
 import { generatePdfDefinition, generatePdfDefinition2 } from './helper';
 import { sendInvoiceViaWhatsApp } from '../../../utils/whatsapp';
 
-// Load pdfMake fonts safely
-try {
-    const vfsFonts = require('pdfmake/build/vfs_fonts');
-    if (vfsFonts?.pdfMake?.vfs) {
-        pdfMake.vfs = vfsFonts.pdfMake.vfs;
-    } else if (vfsFonts?.vfs) {
-        pdfMake.vfs = vfsFonts.vfs;
+// Lazy-load pdfMake on first print — avoids adding ~4MB to the initial route bundle
+let _pdfMakePromise = null;
+const getPdfMake = () => {
+    if (!_pdfMakePromise) {
+        _pdfMakePromise = import('pdfmake/build/pdfmake').then(async (mod) => {
+            const lib = mod.default;
+            try {
+                const fonts = await import('pdfmake/build/vfs_fonts');
+                lib.vfs = fonts?.pdfMake?.vfs || fonts?.vfs;
+            } catch {}
+            return lib;
+        });
     }
-} catch (e) {
-    console.warn('pdfMake fonts not loaded:', e);
-}
+    return _pdfMakePromise;
+};
 
 // Key for storing scroll position
 const SCROLL_POSITION_KEY = 'orders_scroll_position';
@@ -252,7 +255,7 @@ export const ListOrders = () => {
         e.stopPropagation();
         setPrintingInvoice(orderId);
         try {
-            const orderData = await dispatch(getOrderAction(orderId));
+            const [orderData, pdfMake] = await Promise.all([dispatch(getOrderAction(orderId)), getPdfMake()]);
             if (orderData) pdfMake.createPdf(generatePdfDefinition(orderData)).print();
         } catch {
             alert('Failed to print invoice. Please try again.');
@@ -265,7 +268,7 @@ export const ListOrders = () => {
         e.stopPropagation();
         setPrintingReceipt(orderId);
         try {
-            const orderData = await dispatch(getOrderAction(orderId));
+            const [orderData, pdfMake] = await Promise.all([dispatch(getOrderAction(orderId)), getPdfMake()]);
             if (orderData) pdfMake.createPdf(generatePdfDefinition2(orderData)).print();
         } catch {
             alert('Failed to print receipt. Please try again.');
@@ -475,12 +478,12 @@ export const ListOrders = () => {
         }));
     };
 
-    // Debounced filter effect
+    // Debounced filter effect — skip initial mount (mount effect already fetches)
+    const isFirstFilterRender = useRef(true);
     useEffect(() => {
-        const getData = setTimeout(() => {
-            shouldFetch(true);
-        }, 500);
-        return () => clearTimeout(getData);
+        if (isFirstFilterRender.current) { isFirstFilterRender.current = false; return; }
+        const t = setTimeout(() => shouldFetch(true), 500);
+        return () => clearTimeout(t);
     }, [filters.q, filters.date]);
 
     const viewOrder = useCallback((row) => {
