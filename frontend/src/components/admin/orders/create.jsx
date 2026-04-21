@@ -69,7 +69,6 @@ const HIGHLIGHT_SX = {
   transition: 'all 0.15s'
 };
 
-const ORDER_SER_KEY = 'orderSeries_v1';
 const INVOICES_KEY = 'invoices_v1';
 const DAY_TOTAL_KEY = 'dayTotals_v1';
 
@@ -86,22 +85,6 @@ const fromInputDate = (yyyymmdd) => {
   if (!yyyymmdd || !String(yyyymmdd).match(/^\d{4}-\d{2}-\d{2}$/)) return getTodayStr();
   const [y, m, d] = String(yyyymmdd).split('-');
   return `${d}-${m}-${y}`;
-};
-
-const getStoredSeries = () => { try { const raw = localStorage.getItem(ORDER_SER_KEY); return raw ? JSON.parse(raw) : {}; } catch { return {}; } };
-const setStoredSeries = (obj) => { try { localStorage.setItem(ORDER_SER_KEY, JSON.stringify(obj)); } catch {} };
-const generateStartForToday = () => Math.floor(Math.random() * 100000) * 10 + 1;
-const nextOrderNumberForToday = () => {
-  const t = getTodayStr();
-  const d = getStoredSeries();
-  if (d.date !== t || typeof d.last !== 'number') {
-    const s = generateStartForToday();
-    setStoredSeries({ date: t, last: s });
-    return s;
-  }
-  const n = d.last + 1;
-  setStoredSeries({ date: t, last: n });
-  return n;
 };
 
 const getStoredDayTotal=()=>{ try{const raw=localStorage.getItem(DAY_TOTAL_KEY); return raw?JSON.parse(raw):{};}catch{return{}} };
@@ -195,12 +178,6 @@ const isRestrictedPrice = (price) => {
 ------------------------- */
 function toNumber(n){ const x = Number(n); return Number.isFinite(x) ? x : 0; }
 function round2(n) { return Math.round(Number(n) * 100) / 100; }
-function recomputeTotals(order) {
-  const sub = round2((order.orderItems || []).reduce((s, it) => s + toNumber(it.totalPrice), 0));
-  const tax = round2(sub * (toNumber(order.taxPercent) / 100));
-  const total = round2(sub + tax);
-  return { subTotal: sub, tax, total };
-}
 
 function loadAllInvoices() {
   try { return JSON.parse(localStorage.getItem(INVOICES_KEY) || '[]'); } catch { return []; }

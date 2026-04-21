@@ -278,7 +278,7 @@ export const ListOrders = () => {
     }, [dispatch]);
 
     // Fetch customers for autocomplete
-    const fetchCustomers = async () => {
+    const fetchCustomers = useCallback(async () => {
         try {
             setLoadingCustomers(true);
             const token = localStorage.getItem('token');
@@ -292,7 +292,7 @@ export const ListOrders = () => {
         } finally {
             setLoadingCustomers(false);
         }
-    };
+    }, []);
 
     const handleDeleteClick = useCallback((order) => {
         setOrderToDelete(order);
