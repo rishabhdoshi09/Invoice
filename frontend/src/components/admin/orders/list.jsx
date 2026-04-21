@@ -1,6 +1,6 @@
-import { Button, Paper, TextField, Typography, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, Chip, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Box, IconButton, CircularProgress, Autocomplete, Alert } from '@mui/material';
+import { Button, Paper, TextField, Typography, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, Chip, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Box, IconButton, CircularProgress, Autocomplete, Alert, Checkbox } from '@mui/material';
 import { useNavigate } from 'react-router';
-import { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react';
+import { useState, useRef, useLayoutEffect, useEffect, useCallback, memo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { listOrdersAction, deleteOrderAction, getOrderAction } from '../../../store/orders';
 import { Pagination } from '../../common/pagination';
@@ -27,12 +27,165 @@ try {
 const SCROLL_POSITION_KEY = 'orders_scroll_position';
 const SCROLL_FILTERS_KEY = 'orders_filters';
 
+// ─── Module-level utilities (stable references, no recreation per render) ───
+const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+const formatDate = (dateString) => {
+    if (!dateString) return '-';
+    try {
+        let date;
+        if (typeof dateString === 'string') {
+            if (dateString.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                const [day, month, year] = dateString.split('-');
+                date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+            } else if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                date = new Date(dateString + 'T00:00:00');
+            } else {
+                date = new Date(dateString);
+            }
+        } else {
+            date = new Date(dateString);
+        }
+        if (isNaN(date.getTime())) return '-';
+        return `${String(date.getDate()).padStart(2,'0')} ${MONTHS_SHORT[date.getMonth()]} ${date.getFullYear()}`;
+    } catch { return '-'; }
+};
+
+const formatTime = (row) => {
+    const dateString = row.createdAt || row.updatedAt || row.orderDate;
+    if (!dateString) return '-';
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return '-';
+        return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    } catch { return '-'; }
+};
+
+const formatCurrency = (amount) => {
+    const num = Number(amount) || 0;
+    return `₹ ${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+const getTodayDDMMYYYY = () => {
+    const now = new Date();
+    return `${String(now.getDate()).padStart(2,'0')}-${String(now.getMonth()+1).padStart(2,'0')}-${now.getFullYear()}`;
+};
+
+const isBackdated = (dateString) => {
+    if (!dateString || typeof dateString !== 'string') return false;
+    return dateString.match(/^\d{2}-\d{2}-\d{4}$/) && dateString !== getTodayDDMMYYYY();
+};
+
+const OrderRow = memo(({ row, isChecked, onToggleChecked, canToggleStatus, isAdmin, onStatusToggle, onDelete, onView, isPrintingInvoice, isPrintingReceipt, onPrintInvoice, onPrintReceipt, isDeleting }) => {
+    const handleWhatsApp = async (e) => {
+        e.stopPropagation();
+        try {
+            const token = localStorage.getItem('token');
+            const { data } = await axios.get(`/api/orders/${row.id}`, { headers: { Authorization: `Bearer ${token}` } });
+            const fullOrder = data.data || data;
+            sendInvoiceViaWhatsApp(fullOrder.customerMobile || row.customerMobile, fullOrder);
+        } catch {
+            sendInvoiceViaWhatsApp(row.customerMobile, row);
+        }
+    };
+
+    return (
+        <TableRow hover sx={{ cursor: 'pointer' }} onClick={() => onView(row)}>
+            <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
+                <Checkbox size="small" checked={isChecked} onChange={() => onToggleChecked(row.id)} />
+            </TableCell>
+            <TableCell>
+                <Typography variant="body2" fontWeight="bold" color="primary">{row.orderNumber}</Typography>
+            </TableCell>
+            <TableCell>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Typography variant="body2" fontWeight={500}>{formatDate(row.orderDate)}</Typography>
+                    {isBackdated(row.orderDate) && (
+                        <Tooltip title="Backdated entry">
+                            <Chip label="Back" size="small" color="warning" variant="outlined" sx={{ fontSize: '0.68rem', height: 18, px: 0.2 }} />
+                        </Tooltip>
+                    )}
+                </Box>
+            </TableCell>
+            <TableCell>
+                <Typography variant="body2" color="text.secondary">{formatTime(row)}</Typography>
+            </TableCell>
+            <TableCell>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    {row.customerName || 'Walk-in'}
+                    {row.notes && (
+                        <Tooltip title={row.notes}><Note fontSize="small" color="action" /></Tooltip>
+                    )}
+                </Box>
+            </TableCell>
+            <TableCell>{row.customerMobile || '-'}</TableCell>
+            <TableCell align="right">
+                <Typography fontWeight="bold">{formatCurrency(row.total)}</Typography>
+            </TableCell>
+            <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                {canToggleStatus ? (
+                    <Tooltip title="Click to toggle payment status">
+                        <Chip
+                            label={row.paymentStatus === 'paid' ? 'Paid' : row.paymentStatus === 'partial' ? 'Partial' : 'Unpaid'}
+                            size="small"
+                            color={row.paymentStatus === 'paid' ? 'success' : row.paymentStatus === 'partial' ? 'warning' : 'error'}
+                            onClick={(e) => onStatusToggle(row, e)}
+                            onDelete={row.paymentStatus !== 'partial' ? (e) => onStatusToggle(row, e) : undefined}
+                            deleteIcon={row.paymentStatus !== 'partial' ? <SwapHoriz fontSize="small" /> : undefined}
+                            sx={{ cursor: 'pointer' }}
+                            data-testid={`status-chip-${row.id}`}
+                        />
+                    </Tooltip>
+                ) : (
+                    row.paymentStatus === 'paid' ? <Chip label="Paid" size="small" color="success" /> :
+                    row.paymentStatus === 'partial' ? <Chip label="Partial" size="small" color="warning" /> :
+                    <Chip label="Unpaid" size="small" color="error" />
+                )}
+            </TableCell>
+            <TableCell>
+                <Typography variant="body2" color="text.secondary" data-testid={`created-by-${row.id}`}>
+                    {row.createdByName || '-'}
+                </Typography>
+            </TableCell>
+            <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+                    <Tooltip title="View Invoice">
+                        <Button size="small" variant="outlined" onClick={() => onView(row)} startIcon={<Visibility fontSize="small" />} data-testid={`view-order-${row.id}`}>
+                            View
+                        </Button>
+                    </Tooltip>
+                    <Tooltip title="Print GST Tax Invoice">
+                        <Button size="small" variant="outlined" color="secondary" onClick={(e) => onPrintInvoice(row.id, e)} disabled={isPrintingInvoice} startIcon={isPrintingInvoice ? <CircularProgress size={14} /> : <Print fontSize="small" />} data-testid={`print-invoice-${row.id}`}>
+                            Invoice
+                        </Button>
+                    </Tooltip>
+                    <Tooltip title="Print simple receipt (no GST) — for customer">
+                        <Button size="small" variant="outlined" onClick={(e) => onPrintReceipt(row.id, e)} disabled={isPrintingReceipt} startIcon={isPrintingReceipt ? <CircularProgress size={14} /> : <Print fontSize="small" />} data-testid={`print-receipt-${row.id}`}>
+                            Receipt
+                        </Button>
+                    </Tooltip>
+                    <Tooltip title="Send via WhatsApp">
+                        <Button size="small" variant="outlined" sx={{ color: '#25D366', borderColor: '#25D366', '&:hover': { borderColor: '#128C7E', bgcolor: '#e8f8f0' } }} onClick={handleWhatsApp} startIcon={<WhatsApp fontSize="small" />} data-testid={`whatsapp-invoice-${row.id}`}>
+                            WhatsApp
+                        </Button>
+                    </Tooltip>
+                    {isAdmin && (
+                        <Button size="small" variant="outlined" color="error" onClick={() => onDelete(row)} disabled={isDeleting}>
+                            Delete
+                        </Button>
+                    )}
+                </Box>
+            </TableCell>
+        </TableRow>
+    );
+});
+
 export const ListOrders = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch();
     const { isAdmin, isBillingStaff, user } = useAuth();
     const scrollRestoredRef = useRef(false);
-    const isInitialLoadRef = useRef(true);
+    const lastFetchTimeRef = useRef(0);
     
     // Both admin and billing staff can toggle payment status
     const canToggleStatus = isAdmin || isBillingStaff;
@@ -40,7 +193,7 @@ export const ListOrders = () => {
     // Get orders from Redux store
     const { orders } = useSelector((state) => state.orderState);
     const { count = 0, rows = [] } = orders || {};
-    const { loading } = useSelector((state) => state.applicationState);
+    const [loading, setLoading] = useState(false);
 
     // Try to restore filters from sessionStorage on initial load
     const getSavedFilters = () => {
@@ -74,46 +227,52 @@ export const ListOrders = () => {
     const [loadingCustomers, setLoadingCustomers] = useState(false);
     const [changedByName, setChangedByName] = useState(''); // Mandatory name for audit
     
+    // Manual checkbox state — persisted in sessionStorage so navigation doesn't reset it
+    const [checkedIds, setCheckedIds] = useState(() => {
+        try {
+            const saved = sessionStorage.getItem('orders_checked_ids');
+            return saved ? new Set(JSON.parse(saved)) : new Set();
+        } catch { return new Set(); }
+    });
+
+    const toggleChecked = useCallback((id) => {
+        setCheckedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            try { sessionStorage.setItem('orders_checked_ids', JSON.stringify([...next])); } catch {}
+            return next;
+        });
+    }, []);
+
     // Print state
     const [printingInvoice, setPrintingInvoice] = useState(null);
     const [printingReceipt, setPrintingReceipt] = useState(null);
 
-    // Print GST Tax Invoice (Template 1)
-    const handlePrintInvoice = async (orderId, e) => {
+    const handlePrintInvoice = useCallback(async (orderId, e) => {
         e.stopPropagation();
         setPrintingInvoice(orderId);
         try {
-            // Fetch full order details with items
             const orderData = await dispatch(getOrderAction(orderId));
-            if (orderData) {
-                const pdfDefinition = generatePdfDefinition(orderData);
-                pdfMake.createPdf(pdfDefinition).print();
-            }
-        } catch (error) {
-            console.error('Error printing invoice:', error);
+            if (orderData) pdfMake.createPdf(generatePdfDefinition(orderData)).print();
+        } catch {
             alert('Failed to print invoice. Please try again.');
         } finally {
             setPrintingInvoice(null);
         }
-    };
+    }, [dispatch]);
 
-    // Print simple receipt (Template 2 — no GST breakdown, customer-facing)
-    const handlePrintReceipt = async (orderId, e) => {
+    const handlePrintReceipt = useCallback(async (orderId, e) => {
         e.stopPropagation();
         setPrintingReceipt(orderId);
         try {
             const orderData = await dispatch(getOrderAction(orderId));
-            if (orderData) {
-                const pdfDefinition = generatePdfDefinition2(orderData);
-                pdfMake.createPdf(pdfDefinition).print();
-            }
-        } catch (error) {
-            console.error('Error printing receipt:', error);
+            if (orderData) pdfMake.createPdf(generatePdfDefinition2(orderData)).print();
+        } catch {
             alert('Failed to print receipt. Please try again.');
         } finally {
             setPrintingReceipt(null);
         }
-    };
+    }, [dispatch]);
 
     // Fetch customers for autocomplete
     const fetchCustomers = async () => {
@@ -132,11 +291,10 @@ export const ListOrders = () => {
         }
     };
 
-    // Handle delete button click - open confirmation dialog
-    const handleDeleteClick = (order) => {
+    const handleDeleteClick = useCallback((order) => {
         setOrderToDelete(order);
         setDeleteDialogOpen(true);
-    };
+    }, []);
 
     // Confirm delete
     const handleConfirmDelete = async () => {
@@ -160,8 +318,7 @@ export const ListOrders = () => {
         setOrderToDelete(null);
     };
 
-    // Handle status toggle click - open confirmation dialog
-    const handleStatusToggleClick = (order, e) => {
+    const handleStatusToggleClick = useCallback((order, e) => {
         e.stopPropagation();
         setOrderToToggle(order);
         // Pre-fill customer info if available
@@ -177,13 +334,9 @@ export const ListOrders = () => {
         // Fetch customers when opening dialog (for toggling to unpaid)
         if (order.paymentStatus === 'paid') {
             fetchCustomers();
-            // Try to find existing customer match
-            if (order.customerName) {
-                // Will be matched after customers are loaded
-            }
         }
         setStatusDialogOpen(true);
-    };
+    }, [user?.name, fetchCustomers]);
 
     // Confirm status toggle
     const handleConfirmStatusToggle = async () => {
@@ -252,12 +405,14 @@ export const ListOrders = () => {
         setChangedByName('');
     };
 
-    // Fetch orders function
+    // Fetch orders function — records timestamp to debounce focus handler
     const fetchOrders = useCallback(() => {
-        dispatch(listOrdersAction(filters));
+        lastFetchTimeRef.current = Date.now();
+        setLoading(true);
+        dispatch(listOrdersAction(filters)).finally(() => setLoading(false));
     }, [dispatch, filters]);
 
-    // Fetch on filter change
+    // Fetch on explicit filter change (search, date, pagination)
     useEffect(() => {
         if (refetch) {
             shouldFetch(false);
@@ -265,15 +420,17 @@ export const ListOrders = () => {
         }
     }, [refetch, fetchOrders]);
 
-    // Always fetch fresh data when component mounts
+    // Fetch on mount (initial load or filter-driven remount)
     useEffect(() => {
         fetchOrders();
     }, [fetchOrders]);
 
-    // Refresh data when window gains focus
+    // Refresh when window regains focus — but skip if we just fetched (e.g. back-navigation)
     useEffect(() => {
         const handleFocus = () => {
-            fetchOrders();
+            if (Date.now() - lastFetchTimeRef.current > 30000) {
+                fetchOrders();
+            }
         };
         window.addEventListener('focus', handleFocus);
         return () => window.removeEventListener('focus', handleFocus);
@@ -284,20 +441,17 @@ export const ListOrders = () => {
         sessionStorage.setItem(SCROLL_FILTERS_KEY, JSON.stringify(filters));
     }, [filters]);
 
-    // Restore scroll position after data is loaded
+    // Restore scroll position — fires as soon as rows are available (cached or fresh)
     useLayoutEffect(() => {
-        if (rows.length > 0 && !scrollRestoredRef.current && !isInitialLoadRef.current) {
+        if (rows.length > 0 && !scrollRestoredRef.current) {
+            scrollRestoredRef.current = true;
             const savedPosition = sessionStorage.getItem(SCROLL_POSITION_KEY);
             if (savedPosition) {
+                sessionStorage.removeItem(SCROLL_POSITION_KEY);
                 requestAnimationFrame(() => {
                     window.scrollTo(0, parseInt(savedPosition, 10));
-                    sessionStorage.removeItem(SCROLL_POSITION_KEY);
-                    scrollRestoredRef.current = true;
                 });
             }
-        }
-        if (rows.length > 0) {
-            isInitialLoadRef.current = false;
         }
     }, [rows]);
 
@@ -329,10 +483,10 @@ export const ListOrders = () => {
         return () => clearTimeout(getData);
     }, [filters.q, filters.date]);
 
-    const viewOrder = (row) => {
+    const viewOrder = useCallback((row) => {
         sessionStorage.setItem(SCROLL_POSITION_KEY, window.scrollY.toString());
         navigate(`/orders/edit/${row.id}`);
-    };
+    }, [navigate]);
 
     const clearFilters = () => {
         sessionStorage.removeItem(SCROLL_POSITION_KEY);
@@ -343,76 +497,6 @@ export const ListOrders = () => {
     };
 
     const hasFilters = filters.q || filters.date;
-
-    const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
-    // Format date as DD MMM YYYY (e.g. "15 Mar 2025") — Indian standard
-    const formatDate = (dateString) => {
-        if (!dateString) return '-';
-        try {
-            let date;
-            if (typeof dateString === 'string') {
-                if (dateString.match(/^\d{2}-\d{2}-\d{4}$/)) {
-                    const [day, month, year] = dateString.split('-');
-                    date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-                } else if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                    date = new Date(dateString + 'T00:00:00');
-                } else {
-                    date = new Date(dateString);
-                }
-            } else {
-                date = new Date(dateString);
-            }
-            if (isNaN(date.getTime())) return '-';
-            const dd = String(date.getDate()).padStart(2, '0');
-            const mmm = MONTHS_SHORT[date.getMonth()];
-            const yyyy = date.getFullYear();
-            return `${dd} ${mmm} ${yyyy}`;
-        } catch {
-            return '-';
-        }
-    };
-
-    // Returns true if the invoice date is not today (backdated entry)
-    const getTodayDDMMYYYY = () => {
-        const now = new Date();
-        const dd = String(now.getDate()).padStart(2, '0');
-        const mm = String(now.getMonth() + 1).padStart(2, '0');
-        return `${dd}-${mm}-${now.getFullYear()}`;
-    };
-    const isBackdated = (dateString) => {
-        if (!dateString) return false;
-        const today = getTodayDDMMYYYY();
-        if (typeof dateString === 'string' && dateString.match(/^\d{2}-\d{2}-\d{4}$/)) {
-            return dateString !== today;
-        }
-        return false;
-    };
-
-    // Format time for display
-    const formatTime = (row) => {
-        // Try createdAt first, then updatedAt, then use orderDate
-        const dateString = row.createdAt || row.updatedAt || row.orderDate;
-        if (!dateString) return '-';
-        try {
-            const date = new Date(dateString);
-            // Check if date is valid
-            if (isNaN(date.getTime())) return '-';
-            return date.toLocaleTimeString('en-IN', {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
-            });
-        } catch {
-            return '-';
-        }
-    };
-
-    // Format currency with Indian number formatting
-    const formatCurrency = (amount) => {
-        const num = Number(amount) || 0;
-        return `₹\u202F${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    };
 
     return (
         <Paper sx={{ width: '100%', overflow: 'hidden', padding: '16px' }}>
@@ -471,6 +555,7 @@ export const ListOrders = () => {
                         <Table size="small">
                             <TableHead>
                                 <TableRow>
+                                    <TableCell padding="checkbox" />
                                     <TableCell>Invoice #</TableCell>
                                     <TableCell>Date</TableCell>
                                     <TableCell>Time</TableCell>
@@ -485,7 +570,7 @@ export const ListOrders = () => {
                             <TableBody>
                                 {rows.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={9} align="center">
+                                        <TableCell colSpan={10} align="center">
                                             <Typography color="text.secondary" sx={{ py: 6, fontSize: '1rem' }}>
                                                 No invoices found
                                             </Typography>
@@ -493,153 +578,22 @@ export const ListOrders = () => {
                                     </TableRow>
                                 ) : (
                                     rows.map((row) => (
-                                        <TableRow 
-                                            key={row.id} 
-                                            hover 
-                                            sx={{ cursor: 'pointer' }}
-                                            onClick={() => viewOrder(row)}
-                                        >
-                                            <TableCell>
-                                                <Typography variant="body2" fontWeight="bold" color="primary">
-                                                    {row.orderNumber}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                    <Typography variant="body2" fontWeight={500}>
-                                                        {formatDate(row.orderDate)}
-                                                    </Typography>
-                                                    {isBackdated(row.orderDate) && (
-                                                        <Tooltip title="Backdated entry">
-                                                            <Chip label="Back" size="small" color="warning" variant="outlined" sx={{ fontSize: '0.68rem', height: 18, px: 0.2 }} />
-                                                        </Tooltip>
-                                                    )}
-                                                </Box>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Typography variant="body2" color="text.secondary">
-                                                    {formatTime(row)}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                    {row.customerName || 'Walk-in'}
-                                                    {row.notes && (
-                                                        <Tooltip title={row.notes}>
-                                                            <Note fontSize="small" color="action" />
-                                                        </Tooltip>
-                                                    )}
-                                                </Box>
-                                            </TableCell>
-                                            <TableCell>{row.customerMobile || '-'}</TableCell>
-                                            <TableCell align="right">
-                                                <Typography fontWeight="bold">
-                                                    {formatCurrency(row.total)}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell align="center" onClick={(e) => e.stopPropagation()}>
-                                                {canToggleStatus ? (
-                                                    <Tooltip title="Click to toggle payment status">
-                                                        <Chip 
-                                                            label={row.paymentStatus === 'paid' ? 'Paid' : row.paymentStatus === 'partial' ? 'Partial' : 'Unpaid'} 
-                                                            size="small" 
-                                                            color={row.paymentStatus === 'paid' ? 'success' : row.paymentStatus === 'partial' ? 'warning' : 'error'}
-                                                            onClick={(e) => handleStatusToggleClick(row, e)}
-                                                            onDelete={row.paymentStatus !== 'partial' ? (e) => handleStatusToggleClick(row, e) : undefined}
-                                                            deleteIcon={row.paymentStatus !== 'partial' ? <SwapHoriz fontSize="small" /> : undefined}
-                                                            sx={{ cursor: 'pointer' }}
-                                                            data-testid={`status-chip-${row.id}`}
-                                                        />
-                                                    </Tooltip>
-                                                ) : (
-                                                    row.paymentStatus === 'paid' ? (
-                                                        <Chip label="Paid" size="small" color="success" />
-                                                    ) : row.paymentStatus === 'partial' ? (
-                                                        <Chip label="Partial" size="small" color="warning" />
-                                                    ) : (
-                                                        <Chip label="Unpaid" size="small" color="error" />
-                                                    )
-                                                )}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Typography variant="body2" color="text.secondary" data-testid={`created-by-${row.id}`}>
-                                                    {row.createdByName || '-'}
-                                                </Typography>
-                                            </TableCell>
-                                            <TableCell align="center" onClick={(e) => e.stopPropagation()}>
-                                                <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-                                                    <Tooltip title="View Invoice">
-                                                        <Button 
-                                                            size="small" 
-                                                            variant="outlined"
-                                                            onClick={() => viewOrder(row)}
-                                                            startIcon={<Visibility fontSize="small" />}
-                                                            data-testid={`view-order-${row.id}`}
-                                                        >
-                                                            View
-                                                        </Button>
-                                                    </Tooltip>
-                                                    <Tooltip title="Print GST Tax Invoice">
-                                                        <Button
-                                                            size="small"
-                                                            variant="outlined"
-                                                            color="secondary"
-                                                            onClick={(e) => handlePrintInvoice(row.id, e)}
-                                                            disabled={printingInvoice === row.id}
-                                                            startIcon={printingInvoice === row.id ? <CircularProgress size={14} /> : <Print fontSize="small" />}
-                                                            data-testid={`print-invoice-${row.id}`}
-                                                        >
-                                                            Invoice
-                                                        </Button>
-                                                    </Tooltip>
-                                                    <Tooltip title="Print simple receipt (no GST) — for customer">
-                                                        <Button
-                                                            size="small"
-                                                            variant="outlined"
-                                                            onClick={(e) => handlePrintReceipt(row.id, e)}
-                                                            disabled={printingReceipt === row.id}
-                                                            startIcon={printingReceipt === row.id ? <CircularProgress size={14} /> : <Print fontSize="small" />}
-                                                            data-testid={`print-receipt-${row.id}`}
-                                                        >
-                                                            Receipt
-                                                        </Button>
-                                                    </Tooltip>
-                                                    <Tooltip title="Send via WhatsApp">
-                                                        <Button
-                                                            size="small"
-                                                            variant="outlined"
-                                                            sx={{ color: '#25D366', borderColor: '#25D366', '&:hover': { borderColor: '#128C7E', bgcolor: '#e8f8f0' } }}
-                                                            onClick={async (e) => {
-                                                                e.stopPropagation();
-                                                                try {
-                                                                    const token = localStorage.getItem('token');
-                                                                    const { data } = await axios.get(`/api/orders/${row.id}`, { headers: { Authorization: `Bearer ${token}` } });
-                                                                    const fullOrder = data.data || data;
-                                                                    sendInvoiceViaWhatsApp(fullOrder.customerMobile || row.customerMobile, fullOrder);
-                                                                } catch (err) {
-                                                                    sendInvoiceViaWhatsApp(row.customerMobile, row);
-                                                                }
-                                                            }}
-                                                            startIcon={<WhatsApp fontSize="small" />}
-                                                            data-testid={`whatsapp-invoice-${row.id}`}
-                                                        >
-                                                            WhatsApp
-                                                        </Button>
-                                                    </Tooltip>
-                                                    {isAdmin && (
-                                                        <Button 
-                                                            size="small" 
-                                                            variant="outlined" 
-                                                            color="error"
-                                                            onClick={() => handleDeleteClick(row)}
-                                                            disabled={isDeleting}
-                                                        >
-                                                            Delete
-                                                        </Button>
-                                                    )}
-                                                </Box>
-                                            </TableCell>
-                                        </TableRow>
+                                        <OrderRow
+                                            key={row.id}
+                                            row={row}
+                                            isChecked={checkedIds.has(row.id)}
+                                            onToggleChecked={toggleChecked}
+                                            canToggleStatus={canToggleStatus}
+                                            isAdmin={isAdmin}
+                                            onStatusToggle={handleStatusToggleClick}
+                                            onDelete={handleDeleteClick}
+                                            onView={viewOrder}
+                                            isPrintingInvoice={printingInvoice === row.id}
+                                            isPrintingReceipt={printingReceipt === row.id}
+                                            onPrintInvoice={handlePrintInvoice}
+                                            onPrintReceipt={handlePrintReceipt}
+                                            isDeleting={isDeleting}
+                                        />
                                     ))
                                 )}
                             </TableBody>
