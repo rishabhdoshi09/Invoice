@@ -30,7 +30,6 @@ export const generatePdfDefinition = (data) => {
     // Product price is inclusive of GST, so we need to extract base price
     const itemsWithTax = sortedItems.map(item => {
         const inclusivePrice = Number(item.productPrice) || 0;
-        const quantity = Number(item.quantity) || 0;
         const inclusiveTotal = Number(item.totalPrice) || 0;
         
         // Calculate base price (exclusive of GST)

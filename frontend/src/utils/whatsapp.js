@@ -5,7 +5,7 @@ import moment from 'moment';
  */
 const formatPhone = (phone) => {
     if (!phone) return '';
-    let clean = phone.replace(/[\s\-\+\(\)]/g, '');
+    let clean = phone.replace(/[\s\-+()]/g, '');
     if (clean.length === 10) clean = '91' + clean;
     return clean;
 };

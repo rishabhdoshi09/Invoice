@@ -11,6 +11,7 @@ export const Pagination = (props) => {
         if (props.limit !== page.limit || props.offset !== page.offset) {
             props.updateFilters(page.limit, page.offset);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [page]);
 
     useEffect(() => {
