@@ -300,6 +300,7 @@ export const CreateOrder = () => {
   
   // Local state for customers fetched from API
   const [customers, setCustomers] = useState([]);
+  const [customerInputValue, setCustomerInputValue] = useState('');
   
   // Fetch customers from database on mount
   useEffect(() => {
@@ -1632,6 +1633,7 @@ export const CreateOrder = () => {
       });
 
       setOrderProps(initialOrderProps);
+      setCustomerInputValue('');
       formik.resetForm();
       setLocalPriceValue('');
       setFetchedViaScale(false);
@@ -2016,10 +2018,12 @@ export const CreateOrder = () => {
                   size="small"
                   options={customerOptions}
                   value={orderProps.customer || null}
+                  inputValue={customerInputValue}
+                  onInputChange={(_, v) => setCustomerInputValue(v)}
                   onChange={(_, val) => {
                     // Auto-fill customerName and customerMobile when a customer is selected
                     setOrderProps(prev => ({
-                      ...prev, 
+                      ...prev,
                       customer: val,
                       customerName: val?.name || prev.customerName || '',
                       customerMobile: val?.mobile || prev.customerMobile || ''
