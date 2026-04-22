@@ -545,11 +545,11 @@ class SelfAuditService {
 
         console.log(`${prefix} ${report.triggeredBy} run completed in ${report.durationMs}ms`);
         console.log(`  PASS=${counts.PASS} FAIL=${counts.FAIL} SKIP=${counts.SKIP} ERROR=${counts.ERROR}`);
-        if (sevCounts.HALT > 0 || sevCounts.CRITICAL > 0) {
-            for (const r of report.results.filter(x => x.status === 'FAIL')) {
-                console.error(`  [${r.severity}] ${r.id} ${r.name}: ${r.count} violation(s)`);
-                if (Array.isArray(r.detail)) r.detail.slice(0, 5).forEach(d => console.error(`    → ${d}`));
-            }
+        const failed = report.results.filter(x => x.status === 'FAIL');
+        for (const r of failed) {
+            const log = r.severity === 'HALT' || r.severity === 'CRITICAL' ? console.error : console.warn;
+            log(`  [${r.severity}] ${r.id} ${r.name}: ${r.count} violation(s)`);
+            if (Array.isArray(r.detail)) r.detail.slice(0, 5).forEach(d => log(`    → ${d}`));
         }
     }
 }
