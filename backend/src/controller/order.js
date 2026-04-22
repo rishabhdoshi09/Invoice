@@ -6,7 +6,7 @@ const db = require('../models');
 const { createAuditLog } = require('../middleware/auditLogger');
 const { postInvoiceToLedger, reverseInvoiceLedger, postPaymentStatusToggleToLedger, postInvoiceCashReceiptToLedger } = require('../services/realTimeLedger');
 const { assertOrderInvariants } = require('../services/orderInvariants');
-const { updateStock } = require('../services/accountingEngine');
+const { updateStock, reverseAllBatchesForReference } = require('../services/accountingEngine');
 const telegram = require('../services/telegramAlert');
 
 // Helper to get client IP
@@ -934,6 +934,20 @@ module.exports = {
                             changedByTrimmed,
                             transaction
                         );
+
+                        // When toggling paid→unpaid for a CASH invoice (originalPaidAmount > 0),
+                        // postPaymentStatusToggle skips because togglePaid = total - originalPaid = 0.
+                        // The INVOICE_CASH batch from creation must be explicitly reversed here
+                        // so it no longer shows as active while paidAmount = 0 (fixes INV-11).
+                        if (oldStatus === 'paid' && newStatus === 'unpaid' &&
+                            Number(lockedOrder.originalPaidAmount) > 0) {
+                            await reverseAllBatchesForReference(
+                                orderId,
+                                `Cash reversed: ${order.orderNumber} toggled to unpaid by ${changedByTrimmed}`,
+                                transaction,
+                                'INVOICE_CASH'
+                            );
+                        }
                     } else {
                         console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — toggle for ${order.orderNumber} not posted to ledger`);
                     }

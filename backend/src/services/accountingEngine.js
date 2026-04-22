@@ -447,11 +447,10 @@ async function postPaymentStatusToggle(order, oldStatus, newStatus, changedBy, t
 //     create mirror batches with DR↔CR swapped.
 //     Returns array of reversal results.
 // ══════════════════════════════════════════════════════════════════════════
-async function reverseAllBatchesForReference(referenceId, reason, transaction) {
-    const activeBatches = await db.journalBatch.findAll({
-        where: { referenceId, isReversed: false, isPosted: true },
-        transaction
-    });
+async function reverseAllBatchesForReference(referenceId, reason, transaction, referenceType = null) {
+    const where = { referenceId, isReversed: false, isPosted: true };
+    if (referenceType) where.referenceType = referenceType;
+    const activeBatches = await db.journalBatch.findAll({ where, transaction });
 
     if (!activeBatches.length) {
         console.log(`[AE] SKIP REVERSAL: No active batches for ${referenceId}`);
