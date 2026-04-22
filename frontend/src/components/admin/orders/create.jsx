@@ -738,10 +738,11 @@ export const CreateOrder = () => {
         if (typeof el.setSelectionRange === 'function') {
           const num = Number(val);
           if (Number.isFinite(num) && num >= 200 && num <= 299 && len >= 3) {
-            // Select only the TENS digit so keypad/physical typing goes digit-by-digit
-            // Phase ref drives keypad placement; physical keyboard auto-advances in onPriceChange
+            // Select BOTH tens and units so the user sees both highlighted on focus.
+            // Phase ref (='tens') drives which digit gets replaced first.
+            // onPriceKeyDown intercepts digit keys to prevent browser overwriting both at once.
             twoXXPhaseRef.current = 'tens';
-            el.setSelectionRange(len - 2, len - 1); // just tens
+            el.setSelectionRange(len - 2, len); // tens + units
           } else {
             el.setSelectionRange(0, len);
           }
@@ -1008,7 +1009,7 @@ export const CreateOrder = () => {
     if (Number.isFinite(num) && num >= 200 && num <= 299 && val.length >= 3) {
       twoXXPhaseRef.current = 'tens';
       const selStart = val.length - 2; // tens position
-      const selEnd = val.length - 1;   // just tens, not units
+      const selEnd = val.length;       // tens + units both selected
       setTimeout(() => {
         try {
           const el = priceInputRef && priceInputRef.current;
@@ -1068,6 +1069,20 @@ export const CreateOrder = () => {
 
     // For 'add', no extra blocking here
     if (isNameAdd) return;
+
+    // 2xx range: intercept digit keys so the browser doesn't replace both selected
+    // digits (tens+units) with a single character. Route through applyDigitToPrice
+    // which uses the phase ref to fill tens then units one at a time.
+    if (/^\d$/.test(e.key) && !modalOpen) {
+      const target2 = e.target;
+      const val2 = String(target2.value || '');
+      const num2 = Number(val2);
+      if (Number.isFinite(num2) && num2 >= 200 && num2 <= 299 && val2.length === 3) {
+        e.preventDefault();
+        applyDigitToPrice(parseInt(e.key, 10));
+        return;
+      }
+    }
 
     const isBackspace = e.key === 'Backspace';
     const isDelete = e.key === 'Delete';
