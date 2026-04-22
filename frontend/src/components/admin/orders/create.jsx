@@ -352,6 +352,13 @@ export const CreateOrder = () => {
   const [localPriceValue, setLocalPriceValue] = useState('');
   const priceUpdateTimeoutRef = useRef(null);
 
+  // 2xx price keypad editing phase: 'tens' → 'units' → reset
+  // Prevents relying on DOM selection timing for keypad digit placement
+  const twoXXPhaseRef = useRef(null);
+  // Flag: set true while applyDigitToPrice calls onPriceChange so onPriceChange
+  // skips its own physical-keyboard phase-advance logic (keypad handles it)
+  const skipPhaseAdvanceRef = useRef(false);
+
   // ref for modal price input to ensure focus works reliably
   const modalPriceRef = useRef(null);
   // ref for main productPrice input to focus after adding / selecting product
@@ -636,6 +643,7 @@ export const CreateOrder = () => {
 
       formik.resetForm();
       setLocalPriceValue('');
+      twoXXPhaseRef.current = null;
       setSelectedProduct(null);
       setInputValue('');
       try { setFetchedViaScale(false); } catch {}
@@ -719,9 +727,6 @@ export const CreateOrder = () => {
   }, [dispatch, formik]);
 
   // Helper: focus main price input, with 2xx tens-digit selection
-  // For 200-299: select only the TENS digit (index 1) so keypad digit replaces just that one char.
-  // e.g. "250" → selects "5" → click 7 → "270" ✓
-  // Selecting 2 chars would replace "50" with "7" → "27" (wrong — 2 digits, breaks keypad).
   const focusMainPriceInput = useCallback(() => {
     try {
       setTimeout(() => {
@@ -733,8 +738,10 @@ export const CreateOrder = () => {
         if (typeof el.setSelectionRange === 'function') {
           const num = Number(val);
           if (Number.isFinite(num) && num >= 200 && num <= 299 && len >= 3) {
-            // Select only the tens digit (position 1), preserving the units digit
-            el.setSelectionRange(len - 2, len - 1);
+            // Select only the TENS digit so keypad/physical typing goes digit-by-digit
+            // Phase ref drives keypad placement; physical keyboard auto-advances in onPriceChange
+            twoXXPhaseRef.current = 'tens';
+            el.setSelectionRange(len - 2, len - 1); // just tens
           } else {
             el.setSelectionRange(0, len);
           }
@@ -764,6 +771,28 @@ export const CreateOrder = () => {
 
     if (el) {
       const val = String(el.value || '');
+      const num = Number(val);
+
+      // 2xx range: place digit at the correct position (tens or units) using phase ref,
+      // without relying on DOM selection timing. Then advance selection for next digit.
+      if (!modalOpen && Number.isFinite(num) && num >= 200 && num <= 299 && val.length === 3) {
+        const phase = twoXXPhaseRef.current || 'tens';
+        const chars = val.split('');
+        chars[phase === 'tens' ? 1 : 2] = dStr;
+        const newVal = chars.join('');
+        skipPhaseAdvanceRef.current = true;
+        onPriceChange({ target: { value: newVal }, preventDefault: () => {} });
+        skipPhaseAdvanceRef.current = false;
+        if (phase === 'tens') {
+          twoXXPhaseRef.current = 'units';
+          setTimeout(() => { try { el.setSelectionRange(2, 3); } catch {} }, 0);
+        } else {
+          twoXXPhaseRef.current = 'tens';
+          setTimeout(() => { try { el.setSelectionRange(3, 3); } catch {} }, 0);
+        }
+        return;
+      }
+
       const start = el.selectionStart != null ? el.selectionStart : val.length;
       const end = el.selectionEnd != null ? el.selectionEnd : val.length;
       const newVal = val.slice(0, start) + dStr + val.slice(end);
@@ -973,6 +1002,22 @@ export const CreateOrder = () => {
     } else {
       try { firstDigitLockRef.current = String(val || '').charAt(0) || firstDigitLockRef.current; } catch {}
     }
+    // For 200-299: select only the TENS digit and init phase for keypad digit-by-digit editing.
+    // Physical typing auto-advances selection to units in onPriceChange.
+    const num = Number(val);
+    if (Number.isFinite(num) && num >= 200 && num <= 299 && val.length >= 3) {
+      twoXXPhaseRef.current = 'tens';
+      const selStart = val.length - 2; // tens position
+      const selEnd = val.length - 1;   // just tens, not units
+      setTimeout(() => {
+        try {
+          const el = priceInputRef && priceInputRef.current;
+          if (el) el.setSelectionRange(selStart, selEnd);
+        } catch {}
+      }, 80);
+    } else {
+      twoXXPhaseRef.current = null;
+    }
   };
 
   const onPriceKeyDown = (e) => {
@@ -1080,7 +1125,23 @@ export const CreateOrder = () => {
       
       // Update local state for display purposes (non-critical sync)
       setLocalPriceValue(rawInput);
-      
+
+      // For 2xx range: after physical keyboard types tens digit, auto-advance selection to units.
+      // skipPhaseAdvanceRef is set by applyDigitToPrice (keypad) so we don't double-advance.
+      if (!skipPhaseAdvanceRef.current) {
+        const newNum = Number(rawInput);
+        if (Number.isFinite(newNum) && newNum >= 200 && newNum <= 299 && rawInput.length === 3) {
+          if (twoXXPhaseRef.current === 'tens') {
+            twoXXPhaseRef.current = 'units';
+            setTimeout(() => {
+              try { const el = priceInputRef?.current; if (el) el.setSelectionRange(2, 3); } catch {}
+            }, 0);
+          } else if (twoXXPhaseRef.current === 'units') {
+            twoXXPhaseRef.current = 'tens';
+          }
+        }
+      }
+
       // Capture current quantity for the debounced callback
       const currentQuantity = Number(formik.values.quantity) || 0;
       
