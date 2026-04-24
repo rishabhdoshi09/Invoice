@@ -34,6 +34,12 @@ module.exports = (router) => {
             authenticate,
             Controller.payment.getPayment
         )
+        .put(
+            authenticate,
+            canModify,
+            financialWriteGuard,
+            Controller.payment.updatePayment
+        )
         .delete(
             authenticate,
             canModify,

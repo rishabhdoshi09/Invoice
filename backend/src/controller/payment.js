@@ -473,5 +473,63 @@ module.exports = {
                 message: error.message
             });
         }
+    },
+
+    updatePayment: async (req, res) => {
+        try {
+            const { paymentId } = req.params;
+            const { amount, paymentDate, notes } = req.body;
+
+            const payment = await db.payment.findOne({ where: { id: paymentId, isDeleted: false } });
+            if (!payment) {
+                return res.status(404).send({ status: 404, message: 'Payment not found' });
+            }
+
+            const oldAmount = Number(payment.amount) || 0;
+            const newAmount = amount !== undefined ? Number(amount) : oldAmount;
+            if (newAmount <= 0) {
+                return res.status(400).send({ status: 400, message: 'Amount must be greater than 0' });
+            }
+
+            await db.sequelize.transaction(async (transaction) => {
+                const amountDiff = newAmount - oldAmount;
+
+                if (amountDiff !== 0) {
+                    // Update customer balance atomically (positive diff = more paid = balance decreases)
+                    if (payment.partyType === 'customer' && payment.partyId) {
+                        await db.customer.update(
+                            { currentBalance: db.sequelize.literal(`"currentBalance" - ${amountDiff}`) },
+                            { where: { id: payment.partyId }, transaction }
+                        );
+                    }
+
+                    // Ledger: reverse old batch then post new one with updated amount
+                    const accountsExist = await db.account.count({ transaction });
+                    if (accountsExist > 0) {
+                        await reversePaymentLedger(payment, transaction);
+                        const updatedPaymentData = { ...payment.toJSON(), amount: newAmount };
+                        if (payment.partyType === 'customer') {
+                            await postPaymentToLedger(updatedPaymentData, payment.partyId, payment.partyName, transaction);
+                        } else if (payment.partyType === 'supplier') {
+                            await postSupplierPaymentToLedger(updatedPaymentData, payment.partyId, payment.partyName, transaction);
+                        }
+                    }
+                }
+
+                const updateData = {};
+                if (amount !== undefined) updateData.amount = newAmount;
+                if (paymentDate !== undefined) updateData.paymentDate = paymentDate;
+                if (notes !== undefined) updateData.notes = notes;
+
+                await db.payment.update(updateData, { where: { id: paymentId }, transaction });
+            });
+
+            const updated = await db.payment.findByPk(paymentId);
+            return res.status(200).send({ status: 200, message: 'Payment updated', data: updated });
+
+        } catch (error) {
+            console.error('Update payment error:', error);
+            return res.status(500).send({ status: 500, message: error.message || 'Internal server error' });
+        }
     }
 };

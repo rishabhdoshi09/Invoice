@@ -9,8 +9,8 @@ import {
     InputAdornment, TablePagination, Collapse, Switch, FormControlLabel,
     List, ListItem, ListItemText, ListItemSecondaryAction, Badge
 } from '@mui/material';
-import { 
-    Delete, Visibility, Refresh, Add, Receipt, People, Close, 
+import {
+    Delete, Edit, Visibility, Refresh, Add, Receipt, People, Close,
     ShoppingCart, Search, Download, CheckCircle,
     KeyboardArrowDown, KeyboardArrowUp, PersonAdd, Warning,
     History, Phone, Email, AccountBalance, TipsAndUpdates, Print, WhatsApp
@@ -67,7 +67,10 @@ export const ListCustomers = () => {
 
     // Expanded rows
     const [expandedOrder, setExpandedOrder] = useState(null);
-    
+
+    // Edit payment dialog
+    const [editPaymentDialog, setEditPaymentDialog] = useState({ open: false, payment: null, amount: '', paymentDate: '', notes: '', saving: false });
+
     // Customer notes
     const [customerNotes, setCustomerNotes] = useState('');
     const [savingNotes, setSavingNotes] = useState(false);
@@ -124,6 +127,32 @@ export const ListCustomers = () => {
             setDetailsDialog({ open: true, customer: data.data, tab: 0 });
         } catch (error) {
             alert('Error fetching details');
+        }
+    };
+
+    const handleDeletePayment = async (paymentId) => {
+        if (!window.confirm('Delete this receipt? This will reverse the ledger entry and restore the customer balance.')) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`/api/payments/${paymentId}`, { headers: { Authorization: `Bearer ${token}` } });
+            if (detailsDialog.customer?.id) fetchCustomerDetails(detailsDialog.customer.id);
+            fetchCustomers();
+        } catch (e) { alert(e.response?.data?.message || e.message); }
+    };
+
+    const handleEditPaymentSubmit = async () => {
+        const { payment, amount, paymentDate, notes } = editPaymentDialog;
+        if (!amount || Number(amount) <= 0) { alert('Amount must be greater than 0'); return; }
+        setEditPaymentDialog(prev => ({ ...prev, saving: true }));
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`/api/payments/${payment.id}`, { amount: Number(amount), paymentDate, notes }, { headers: { Authorization: `Bearer ${token}` } });
+            setEditPaymentDialog({ open: false, payment: null, amount: '', paymentDate: '', notes: '', saving: false });
+            if (detailsDialog.customer?.id) fetchCustomerDetails(detailsDialog.customer.id);
+            fetchCustomers();
+        } catch (e) {
+            alert(e.response?.data?.message || e.message);
+            setEditPaymentDialog(prev => ({ ...prev, saving: false }));
         }
     };
 
@@ -992,12 +1021,13 @@ export const ListCustomers = () => {
                                 </Grid>
                             </Grid>
 
-                            <Tabs value={detailsDialog.tab} onChange={(e, v) => setDetailsDialog({ ...detailsDialog, tab: v })}>
+                            <Tabs value={detailsDialog.tab} onChange={(e, v) => setDetailsDialog({ ...detailsDialog, tab: v })} variant="scrollable" scrollButtons="auto">
                                 <Tab label={`Invoices (${detailsDialog.customer.orders?.length || 0})`} />
                                 <Tab label={`Receipts (${detailsDialog.customer.payments?.length || 0})`} />
                                 <Tab label="Allocate" />
                                 <Tab label={`Toggle History (${detailsDialog.customer.toggleHistory?.length || 0})`} data-testid="customer-toggle-history-tab" />
                                 <Tab label="Notes" data-testid="customer-notes-tab" />
+                                <Tab label="Ledger" />
                             </Tabs>
 
                             {detailsDialog.tab === 0 && (
@@ -1111,12 +1141,13 @@ export const ListCustomers = () => {
                                                 <TableCell align="right">Allocated</TableCell>
                                                 <TableCell align="right">Unallocated</TableCell>
                                                 <TableCell>Notes</TableCell>
+                                                <TableCell align="center" width={72}></TableCell>
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
                                             {detailsDialog.customer.payments?.length === 0 ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={6} align="center" sx={{ py: 2 }}>No receipts yet</TableCell>
+                                                    <TableCell colSpan={7} align="center" sx={{ py: 2 }}>No receipts yet</TableCell>
                                                 </TableRow>
                                             ) : (
                                                 detailsDialog.customer.payments?.map((p) => (
@@ -1132,6 +1163,18 @@ export const ListCustomers = () => {
                                                             )}
                                                         </TableCell>
                                                         <TableCell>{p.notes || '-'}</TableCell>
+                                                        <TableCell align="center">
+                                                            <Tooltip title="Edit receipt">
+                                                                <IconButton size="small" sx={{ p: 0.3 }} onClick={() => setEditPaymentDialog({ open: true, payment: p, amount: String(p.amount || ''), paymentDate: p.paymentDate ? moment(p.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('YYYY-MM-DD') : moment().format('YYYY-MM-DD'), notes: p.notes || '', saving: false })}>
+                                                                    <Edit sx={{ fontSize: 15, color: '#1976d2' }} />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                            <Tooltip title="Delete receipt">
+                                                                <IconButton size="small" sx={{ p: 0.3 }} onClick={() => handleDeletePayment(p.id)}>
+                                                                    <Delete sx={{ fontSize: 15, color: '#e57373' }} />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        </TableCell>
                                                     </TableRow>
                                                 ))
                                             )}
@@ -1288,6 +1331,94 @@ export const ListCustomers = () => {
                                 </TableContainer>
                             )}
 
+                            {/* Tab 5: Ledger (Tally-style) */}
+                            {detailsDialog.tab === 5 && (() => {
+                                const cust = detailsDialog.customer;
+                                const fmt = v => v ? `₹${Math.abs(v).toLocaleString('en-IN', { minimumFractionDigits: 0 })}` : '₹0';
+                                const entries = [];
+
+                                if (cust.openingBalance && Number(cust.openingBalance) !== 0) {
+                                    entries.push({ id: 'opening', date: null, sortKey: '0000-00-00', particulars: 'Opening Balance', refNo: '-', debit: Number(cust.openingBalance) > 0 ? Number(cust.openingBalance) : 0, credit: Number(cust.openingBalance) < 0 ? Math.abs(Number(cust.openingBalance)) : 0, type: 'opening' });
+                                }
+
+                                (cust.orders || []).forEach(o => {
+                                    const d = o.orderDate ? moment(o.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(o.createdAt);
+                                    entries.push({ id: o.id, date: d.isValid() ? d.format('DD/MM/YY') : '-', sortKey: d.isValid() ? d.toISOString() : '9999', particulars: `Invoice — ${o.orderNumber || ''}`, refNo: o.orderNumber || '-', debit: Number(o.total) || 0, credit: 0, type: 'invoice', raw: o });
+                                    if ((Number(o.derivedPaid || o.paidAmount) || 0) > 0 && o.paymentMode === 'CASH') {
+                                        entries.push({ id: `${o.id}-cash`, date: d.isValid() ? d.format('DD/MM/YY') : '-', sortKey: d.toISOString() + 'Z', particulars: `Cash at Invoice — ${o.orderNumber || ''}`, refNo: o.orderNumber || '-', debit: 0, credit: Number(o.derivedPaid || o.paidAmount) || 0, type: 'cash-at-invoice' });
+                                    }
+                                });
+
+                                (cust.payments || []).forEach(p => {
+                                    const d = p.paymentDate ? moment(p.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(p.createdAt);
+                                    entries.push({ id: p.id, date: d.isValid() ? d.format('DD/MM/YY') : '-', sortKey: d.isValid() ? d.toISOString() : '9999', particulars: 'Receipt' + (p.notes ? ` — ${p.notes}` : ''), refNo: p.paymentNumber || '-', debit: 0, credit: Number(p.amount) || 0, type: 'payment', raw: p });
+                                });
+
+                                entries.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+                                let runBal = 0;
+                                entries.forEach(e => { runBal += e.debit - e.credit; e.balance = runBal; });
+                                const totalDebit = entries.reduce((s, e) => s + e.debit, 0);
+                                const totalCredit = entries.reduce((s, e) => s + e.credit, 0);
+                                const closing = totalDebit - totalCredit;
+
+                                return (
+                                    <Box sx={{ mt: 1 }}>
+                                        <TableContainer sx={{ maxHeight: 380, border: '2px solid #1a237e', borderRadius: 1 }}>
+                                            <Table size="small" stickyHeader sx={{
+                                                '& td, & th': { borderRight: '1px solid #e0e0e0', py: 0.5, px: 1, fontSize: '0.8rem', fontFamily: "'Roboto Mono', monospace" },
+                                                '& th': { bgcolor: '#e8eaf6', fontWeight: 700, color: '#1a237e', borderBottom: '2px solid #1a237e', fontSize: '0.76rem' },
+                                                '& td:last-child, & th:last-child': { borderRight: 'none' }
+                                            }}>
+                                                <TableHead>
+                                                    <TableRow>
+                                                        <TableCell width={68}>Date</TableCell>
+                                                        <TableCell>Particulars</TableCell>
+                                                        <TableCell width={90}>Vch No.</TableCell>
+                                                        <TableCell align="right" width={90}>Debit</TableCell>
+                                                        <TableCell align="right" width={90}>Credit</TableCell>
+                                                        <TableCell align="right" width={100}>Balance</TableCell>
+                                                        <TableCell align="center" width={36}></TableCell>
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {entries.length === 0 ? (
+                                                        <TableRow><TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary', fontFamily: 'Roboto' }}>No transactions yet</TableCell></TableRow>
+                                                    ) : entries.map(e => (
+                                                        <TableRow key={`${e.type}-${e.id}`} hover sx={{ bgcolor: e.type === 'opening' ? '#fffde7' : e.type === 'payment' ? '#f1f8e9' : '#fff', '&:hover': { bgcolor: e.type === 'payment' ? '#dcedc8' : '#f5f5f5' } }}>
+                                                            <TableCell sx={{ whiteSpace: 'nowrap' }}>{e.date || ''}</TableCell>
+                                                            <TableCell sx={{ fontFamily: 'Roboto', fontSize: '0.8rem' }}>{e.particulars}</TableCell>
+                                                            <TableCell sx={{ color: '#666', fontSize: '0.72rem' }}>{e.refNo}</TableCell>
+                                                            <TableCell align="right" sx={{ color: e.debit > 0 ? '#c62828' : 'transparent', fontWeight: 600 }}>{e.debit > 0 ? fmt(e.debit) : ''}</TableCell>
+                                                            <TableCell align="right" sx={{ color: e.credit > 0 ? '#2e7d32' : 'transparent', fontWeight: 600 }}>{e.credit > 0 ? fmt(e.credit) : ''}</TableCell>
+                                                            <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.78rem' }}>{fmt(e.balance)} {e.balance >= 0 ? 'Dr' : 'Cr'}</TableCell>
+                                                            <TableCell align="center">
+                                                                {e.type === 'payment' && (
+                                                                    <>
+                                                                        <Tooltip title="Edit"><IconButton size="small" sx={{ p: 0.2 }} onClick={() => setEditPaymentDialog({ open: true, payment: e.raw, amount: String(e.raw.amount || ''), paymentDate: e.raw.paymentDate ? moment(e.raw.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('YYYY-MM-DD') : moment().format('YYYY-MM-DD'), notes: e.raw.notes || '', saving: false })}><Edit sx={{ fontSize: 13, color: '#1976d2' }} /></IconButton></Tooltip>
+                                                                        <Tooltip title="Delete"><IconButton size="small" sx={{ p: 0.2 }} onClick={() => handleDeletePayment(e.id)}><Delete sx={{ fontSize: 13, color: '#e57373' }} /></IconButton></Tooltip>
+                                                                    </>
+                                                                )}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                                {entries.length > 0 && (
+                                                    <TableBody>
+                                                        <TableRow sx={{ '& td': { borderTop: '2px solid #1a237e', bgcolor: '#e8eaf6', fontWeight: 700, py: 0.8 } }}>
+                                                            <TableCell colSpan={3} sx={{ color: '#1a237e', fontSize: '0.8rem', fontFamily: 'Roboto Mono' }}>TOTAL</TableCell>
+                                                            <TableCell align="right" sx={{ color: '#c62828' }}>{fmt(totalDebit)}</TableCell>
+                                                            <TableCell align="right" sx={{ color: '#2e7d32' }}>{fmt(totalCredit)}</TableCell>
+                                                            <TableCell align="right" sx={{ color: '#1a237e' }}>{fmt(closing)} {closing >= 0 ? 'Dr' : 'Cr'}</TableCell>
+                                                            <TableCell />
+                                                        </TableRow>
+                                                    </TableBody>
+                                                )}
+                                            </Table>
+                                        </TableContainer>
+                                    </Box>
+                                );
+                            })()}
+
                             {/* Tab 4: Customer Notes */}
                             {detailsDialog.tab === 4 && (
                                 <Box sx={{ mt: 2 }}>
@@ -1349,9 +1480,25 @@ export const ListCustomers = () => {
                 )}
             </Dialog>
 
+            {/* Edit Payment Dialog */}
+            <Dialog open={editPaymentDialog.open} onClose={() => setEditPaymentDialog(prev => ({ ...prev, open: false }))} maxWidth="xs" fullWidth>
+                <DialogTitle>Edit Receipt — {editPaymentDialog.payment?.paymentNumber}</DialogTitle>
+                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
+                    <TextField label="Amount (₹)" type="number" size="small" fullWidth value={editPaymentDialog.amount} onChange={e => setEditPaymentDialog(prev => ({ ...prev, amount: e.target.value }))} inputProps={{ min: 1 }} />
+                    <TextField label="Date" type="date" size="small" fullWidth value={editPaymentDialog.paymentDate} onChange={e => setEditPaymentDialog(prev => ({ ...prev, paymentDate: e.target.value }))} InputLabelProps={{ shrink: true }} />
+                    <TextField label="Notes" size="small" fullWidth multiline rows={2} value={editPaymentDialog.notes} onChange={e => setEditPaymentDialog(prev => ({ ...prev, notes: e.target.value }))} />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setEditPaymentDialog(prev => ({ ...prev, open: false }))}>Cancel</Button>
+                    <Button variant="contained" onClick={handleEditPaymentSubmit} disabled={editPaymentDialog.saving}>
+                        {editPaymentDialog.saving ? 'Saving...' : 'Save'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
             {/* Invoice Preview Dialog */}
-            <Dialog 
-                open={invoicePreviewOpen} 
+            <Dialog
+                open={invoicePreviewOpen}
                 onClose={handleCloseInvoicePreview} 
                 maxWidth="md" 
                 fullWidth
