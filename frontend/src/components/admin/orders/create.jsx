@@ -738,7 +738,7 @@ export const CreateOrder = () => {
         const len = val.length;
         if (typeof el.setSelectionRange === 'function') {
           const num = Number(val);
-          if (Number.isFinite(num) && num >= 200 && num <= 299 && len >= 3) {
+          if (Number.isFinite(num) && num >= 200 && num <= 399 && len >= 3) {
             // Select BOTH tens and units so the user sees both highlighted on focus.
             // Phase ref (='tens') drives which digit gets replaced first.
             // onPriceKeyDown intercepts digit keys to prevent browser overwriting both at once.
@@ -775,9 +775,9 @@ export const CreateOrder = () => {
       const val = String(el.value || '');
       const num = Number(val);
 
-      // 2xx range: place digit at the correct position (tens or units) using phase ref,
+      // 2xx/3xx range: place digit at the correct position (tens or units) using phase ref,
       // without relying on DOM selection timing. Then advance selection for next digit.
-      if (!modalOpen && Number.isFinite(num) && num >= 200 && num <= 299 && val.length === 3) {
+      if (!modalOpen && Number.isFinite(num) && num >= 200 && num <= 399 && val.length === 3) {
         const phase = twoXXPhaseRef.current || 'tens';
         const chars = val.split('');
         chars[phase === 'tens' ? 1 : 2] = dStr;
@@ -1004,10 +1004,10 @@ export const CreateOrder = () => {
     } else {
       try { firstDigitLockRef.current = String(val || '').charAt(0) || firstDigitLockRef.current; } catch {}
     }
-    // For 200-299: select only the TENS digit and init phase for keypad digit-by-digit editing.
+    // For 200-399: select only the TENS digit and init phase for keypad digit-by-digit editing.
     // Physical typing auto-advances selection to units in onPriceChange.
     const num = Number(val);
-    if (Number.isFinite(num) && num >= 200 && num <= 299 && val.length >= 3) {
+    if (Number.isFinite(num) && num >= 200 && num <= 399 && val.length >= 3) {
       twoXXPhaseRef.current = 'tens';
       const selStart = val.length - 2; // tens position
       const selEnd = val.length;       // tens + units both selected
@@ -1078,7 +1078,7 @@ export const CreateOrder = () => {
       const target2 = e.target;
       const val2 = String(target2.value || '');
       const num2 = Number(val2);
-      if (Number.isFinite(num2) && num2 >= 200 && num2 <= 299 && val2.length === 3) {
+      if (Number.isFinite(num2) && num2 >= 200 && num2 <= 399 && val2.length === 3) {
         e.preventDefault();
         applyDigitToPrice(parseInt(e.key, 10));
         return;
@@ -1142,11 +1142,11 @@ export const CreateOrder = () => {
       // Update local state for display purposes (non-critical sync)
       setLocalPriceValue(rawInput);
 
-      // For 2xx range: after physical keyboard types tens digit, auto-advance selection to units.
+      // For 2xx/3xx range: after physical keyboard types tens digit, auto-advance selection to units.
       // skipPhaseAdvanceRef is set by applyDigitToPrice (keypad) so we don't double-advance.
       if (!skipPhaseAdvanceRef.current) {
         const newNum = Number(rawInput);
-        if (Number.isFinite(newNum) && newNum >= 200 && newNum <= 299 && rawInput.length === 3) {
+        if (Number.isFinite(newNum) && newNum >= 200 && newNum <= 399 && rawInput.length === 3) {
           if (twoXXPhaseRef.current === 'tens') {
             twoXXPhaseRef.current = 'units';
             setTimeout(() => {
@@ -1819,6 +1819,7 @@ export const CreateOrder = () => {
   }, [selectedProduct, modalOpen, focusMainPriceInput]);
 
   const show200sKeypad = isWeighted && priceValue >= 200 && priceValue <= 299;
+  const show300sKeypad = isWeighted && priceValue >= 300 && priceValue <= 399;
 
   const selectedHistoryRow = selectedHistoryDate
     ? dailyHistory.find((r) => r.date === selectedHistoryDate)
@@ -2266,6 +2267,22 @@ export const CreateOrder = () => {
                 {show200sKeypad && !modalOpen && (
                   <Box sx={{ mt: 0.5, display: 'flex', gap: 1 }}>
                     {[6, 7, 8, 9].map((d) => (
+                      <Button
+                        key={d}
+                        size="small"
+                        variant="outlined"
+                        tabIndex={-1}
+                        onClick={() => applyDigitToPrice(d, priceInputRef)}
+                      >
+                        {d}
+                      </Button>
+                    ))}
+                  </Box>
+                )}
+                {/* Virtual keypad for 300–399 range: digits 0–9 */}
+                {show300sKeypad && !modalOpen && (
+                  <Box sx={{ mt: 0.5, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
                       <Button
                         key={d}
                         size="small"
