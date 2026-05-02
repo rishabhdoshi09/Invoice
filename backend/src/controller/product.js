@@ -11,6 +11,11 @@ const { ReadlineParser } = require('@serialport/parser-readline');
 
 let port = null;
 let parser = null;
+let reconnectTimer = null;
+let reconnectDelay = 2000;       // starts at 2 s, doubles each attempt
+const MAX_RECONNECT_DELAY = 32000; // cap at 32 s
+const STALE_THRESHOLD_MS  = 15000; // no data for 15 s → stale
+const HEARTBEAT_INTERVAL_MS = 5000; // check every 5 s
 
 // Auto-detect serial device: prefer env var, then scan /dev for usbserial/wchusbserial
 function detectSerialPort() {
@@ -28,51 +33,101 @@ function detectSerialPort() {
     } catch { return null; }
 }
 
+function destroyPort() {
+    if (port) {
+        try { port.removeAllListeners(); } catch {}
+        try { if (port.isOpen) port.close(); } catch {}
+        try { port.destroy(); } catch {}
+        port = null;
+        parser = null;
+    }
+}
+
+function scheduleReconnect() {
+    if (reconnectTimer) return; // already pending
+    console.log(`[SERIAL] Reconnect scheduled in ${reconnectDelay / 1000}s...`);
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        initSerial();
+    }, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY);
+}
+
 function initSerial() {
+    destroyPort();
+
     const devPath = detectSerialPort();
     if (!devPath || !fs.existsSync(devPath)) {
-        console.log("Serial device NOT found → skipping serial initialization");
+        console.log('[SERIAL] Device not found → will retry');
         connectionStatus = 'disconnected';
+        scheduleReconnect();
         return;
     }
 
-    console.log("Serial device found → opening:", devPath);
+    console.log('[SERIAL] Opening:', devPath);
     try {
         port = new SerialPort({ path: devPath, baudRate: 9600 });
         parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
 
         port.on('open', () => {
-            console.log("Serial port opened successfully");
+            console.log('[SERIAL] Port opened successfully');
             connectionStatus = 'connected';
+            reconnectDelay = 2000; // reset backoff on successful open
         });
 
         parser.on('data', (line) => {
             const data = Number(line.trim());
-            if (!isNaN(data) && data !== weight) {
-                weight = data;
+            if (!isNaN(data)) {
+                // Update timestamp on every valid line, not just when value changes.
+                // The scale continuously sends the same reading while stable — we must
+                // still treat that as "alive".
                 lastDataReceived = Date.now();
                 connectionStatus = 'connected';
+                if (data !== weight) weight = data;
             }
         });
 
         port.on('error', (e) => {
-            console.log("SerialPort Error:", e.message);
+            console.log('[SERIAL] Error:', e.message);
             connectionStatus = 'error';
+            scheduleReconnect();
         });
 
         port.on('close', () => {
-            console.log("Serial port closed");
+            console.log('[SERIAL] Port closed');
             connectionStatus = 'disconnected';
-            port = null; parser = null;
+            port = null;
+            parser = null;
+            scheduleReconnect();
         });
 
     } catch (err) {
-        console.log("Failed to open serial port:", err.message);
+        console.log('[SERIAL] Failed to open:', err.message);
         connectionStatus = 'error';
+        scheduleReconnect();
     }
 }
 
 initSerial();
+
+// Heartbeat: detect silent failures (port open but no data arriving) and trigger reconnect.
+setInterval(() => {
+    const isStale = lastDataReceived !== null &&
+        (Date.now() - lastDataReceived > STALE_THRESHOLD_MS);
+
+    if (connectionStatus === 'connected' && isStale) {
+        console.log('[SERIAL] Heartbeat: no data received for', Math.round((Date.now() - lastDataReceived) / 1000), 's — forcing reconnect');
+        connectionStatus = 'stale';
+        destroyPort();
+        scheduleReconnect();
+        return;
+    }
+
+    // If we're in a broken state and no reconnect is pending, kick one off.
+    if ((connectionStatus === 'error' || connectionStatus === 'disconnected') && !reconnectTimer) {
+        scheduleReconnect();
+    }
+}, HEARTBEAT_INTERVAL_MS);
 
 
 module.exports = {
@@ -215,14 +270,14 @@ module.exports = {
 
     getWeights: async (req, res) => {
         try {
-            // Check if connection seems stale (no data in last 30 seconds while expecting continuous data)
-            const isStale = lastDataReceived && (Date.now() - lastDataReceived > 30000);
+            const isStale = lastDataReceived !== null &&
+                (Date.now() - lastDataReceived > STALE_THRESHOLD_MS);
             const effectiveStatus = isStale ? 'stale' : connectionStatus;
 
             return res.status(200).send({
                 status: 200,
                 message: 'weights fetched successfully',
-                data: { 
+                data: {
                     weight: weight,
                     connectionStatus: effectiveStatus,
                     lastDataReceived: lastDataReceived,
