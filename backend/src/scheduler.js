@@ -90,6 +90,16 @@ function init(db) {
     });
 
     console.log('[SCHEDULER] Nightly database backup registered — runs at 11:00 PM IST');
+
+    // ── Telegram Bot Command Polling ─────────────────────────────────────────
+    // Starts a long-poll loop so the bot responds to /backup, /report, /audit,
+    // /status commands sent from any device (phone, desktop Telegram).
+    try {
+        telegram.startBotPolling();
+        console.log('[BOT] Telegram command polling started');
+    } catch (e) {
+        console.warn('[BOT] Polling skipped —', e.message);
+    }
 }
 
 module.exports = { init };

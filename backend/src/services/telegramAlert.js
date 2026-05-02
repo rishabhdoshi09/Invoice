@@ -744,6 +744,127 @@ async function sendFullAuditReport(options = {}) {
     }
 }
 
+// ─── Bot command polling (long-poll getUpdates) ─────────────────────
+// Listens for commands sent to the bot from any device (phone, desktop).
+// Supported commands:
+//   /backup  — run a full db backup and send the .sql.gz file here
+//   /report  — send today's fraud/daily summary
+//   /audit   — send the full bill audit report
+//   /status  — quick server health reply
+//
+// Does NOT require a public URL — pure outbound polling from the server.
+
+let _pollOffset = 0;
+let _pollActive = false;
+
+function _getUpdates() {
+    return new Promise((resolve) => {
+        if (!BOT_TOKEN) return resolve([]);
+        const path = `/bot${BOT_TOKEN}/getUpdates?offset=${_pollOffset}&timeout=30&allowed_updates=["message"]`;
+        const req = https.request({
+            hostname: 'api.telegram.org',
+            path,
+            method: 'GET',
+            family: 4
+        }, (res) => {
+            let raw = '';
+            res.on('data', c => raw += c);
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(raw);
+                    resolve(parsed.ok ? (parsed.result || []) : []);
+                } catch { resolve([]); }
+            });
+        });
+        req.on('error', () => resolve([]));
+        req.setTimeout(35000, () => { req.destroy(); resolve([]); });
+        req.end();
+    });
+}
+
+async function _handleUpdate(update) {
+    const msg = update.message;
+    if (!msg || !msg.text) return;
+
+    // Security: only respond to the configured chat
+    if (CHAT_ID && String(msg.chat.id) !== String(CHAT_ID)) return;
+
+    const text = (msg.text || '').trim().toLowerCase().split(' ')[0];
+    console.log(`[BOT] Command received: ${text}`);
+
+    try {
+        if (text === '/backup') {
+            await sendTelegram('⏳ <b>Backup started…</b> This may take 30–60 seconds.');
+            await sendDailyBackup();
+
+        } else if (text === '/report' || text === '/summary') {
+            await sendTelegram('⏳ <b>Generating daily summary…</b>');
+            await sendDailySummary();
+
+        } else if (text === '/audit') {
+            await sendTelegram('⏳ <b>Generating full audit report…</b>');
+            await sendFullAuditReport();
+
+        } else if (text === '/status') {
+            const uptime = process.uptime();
+            const h = Math.floor(uptime / 3600);
+            const m = Math.floor((uptime % 3600) / 60);
+            await sendTelegram(
+                `✅ <b>Server Status</b>\n\n` +
+                `<b>Uptime:</b> ${h}h ${m}m\n` +
+                `<b>Memory:</b> ${Math.round(process.memoryUsage().heapUsed / 1048576)} MB\n` +
+                `<b>Time:</b> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST\n` +
+                `<b>Node:</b> ${process.version}`
+            );
+
+        } else if (text === '/help' || text === '/start') {
+            await sendTelegram(
+                `🤖 <b>Invoice Bot Commands</b>\n\n` +
+                `/backup — Send full database backup\n` +
+                `/report — Today's fraud summary\n` +
+                `/audit  — Full bill audit report\n` +
+                `/status — Server uptime &amp; health\n` +
+                `/help   — Show this message`
+            );
+        }
+    } catch (e) {
+        console.error('[BOT] Command handler error:', e.message);
+        sendTelegram(`❌ Command failed: ${esc(e.message)}`).catch(() => {});
+    }
+}
+
+async function startBotPolling() {
+    if (!BOT_TOKEN || !CHAT_ID) {
+        console.log('[BOT] TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set — polling disabled');
+        return;
+    }
+    if (_pollActive) return;
+    _pollActive = true;
+    console.log('[BOT] Starting Telegram command polling…');
+
+    const loop = async () => {
+        if (!_pollActive) return;
+        try {
+            const updates = await _getUpdates();
+            for (const u of updates) {
+                if (u.update_id >= _pollOffset) _pollOffset = u.update_id + 1;
+                await _handleUpdate(u);
+            }
+        } catch (e) {
+            console.warn('[BOT] Poll error:', e.message);
+            // Wait 5 s before retrying to avoid hammering on network errors
+            await new Promise(r => setTimeout(r, 5000));
+        }
+        setImmediate(loop);
+    };
+
+    loop();
+}
+
+function stopBotPolling() {
+    _pollActive = false;
+}
+
 module.exports = {
     sendTelegram,
     sendTelegramDocument,
@@ -755,5 +876,7 @@ module.exports = {
     alertOrderCreated,
     sendDailySummary,
     sendFullAuditReport,
-    sendDailyBackup
+    sendDailyBackup,
+    startBotPolling,
+    stopBotPolling
 };
