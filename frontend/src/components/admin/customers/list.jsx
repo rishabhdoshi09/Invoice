@@ -71,6 +71,12 @@ export const ListCustomers = () => {
     // Edit payment dialog
     const [editPaymentDialog, setEditPaymentDialog] = useState({ open: false, payment: null, amount: '', paymentDate: '', notes: '', saving: false });
 
+    // Edit order dialog
+    const [editOrderDialog, setEditOrderDialog] = useState({ open: false, order: null, orderDate: '', customerName: '', customerMobile: '', saving: false });
+
+    // Order logs (per-order, keyed by orderId)
+    const [orderLogs, setOrderLogs] = useState({});
+
     // Customer notes
     const [customerNotes, setCustomerNotes] = useState('');
     const [savingNotes, setSavingNotes] = useState(false);
@@ -127,6 +133,42 @@ export const ListCustomers = () => {
             setDetailsDialog({ open: true, customer: data.data, tab: 0 });
         } catch (error) {
             alert('Error fetching details');
+        }
+    };
+
+    const handleDeleteOrder = async (orderId) => {
+        if (!window.confirm('Delete this invoice? This will reverse the ledger entry and restore the customer balance.')) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`/api/orders/${orderId}`, { headers: { Authorization: `Bearer ${token}` } });
+            if (detailsDialog.customer?.id) fetchCustomerDetails(detailsDialog.customer.id);
+            fetchCustomers();
+        } catch (e) { alert(e.response?.data?.message || e.message); }
+    };
+
+    const handleEditOrderSubmit = async () => {
+        const { order, orderDate, customerName, customerMobile } = editOrderDialog;
+        if (!orderDate) { alert('Date is required'); return; }
+        setEditOrderDialog(prev => ({ ...prev, saving: true }));
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`/api/orders/${order.id}`, { orderDate, customerName, customerMobile }, { headers: { Authorization: `Bearer ${token}` } });
+            setEditOrderDialog({ open: false, order: null, orderDate: '', customerName: '', customerMobile: '', saving: false });
+            if (detailsDialog.customer?.id) fetchCustomerDetails(detailsDialog.customer.id);
+        } catch (e) {
+            alert(e.response?.data?.message || e.message);
+            setEditOrderDialog(prev => ({ ...prev, saving: false }));
+        }
+    };
+
+    const fetchOrderLogs = async (orderId) => {
+        if (orderLogs[orderId]) return; // already loaded
+        try {
+            const token = localStorage.getItem('token');
+            const { data } = await axios.get(`/api/orders/${orderId}/logs`, { headers: { Authorization: `Bearer ${token}` } });
+            setOrderLogs(prev => ({ ...prev, [orderId]: data.data || [] }));
+        } catch (e) {
+            setOrderLogs(prev => ({ ...prev, [orderId]: [] }));
         }
     };
 
@@ -1106,6 +1148,17 @@ export const ListCustomers = () => {
                                                                             <WhatsApp fontSize="small" />
                                                                         </IconButton>
                                                                     </Tooltip>
+                                                                    <Tooltip title="Edit Invoice">
+                                                                        <IconButton size="small" sx={{ color: '#1976d2' }}
+                                                                            onClick={() => setEditOrderDialog({ open: true, order: o, orderDate: o.orderDate ? moment(o.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('YYYY-MM-DD') : moment().format('YYYY-MM-DD'), customerName: o.customerName || '', customerMobile: o.customerMobile || '', saving: false })}>
+                                                                            <Edit fontSize="small" />
+                                                                        </IconButton>
+                                                                    </Tooltip>
+                                                                    <Tooltip title="Delete Invoice">
+                                                                        <IconButton size="small" sx={{ color: '#e57373' }} onClick={() => handleDeleteOrder(o.id)}>
+                                                                            <Delete fontSize="small" />
+                                                                        </IconButton>
+                                                                    </Tooltip>
                                                                 </Box>
                                                             </TableCell>
                                                         </TableRow>
@@ -1114,9 +1167,29 @@ export const ListCustomers = () => {
                                                                 <TableCell colSpan={8} sx={{ bgcolor: '#fafafa', py: 0 }}>
                                                                     <Collapse in={true}>
                                                                         <Box sx={{ p: 1.5 }}>
-                                                                            <Typography variant="caption" sx={{ fontWeight: 600, color: '#1976d2' }}>
-                                                                                Customer ID linked: {o.customerId ? '✓ Yes' : '✗ No (legacy)'}
-                                                                            </Typography>
+                                                                            {/* Activity log */}
+                                                                            {!orderLogs[o.id] && fetchOrderLogs(o.id)}
+                                                                            {!orderLogs[o.id] ? (
+                                                                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>Loading logs…</Typography>
+                                                                            ) : orderLogs[o.id].length === 0 ? (
+                                                                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>No activity logs found.</Typography>
+                                                                            ) : (
+                                                                                <Box>
+                                                                                    <Typography variant="caption" sx={{ fontWeight: 700, color: '#1976d2', display: 'block', mb: 0.5 }}>Activity Log</Typography>
+                                                                                    {orderLogs[o.id].map(log => (
+                                                                                        <Box key={log.id} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mb: 0.5, fontSize: 11 }}>
+                                                                                            <Typography variant="caption" sx={{ color: 'text.disabled', whiteSpace: 'nowrap', minWidth: 110 }}>
+                                                                                                {new Date(log.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                                                                            </Typography>
+                                                                                            <Chip label={log.action} size="small" sx={{ height: 16, fontSize: 9, fontWeight: 700, bgcolor: log.action === 'DELETE' || log.action === 'BILL_DELETED' ? '#ffebee' : log.action === 'CREATE' ? '#e8f5e9' : '#e3f2fd', color: log.action === 'DELETE' || log.action === 'BILL_DELETED' ? '#c62828' : log.action === 'CREATE' ? '#2e7d32' : '#1565c0' }} />
+                                                                                            <Typography variant="caption" sx={{ color: '#555' }}>
+                                                                                                {log.userName && <strong>{log.userName}</strong>}{log.description && ` — ${log.description}`}
+                                                                                                {log.productName && ` [${log.productName} × ${log.quantity}]`}
+                                                                                            </Typography>
+                                                                                        </Box>
+                                                                                    ))}
+                                                                                </Box>
+                                                                            )}
                                                                         </Box>
                                                                     </Collapse>
                                                                 </TableCell>
@@ -1478,6 +1551,22 @@ export const ListCustomers = () => {
                         </DialogActions>
                     </>
                 )}
+            </Dialog>
+
+            {/* Edit Order Dialog */}
+            <Dialog open={editOrderDialog.open} onClose={() => setEditOrderDialog(prev => ({ ...prev, open: false }))} maxWidth="xs" fullWidth>
+                <DialogTitle>Edit Invoice — {editOrderDialog.order?.orderNumber}</DialogTitle>
+                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
+                    <TextField label="Invoice Date" type="date" size="small" fullWidth value={editOrderDialog.orderDate} onChange={e => setEditOrderDialog(prev => ({ ...prev, orderDate: e.target.value }))} InputLabelProps={{ shrink: true }} />
+                    <TextField label="Customer Name" size="small" fullWidth value={editOrderDialog.customerName} onChange={e => setEditOrderDialog(prev => ({ ...prev, customerName: e.target.value }))} />
+                    <TextField label="Customer Mobile" size="small" fullWidth value={editOrderDialog.customerMobile} onChange={e => setEditOrderDialog(prev => ({ ...prev, customerMobile: e.target.value }))} />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setEditOrderDialog(prev => ({ ...prev, open: false }))}>Cancel</Button>
+                    <Button variant="contained" onClick={handleEditOrderSubmit} disabled={editOrderDialog.saving}>
+                        {editOrderDialog.saving ? 'Saving...' : 'Save'}
+                    </Button>
+                </DialogActions>
             </Dialog>
 
             {/* Edit Payment Dialog */}

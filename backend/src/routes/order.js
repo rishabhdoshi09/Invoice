@@ -52,6 +52,14 @@ module.exports = (router) => {
             Controller.order.addStaffNote
         );
 
+    // Order activity logs
+    router
+        .route('/orders/:orderId/logs')
+        .get(
+            authenticate,
+            Controller.order.getOrderLogs
+        );
+
     // Toggle payment status - admin and billing staff can toggle
     router
         .route('/orders/:orderId/payment-status')

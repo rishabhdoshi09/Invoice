@@ -1064,5 +1064,54 @@ module.exports = {
         } catch (error) {
             return res.status(500).json({ status: 500, message: error.message });
         }
+    },
+
+    getOrderLogs: async (req, res) => {
+        try {
+            const { orderId } = req.params;
+
+            const [auditLogs, billLogs] = await Promise.all([
+                db.auditLog.findAll({
+                    where: { entityId: orderId },
+                    order: [['createdAt', 'DESC']],
+                    limit: 50
+                }),
+                db.billAuditLog.findAll({
+                    where: { orderId },
+                    order: [['createdAt', 'DESC']],
+                    limit: 50
+                })
+            ]);
+
+            const combined = [
+                ...auditLogs.map(l => ({
+                    id: l.id,
+                    source: 'audit',
+                    action: l.action,
+                    userName: l.userName || 'System',
+                    userRole: l.userRole,
+                    description: l.description || `${l.action} by ${l.userName || 'System'}`,
+                    oldValues: l.oldValues,
+                    newValues: l.newValues,
+                    createdAt: l.createdAt
+                })),
+                ...billLogs.map(l => ({
+                    id: l.id,
+                    source: 'bill',
+                    action: l.eventType,
+                    userName: l.userName || 'System',
+                    description: l.invoiceContext || l.eventType,
+                    productName: l.productName,
+                    quantity: l.quantity,
+                    price: l.price,
+                    billTotal: l.billTotal,
+                    createdAt: l.createdAt
+                }))
+            ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+            return res.status(200).json({ status: 200, data: combined });
+        } catch (error) {
+            return res.status(500).json({ status: 500, message: error.message });
+        }
     }
 }
