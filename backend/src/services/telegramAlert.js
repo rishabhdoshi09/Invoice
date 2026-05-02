@@ -147,10 +147,10 @@ function sendTelegramDocument(fileBuffer, filename, caption) {
 function createBackupBuffer() {
     return new Promise((resolve, reject) => {
         const dbUrl = process.env.DATABASE_URL ||
-            `postgres://${process.env.DB_USER || 'postgres'}:${encodeURIComponent(process.env.DB_PASS || '')}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'postgres'}`;
+            `postgres://${process.env.DB_USER || 'postgres'}:${encodeURIComponent(process.env.PASSWORD || '')}@${process.env.DB_HOST || '127.0.0.1'}:${process.env.DB_PORT || 5432}/${process.env.DATABASE_NAME || 'customerInvoice'}`;
 
         const pgDump = spawn('pg_dump', ['--no-owner', '--no-acl', dbUrl], {
-            env: { ...process.env, PGPASSWORD: process.env.DB_PASS || '' }
+            env: { ...process.env, PGPASSWORD: process.env.PASSWORD || '' }
         });
         const gzip = zlib.createGzip({ level: 6 });
 

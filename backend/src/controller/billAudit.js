@@ -233,6 +233,16 @@ module.exports = {
         }
     },
 
+    // Manually trigger a full database backup sent to Telegram
+    sendBackupNow: async (req, res) => {
+        try {
+            const result = await telegram.sendDailyBackup();
+            return res.json({ status: 200, message: 'Database backup sent to Telegram', data: result });
+        } catch (error) {
+            return res.status(500).json({ status: 500, message: error.message });
+        }
+    },
+
     // Send complete bill audit report (mirrors /bill-audit page) to Telegram
     sendFullAuditReport: async (req, res) => {
         try {

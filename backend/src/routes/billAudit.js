@@ -69,4 +69,12 @@ module.exports = (router) => {
             authorize('admin'),
             Controller.billAudit.sendFullAuditReport
         );
+
+    router
+        .route('/audit/telegram/backup')
+        .post(
+            authenticate,
+            authorize('admin'),
+            Controller.billAudit.sendBackupNow
+        );
 };
