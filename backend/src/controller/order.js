@@ -613,6 +613,30 @@ module.exports = {
                     throw ledgerError;
                 }
 
+                // Soft-delete any payments that were recorded specifically against this order.
+                // These are receipts tied to this invoice (referenceType='order', referenceId=orderId).
+                // On-account payments (referenceId=null) are left untouched.
+                const linkedPayments = await db.payment.findAll({
+                    where: { referenceId: orderId, referenceType: 'order', isDeleted: false },
+                    transaction
+                });
+                for (const lp of linkedPayments) {
+                    // Reverse the payment's ledger entries
+                    try { await reversePaymentLedger(lp, transaction); } catch (e) { console.warn(`[DELETE] Ledger reversal skipped for payment ${lp.paymentNumber}:`, e.message); }
+                    // Restore customer balance
+                    if (lp.partyId) {
+                        await db.customer.update(
+                            { currentBalance: db.sequelize.literal(`"currentBalance" + ${Number(lp.amount)}`) },
+                            { where: { id: lp.partyId }, transaction }
+                        );
+                    }
+                    await db.payment.update(
+                        { isDeleted: true, deletedAt: new Date(), deletedBy: req.user?.id || null, deletedByName: req.user?.name || req.user?.username || null },
+                        { where: { id: lp.id }, transaction }
+                    );
+                    console.log(`[DELETE] Soft-deleted linked payment ${lp.paymentNumber} (₹${lp.amount}) for order ${order.orderNumber}`);
+                }
+
                 // Soft delete the order (preserve old ledger entries for audit trail)
                 await db.order.update(
                     {
