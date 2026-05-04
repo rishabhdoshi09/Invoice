@@ -19,12 +19,59 @@ dns.setDefaultResultOrder('ipv4first');
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
+// ─── Circuit Breaker — suppress retry noise when network is down ──────────
+// DNS errors (ENOTFOUND etc.) won't resolve within seconds; retrying is
+// pointless and floods the log. After THRESHOLD consecutive failures the
+// circuit opens and all subsequent sends resolve silently for COOLDOWN_MS,
+// then a single probe attempt is made to check if connectivity returned.
+const _circuit = {
+    open: false,
+    openedAt: 0,
+    failures: 0,
+    THRESHOLD: 2,
+    COOLDOWN_MS: 5 * 60 * 1000,
+};
+
+// Errors that indicate the host is unreachable — no value in retrying fast.
+const _OFFLINE_CODES = new Set(['ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH', 'ECONNREFUSED']);
+
+function _circuitIsOpen() {
+    if (!_circuit.open) return false;
+    if (Date.now() - _circuit.openedAt > _circuit.COOLDOWN_MS) {
+        console.log('[TELEGRAM] Cooldown elapsed — probing connectivity');
+        _circuit.open = false;
+        return false;
+    }
+    return true;
+}
+
+function _onNetworkFail() {
+    _circuit.failures++;
+    if (!_circuit.open && _circuit.failures >= _circuit.THRESHOLD) {
+        _circuit.open = true;
+        _circuit.openedAt = Date.now();
+        console.warn('[TELEGRAM] Network unreachable — alerts paused for 5 min');
+    }
+}
+
+function _onNetworkOk() {
+    if (_circuit.open || _circuit.failures > 0) {
+        console.log('[TELEGRAM] Connectivity restored');
+    }
+    _circuit.open = false;
+    _circuit.failures = 0;
+}
+
 // ─── Send message via Telegram Bot API (with exponential backoff retry) ───
 function sendTelegram(text, parseMode = 'HTML', retries = 3) {
     return new Promise((resolve, reject) => {
         if (!BOT_TOKEN || !CHAT_ID) {
-            console.warn('[TELEGRAM] Bot token or chat ID not configured — skipping alert');
             return resolve({ skipped: true });
+        }
+
+        // Circuit open — resolve silently, no log spam
+        if (_circuitIsOpen()) {
+            return resolve({ skipped: true, offline: true });
         }
 
         const attempt = (attemptNum) => {
@@ -48,6 +95,7 @@ function sendTelegram(text, parseMode = 'HTML', retries = 3) {
                     try {
                         const parsed = JSON.parse(data);
                         if (parsed.ok) {
+                            _onNetworkOk();
                             resolve(parsed);
                         } else if (parsed.error_code === 429 && attemptNum < retries) {
                             // Rate limited — retry with backoff
@@ -66,12 +114,18 @@ function sendTelegram(text, parseMode = 'HTML', retries = 3) {
             });
 
             req.on('error', (err) => {
+                if (_OFFLINE_CODES.has(err.code)) {
+                    // Host unreachable — retrying in seconds won't help; fail fast
+                    _onNetworkFail();
+                    return resolve({ skipped: true, offline: true });
+                }
                 if (attemptNum < retries) {
                     const delay = Math.pow(2, attemptNum) * 1000;
                     console.warn(`[TELEGRAM] Network error (attempt ${attemptNum + 1}/${retries}): ${err.message}, retrying in ${delay}ms`);
                     setTimeout(() => attempt(attemptNum + 1), delay);
                 } else {
-                    reject(new Error(`Telegram network error after ${retries} attempts: ${err.message}`));
+                    _onNetworkFail();
+                    resolve({ skipped: true, offline: true });
                 }
             });
             req.setTimeout(10000, () => {
@@ -81,7 +135,8 @@ function sendTelegram(text, parseMode = 'HTML', retries = 3) {
                     console.warn(`[TELEGRAM] Timeout (attempt ${attemptNum + 1}/${retries}), retrying in ${delay}ms`);
                     setTimeout(() => attempt(attemptNum + 1), delay);
                 } else {
-                    reject(new Error(`Telegram timeout after ${retries} attempts`));
+                    _onNetworkFail();
+                    resolve({ skipped: true, offline: true });
                 }
             });
             req.write(payload);
