@@ -7,9 +7,9 @@ import {
     InputAdornment, TablePagination, Collapse, Switch, FormControlLabel,
     List, ListItem, ListItemText, ListItemSecondaryAction
 } from '@mui/material';
-import { 
+import {
     Delete, Visibility, Refresh, Add, Payment, Close,
-    Search, Download, AccountBalance, ShoppingBag, CheckCircle,
+    Search, Download, Print, AccountBalance, ShoppingBag, CheckCircle,
     KeyboardArrowDown, Save
 } from '@mui/icons-material';
 import axios from 'axios';
@@ -336,7 +336,7 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
 };
 
 // ─── Supplier Ledger Dialog (Tally-style) ──────────────────────────
-const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDeletePayment, onPayment, onPurchase, onDownload }) => {
+const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDeletePayment, onPayment, onPurchase, onDownload, onPrint }) => {
     const [expandedId, setExpandedId] = useState(null);
     
     if (!supplier) return null;
@@ -542,8 +542,11 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
             </DialogContent>
 
             <DialogActions sx={{ bgcolor: '#f5f5f5', borderTop: '1px solid #ddd', px: 2, py: 0.8, gap: 1 }}>
-                <Button data-testid="ledger-download" onClick={() => onDownload(s, ledgerEntries, totalDebit, totalCredit, closingBal)} startIcon={<Download />} variant="outlined" size="small" sx={{ textTransform: 'none', mr: 'auto' }}>
+                <Button data-testid="ledger-download" onClick={() => onDownload(s, ledgerEntries, totalDebit, totalCredit, closingBal)} startIcon={<Download />} variant="outlined" size="small" sx={{ textTransform: 'none' }}>
                     Download
+                </Button>
+                <Button data-testid="ledger-print" onClick={() => onPrint(s, ledgerEntries, totalDebit, totalCredit, closingBal)} startIcon={<Print />} variant="outlined" size="small" sx={{ textTransform: 'none', mr: 'auto' }}>
+                    Print
                 </Button>
                 <Button data-testid="ledger-make-payment" onClick={() => onPayment(s)} startIcon={<Payment />} variant="contained" color="success" size="small" sx={{ textTransform: 'none' }}>
                     Make Payment
@@ -662,6 +665,45 @@ export const ListSuppliers = () => {
         a.download = `${s.name.replace(/\s+/g, '_')}_ledger_${moment().format('YYYY-MM-DD')}.csv`;
         a.click();
         URL.revokeObjectURL(url);
+    };
+
+    // Print individual supplier ledger
+    const handleLedgerPrint = (s, ledgerEntries, totalDebit, totalCredit, closingBal) => {
+        const fmt = v => v != null && v !== 0 ? `₹${Math.abs(v).toLocaleString('en-IN')}` : '₹0';
+        const rows = ledgerEntries.map(e => `
+            <tr style="background:${e.type === 'opening' ? '#fffde7' : e.type === 'payment' ? '#f1f8e9' : '#fff'}">
+                <td>${e.date || ''}</td>
+                <td>${e.particulars}</td>
+                <td>${e.refNo}</td>
+                <td style="text-align:right;color:#c62828">${e.debit > 0 ? fmt(e.debit) : ''}</td>
+                <td style="text-align:right;color:#2e7d32">${e.credit > 0 ? fmt(e.credit) : ''}</td>
+                <td style="text-align:right;font-weight:700">${fmt(e.balance)} ${e.balance >= 0 ? 'Dr' : 'Cr'}</td>
+            </tr>`).join('');
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${s.name} — Ledger</title>
+            <style>
+                body { font-family: 'Roboto Mono', monospace; font-size: 12px; margin: 20px; color: #222; }
+                h2 { color: #0d1b4a; margin-bottom: 2px; }
+                .meta { color: #666; font-size: 11px; margin-bottom: 16px; }
+                table { width: 100%; border-collapse: collapse; }
+                th { background: #e8eaf6; color: #1a237e; border-bottom: 2px solid #1a237e; padding: 6px 8px; text-align: left; font-size: 11px; }
+                td { padding: 4px 8px; border-bottom: 1px solid #e0e0e0; }
+                .total-row td { border-top: 2px solid #1a237e; background: #e8eaf6; font-weight: 700; color: #1a237e; }
+                .closing { margin-top: 12px; text-align: right; font-size: 13px; font-weight: 700; color: #0d1b4a; }
+                @media print { body { margin: 10px; } }
+            </style></head><body>
+            <h2>${s.name}</h2>
+            <div class="meta">${[s.mobile, s.gstin && `GSTIN: ${s.gstin}`, `Printed: ${moment().format('DD/MM/YYYY hh:mm A')}`].filter(Boolean).join(' | ')}</div>
+            <table>
+                <thead><tr><th>Date</th><th>Particulars</th><th>Vch No.</th><th style="text-align:right">Debit</th><th style="text-align:right">Credit</th><th style="text-align:right">Balance</th></tr></thead>
+                <tbody>${rows}</tbody>
+                <tfoot><tr class="total-row"><td colspan="3">TOTAL</td><td style="text-align:right;color:#c62828">${fmt(totalDebit)}</td><td style="text-align:right;color:#2e7d32">${fmt(totalCredit)}</td><td style="text-align:right">${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</td></tr></tfoot>
+            </table>
+            <div class="closing">Closing Balance: ${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</div>
+            <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }<\/script>
+            </body></html>`;
+        const w = window.open('', '_blank');
+        w.document.write(html);
+        w.document.close();
     };
 
     // Export
@@ -847,6 +889,7 @@ export const ListSuppliers = () => {
                 onPayment={(s) => { setDetailsDialog({ open: false, supplier: null }); setPrefilledSupplier(s); setEntryMode('payment'); }}
                 onPurchase={(s) => { setDetailsDialog({ open: false, supplier: null }); setPrefilledSupplier(s); setEntryMode('purchase'); }}
                 onDownload={handleLedgerDownload}
+                onPrint={handleLedgerPrint}
             />
         </Box>
     );
