@@ -336,7 +336,7 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
 };
 
 // ─── Supplier Ledger Dialog (Tally-style) ──────────────────────────
-const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDeletePayment, onPayment, onPurchase }) => {
+const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDeletePayment, onPayment, onPurchase, onDownload }) => {
     const [expandedId, setExpandedId] = useState(null);
     
     if (!supplier) return null;
@@ -542,6 +542,9 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
             </DialogContent>
 
             <DialogActions sx={{ bgcolor: '#f5f5f5', borderTop: '1px solid #ddd', px: 2, py: 0.8, gap: 1 }}>
+                <Button data-testid="ledger-download" onClick={() => onDownload(s, ledgerEntries, totalDebit, totalCredit, closingBal)} startIcon={<Download />} variant="outlined" size="small" sx={{ textTransform: 'none', mr: 'auto' }}>
+                    Download
+                </Button>
                 <Button data-testid="ledger-make-payment" onClick={() => onPayment(s)} startIcon={<Payment />} variant="contained" color="success" size="small" sx={{ textTransform: 'none' }}>
                     Make Payment
                 </Button>
@@ -630,6 +633,35 @@ export const ListSuppliers = () => {
     const handlePurchaseFromTable = (supplier) => {
         setPrefilledSupplier(supplier);
         setEntryMode('purchase');
+    };
+
+    // Download individual supplier ledger as CSV
+    const handleLedgerDownload = (s, ledgerEntries, totalDebit, totalCredit, closingBal) => {
+        const fmt = v => v != null && v !== 0 ? Math.abs(v).toFixed(2) : '0.00';
+        const header = [`Supplier Ledger: ${s.name}`, s.mobile || '', s.gstin ? `GSTIN: ${s.gstin}` : '', `Generated: ${moment().format('DD/MM/YYYY')}`].filter(Boolean).join(' | ');
+        const cols = ['Date', 'Particulars', 'Vch No.', 'Debit', 'Credit', 'Balance'];
+        const rows = ledgerEntries.map(e => [
+            e.date || '',
+            e.particulars,
+            e.refNo,
+            fmt(e.debit),
+            fmt(e.credit),
+            `${fmt(e.balance)} ${e.balance >= 0 ? 'Dr' : 'Cr'}`
+        ]);
+        const totalsRow = ['TOTAL', '', '', fmt(totalDebit), fmt(totalCredit), `${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}`];
+        const csvContent = [
+            [header],
+            cols,
+            ...rows,
+            totalsRow
+        ].map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${s.name.replace(/\s+/g, '_')}_ledger_${moment().format('YYYY-MM-DD')}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
     };
 
     // Export
@@ -814,6 +846,7 @@ export const ListSuppliers = () => {
                 onDeletePayment={handleDeletePayment}
                 onPayment={(s) => { setDetailsDialog({ open: false, supplier: null }); setPrefilledSupplier(s); setEntryMode('payment'); }}
                 onPurchase={(s) => { setDetailsDialog({ open: false, supplier: null }); setPrefilledSupplier(s); setEntryMode('purchase'); }}
+                onDownload={handleLedgerDownload}
             />
         </Box>
     );
