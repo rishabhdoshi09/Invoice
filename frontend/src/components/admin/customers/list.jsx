@@ -33,8 +33,6 @@ try {
     console.warn('pdfMake fonts not loaded:', e);
 }
 
-}
-
 // ─── Customer Ledger Dialog (Tally-style) ─────────────────────────
 const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, onReceipt, onSale }) => {
     if (!customer) return null;
