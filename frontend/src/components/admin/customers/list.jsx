@@ -599,7 +599,7 @@ export const ListCustomers = () => {
                 <tfoot><tr class="total-row"><td colspan="3">TOTAL</td><td style="text-align:right;color:#c62828">${fmt(totalDebit)}</td><td style="text-align:right;color:#2e7d32">${fmt(totalCredit)}</td><td style="text-align:right">${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</td></tr></tfoot>
             </table>
             <div class="closing">Closing Balance: ${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</div>
-            <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }<\/script>
+            <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }</` + `script>
             </body></html>`;
         const w = window.open('', '_blank');
         w.document.write(html);
