@@ -33,12 +33,166 @@ try {
     console.warn('pdfMake fonts not loaded:', e);
 }
 
+}
+
+// ─── Customer Ledger Dialog (Tally-style) ─────────────────────────
+const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, onReceipt, onSale }) => {
+    if (!customer) return null;
+    const c = customer;
+
+    const ledgerEntries = [];
+
+    if (c.openingBalance && Number(c.openingBalance) !== 0) {
+        ledgerEntries.push({
+            id: 'opening', date: null, sortKey: '0000-00-00T00:00:00',
+            particulars: 'Opening Balance', refNo: '-',
+            debit: Number(c.openingBalance) > 0 ? Number(c.openingBalance) : 0,
+            credit: Number(c.openingBalance) < 0 ? Math.abs(Number(c.openingBalance)) : 0,
+            type: 'opening'
+        });
+    }
+
+    (c.orders || []).forEach(o => {
+        const d = o.orderDate ? moment(o.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(o.createdAt);
+        const dateStr = d.isValid() ? d.format('DD/MM/YYYY') : '-';
+        const sortStr = d.isValid() ? d.toISOString() : '9999-12-31T23:59:59';
+        ledgerEntries.push({
+            id: o.id, date: dateStr, sortKey: sortStr,
+            particulars: 'Invoice',
+            refNo: o.orderNumber || '-',
+            debit: Number(o.total) || 0, credit: 0,
+            type: 'invoice', raw: o
+        });
+    });
+
+    (c.payments || []).forEach(p => {
+        const d = p.paymentDate ? moment(p.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(p.createdAt);
+        ledgerEntries.push({
+            id: p.id,
+            date: d.isValid() ? d.format('DD/MM/YYYY') : '-',
+            sortKey: d.isValid() ? d.toISOString() : '9999-12-31T23:59:59',
+            particulars: 'Receipt' + (p.notes ? ` — ${p.notes}` : ''),
+            refNo: p.paymentNumber || '-',
+            debit: 0, credit: Number(p.amount) || 0,
+            type: 'receipt', raw: p
+        });
+    });
+
+    ledgerEntries.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+
+    let runBal = 0;
+    ledgerEntries.forEach(e => { runBal += e.debit - e.credit; e.balance = runBal; });
+
+    const totalDebit = ledgerEntries.reduce((sum, e) => sum + e.debit, 0);
+    const totalCredit = ledgerEntries.reduce((sum, e) => sum + e.credit, 0);
+    const closingBal = totalDebit - totalCredit;
+    const fmt = v => `₹${Math.abs(v || 0).toLocaleString('en-IN')}`;
+
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
+            PaperProps={{ sx: { borderRadius: '4px', overflow: 'hidden', border: '2px solid #1a237e' } }}>
+            <Box sx={{ bgcolor: '#0d1b4a', color: '#fff', px: 2.5, py: 1.2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: 0.5, fontSize: '1.1rem' }}>{c.name}</Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.7, fontSize: '0.72rem' }}>
+                        {[c.mobile, c.gstin && `GSTIN: ${c.gstin}`, 'Customer Ledger'].filter(Boolean).join(' | ')}
+                    </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <Box sx={{ textAlign: 'right' }}>
+                        <Typography variant="caption" sx={{ opacity: 0.6 }}>Closing Balance</Typography>
+                        <Typography variant="body1" sx={{ fontWeight: 700, fontFamily: 'monospace', fontSize: '1rem' }}>
+                            {fmt(closingBal)} {closingBal >= 0 ? 'Dr' : 'Cr'}
+                        </Typography>
+                    </Box>
+                    <IconButton onClick={onClose} sx={{ color: '#fff' }}><Close /></IconButton>
+                </Box>
+            </Box>
+
+            <DialogContent sx={{ p: 0 }}>
+                <TableContainer sx={{ maxHeight: 420 }}>
+                    <Table size="small" stickyHeader sx={{
+                        '& td, & th': { borderRight: '1px solid #e0e0e0', py: 0.5, px: 1, fontSize: '0.82rem', fontFamily: "'Roboto Mono', monospace" },
+                        '& th': { bgcolor: '#e8eaf6', fontWeight: 700, color: '#1a237e', borderBottom: '2px solid #1a237e', fontSize: '0.78rem' },
+                        '& td:last-child, & th:last-child': { borderRight: 'none' }
+                    }}>
+                        <TableHead>
+                            <TableRow>
+                                <TableCell width={85}>Date</TableCell>
+                                <TableCell>Particulars</TableCell>
+                                <TableCell width={110}>Vch No.</TableCell>
+                                <TableCell align="right" width={100}>Debit</TableCell>
+                                <TableCell align="right" width={100}>Credit</TableCell>
+                                <TableCell align="right" width={110}>Balance</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {ledgerEntries.length === 0 ? (
+                                <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary', fontFamily: 'Roboto' }}>No transactions yet</TableCell></TableRow>
+                            ) : (
+                                ledgerEntries.map(e => (
+                                    <TableRow key={`${e.type}-${e.id}`} hover sx={{
+                                        bgcolor: e.type === 'opening' ? '#fffde7' : e.type === 'receipt' ? '#f1f8e9' : '#fff',
+                                    }}>
+                                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{e.date || ''}</TableCell>
+                                        <TableCell sx={{ fontFamily: 'Roboto' }}>
+                                            <Typography variant="body2" sx={{ fontWeight: e.type === 'opening' ? 700 : 500, fontSize: '0.82rem' }}>
+                                                {e.particulars}
+                                            </Typography>
+                                        </TableCell>
+                                        <TableCell sx={{ color: '#666', fontSize: '0.75rem' }}>{e.refNo}</TableCell>
+                                        <TableCell align="right" sx={{ color: e.debit > 0 ? '#c62828' : 'transparent', fontWeight: 600 }}>
+                                            {e.debit > 0 ? fmt(e.debit) : ''}
+                                        </TableCell>
+                                        <TableCell align="right" sx={{ color: e.credit > 0 ? '#2e7d32' : 'transparent', fontWeight: 600 }}>
+                                            {e.credit > 0 ? fmt(e.credit) : ''}
+                                        </TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 700 }}>
+                                            {fmt(e.balance)} {e.balance >= 0 ? 'Dr' : 'Cr'}
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                        {ledgerEntries.length > 0 && (
+                            <TableBody>
+                                <TableRow sx={{ '& td': { borderTop: '2px solid #1a237e', bgcolor: '#e8eaf6', fontWeight: 700, py: 0.8 } }}>
+                                    <TableCell colSpan={3} sx={{ color: '#1a237e', fontSize: '0.82rem' }}>TOTAL</TableCell>
+                                    <TableCell align="right" sx={{ color: '#c62828' }}>{fmt(totalDebit)}</TableCell>
+                                    <TableCell align="right" sx={{ color: '#2e7d32' }}>{fmt(totalCredit)}</TableCell>
+                                    <TableCell align="right" sx={{ color: '#1a237e' }}>{fmt(closingBal)} {closingBal >= 0 ? 'Dr' : 'Cr'}</TableCell>
+                                </TableRow>
+                            </TableBody>
+                        )}
+                    </Table>
+                </TableContainer>
+            </DialogContent>
+
+            <DialogActions sx={{ bgcolor: '#f5f5f5', borderTop: '1px solid #ddd', px: 2, py: 0.8, gap: 1 }}>
+                <Button onClick={() => onDownload(c, ledgerEntries, totalDebit, totalCredit, closingBal)} startIcon={<Download />} variant="outlined" size="small" sx={{ textTransform: 'none' }}>
+                    Download
+                </Button>
+                <Button onClick={() => onPrint(c, ledgerEntries, totalDebit, totalCredit, closingBal)} startIcon={<Print />} variant="outlined" size="small" sx={{ textTransform: 'none', mr: 'auto' }}>
+                    Print
+                </Button>
+                <Button onClick={() => onReceipt(c)} startIcon={<Receipt />} variant="contained" color="success" size="small" sx={{ textTransform: 'none' }}>
+                    Receive Payment
+                </Button>
+                <Button onClick={() => onSale(c)} startIcon={<ShoppingCart />} variant="contained" size="small" sx={{ textTransform: 'none' }}>
+                    New Sale
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+};
+
 export const ListCustomers = () => {
     const navigate = useNavigate();
     const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [detailsDialog, setDetailsDialog] = useState({ open: false, customer: null, tab: 0 });
     const [statementCustomer, setStatementCustomer] = useState(null);
+    const [ledgerDialog, setLedgerDialog] = useState({ open: false, customer: null });
     
     // Search and Filter
     const [searchTerm, setSearchTerm] = useState('');
@@ -130,7 +284,7 @@ export const ListCustomers = () => {
         }
     };
 
-    const fetchCustomerDetails = async (customerId) => {
+    const fetchCustomerDetails = async (customerId, openLedger = false) => {
         try {
             const token = localStorage.getItem('token');
             const { data } = await axios.get(`/api/customers/${customerId}/transactions`, {
@@ -138,7 +292,11 @@ export const ListCustomers = () => {
             });
             setExpandedOrder(null);
             setCustomerNotes(data.data?.notes || '');
-            setDetailsDialog({ open: true, customer: data.data, tab: 0 });
+            if (openLedger) {
+                setLedgerDialog({ open: true, customer: data.data });
+            } else {
+                setDetailsDialog({ open: true, customer: data.data, tab: 0 });
+            }
         } catch (error) {
             alert('Error fetching details');
         }
@@ -392,6 +550,62 @@ export const ListCustomers = () => {
         } catch (error) {
             alert('Error: ' + (error.response?.data?.message || error.message));
         }
+    };
+
+    // Customer ledger download (CSV)
+    const handleLedgerDownload = (c, ledgerEntries, totalDebit, totalCredit, closingBal) => {
+        const fmt = v => Math.abs(v || 0).toFixed(2);
+        const header = [`Customer Ledger: ${c.name}`, c.mobile || '', c.gstin ? `GSTIN: ${c.gstin}` : '', `Generated: ${moment().format('DD/MM/YYYY')}`].filter(Boolean).join(' | ');
+        const cols = ['Date', 'Particulars', 'Vch No.', 'Debit', 'Credit', 'Balance'];
+        const rows = ledgerEntries.map(e => [e.date || '', e.particulars, e.refNo, fmt(e.debit), fmt(e.credit), `${fmt(e.balance)} ${e.balance >= 0 ? 'Dr' : 'Cr'}`]);
+        const totalsRow = ['TOTAL', '', '', fmt(totalDebit), fmt(totalCredit), `${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}`];
+        const csv = [[header], cols, ...rows, totalsRow].map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${c.name.replace(/\s+/g, '_')}_ledger_${moment().format('YYYY-MM-DD')}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    // Customer ledger print
+    const handleLedgerPrint = (c, ledgerEntries, totalDebit, totalCredit, closingBal) => {
+        const fmt = v => `₹${Math.abs(v || 0).toLocaleString('en-IN')}`;
+        const rows = ledgerEntries.map(e => `
+            <tr style="background:${e.type === 'opening' ? '#fffde7' : e.type === 'receipt' ? '#f1f8e9' : '#fff'}">
+                <td>${e.date || ''}</td>
+                <td>${e.particulars}</td>
+                <td>${e.refNo}</td>
+                <td style="text-align:right;color:#c62828">${e.debit > 0 ? fmt(e.debit) : ''}</td>
+                <td style="text-align:right;color:#2e7d32">${e.credit > 0 ? fmt(e.credit) : ''}</td>
+                <td style="text-align:right;font-weight:700">${fmt(e.balance)} ${e.balance >= 0 ? 'Dr' : 'Cr'}</td>
+            </tr>`).join('');
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${c.name} — Ledger</title>
+            <style>
+                body { font-family: 'Roboto Mono', monospace; font-size: 12px; margin: 20px; color: #222; }
+                h2 { color: #0d1b4a; margin-bottom: 2px; }
+                .meta { color: #666; font-size: 11px; margin-bottom: 16px; }
+                table { width: 100%; border-collapse: collapse; }
+                th { background: #e8eaf6; color: #1a237e; border-bottom: 2px solid #1a237e; padding: 6px 8px; text-align: left; font-size: 11px; }
+                td { padding: 4px 8px; border-bottom: 1px solid #e0e0e0; }
+                .total-row td { border-top: 2px solid #1a237e; background: #e8eaf6; font-weight: 700; color: #1a237e; }
+                .closing { margin-top: 12px; text-align: right; font-size: 13px; font-weight: 700; color: #0d1b4a; }
+                @media print { body { margin: 10px; } }
+            </style></head><body>
+            <h2>${c.name}</h2>
+            <div class="meta">${[c.mobile, c.gstin && `GSTIN: ${c.gstin}`, `Printed: ${moment().format('DD/MM/YYYY hh:mm A')}`].filter(Boolean).join(' | ')}</div>
+            <table>
+                <thead><tr><th>Date</th><th>Particulars</th><th>Vch No.</th><th style="text-align:right">Debit</th><th style="text-align:right">Credit</th><th style="text-align:right">Balance</th></tr></thead>
+                <tbody>${rows}</tbody>
+                <tfoot><tr class="total-row"><td colspan="3">TOTAL</td><td style="text-align:right;color:#c62828">${fmt(totalDebit)}</td><td style="text-align:right;color:#2e7d32">${fmt(totalCredit)}</td><td style="text-align:right">${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</td></tr></tfoot>
+            </table>
+            <div class="closing">Closing Balance: ${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</div>
+            <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }<\/script>
+            </body></html>`;
+        const w = window.open('', '_blank');
+        w.document.write(html);
+        w.document.close();
     };
 
     // Export
@@ -932,18 +1146,18 @@ export const ListCustomers = () => {
                                                         <Receipt fontSize="small" />
                                                     </Button>
                                                 </Tooltip>
-                                                <Tooltip title="View Details">
+                                                <Tooltip title="View Ledger">
                                                     <Button
                                                         size="small"
                                                         variant="contained"
-                                                        onClick={() => fetchCustomerDetails(customer.id)}
+                                                        onClick={() => fetchCustomerDetails(customer.id, true)}
                                                         sx={{ minWidth: 40, px: 1 }}
                                                     >
                                                         <Visibility fontSize="small" />
                                                     </Button>
                                                 </Tooltip>
-                                                <Tooltip title="Ledger Statement">
-                                                    <IconButton size="small" onClick={() => setStatementCustomer(customer)}>
+                                                <Tooltip title="Detailed Statement">
+                                                    <IconButton size="small" onClick={() => fetchCustomerDetails(customer.id)}>
                                                         <AccountBalance fontSize="small" color="primary" />
                                                     </IconButton>
                                                 </Tooltip>
@@ -1441,7 +1655,18 @@ export const ListCustomers = () => {
                 </DialogContent>
             </Dialog>
 
-            {/* Customer Ledger Statement */}
+            {/* Customer Tally-style Ledger Dialog */}
+            <CustomerLedgerDialog
+                open={ledgerDialog.open}
+                customer={ledgerDialog.customer}
+                onClose={() => setLedgerDialog({ open: false, customer: null })}
+                onDownload={handleLedgerDownload}
+                onPrint={handleLedgerPrint}
+                onReceipt={(c) => { setLedgerDialog({ open: false, customer: null }); handleQuickReceiptFromTable(c); }}
+                onSale={(c) => { setLedgerDialog({ open: false, customer: null }); handleCreateSale(c); }}
+            />
+
+            {/* Customer Ledger Statement (date-range PDF) */}
             <CustomerStatement
                 customer={statementCustomer}
                 open={!!statementCustomer}
