@@ -671,13 +671,13 @@ export const ListSuppliers = () => {
     const handleLedgerPrint = (s, ledgerEntries, totalDebit, totalCredit, closingBal) => {
         const fmt = v => v != null && v !== 0 ? `₹${Math.abs(v).toLocaleString('en-IN')}` : '₹0';
         const rows = ledgerEntries.map(e => `
-            <tr style="background:${e.type === 'opening' ? '#fffde7' : e.type === 'payment' ? '#f1f8e9' : '#fff'}">
+            <tr class="${e.type === 'opening' ? 'row-opening' : e.type === 'payment' ? 'row-payment' : 'row-purchase'}">
                 <td>${e.date || ''}</td>
                 <td>${e.particulars}</td>
                 <td>${e.refNo}</td>
-                <td style="text-align:right;color:#c62828">${e.debit > 0 ? fmt(e.debit) : ''}</td>
-                <td style="text-align:right;color:#2e7d32">${e.credit > 0 ? fmt(e.credit) : ''}</td>
-                <td style="text-align:right;font-weight:700">${fmt(e.balance)} ${e.balance >= 0 ? 'Dr' : 'Cr'}</td>
+                <td class="debit">${e.debit > 0 ? fmt(e.debit) : ''}</td>
+                <td class="credit">${e.credit > 0 ? fmt(e.credit) : ''}</td>
+                <td class="balance">${fmt(e.balance)} ${e.balance >= 0 ? 'Dr' : 'Cr'}</td>
             </tr>`).join('');
         const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${s.name} — Ledger</title>
             <style>
@@ -687,16 +687,29 @@ export const ListSuppliers = () => {
                 table { width: 100%; border-collapse: collapse; }
                 th { background: #e8eaf6; color: #1a237e; border-bottom: 2px solid #1a237e; padding: 6px 8px; text-align: left; font-size: 11px; }
                 td { padding: 4px 8px; border-bottom: 1px solid #e0e0e0; }
+                .debit { text-align: right; color: #c62828; font-weight: 700; }
+                .credit { text-align: right; color: #2e7d32; font-style: italic; }
+                .balance { text-align: right; font-weight: 700; }
+                .row-opening { background: #fffde7; }
+                .row-payment { background: #f1f8e9; }
                 .total-row td { border-top: 2px solid #1a237e; background: #e8eaf6; font-weight: 700; color: #1a237e; }
                 .closing { margin-top: 12px; text-align: right; font-size: 13px; font-weight: 700; color: #0d1b4a; }
-                @media print { body { margin: 10px; } }
+                @media print {
+                    * { color: #000 !important; background: #fff !important; }
+                    .debit { font-weight: 700; }
+                    .credit { font-style: italic; text-decoration: underline; }
+                    .balance { font-weight: 700; }
+                    th { border-bottom: 2px solid #000 !important; }
+                    .total-row td { border-top: 2px solid #000 !important; border-bottom: 2px solid #000 !important; }
+                    td { border-bottom: 1px solid #ccc !important; }
+                }
             </style></head><body>
             <h2>${s.name}</h2>
             <div class="meta">${[s.mobile, s.gstin && `GSTIN: ${s.gstin}`, `Printed: ${moment().format('DD/MM/YYYY hh:mm A')}`].filter(Boolean).join(' | ')}</div>
             <table>
-                <thead><tr><th>Date</th><th>Particulars</th><th>Vch No.</th><th style="text-align:right">Debit</th><th style="text-align:right">Credit</th><th style="text-align:right">Balance</th></tr></thead>
+                <thead><tr><th>Date</th><th>Particulars</th><th>Vch No.</th><th style="text-align:right">Debit</th><th style="text-align:right">Credit (italic)</th><th style="text-align:right">Balance</th></tr></thead>
                 <tbody>${rows}</tbody>
-                <tfoot><tr class="total-row"><td colspan="3">TOTAL</td><td style="text-align:right;color:#c62828">${fmt(totalDebit)}</td><td style="text-align:right;color:#2e7d32">${fmt(totalCredit)}</td><td style="text-align:right">${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</td></tr></tfoot>
+                <tfoot><tr class="total-row"><td colspan="3">TOTAL</td><td class="debit">${fmt(totalDebit)}</td><td class="credit">${fmt(totalCredit)}</td><td class="balance">${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</td></tr></tfoot>
             </table>
             <div class="closing">Closing Balance: ${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</div>
             <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }<\/script>
