@@ -602,7 +602,9 @@ export const EditOrder = () => {
                               sx={{ width: 100 }}
                             />
                           ) : (
-                            editedItem.quantity
+                            item.type === 'weighted'
+                              ? `${editedItem.quantity} kg (₹${editedItem.productPrice}/kg)`
+                              : editedItem.quantity
                           )}
                         </TableCell>
                         <TableCell align="right">

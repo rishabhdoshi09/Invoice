@@ -364,7 +364,9 @@ export const generatePdfDefinition2 = (data) => {
                             `${index + 1}.`,
                             (item.altName && item.altName.trim()) ? item.altName.trim() : item.name,
                             `₹ ${item.productPrice}`,
-                            item.quantity,
+                            item.type === 'weighted'
+                                ? { text: `${item.quantity} kg\n(₹${item.productPrice}/kg)`, fontSize: 8 }
+                                : item.quantity,
                             `₹ ${item.totalPrice}`
                         ]),
                         [
