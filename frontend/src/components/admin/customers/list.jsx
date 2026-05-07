@@ -9,9 +9,9 @@ import {
     InputAdornment, TablePagination, Collapse, Switch, FormControlLabel,
     List, ListItem, ListItemText, ListItemSecondaryAction, Badge
 } from '@mui/material';
-import { 
-    Delete, Visibility, Refresh, Add, Receipt, People, Close, 
-    ShoppingCart, Search, Download, CheckCircle,
+import {
+    Delete, Visibility, Refresh, Add, Receipt, People, Close,
+    ShoppingCart, Search, Download, CheckCircle, Edit,
     KeyboardArrowDown, KeyboardArrowUp, PersonAdd, Warning,
     History, Phone, Email, AccountBalance, TipsAndUpdates, Print, WhatsApp
 } from '@mui/icons-material';
@@ -64,6 +64,23 @@ export const ListCustomers = () => {
     const [createNewCustomer, setCreateNewCustomer] = useState(false);
     const [newCustomerName, setNewCustomerName] = useState('');
     const [newCustomerMobile, setNewCustomerMobile] = useState('');
+
+    // Inline name editing
+    const [editingName, setEditingName] = useState(null); // { id, value }
+
+    const handleInlineNameSave = async (id, newName) => {
+        const trimmed = newName.trim();
+        setEditingName(null);
+        const original = customers.find(c => c.id === id);
+        if (!trimmed || trimmed === original?.name) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`/api/customers/${id}`, { name: trimmed }, { headers: { Authorization: `Bearer ${token}` } });
+            setCustomers(prev => prev.map(c => c.id === id ? { ...c, name: trimmed } : c));
+        } catch (e) {
+            alert('Failed to rename: ' + (e.response?.data?.message || e.message));
+        }
+    };
 
     // Expanded rows
     const [expandedOrder, setExpandedOrder] = useState(null);
@@ -834,7 +851,27 @@ export const ListCustomers = () => {
                                 paginatedCustomers.map((customer) => (
                                     <TableRow key={customer.id} hover>
                                         <TableCell>
-                                            <Typography variant="body2" sx={{ fontWeight: 500 }}>{customer.name}</Typography>
+                                            {editingName?.id === customer.id ? (
+                                                <TextField
+                                                    size="small"
+                                                    autoFocus
+                                                    value={editingName.value}
+                                                    onChange={e => setEditingName({ id: customer.id, value: e.target.value })}
+                                                    onBlur={() => handleInlineNameSave(customer.id, editingName.value)}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') handleInlineNameSave(customer.id, editingName.value);
+                                                        if (e.key === 'Escape') setEditingName(null);
+                                                    }}
+                                                    sx={{ width: 160 }}
+                                                    inputProps={{ style: { fontWeight: 500, fontSize: '0.875rem' } }}
+                                                />
+                                            ) : (
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer' }}
+                                                    onClick={() => setEditingName({ id: customer.id, value: customer.name })}>
+                                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{customer.name}</Typography>
+                                                    <Edit sx={{ fontSize: 13, color: 'text.disabled', opacity: 0, '.MuiTableRow-root:hover &': { opacity: 1 } }} />
+                                                </Box>
+                                            )}
                                             {customer.gstin && <Typography variant="caption" color="text.secondary">{customer.gstin}</Typography>}
                                         </TableCell>
                                         <TableCell>
