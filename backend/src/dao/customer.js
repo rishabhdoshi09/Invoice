@@ -320,6 +320,7 @@ module.exports = {
                 WHERE o."isDeleted" = false
                 AND o."paymentStatus" IN ('unpaid', 'partial')
                 AND o."dueAmount" > 0
+                AND o.total > o."paidAmount"
                 AND (
                     CASE
                         WHEN o."orderDate" ~ '^\\d{2}-\\d{2}-\\d{4}$'
