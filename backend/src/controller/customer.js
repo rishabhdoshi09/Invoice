@@ -454,5 +454,15 @@ module.exports = {
         } catch (error) {
             return res.status(500).json({ status: 500, message: error.message });
         }
+    },
+
+    getOverdueCustomers: async (req, res) => {
+        try {
+            const days = parseInt(req.query.days) || 20;
+            const data = await Services.customer.getOverdueCustomers(days);
+            return res.status(200).json({ status: 200, data });
+        } catch (error) {
+            return res.status(500).json({ status: 500, message: error.message });
+        }
     }
 };

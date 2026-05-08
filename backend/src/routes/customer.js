@@ -24,6 +24,14 @@ module.exports = (router) => {
             Controller.customer.listCustomersWithBalance
         );
 
+    // Get customers with dues older than N days (default 20)
+    router
+        .route('/customers/overdue')
+        .get(
+            authenticate,
+            Controller.customer.getOverdueCustomers
+        );
+
     // Find duplicate customers
     router
         .route('/customers/duplicates')

@@ -56,5 +56,12 @@ module.exports = {
         } catch (error) {
             throw error;
         }
+    },
+    getOverdueCustomers: async (days = 20) => {
+        try {
+            return await Dao.customer.getOverdueCustomers(days);
+        } catch (error) {
+            throw error;
+        }
     }
 };

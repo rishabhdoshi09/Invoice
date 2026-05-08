@@ -286,5 +286,33 @@ module.exports = {
             console.log(error);
             throw new Error(error);
         }
+    },
+
+    getOverdueCustomers: async (days = 20) => {
+        try {
+            const customers = await db.sequelize.query(`
+                SELECT
+                    c.id,
+                    c.name,
+                    c.mobile,
+                    MIN(o."orderDate") as oldest_due_date,
+                    COUNT(DISTINCT o.id) as unpaid_invoices,
+                    COALESCE(SUM(o."dueAmount"), 0) as total_outstanding,
+                    CURRENT_DATE - MIN(o."orderDate"::date) as days_overdue
+                FROM customers c
+                JOIN orders o ON (o."customerId" = c.id OR (o."customerName" = c.name AND o."customerId" IS NULL))
+                WHERE o."isDeleted" = false
+                AND o."paymentStatus" IN ('unpaid', 'partial')
+                AND o."dueAmount" > 0
+                AND o."orderDate"::date <= CURRENT_DATE - INTERVAL '${days} days'
+                GROUP BY c.id, c.name, c.mobile
+                ORDER BY days_overdue DESC, total_outstanding DESC
+            `, { type: db.Sequelize.QueryTypes.SELECT });
+
+            return customers;
+        } catch (error) {
+            console.log(error);
+            throw new Error(error);
+        }
     }
 };

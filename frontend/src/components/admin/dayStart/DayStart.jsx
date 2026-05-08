@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Box,
     Card,
@@ -36,7 +36,8 @@ import {
     History,
     ExpandLess,
     Visibility,
-    PictureAsPdf
+    PictureAsPdf,
+    Warning
 } from '@mui/icons-material';
 import {
     ResponsiveContainer,
@@ -76,6 +77,29 @@ export const DayStart = () => {
     const [openingBalanceInput, setOpeningBalanceInput] = useState('');
     // Card expansion state for inline detail view
     const [expandedCard, setExpandedCard] = useState(null); // 'cashSales' | 'creditSales' | 'customerReceipts' | 'supplierPayments' | 'expenses' | null
+
+    // Overdue customers (dues > 20 days)
+    const [overdueCustomers, setOverdueCustomers] = useState([]);
+    const [overdueLoading, setOverdueLoading] = useState(false);
+
+    useEffect(() => {
+        const fetchOverdue = async () => {
+            setOverdueLoading(true);
+            try {
+                const token = localStorage.getItem('token');
+                const res = await fetch('/api/customers/overdue?days=20', {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const json = await res.json();
+                setOverdueCustomers(json.data || []);
+            } catch (e) {
+                console.error('Failed to fetch overdue customers', e);
+            } finally {
+                setOverdueLoading(false);
+            }
+        };
+        fetchOverdue();
+    }, []);
 
     // RTK Query hooks - automatic caching and refetch!
     // SINGLE SOURCE OF TRUTH: Real-time summary - calculated directly from orders
@@ -995,6 +1019,70 @@ export const DayStart = () => {
                     </Card>
                 </Grid>
             </Grid>
+            )}
+
+            {/* Overdue Customers Section */}
+            {(overdueLoading || overdueCustomers.length > 0) && (
+                <Paper sx={{ mt: 3, border: '2px solid #e53935', borderRadius: 2, overflow: 'hidden' }}>
+                    <Box sx={{ bgcolor: '#ffebee', px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Warning sx={{ color: '#e53935' }} />
+                        <Typography variant="h6" sx={{ color: '#c62828', fontWeight: 700 }}>
+                            Overdue Customers — Due &gt; 20 Days
+                        </Typography>
+                        <Chip label={`${overdueCustomers.length} customers`} color="error" size="small" sx={{ ml: 1 }} />
+                    </Box>
+                    {overdueLoading ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                            <CircularProgress size={24} />
+                        </Box>
+                    ) : (
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ '& th': { bgcolor: '#fce4ec', fontWeight: 700, fontSize: '0.82rem' } }}>
+                                        <TableCell>#</TableCell>
+                                        <TableCell>Customer</TableCell>
+                                        <TableCell>Mobile</TableCell>
+                                        <TableCell align="right">Outstanding</TableCell>
+                                        <TableCell align="right">Unpaid Bills</TableCell>
+                                        <TableCell align="right">Days Overdue</TableCell>
+                                        <TableCell>Oldest Due Date</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {overdueCustomers.map((c, idx) => (
+                                        <TableRow key={c.id} hover sx={{ bgcolor: Number(c.days_overdue) > 45 ? '#fff3e0' : '#fff' }}>
+                                            <TableCell>{idx + 1}</TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" fontWeight={700}>{c.name}</Typography>
+                                            </TableCell>
+                                            <TableCell>{c.mobile || '-'}</TableCell>
+                                            <TableCell align="right">
+                                                <Typography fontWeight={700} color="error.main">
+                                                    ₹{Number(c.total_outstanding).toLocaleString('en-IN')}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell align="right">
+                                                <Chip label={c.unpaid_invoices} size="small" color="error" variant="outlined" />
+                                            </TableCell>
+                                            <TableCell align="right">
+                                                <Chip
+                                                    label={`${c.days_overdue} days`}
+                                                    size="small"
+                                                    color={Number(c.days_overdue) > 45 ? 'error' : 'warning'}
+                                                    sx={{ fontWeight: 700 }}
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                {c.oldest_due_date ? moment(c.oldest_due_date).format('DD MMM YYYY') : '-'}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+                </Paper>
             )}
 
             {/* Info Section */}
