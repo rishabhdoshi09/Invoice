@@ -291,47 +291,76 @@ module.exports = {
     getOverdueCustomers: async (days = 20) => {
         try {
             const customers = await db.sequelize.query(`
+                WITH customer_balances AS (
+                    SELECT
+                        c.id,
+                        c.name,
+                        c.mobile,
+                        COALESCE(c."openingBalance", 0) as opening_balance,
+                        COALESCE(order_totals.total_sales, 0) as total_sales,
+                        COALESCE(payment_totals.total_received, 0) as total_received,
+                        COALESCE(c."openingBalance", 0) + COALESCE(order_totals.total_sales, 0) - COALESCE(payment_totals.total_received, 0) as net_balance,
+                        order_totals.oldest_overdue_date,
+                        order_totals.unpaid_invoices
+                    FROM customers c
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            COALESCE(SUM(total), 0) as total_sales,
+                            COUNT(DISTINCT id) FILTER (WHERE
+                                (
+                                    CASE
+                                        WHEN "orderDate" ~ '^\\d{2}-\\d{2}-\\d{4}$'
+                                        THEN TO_DATE("orderDate", 'DD-MM-YYYY')
+                                        WHEN "orderDate" ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                                        THEN TO_DATE("orderDate", 'YYYY-MM-DD')
+                                        ELSE "createdAt"::date
+                                    END
+                                ) <= CURRENT_DATE - INTERVAL '${days} days'
+                            ) as unpaid_invoices,
+                            MIN(
+                                CASE
+                                    WHEN "orderDate" ~ '^\\d{2}-\\d{2}-\\d{4}$'
+                                    THEN TO_DATE("orderDate", 'DD-MM-YYYY')
+                                    WHEN "orderDate" ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                                    THEN TO_DATE("orderDate", 'YYYY-MM-DD')
+                                    ELSE "createdAt"::date
+                                END
+                            ) FILTER (WHERE
+                                (
+                                    CASE
+                                        WHEN "orderDate" ~ '^\\d{2}-\\d{2}-\\d{4}$'
+                                        THEN TO_DATE("orderDate", 'DD-MM-YYYY')
+                                        WHEN "orderDate" ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                                        THEN TO_DATE("orderDate", 'YYYY-MM-DD')
+                                        ELSE "createdAt"::date
+                                    END
+                                ) <= CURRENT_DATE - INTERVAL '${days} days'
+                            ) as oldest_overdue_date
+                        FROM orders
+                        WHERE "isDeleted" = false
+                        AND ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
+                    ) order_totals ON true
+                    LEFT JOIN LATERAL (
+                        SELECT COALESCE(SUM(amount), 0) as total_received
+                        FROM payments
+                        WHERE "partyType" = 'customer'
+                        AND ("partyId" = c.id OR ("partyName" = c.name AND "partyId" IS NULL))
+                        AND ("paymentNumber" IS NULL OR "paymentNumber" NOT LIKE 'PAY-TOGGLE-%')
+                        ${db.payment.rawAttributes.isDeleted ? 'AND "isDeleted" = false' : ''}
+                    ) payment_totals ON true
+                    WHERE order_totals.oldest_overdue_date IS NOT NULL
+                )
                 SELECT
-                    c.id,
-                    c.name,
-                    c.mobile,
-                    MIN(
-                        CASE
-                            WHEN o."orderDate" ~ '^\\d{2}-\\d{2}-\\d{4}$'
-                            THEN TO_DATE(o."orderDate", 'DD-MM-YYYY')
-                            WHEN o."orderDate" ~ '^\\d{4}-\\d{2}-\\d{2}$'
-                            THEN TO_DATE(o."orderDate", 'YYYY-MM-DD')
-                            ELSE o."createdAt"::date
-                        END
-                    ) as oldest_due_date,
-                    COUNT(DISTINCT o.id) as unpaid_invoices,
-                    COALESCE(SUM(o."dueAmount"), 0) as total_outstanding,
-                    CURRENT_DATE - MIN(
-                        CASE
-                            WHEN o."orderDate" ~ '^\\d{2}-\\d{2}-\\d{4}$'
-                            THEN TO_DATE(o."orderDate", 'DD-MM-YYYY')
-                            WHEN o."orderDate" ~ '^\\d{4}-\\d{2}-\\d{2}$'
-                            THEN TO_DATE(o."orderDate", 'YYYY-MM-DD')
-                            ELSE o."createdAt"::date
-                        END
-                    ) as days_overdue
-                FROM customers c
-                JOIN orders o ON (o."customerId" = c.id OR (o."customerName" = c.name AND o."customerId" IS NULL))
-                WHERE o."isDeleted" = false
-                AND o."paymentStatus" IN ('unpaid', 'partial')
-                AND o."dueAmount" > 0
-                AND o.total > o."paidAmount"
-                AND (
-                    CASE
-                        WHEN o."orderDate" ~ '^\\d{2}-\\d{2}-\\d{4}$'
-                        THEN TO_DATE(o."orderDate", 'DD-MM-YYYY')
-                        WHEN o."orderDate" ~ '^\\d{4}-\\d{2}-\\d{2}$'
-                        THEN TO_DATE(o."orderDate", 'YYYY-MM-DD')
-                        ELSE o."createdAt"::date
-                    END
-                ) <= CURRENT_DATE - INTERVAL '${days} days'
-                GROUP BY c.id, c.name, c.mobile
-                ORDER BY days_overdue DESC, total_outstanding DESC
+                    id,
+                    name,
+                    mobile,
+                    oldest_overdue_date,
+                    unpaid_invoices,
+                    ROUND(net_balance::numeric, 2) as total_outstanding,
+                    CURRENT_DATE - oldest_overdue_date as days_overdue
+                FROM customer_balances
+                WHERE net_balance > 0.01
+                ORDER BY days_overdue DESC, net_balance DESC
             `, { type: db.Sequelize.QueryTypes.SELECT });
 
             return customers;
