@@ -295,16 +295,40 @@ module.exports = {
                     c.id,
                     c.name,
                     c.mobile,
-                    MIN(o."orderDate") as oldest_due_date,
+                    MIN(
+                        CASE
+                            WHEN o."orderDate" ~ '^\\d{2}-\\d{2}-\\d{4}$'
+                            THEN TO_DATE(o."orderDate", 'DD-MM-YYYY')
+                            WHEN o."orderDate" ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                            THEN TO_DATE(o."orderDate", 'YYYY-MM-DD')
+                            ELSE o."createdAt"::date
+                        END
+                    ) as oldest_due_date,
                     COUNT(DISTINCT o.id) as unpaid_invoices,
                     COALESCE(SUM(o."dueAmount"), 0) as total_outstanding,
-                    CURRENT_DATE - MIN(o."orderDate"::date) as days_overdue
+                    CURRENT_DATE - MIN(
+                        CASE
+                            WHEN o."orderDate" ~ '^\\d{2}-\\d{2}-\\d{4}$'
+                            THEN TO_DATE(o."orderDate", 'DD-MM-YYYY')
+                            WHEN o."orderDate" ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                            THEN TO_DATE(o."orderDate", 'YYYY-MM-DD')
+                            ELSE o."createdAt"::date
+                        END
+                    ) as days_overdue
                 FROM customers c
                 JOIN orders o ON (o."customerId" = c.id OR (o."customerName" = c.name AND o."customerId" IS NULL))
                 WHERE o."isDeleted" = false
                 AND o."paymentStatus" IN ('unpaid', 'partial')
                 AND o."dueAmount" > 0
-                AND o."orderDate"::date <= CURRENT_DATE - INTERVAL '${days} days'
+                AND (
+                    CASE
+                        WHEN o."orderDate" ~ '^\\d{2}-\\d{2}-\\d{4}$'
+                        THEN TO_DATE(o."orderDate", 'DD-MM-YYYY')
+                        WHEN o."orderDate" ~ '^\\d{4}-\\d{2}-\\d{2}$'
+                        THEN TO_DATE(o."orderDate", 'YYYY-MM-DD')
+                        ELSE o."createdAt"::date
+                    END
+                ) <= CURRENT_DATE - INTERVAL '${days} days'
                 GROUP BY c.id, c.name, c.mobile
                 ORDER BY days_overdue DESC, total_outstanding DESC
             `, { type: db.Sequelize.QueryTypes.SELECT });
