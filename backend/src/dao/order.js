@@ -96,7 +96,7 @@ module.exports = {
             
             const res = await db.order.findAndCountAll({ 
                 where: whereClause,
-                order: [['createdAt', 'DESC']], 
+                order: [['orderDate', 'DESC'], ['createdAt', 'DESC']],
                 include: [ { 
                     model: db.orderItems,
                     separate: true,
