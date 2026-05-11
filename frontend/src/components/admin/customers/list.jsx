@@ -550,6 +550,17 @@ export const ListCustomers = () => {
         }
     };
 
+    const handleDeletePayment = async (paymentId) => {
+        if (!window.confirm('Delete this receipt? This cannot be undone.')) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`/api/payments/${paymentId}`, { headers: { Authorization: `Bearer ${token}` } });
+            const cid = detailsDialog.customer?.id;
+            if (cid) fetchCustomerDetails(cid);
+            fetchCustomers();
+        } catch (e) { alert(e.response?.data?.message || e.message); }
+    };
+
     // Customer ledger download (CSV)
     const handleLedgerDownload = (c, ledgerEntries, totalDebit, totalCredit, closingBal) => {
         const fmt = v => Math.abs(v || 0).toFixed(2);
@@ -1373,12 +1384,13 @@ export const ListCustomers = () => {
                                                 <TableCell align="right">Allocated</TableCell>
                                                 <TableCell align="right">Unallocated</TableCell>
                                                 <TableCell>Notes</TableCell>
+                                                <TableCell align="center">Actions</TableCell>
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
                                             {detailsDialog.customer.payments?.length === 0 ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={6} align="center" sx={{ py: 2 }}>No receipts yet</TableCell>
+                                                    <TableCell colSpan={7} align="center" sx={{ py: 2 }}>No receipts yet</TableCell>
                                                 </TableRow>
                                             ) : (
                                                 detailsDialog.customer.payments?.map((p) => (
@@ -1394,6 +1406,13 @@ export const ListCustomers = () => {
                                                             )}
                                                         </TableCell>
                                                         <TableCell>{p.notes || '-'}</TableCell>
+                                                        <TableCell align="center" onClick={ev => ev.stopPropagation()}>
+                                                            <Tooltip title="Delete receipt">
+                                                                <IconButton size="small" onClick={() => handleDeletePayment(p.id)} sx={{ p: 0.2 }}>
+                                                                    <Delete sx={{ fontSize: 15, color: '#e57373' }} />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        </TableCell>
                                                     </TableRow>
                                                 ))
                                             )}
