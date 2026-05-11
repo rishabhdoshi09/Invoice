@@ -470,7 +470,7 @@ module.exports = {
                     isDeleted: false,
                     createdAt: { [db.Sequelize.Op.between]: [fromDate, toDate] }
                 },
-                order: [['createdAt', 'ASC']],
+                order: [['orderDate', 'ASC'], ['createdAt', 'ASC']],
                 raw: true
             });
 
@@ -482,7 +482,7 @@ module.exports = {
                     isDeleted: false,
                     createdAt: { [db.Sequelize.Op.between]: [fromDate, toDate] }
                 },
-                order: [['createdAt', 'ASC']],
+                order: [['paymentDate', 'ASC'], ['createdAt', 'ASC']],
                 raw: true
             });
 
@@ -514,17 +514,23 @@ module.exports = {
             const transactions = [];
             let runningBalance = openingBalance;
 
-            // Merge orders + payments sorted by date
+            const parseTxnDate = (dateStr) => {
+                if (!dateStr) return new Date(0);
+                const m = String(dateStr).match(/^(\d{2})-(\d{2})-(\d{4})$/);
+                return m ? new Date(`${m[3]}-${m[2]}-${m[1]}`) : new Date(dateStr);
+            };
+
+            // Merge orders + payments sorted strictly by actual transaction date
             const allTxns = [
-                ...orders.map(o => ({ ...o, _type: 'invoice' })),
-                ...payments.map(p => ({ ...p, _type: 'payment' }))
-            ].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                ...orders.map(o => ({ ...o, _type: 'invoice', _txnDate: parseTxnDate(o.orderDate || o.createdAt) })),
+                ...payments.map(p => ({ ...p, _type: 'payment', _txnDate: parseTxnDate(p.paymentDate || p.createdAt) }))
+            ].sort((a, b) => a._txnDate - b._txnDate);
 
             for (const txn of allTxns) {
                 if (txn._type === 'invoice') {
                     runningBalance += Number(txn.total || 0);
                     transactions.push({
-                        date:        txn.createdAt,
+                        date:        txn.orderDate || txn.createdAt,
                         type:        'Invoice',
                         reference:   txn.orderNumber,
                         description: txn.notes || txn.staffNotes || '',
@@ -535,7 +541,7 @@ module.exports = {
                 } else {
                     runningBalance -= Number(txn.amount || 0);
                     transactions.push({
-                        date:        txn.createdAt,
+                        date:        txn.paymentDate || txn.createdAt,
                         type:        'Payment',
                         reference:   txn.paymentNumber || '',
                         description: txn.notes || txn.paymentMethod || '',
