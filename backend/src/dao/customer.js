@@ -296,80 +296,90 @@ module.exports = {
 
     getOverdueCustomers: async (days = 20) => {
         try {
-            const customers = await db.sequelize.query(`
-                WITH customer_balances AS (
-                    SELECT
-                        c.id,
-                        c.name,
-                        c.mobile,
-                        COALESCE(c."openingBalance", 0) as opening_balance,
-                        COALESCE(order_totals.total_sales, 0) as total_sales,
-                        COALESCE(payment_totals.total_received, 0) as total_received,
-                        COALESCE(c."openingBalance", 0) + COALESCE(order_totals.total_sales, 0) - COALESCE(payment_totals.total_received, 0) as net_balance,
-                        order_totals.oldest_overdue_date,
-                        order_totals.unpaid_invoices
-                    FROM customers c
-                    LEFT JOIN LATERAL (
-                        SELECT
-                            COALESCE(SUM(total), 0) as total_sales,
-                            COUNT(DISTINCT id) FILTER (WHERE
-                                (
-                                    CASE
-                                        WHEN "orderDate" ~ '^\\d{2}-\\d{2}-\\d{4}$'
-                                        THEN TO_DATE("orderDate", 'DD-MM-YYYY')
-                                        WHEN "orderDate" ~ '^\\d{4}-\\d{2}-\\d{2}$'
-                                        THEN TO_DATE("orderDate", 'YYYY-MM-DD')
-                                        ELSE "createdAt"::date
-                                    END
-                                ) <= CURRENT_DATE - INTERVAL '${days} days'
-                            ) as unpaid_invoices,
-                            MIN(
-                                CASE
-                                    WHEN "orderDate" ~ '^\\d{2}-\\d{2}-\\d{4}$'
-                                    THEN TO_DATE("orderDate", 'DD-MM-YYYY')
-                                    WHEN "orderDate" ~ '^\\d{4}-\\d{2}-\\d{2}$'
-                                    THEN TO_DATE("orderDate", 'YYYY-MM-DD')
-                                    ELSE "createdAt"::date
-                                END
-                            ) FILTER (WHERE
-                                (
-                                    CASE
-                                        WHEN "orderDate" ~ '^\\d{2}-\\d{2}-\\d{4}$'
-                                        THEN TO_DATE("orderDate", 'DD-MM-YYYY')
-                                        WHEN "orderDate" ~ '^\\d{4}-\\d{2}-\\d{2}$'
-                                        THEN TO_DATE("orderDate", 'YYYY-MM-DD')
-                                        ELSE "createdAt"::date
-                                    END
-                                ) <= CURRENT_DATE - INTERVAL '${days} days'
-                            ) as oldest_overdue_date
-                        FROM orders
-                        WHERE "isDeleted" = false
-                        AND ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
-                    ) order_totals ON true
-                    LEFT JOIN LATERAL (
-                        SELECT COALESCE(SUM(amount), 0) as total_received
-                        FROM payments
-                        WHERE "partyType" = 'customer'
-                        AND ("partyId" = c.id OR ("partyName" = c.name AND "partyId" IS NULL))
-                        AND ("paymentNumber" IS NULL OR "paymentNumber" NOT LIKE 'PAY-TOGGLE-%')
-                        ${db.payment.rawAttributes.isDeleted ? 'AND "isDeleted" = false' : ''}
-                    ) payment_totals ON true
-                    WHERE order_totals.oldest_overdue_date IS NOT NULL
-                )
-                SELECT
-                    id,
-                    name,
-                    mobile,
-                    oldest_overdue_date,
-                    unpaid_invoices,
-                    ROUND(net_balance::numeric, 2) as total_outstanding,
-                    CURRENT_DATE - oldest_overdue_date as days_overdue
-                FROM customer_balances
-                WHERE net_balance > 0.01
-                ORDER BY days_overdue DESC, net_balance DESC
-            `, { type: db.Sequelize.QueryTypes.SELECT });
+            const parseDate = (s) => {
+                if (!s) return null;
+                const m = String(s).match(/^(\d{2})-(\d{2})-(\d{4})$/);
+                return m ? new Date(`${m[3]}-${m[2]}-${m[1]}`) : new Date(s);
+            };
 
-            return customers;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const cutoff = new Date(today);
+            cutoff.setDate(cutoff.getDate() - days);
+
+            const customers = await db.customer.findAll({ raw: true });
+
+            // Bulk fetch for performance
+            const allOrders = await db.order.findAll({
+                where: { isDeleted: false },
+                attributes: ['id', 'customerId', 'customerName', 'orderDate', 'total', 'createdAt'],
+                raw: true
+            });
+
+            const paymentWhere = { partyType: 'customer' };
+            if (db.payment.rawAttributes.isDeleted) paymentWhere.isDeleted = false;
+            const allPayments = await db.payment.findAll({
+                where: paymentWhere,
+                attributes: ['id', 'partyId', 'partyName', 'paymentNumber', 'amount'],
+                raw: true
+            });
+
+            const results = [];
+
+            for (const customer of customers) {
+                const orders = allOrders
+                    .filter(o => o.customerId === customer.id || (!o.customerId && o.customerName === customer.name))
+                    .map(o => ({ ...o, _date: parseDate(o.orderDate) || new Date(o.createdAt) }))
+                    .sort((a, b) => a._date - b._date);
+
+                const payments = allPayments.filter(p =>
+                    p.partyId === customer.id || (!p.partyId && p.partyName === customer.name)
+                );
+
+                const totalPaid = payments
+                    .filter(p => !String(p.paymentNumber || '').startsWith('PAY-TOGGLE-'))
+                    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+                const openingBalance = Number(customer.openingBalance) || 0;
+                const totalSales = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+                const netBalance = openingBalance + totalSales - totalPaid;
+
+                if (netBalance <= 0.01) continue;
+
+                // FIFO: payments cover opening balance first, then oldest invoices
+                let available = Math.max(0, totalPaid - openingBalance);
+                let oldestOverdueDate = null;
+                let unpaidCount = 0;
+
+                for (const order of orders) {
+                    const invoiceTotal = Number(order.total) || 0;
+                    if (available >= invoiceTotal) {
+                        available -= invoiceTotal;
+                    } else {
+                        available = 0;
+                        if (order._date <= cutoff) {
+                            if (!oldestOverdueDate) oldestOverdueDate = order._date;
+                            unpaidCount++;
+                        }
+                    }
+                }
+
+                if (!oldestOverdueDate) continue;
+
+                const daysOverdue = Math.floor((today - oldestOverdueDate) / (1000 * 60 * 60 * 24));
+                results.push({
+                    id: customer.id,
+                    name: customer.name,
+                    mobile: customer.mobile,
+                    oldest_overdue_date: oldestOverdueDate,
+                    unpaid_invoices: String(unpaidCount),
+                    total_outstanding: Math.round(netBalance * 100) / 100,
+                    days_overdue: daysOverdue
+                });
+            }
+
+            results.sort((a, b) => b.days_overdue - a.days_overdue || b.total_outstanding - a.total_outstanding);
+            return results;
         } catch (error) {
             console.log(error);
             throw new Error(error);
