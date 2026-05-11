@@ -88,12 +88,12 @@ module.exports = {
                     isDeleted: false
                 },
                 attributes: ['id', 'orderNumber', 'orderDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus', 'createdAt', 'customerId'],
-                order: [['createdAt', 'ASC']]
+                order: [['orderDate', 'ASC'], ['createdAt', 'ASC']]
             });
 
             // Get all non-deleted payments from this customer
             const payments = await db.payment.findAll({
-                where: { 
+                where: {
                     [db.Sequelize.Op.or]: [
                         { partyId: customerId },
                         {
@@ -105,7 +105,7 @@ module.exports = {
                     ...(db.payment.rawAttributes.isDeleted ? { isDeleted: false } : {})
                 },
                 attributes: ['id', 'paymentNumber', 'paymentDate', 'amount', 'referenceType', 'referenceId', 'notes', 'createdAt'],
-                order: [['createdAt', 'ASC']]
+                order: [['paymentDate', 'ASC'], ['createdAt', 'ASC']]
             });
 
             // Get receipt allocations for this customer's orders
@@ -180,9 +180,15 @@ module.exports = {
                 };
             });
 
-            // Sort orders by date DESC for display (most recent first)
-            ordersWithDerivedDue.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-            paymentsWithAllocation.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            const parseEntryDate = (dateStr) => {
+                if (!dateStr) return new Date(0);
+                const m = String(dateStr).match(/^(\d{2})-(\d{2})-(\d{4})$/);
+                return m ? new Date(`${m[3]}-${m[2]}-${m[1]}`) : new Date(dateStr);
+            };
+
+            // Sort strictly by invoice/payment date DESC for display (most recent first)
+            ordersWithDerivedDue.sort((a, b) => parseEntryDate(b.orderDate) - parseEntryDate(a.orderDate));
+            paymentsWithAllocation.sort((a, b) => parseEntryDate(b.paymentDate) - parseEntryDate(a.paymentDate));
 
             // Get toggle history (payment status changes) for this customer's orders
             let toggleHistory = [];

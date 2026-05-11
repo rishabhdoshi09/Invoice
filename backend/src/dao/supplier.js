@@ -85,19 +85,18 @@ module.exports = {
                     as: 'purchaseItems',
                     attributes: ['id', 'name', 'quantity', 'price', 'totalPrice']
                 }],
-                order: [['createdAt', 'ASC']]  // Oldest first for FIFO
+                order: [['billDate', 'ASC'], ['createdAt', 'ASC']]
             });
 
             // Get all payments to this supplier by ID only
-            // Sort by createdAt ASC (oldest first for FIFO allocation)
             const payments = await db.payment.findAll({
-                where: { 
+                where: {
                     partyId: supplierId,
                     partyType: 'supplier',
                     isDeleted: false
                 },
                 attributes: ['id', 'paymentNumber', 'paymentDate', 'amount', 'referenceType', 'notes', 'createdAt'],
-                order: [['createdAt', 'ASC']]  // Oldest first
+                order: [['paymentDate', 'ASC'], ['createdAt', 'ASC']]
             });
 
             // Calculate totals
@@ -114,11 +113,15 @@ module.exports = {
             // Balance = Opening + Purchases - All Payments
             const balance = (Number(supplier.openingBalance) || 0) + totalPurchases - totalPaid;
 
-            // Sort purchases by date DESC for display
-            purchases.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-            
-            // Sort payments by date DESC for display
-            payments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            const parseEntryDate = (dateStr) => {
+                if (!dateStr) return new Date(0);
+                const m = String(dateStr).match(/^(\d{2})-(\d{2})-(\d{4})$/);
+                return m ? new Date(`${m[3]}-${m[2]}-${m[1]}`) : new Date(dateStr);
+            };
+
+            // Sort strictly by bill/payment date DESC for display (most recent first)
+            purchases.sort((a, b) => parseEntryDate(b.billDate) - parseEntryDate(a.billDate));
+            payments.sort((a, b) => parseEntryDate(b.paymentDate) - parseEntryDate(a.paymentDate));
 
             return {
                 ...supplier.toJSON(),
