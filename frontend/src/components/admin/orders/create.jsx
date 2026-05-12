@@ -433,6 +433,7 @@ export const CreateOrder = () => {
 
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [inputValue, setInputValue] = useState('');
+  const [customerInputValue, setCustomerInputValue] = useState('');
   const [recentlyDeleted, setRecentlyDeleted] = useState([]);
 
   function formikSafeGet(field) {
@@ -1517,6 +1518,7 @@ export const CreateOrder = () => {
       setIsCreditSale(false); // Reset credit sale toggle
       setSelectedProduct(null); // Reset selected product
       setInputValue(''); // Reset input value
+      setCustomerInputValue(''); // Reset customer autocomplete input
       // Note: Keep archivedOrderProps/archivedPdfUrl to show the just-submitted order's PDF
       // User can start adding new items while viewing the submitted PDF
     } catch (err) {
@@ -1858,22 +1860,24 @@ export const CreateOrder = () => {
               </Grid>
 
               <Grid item xs={12} md={4}>
-                <TextField 
-                  size="small" 
-                  id="customerName" 
-                  name="customerName" 
-                  label={isCreditSale ? "Customer Name *" : "Customer Name"} 
-                  value={orderProps.customerName} 
-                  onChange={(e)=>{ const { id, value } = e.target; setOrderProps((prevProps) => ({ ...prevProps, [id]: value })); }} 
+                <TextField
+                  size="small"
+                  id="customerName"
+                  name="customerName"
+                  label={isCreditSale ? "Customer Name *" : "Customer Name"}
+                  value={orderProps.customerName}
+                  onChange={(e)=>{ const { id, value } = e.target; setOrderProps((prevProps) => ({ ...prevProps, [id]: value })); }}
                   required={isCreditSale}
                   error={isCreditSale && !orderProps.customerName}
                   helperText={isCreditSale && !orderProps.customerName ? "Required for credit sale" : ""}
-                  fullWidth 
+                  fullWidth
+                  autoComplete="off"
+                  inputProps={{ autoComplete: 'off' }}
                   sx={isCreditSale ? { '& .MuiOutlinedInput-root': { borderColor: 'warning.main' } } : {}}
                 />
               </Grid>
               <Grid item xs={12} md={4}>
-                <TextField size="small" id="customerMobile" name="customerMobile" label="Customer Mobile" value={orderProps.customerMobile} onChange={(e)=>{ const { id, value } = e.target; setOrderProps((prevProps) => ({ ...prevProps, [id]: value })); }} fullWidth />
+                <TextField size="small" id="customerMobile" name="customerMobile" label="Customer Mobile" value={orderProps.customerMobile} onChange={(e)=>{ const { id, value } = e.target; setOrderProps((prevProps) => ({ ...prevProps, [id]: value })); }} fullWidth autoComplete="off" inputProps={{ autoComplete: 'off' }} />
               </Grid>
               <Grid item xs={12} md={4}>
                 <TextField size="small" type='number' id="taxPercent" name="taxPercent" label="Tax Percentage" value={orderProps.taxPercent} onChange={(e)=>{ const { id, value } = e.target; const obj = {}; if (id === 'taxPercent') { const taxPct = Number(value) || 0; obj['taxPercent'] = taxPct; const subTotal = orderProps.subTotal; obj['tax'] = round2(subTotal * (taxPct / 100)); obj['total'] = round2(subTotal + obj['tax']); } setOrderProps((prevProps) => ({ ...prevProps, [id]: value, ...obj })); }} required fullWidth />
@@ -1884,20 +1888,29 @@ export const CreateOrder = () => {
                   size="small"
                   options={customerOptions}
                   value={orderProps.customer || null}
+                  inputValue={customerInputValue}
+                  onInputChange={(_, val, reason) => {
+                    setCustomerInputValue(val);
+                    // If user cleared the field, also clear the orderProps customer
+                    if (reason === 'clear' || val === '') {
+                      setOrderProps(prev => ({ ...prev, customer: null, customerName: '', customerMobile: '' }));
+                    }
+                  }}
                   onChange={(_, val) => {
-                    // Auto-fill customerName and customerMobile when a customer is selected
+                    setCustomerInputValue(val?.name || '');
                     setOrderProps(prev => ({
-                      ...prev, 
+                      ...prev,
                       customer: val,
-                      customerName: val?.name || prev.customerName || '',
-                      customerMobile: val?.mobile || prev.customerMobile || ''
+                      customerName: val?.name || '',
+                      customerMobile: val?.mobile || ''
                     }));
                   }}
                   renderInput={(params) => (
-                    <TextField 
-                      {...params} 
-                      label="Select Customer from Database" 
+                    <TextField
+                      {...params}
+                      label="Select Customer from Database"
                       placeholder="Type to search customers..."
+                      inputProps={{ ...params.inputProps, autoComplete: 'off' }}
                     />
                   )}
                   getOptionLabel={(opt) => opt?.label || ''}
