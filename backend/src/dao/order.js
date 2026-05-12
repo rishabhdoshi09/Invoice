@@ -96,7 +96,7 @@ module.exports = {
             
             const res = await db.order.findAndCountAll({ 
                 where: whereClause,
-                order: [[db.Sequelize.literal("TO_DATE(NULLIF(\"orderDate\", ''), 'DD-MM-YYYY')"), 'DESC'], ['createdAt', 'DESC']],
+                order: [[db.Sequelize.literal("SPLIT_PART(\"orderDate\", '-', 3) || SPLIT_PART(\"orderDate\", '-', 2) || SPLIT_PART(\"orderDate\", '-', 1)"), 'DESC'], ['createdAt', 'DESC']],
                 include: [ { 
                     model: db.orderItems,
                     separate: true,
