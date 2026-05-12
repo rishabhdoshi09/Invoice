@@ -13,41 +13,20 @@ let port = null;
 let parser = null;
 let reconnectTimer = null;
 
+// Auto-detect serial device: prefer env var, then scan /dev for usbserial/wchusbserial
 function detectSerialPort() {
-    if (process.env.SERIAL_PORT) {
-        console.log('[Scale] Using SERIAL_PORT env:', process.env.SERIAL_PORT);
-        return process.env.SERIAL_PORT;
-    }
+    if (process.env.SERIAL_PORT) return process.env.SERIAL_PORT;
     try {
         const devDir = fs.readdirSync('/dev');
-        const serialDevices = devDir.filter(f =>
+        const match = devDir.find(f =>
             f.startsWith('cu.usbserial') ||
             f.startsWith('cu.wchusbserial') ||
             f.startsWith('cu.SLAB_USBtoUART') ||
-            f.startsWith('cu.usbmodem') ||
-            f.startsWith('tty.usbserial') ||
-            f.startsWith('tty.wchusbserial') ||
-            f.startsWith('tty.SLAB_USBtoUART') ||
             f.startsWith('ttyUSB') ||
-            f.startsWith('ttyACM') ||
             f.startsWith('ttyS')
         );
-        if (serialDevices.length > 0) {
-            console.log('[Scale] Serial devices found:', serialDevices);
-            return `/dev/${serialDevices[0]}`;
-        }
-        console.log('[Scale] No serial device found in /dev. Set SERIAL_PORT env var to override.');
-        return null;
-    } catch (e) {
-        console.log('[Scale] Error scanning /dev:', e.message);
-        return null;
-    }
-}
-
-function parseWeight(line) {
-    const match = line.match(/[+-]?\d+(\.\d+)?/);
-    if (!match) return NaN;
-    return Number(match[0]);
+        return match ? `/dev/${match}` : null;
+    } catch { return null; }
 }
 
 function scheduleReconnect(delaySec = 5) {
@@ -62,23 +41,23 @@ function initSerial() {
     const devPath = detectSerialPort();
     if (!devPath || !fs.existsSync(devPath)) {
         connectionStatus = 'disconnected';
-        scheduleReconnect(10);
+        scheduleReconnect(10); // device not plugged in — check again in 10s
         return;
     }
 
-    console.log('[Scale] Opening:', devPath);
+    console.log("Serial device found → opening:", devPath);
     try {
         port = new SerialPort({ path: devPath, baudRate: 9600 });
         parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
 
         port.on('open', () => {
-            console.log('[Scale] Port opened successfully');
+            console.log("Serial port opened successfully");
             connectionStatus = 'connected';
         });
 
         parser.on('data', (line) => {
-            const data = parseWeight(line.trim());
-            if (!isNaN(data) && isFinite(data)) {
+            const data = Number(line.trim());
+            if (!isNaN(data) && data !== weight) {
                 weight = data;
                 lastDataReceived = Date.now();
                 connectionStatus = 'connected';
@@ -86,20 +65,20 @@ function initSerial() {
         });
 
         port.on('error', (e) => {
-            console.log('[Scale] SerialPort Error:', e.message);
+            console.log("SerialPort Error:", e.message);
             connectionStatus = 'error';
-            // close event fires after error and handles reconnect
+            // 'close' event fires after error, triggering reconnect there
         });
 
         port.on('close', () => {
-            console.log('[Scale] Port closed — reconnecting in 5s...');
+            console.log("Serial port closed — reconnecting in 5s...");
             connectionStatus = 'disconnected';
             port = null; parser = null;
             scheduleReconnect(5);
         });
 
     } catch (err) {
-        console.log('[Scale] Failed to open serial port:', err.message);
+        console.log("Failed to open serial port:", err.message);
         connectionStatus = 'error';
         port = null; parser = null;
         scheduleReconnect(5);
