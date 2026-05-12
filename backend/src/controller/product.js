@@ -12,9 +12,6 @@ const { ReadlineParser } = require('@serialport/parser-readline');
 let port = null;
 let parser = null;
 let reconnectTimer = null;
-let reconnectAttempts = 0;
-
-const MAX_RECONNECT_DELAY_SEC = 30;
 
 function detectSerialPort() {
     if (process.env.SERIAL_PORT) return process.env.SERIAL_PORT;
@@ -37,47 +34,30 @@ function parseWeight(line) {
     return Number(match[0]);
 }
 
-function destroyPort() {
-    if (port) {
-        try {
-            port.removeAllListeners();
-            if (port.isOpen) port.close(() => {});
-        } catch (_) {}
-        port = null;
-        parser = null;
-    }
-}
-
-function scheduleReconnect(delaySec) {
+function scheduleReconnect(delaySec = 5) {
     if (reconnectTimer) return;
-    const delay = delaySec != null
-        ? delaySec
-        : Math.min(Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY_SEC);
-    console.log(`[Scale] Reconnecting in ${delay}s (attempt ${reconnectAttempts + 1})`);
     reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
         initSerial();
-    }, delay * 1000);
+    }, delaySec * 1000);
 }
 
 function initSerial() {
     const devPath = detectSerialPort();
     if (!devPath || !fs.existsSync(devPath)) {
         connectionStatus = 'disconnected';
-        reconnectAttempts = Math.min(reconnectAttempts + 1, 5);
-        scheduleReconnect(Math.min(Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY_SEC));
+        scheduleReconnect(10);
         return;
     }
 
-    console.log(`[Scale] Opening ${devPath}`);
+    console.log('[Scale] Opening:', devPath);
     try {
         port = new SerialPort({ path: devPath, baudRate: 9600 });
         parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
 
         port.on('open', () => {
-            console.log('[Scale] Port opened');
+            console.log('[Scale] Port opened successfully');
             connectionStatus = 'connected';
-            reconnectAttempts = 0;
         });
 
         parser.on('data', (line) => {
@@ -90,25 +70,23 @@ function initSerial() {
         });
 
         port.on('error', (e) => {
-            console.log('[Scale] Error:', e.message);
+            console.log('[Scale] SerialPort Error:', e.message);
             connectionStatus = 'error';
             // close event fires after error and handles reconnect
         });
 
         port.on('close', () => {
-            console.log('[Scale] Port closed');
+            console.log('[Scale] Port closed — reconnecting in 5s...');
             connectionStatus = 'disconnected';
-            destroyPort();
-            reconnectAttempts++;
-            scheduleReconnect(Math.min(Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY_SEC));
+            port = null; parser = null;
+            scheduleReconnect(5);
         });
 
     } catch (err) {
-        console.log('[Scale] Failed to open:', err.message);
+        console.log('[Scale] Failed to open serial port:', err.message);
         connectionStatus = 'error';
-        destroyPort();
-        reconnectAttempts++;
-        scheduleReconnect(Math.min(Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY_SEC));
+        port = null; parser = null;
+        scheduleReconnect(5);
     }
 }
 
