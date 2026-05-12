@@ -12,10 +12,8 @@ const { ReadlineParser } = require('@serialport/parser-readline');
 let port = null;
 let parser = null;
 let reconnectTimer = null;
-let stalenessTimer = null;
 let reconnectAttempts = 0;
 
-const STALE_TIMEOUT_MS = 12000;   // force reconnect if no data for 12s
 const MAX_RECONNECT_DELAY_SEC = 30;
 
 function detectSerialPort() {
@@ -34,28 +32,12 @@ function detectSerialPort() {
 }
 
 function parseWeight(line) {
-    // Handle formats: "12.35", "+012.350", "12.350 kg", "ST,GS,+12.350,kg"
     const match = line.match(/[+-]?\d+(\.\d+)?/);
     if (!match) return NaN;
     return Number(match[0]);
 }
 
-function clearStalenessTimer() {
-    if (stalenessTimer) { clearTimeout(stalenessTimer); stalenessTimer = null; }
-}
-
-function resetStalenessTimer() {
-    clearStalenessTimer();
-    stalenessTimer = setTimeout(() => {
-        console.log('[Scale] No data received for 12s — forcing reconnect');
-        connectionStatus = 'disconnected';
-        destroyPort();
-        scheduleReconnect(1);
-    }, STALE_TIMEOUT_MS);
-}
-
 function destroyPort() {
-    clearStalenessTimer();
     if (port) {
         try {
             port.removeAllListeners();
@@ -96,7 +78,6 @@ function initSerial() {
             console.log('[Scale] Port opened');
             connectionStatus = 'connected';
             reconnectAttempts = 0;
-            resetStalenessTimer();
         });
 
         parser.on('data', (line) => {
@@ -105,7 +86,6 @@ function initSerial() {
                 weight = data;
                 lastDataReceived = Date.now();
                 connectionStatus = 'connected';
-                resetStalenessTimer();
             }
         });
 
