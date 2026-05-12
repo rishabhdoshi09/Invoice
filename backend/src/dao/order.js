@@ -96,7 +96,7 @@ module.exports = {
             
             const res = await db.order.findAndCountAll({ 
                 where: whereClause,
-                order: [['orderDate', 'DESC'], ['createdAt', 'DESC']],
+                order: [[db.Sequelize.literal("TO_DATE(NULLIF(\"orderDate\", ''), 'DD-MM-YYYY')"), 'DESC'], ['createdAt', 'DESC']],
                 include: [ { 
                     model: db.orderItems,
                     separate: true,
