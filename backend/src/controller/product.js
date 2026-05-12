@@ -14,18 +14,34 @@ let parser = null;
 let reconnectTimer = null;
 
 function detectSerialPort() {
-    if (process.env.SERIAL_PORT) return process.env.SERIAL_PORT;
+    if (process.env.SERIAL_PORT) {
+        console.log('[Scale] Using SERIAL_PORT env:', process.env.SERIAL_PORT);
+        return process.env.SERIAL_PORT;
+    }
     try {
         const devDir = fs.readdirSync('/dev');
-        const match = devDir.find(f =>
+        const serialDevices = devDir.filter(f =>
             f.startsWith('cu.usbserial') ||
             f.startsWith('cu.wchusbserial') ||
             f.startsWith('cu.SLAB_USBtoUART') ||
+            f.startsWith('cu.usbmodem') ||
+            f.startsWith('tty.usbserial') ||
+            f.startsWith('tty.wchusbserial') ||
+            f.startsWith('tty.SLAB_USBtoUART') ||
             f.startsWith('ttyUSB') ||
+            f.startsWith('ttyACM') ||
             f.startsWith('ttyS')
         );
-        return match ? `/dev/${match}` : null;
-    } catch { return null; }
+        if (serialDevices.length > 0) {
+            console.log('[Scale] Serial devices found:', serialDevices);
+            return `/dev/${serialDevices[0]}`;
+        }
+        console.log('[Scale] No serial device found in /dev. Set SERIAL_PORT env var to override.');
+        return null;
+    } catch (e) {
+        console.log('[Scale] Error scanning /dev:', e.message);
+        return null;
+    }
 }
 
 function parseWeight(line) {
