@@ -12,8 +12,12 @@ const { ReadlineParser } = require('@serialport/parser-readline');
 let port = null;
 let parser = null;
 let reconnectTimer = null;
+let stalenessTimer = null;
+let reconnectAttempts = 0;
 
-// Auto-detect serial device: prefer env var, then scan /dev for usbserial/wchusbserial
+const STALE_TIMEOUT_MS = 12000;   // force reconnect if no data for 12s
+const MAX_RECONNECT_DELAY_SEC = 30;
+
 function detectSerialPort() {
     if (process.env.SERIAL_PORT) return process.env.SERIAL_PORT;
     try {
@@ -29,59 +33,102 @@ function detectSerialPort() {
     } catch { return null; }
 }
 
-function scheduleReconnect(delaySec = 5) {
+function parseWeight(line) {
+    // Handle formats: "12.35", "+012.350", "12.350 kg", "ST,GS,+12.350,kg"
+    const match = line.match(/[+-]?\d+(\.\d+)?/);
+    if (!match) return NaN;
+    return Number(match[0]);
+}
+
+function clearStalenessTimer() {
+    if (stalenessTimer) { clearTimeout(stalenessTimer); stalenessTimer = null; }
+}
+
+function resetStalenessTimer() {
+    clearStalenessTimer();
+    stalenessTimer = setTimeout(() => {
+        console.log('[Scale] No data received for 12s — forcing reconnect');
+        connectionStatus = 'disconnected';
+        destroyPort();
+        scheduleReconnect(1);
+    }, STALE_TIMEOUT_MS);
+}
+
+function destroyPort() {
+    clearStalenessTimer();
+    if (port) {
+        try {
+            port.removeAllListeners();
+            if (port.isOpen) port.close(() => {});
+        } catch (_) {}
+        port = null;
+        parser = null;
+    }
+}
+
+function scheduleReconnect(delaySec) {
     if (reconnectTimer) return;
+    const delay = delaySec != null
+        ? delaySec
+        : Math.min(Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY_SEC);
+    console.log(`[Scale] Reconnecting in ${delay}s (attempt ${reconnectAttempts + 1})`);
     reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
         initSerial();
-    }, delaySec * 1000);
+    }, delay * 1000);
 }
 
 function initSerial() {
     const devPath = detectSerialPort();
     if (!devPath || !fs.existsSync(devPath)) {
         connectionStatus = 'disconnected';
-        scheduleReconnect(10); // device not plugged in — check again in 10s
+        reconnectAttempts = Math.min(reconnectAttempts + 1, 5);
+        scheduleReconnect(Math.min(Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY_SEC));
         return;
     }
 
-    console.log("Serial device found → opening:", devPath);
+    console.log(`[Scale] Opening ${devPath}`);
     try {
         port = new SerialPort({ path: devPath, baudRate: 9600 });
         parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
 
         port.on('open', () => {
-            console.log("Serial port opened successfully");
+            console.log('[Scale] Port opened');
             connectionStatus = 'connected';
+            reconnectAttempts = 0;
+            resetStalenessTimer();
         });
 
         parser.on('data', (line) => {
-            const data = Number(line.trim());
-            if (!isNaN(data) && data !== weight) {
+            const data = parseWeight(line.trim());
+            if (!isNaN(data) && isFinite(data)) {
                 weight = data;
                 lastDataReceived = Date.now();
                 connectionStatus = 'connected';
+                resetStalenessTimer();
             }
         });
 
         port.on('error', (e) => {
-            console.log("SerialPort Error:", e.message);
+            console.log('[Scale] Error:', e.message);
             connectionStatus = 'error';
-            // 'close' event fires after error, triggering reconnect there
+            // close event fires after error and handles reconnect
         });
 
         port.on('close', () => {
-            console.log("Serial port closed — reconnecting in 5s...");
+            console.log('[Scale] Port closed');
             connectionStatus = 'disconnected';
-            port = null; parser = null;
-            scheduleReconnect(5);
+            destroyPort();
+            reconnectAttempts++;
+            scheduleReconnect(Math.min(Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY_SEC));
         });
 
     } catch (err) {
-        console.log("Failed to open serial port:", err.message);
+        console.log('[Scale] Failed to open:', err.message);
         connectionStatus = 'error';
-        port = null; parser = null;
-        scheduleReconnect(5);
+        destroyPort();
+        reconnectAttempts++;
+        scheduleReconnect(Math.min(Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY_SEC));
     }
 }
 
