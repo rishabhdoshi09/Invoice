@@ -441,7 +441,7 @@ export const CreateOrder = () => {
 
   const formik = useFormik({
     enableReinitialize: true,
-    initialValues: { id:"", type:"", name:"", altName:"", template:1, productPrice:"", quantity:0, totalPrice:0 },
+    initialValues: { id:"", type:"", name:"", altName:"", template:1, productPrice:"", quantity:"", totalPrice:0 },
     onSubmit: async (values) => {
       lastAddSucceededRef.current = false;
 
