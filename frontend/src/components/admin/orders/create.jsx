@@ -499,6 +499,20 @@ export const CreateOrder = () => {
 
       const price = Number(values?.productPrice) || 0;
       const qty = Number(values?.quantity) || 0;
+
+      // Warn if same product with same quantity and rate already exists
+      const duplicate = orderProps.orderItems.find(item =>
+        String(item.name).toLowerCase() === String(values.name).toLowerCase() &&
+        Number(item.quantity) === qty &&
+        Number(item.productPrice) === price
+      );
+      if (duplicate) {
+        const ok = window.confirm(
+          `"${values.name}" (Qty: ${qty}, Rate: ₹${price}) is already added.\nAdd again?`
+        );
+        if (!ok) return;
+      }
+
       const lineTotal = Number((price * qty).toFixed(2));
       const subTotal = Number((orderProps.subTotal + lineTotal).toFixed(2));
       const tax = Number((subTotal * (orderProps.taxPercent / 100)).toFixed(2));
