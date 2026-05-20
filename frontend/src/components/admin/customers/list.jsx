@@ -300,6 +300,18 @@ export const ListCustomers = () => {
         }
     };
 
+    const refreshDetailsCustomer = async () => {
+        if (!detailsDialog.customer?.id) return;
+        try {
+            const token = localStorage.getItem('token');
+            const { data } = await axios.get(`/api/customers/${detailsDialog.customer.id}/transactions`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setCustomerNotes(data.data?.notes || '');
+            setDetailsDialog(prev => ({ ...prev, customer: data.data }));
+        } catch (_) {}
+    };
+
     // Fetch full order details and generate PDF
     const fetchOrderAndGeneratePdf = async (orderId) => {
         const token = localStorage.getItem('token');
@@ -1265,12 +1277,16 @@ export const ListCustomers = () => {
                                 </Grid>
                             </Grid>
 
-                            <Tabs value={detailsDialog.tab} onChange={(e, v) => setDetailsDialog({ ...detailsDialog, tab: v })}>
+                            <Tabs value={detailsDialog.tab} onChange={(e, v) => {
+                                setDetailsDialog(prev => ({ ...prev, tab: v }));
+                                if (v === 5) refreshDetailsCustomer();
+                            }}>
                                 <Tab label={`Invoices (${detailsDialog.customer.orders?.length || 0})`} />
                                 <Tab label={`Receipts (${detailsDialog.customer.payments?.length || 0})`} />
                                 <Tab label="Allocate" />
                                 <Tab label={`Toggle History (${detailsDialog.customer.toggleHistory?.length || 0})`} data-testid="customer-toggle-history-tab" />
                                 <Tab label="Notes" data-testid="customer-notes-tab" />
+                                <Tab label="Ledger" />
                             </Tabs>
 
                             {detailsDialog.tab === 0 && (
@@ -1617,8 +1633,104 @@ export const ListCustomers = () => {
                                     </Box>
                                 </Box>
                             )}
+
+                            {/* Tab 5: Ledger */}
+                            {detailsDialog.tab === 5 && (() => {
+                                const c = detailsDialog.customer;
+                                const fmt = v => `₹${Math.abs(v || 0).toLocaleString('en-IN')}`;
+                                const entries = [];
+                                if (c.openingBalance && Number(c.openingBalance) !== 0) {
+                                    entries.push({ id: 'opening', date: null, sortKey: '0000', particulars: 'Opening Balance', refNo: '-', debit: Number(c.openingBalance) > 0 ? Number(c.openingBalance) : 0, credit: Number(c.openingBalance) < 0 ? Math.abs(Number(c.openingBalance)) : 0, type: 'opening' });
+                                }
+                                (c.orders || []).forEach(o => {
+                                    const d = o.orderDate ? moment(o.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(o.createdAt);
+                                    entries.push({ id: o.id, date: d.isValid() ? d.format('DD/MM/YYYY') : '-', sortKey: d.isValid() ? d.toISOString() : '9999', particulars: `Invoice — ${o.orderNumber || ''}`, refNo: o.orderNumber || '-', debit: Number(o.total) || 0, credit: 0, type: 'invoice' });
+                                });
+                                (c.payments || []).forEach(p => {
+                                    const d = p.paymentDate ? moment(p.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(p.createdAt);
+                                    entries.push({ id: p.id, date: d.isValid() ? d.format('DD/MM/YYYY') : '-', sortKey: d.isValid() ? d.toISOString() : '9999', particulars: 'Receipt' + (p.notes ? ` — ${p.notes}` : ''), refNo: p.paymentNumber || '-', debit: 0, credit: Number(p.amount) || 0, type: 'receipt' });
+                                });
+                                entries.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+                                let runBal = 0;
+                                entries.forEach(e => { runBal += e.debit - e.credit; e.balance = runBal; });
+                                const totalDebit = entries.reduce((s, e) => s + e.debit, 0);
+                                const totalCredit = entries.reduce((s, e) => s + e.credit, 0);
+                                const closingBal = totalDebit - totalCredit;
+                                return (
+                                    <TableContainer sx={{ maxHeight: 360, mt: 1 }}>
+                                        <Table size="small" stickyHeader sx={{
+                                            '& td, & th': { borderRight: '1px solid #e0e0e0', py: 0.5, px: 1, fontSize: '0.8rem', fontFamily: "'Roboto Mono', monospace" },
+                                            '& th': { bgcolor: '#e8eaf6', fontWeight: 700, color: '#1a237e', borderBottom: '2px solid #1a237e', fontSize: '0.75rem' },
+                                        }}>
+                                            <TableHead>
+                                                <TableRow>
+                                                    <TableCell width={85}>Date</TableCell>
+                                                    <TableCell>Particulars</TableCell>
+                                                    <TableCell width={130}>Vch No.</TableCell>
+                                                    <TableCell align="right" width={100}>Debit</TableCell>
+                                                    <TableCell align="right" width={100}>Credit</TableCell>
+                                                    <TableCell align="right" width={110}>Balance</TableCell>
+                                                </TableRow>
+                                            </TableHead>
+                                            <TableBody>
+                                                {entries.length === 0 ? (
+                                                    <TableRow><TableCell colSpan={6} align="center" sx={{ py: 3, color: 'text.secondary' }}>No transactions yet</TableCell></TableRow>
+                                                ) : entries.map(e => (
+                                                    <TableRow key={e.id} sx={{ bgcolor: e.type === 'opening' ? '#fffde7' : e.type === 'receipt' ? '#f1f8e9' : 'inherit' }}>
+                                                        <TableCell>{e.date || ''}</TableCell>
+                                                        <TableCell>{e.particulars}</TableCell>
+                                                        <TableCell>{e.refNo}</TableCell>
+                                                        <TableCell align="right" sx={{ color: '#c62828', fontWeight: 700 }}>{e.debit > 0 ? fmt(e.debit) : ''}</TableCell>
+                                                        <TableCell align="right" sx={{ color: '#2e7d32', fontStyle: 'italic' }}>{e.credit > 0 ? fmt(e.credit) : ''}</TableCell>
+                                                        <TableCell align="right" sx={{ fontWeight: 700 }}>{fmt(e.balance)} {e.balance >= 0 ? 'Dr' : 'Cr'}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                                <TableRow sx={{ '& td': { borderTop: '2px solid #1a237e', bgcolor: '#e8eaf6', fontWeight: 700, color: '#1a237e' } }}>
+                                                    <TableCell colSpan={3}>TOTAL</TableCell>
+                                                    <TableCell align="right" sx={{ color: '#c62828 !important' }}>{fmt(totalDebit)}</TableCell>
+                                                    <TableCell align="right" sx={{ color: '#2e7d32 !important', fontStyle: 'italic' }}>{fmt(totalCredit)}</TableCell>
+                                                    <TableCell align="right">{fmt(closingBal)} {closingBal >= 0 ? 'Dr' : 'Cr'}</TableCell>
+                                                </TableRow>
+                                            </TableBody>
+                                        </Table>
+                                    </TableContainer>
+                                );
+                            })()}
                         </DialogContent>
                         <DialogActions>
+                            {detailsDialog.tab === 5 && (() => {
+                                const c = detailsDialog.customer;
+                                const fmt = v => `₹${Math.abs(v || 0).toLocaleString('en-IN')}`;
+                                const entries = [];
+                                if (c.openingBalance && Number(c.openingBalance) !== 0) {
+                                    entries.push({ id: 'opening', date: null, sortKey: '0000', particulars: 'Opening Balance', refNo: '-', debit: Number(c.openingBalance) > 0 ? Number(c.openingBalance) : 0, credit: Number(c.openingBalance) < 0 ? Math.abs(Number(c.openingBalance)) : 0 });
+                                }
+                                (c.orders || []).forEach(o => {
+                                    const d = o.orderDate ? moment(o.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(o.createdAt);
+                                    entries.push({ id: o.id, date: d.isValid() ? d.format('DD/MM/YYYY') : '-', sortKey: d.isValid() ? d.toISOString() : '9999', particulars: `Invoice — ${o.orderNumber || ''}`, refNo: o.orderNumber || '-', debit: Number(o.total) || 0, credit: 0 });
+                                });
+                                (c.payments || []).forEach(p => {
+                                    const d = p.paymentDate ? moment(p.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(p.createdAt);
+                                    entries.push({ id: p.id, date: d.isValid() ? d.format('DD/MM/YYYY') : '-', sortKey: d.isValid() ? d.toISOString() : '9999', particulars: 'Receipt' + (p.notes ? ` — ${p.notes}` : ''), refNo: p.paymentNumber || '-', debit: 0, credit: Number(p.amount) || 0 });
+                                });
+                                entries.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+                                let runBal = 0;
+                                entries.forEach(e => { runBal += e.debit - e.credit; e.balance = runBal; });
+                                const totalDebit = entries.reduce((s, e) => s + e.debit, 0);
+                                const totalCredit = entries.reduce((s, e) => s + e.credit, 0);
+                                const closingBal = totalDebit - totalCredit;
+                                return (
+                                    <Button
+                                        startIcon={<Print />}
+                                        variant="outlined"
+                                        size="small"
+                                        sx={{ textTransform: 'none', mr: 'auto' }}
+                                        onClick={() => handleLedgerPrint(c, entries, totalDebit, totalCredit, closingBal)}
+                                    >
+                                        Print Ledger
+                                    </Button>
+                                );
+                            })()}
                             <Button onClick={() => handleCreateSale(detailsDialog.customer)} startIcon={<ShoppingCart />} color="primary">
                                 Create Sale
                             </Button>
