@@ -4,6 +4,7 @@ const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
+const telegram = require('../services/telegramAlert');
 
 // Store uploaded backup in memory (max 500 MB)
 const upload = multer({
@@ -255,5 +256,19 @@ module.exports = (router) => {
                 res.json({ status: 200, message: `Backup saved to USB: ${filename}`, filename, filePath });
             });
         });
+    });
+
+    /**
+     * POST /api/backup/send-telegram
+     * Triggers an on-demand backup and sends it to Telegram.
+     */
+    router.post('/backup/send-telegram', authenticate, authorize('admin'), async (req, res) => {
+        try {
+            await telegram.sendDailyBackup();
+            res.json({ status: 200, message: 'Backup sent to Telegram successfully.' });
+        } catch (err) {
+            console.error('[BACKUP] Telegram send failed:', err.message);
+            res.status(500).json({ status: 500, message: err.message || 'Failed to send backup to Telegram.' });
+        }
     });
 };

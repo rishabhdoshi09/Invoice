@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 import {
     CloudDownload, CloudUpload, CheckCircle, Info, Warning,
-    UsbOutlined, RefreshOutlined, SaveAlt
+    UsbOutlined, RefreshOutlined, SaveAlt, Telegram
 } from '@mui/icons-material';
 
 export const DatabaseBackup = () => {
@@ -27,6 +27,28 @@ export const DatabaseBackup = () => {
     const [selectedDrive, setSelectedDrive] = useState('');
     const [usbLoading, setUsbLoading] = useState(false);
     const [usbStatus, setUsbStatus]   = useState(null);
+
+    const [tgLoading, setTgLoading] = useState(false);
+    const [tgStatus, setTgStatus]   = useState(null);
+
+    const handleSendTelegram = async () => {
+        setTgLoading(true);
+        setTgStatus(null);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch('/api/backup/send-telegram', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || `Server error: ${res.status}`);
+            setTgStatus({ type: 'success', message: 'Backup sent to Telegram successfully.' });
+        } catch (err) {
+            setTgStatus({ type: 'error', message: err.message || 'Failed to send to Telegram.' });
+        } finally {
+            setTgLoading(false);
+        }
+    };
 
     const loadDrives = async () => {
         setDrivesLoading(true);
@@ -195,6 +217,21 @@ export const DatabaseBackup = () => {
                 onClick={handleDownload} disabled={dlLoading}
             >
                 {dlLoading ? 'Preparing backup…' : 'Download to Computer'}
+            </Button>
+
+            {/* Telegram */}
+            {tgStatus && (
+                <Alert severity={tgStatus.type} sx={{ mb: 2 }} onClose={() => setTgStatus(null)}>
+                    {tgStatus.message}
+                </Alert>
+            )}
+            <Button
+                variant="outlined" size="large" fullWidth sx={{ mb: 3 }}
+                startIcon={tgLoading ? <CircularProgress size={18} color="inherit" /> : <Telegram />}
+                onClick={handleSendTelegram} disabled={tgLoading}
+                color="info"
+            >
+                {tgLoading ? 'Sending to Telegram…' : 'Send Backup to Telegram'}
             </Button>
 
             {/* USB Save */}
