@@ -147,6 +147,24 @@ module.exports = {
                 value.currentBalance = value.openingBalance;
             }
 
+            // If name is changing, fetch old name first then cascade to orders/payments
+            if (value.name) {
+                const db = require('../models');
+                const existing = await db.customer.findOne({ where: { id: req.params.customerId } });
+                if (existing && existing.name !== value.name) {
+                    const oldName = existing.name;
+                    const newName = value.name;
+                    await db.order.update(
+                        { customerName: newName },
+                        { where: { customerName: oldName } }
+                    );
+                    await db.payment.update(
+                        { partyName: newName },
+                        { where: { partyName: oldName, partyType: 'customer' } }
+                    );
+                }
+            }
+
             const response = await Services.customer.updateCustomer(
                 { id: req.params.customerId },
                 value
