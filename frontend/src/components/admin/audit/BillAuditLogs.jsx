@@ -923,24 +923,24 @@ const NameChangeLogs = () => {
                     <TableHead>
                         <TableRow>
                             <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Date & Time</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Old Name</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>New Name</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Changed From → To</TableCell>
                             <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Changed By</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
                         {loading ? (
-                            <TableRow><TableCell colSpan={4} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={3} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
                         ) : logs.map((log, i) => (
                             <TableRow key={i} hover>
                                 <TableCell sx={{ whiteSpace: 'nowrap' }}>
                                     {moment(log.createdAt).format('DD-MM-YYYY HH:mm')}
                                 </TableCell>
                                 <TableCell>
-                                    <Typography variant="body2" color="error.main" fontWeight={600}>{log.oldName || '—'}</Typography>
-                                </TableCell>
-                                <TableCell>
-                                    <Typography variant="body2" color="success.main" fontWeight={600}>{log.currentName || log.newName || '—'}</Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <Typography variant="body2" color="error.main" fontWeight={600}>{log.oldName || '—'}</Typography>
+                                        <Typography variant="body2" color="text.secondary">→</Typography>
+                                        <Typography variant="body2" color="success.main" fontWeight={600}>{log.currentName || log.newName || '—'}</Typography>
+                                    </Box>
                                 </TableCell>
                                 <TableCell>{log.userName || '—'}</TableCell>
                             </TableRow>
