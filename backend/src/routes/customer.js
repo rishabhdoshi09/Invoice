@@ -1,5 +1,5 @@
 const Controller = require('../controller');
-const { authenticate, canModify } = require('../middleware/auth');
+const { authenticate, canModify, authorize } = require('../middleware/auth');
 const { auditMiddleware, captureOriginal } = require('../middleware/auditLogger');
 const db = require('../models');
 
