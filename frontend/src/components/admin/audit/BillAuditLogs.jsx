@@ -5,7 +5,7 @@ import {
     InputLabel, Grid, IconButton, Tooltip, Dialog, DialogTitle, DialogContent,
     DialogActions, Button, Alert, Tabs, Tab
 } from '@mui/material';
-import { Visibility, Warning, Delete, RemoveCircle, HighlightOff, Refresh, Scale, FitnessCenter, Telegram, PersonOff, Payment } from '@mui/icons-material';
+import { Visibility, Warning, Delete, RemoveCircle, HighlightOff, Refresh, Scale, FitnessCenter, Telegram, PersonOff, Payment, DriveFileRenameOutline } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
 
@@ -64,12 +64,14 @@ export const BillAuditLogs = () => {
                 <Tab label="Customer Deleted" icon={<PersonOff fontSize="small" />} iconPosition="start" />
                 <Tab label="Customer Payments" icon={<Payment fontSize="small" />} iconPosition="start" />
                 <Tab label="Supplier Payments" icon={<Payment fontSize="small" />} iconPosition="start" />
+                <Tab label="Name Changes" icon={<DriveFileRenameOutline fontSize="small" />} iconPosition="start" />
             </Tabs>
             {activeTab === 0 && <DeletionLogs />}
             {activeTab === 1 && <WeightLogs />}
             {activeTab === 2 && <CustomerDeleteLogs />}
             {activeTab === 3 && <CustomerPaymentLogs />}
             {activeTab === 4 && <SupplierPaymentLogs />}
+            {activeTab === 5 && <NameChangeLogs />}
         </Box>
     );
 };
@@ -873,6 +875,74 @@ const SupplierPaymentLogs = () => {
                                 <TableCell sx={{ maxWidth: 200 }}>
                                     <Typography variant="caption" color="text.secondary">{p.notes || '—'}</Typography>
                                 </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
+    );
+};
+
+const NameChangeLogs = () => {
+    const [logs, setLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchLogs = useCallback(async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get('/api/customers/logs/name-changes', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setLogs(res.data?.data || []);
+        } catch (err) {
+            console.error('Failed to fetch name change logs:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="subtitle1" fontWeight={700} color="primary">
+                    Customer Name Change History
+                </Typography>
+                <IconButton size="small" onClick={fetchLogs}><Refresh fontSize="small" /></IconButton>
+            </Box>
+
+            {!loading && logs.length === 0 && (
+                <Alert severity="info">No name changes recorded yet. Future changes will appear here.</Alert>
+            )}
+
+            <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                <Table stickyHeader size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Date & Time</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Old Name</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>New Name</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Changed By</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow><TableCell colSpan={4} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
+                        ) : logs.map((log, i) => (
+                            <TableRow key={i} hover>
+                                <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                    {moment(log.createdAt).format('DD-MM-YYYY HH:mm')}
+                                </TableCell>
+                                <TableCell>
+                                    <Typography variant="body2" color="error.main" fontWeight={600}>{log.oldName || '—'}</Typography>
+                                </TableCell>
+                                <TableCell>
+                                    <Typography variant="body2" color="success.main" fontWeight={600}>{log.currentName || log.newName || '—'}</Typography>
+                                </TableCell>
+                                <TableCell>{log.userName || '—'}</TableCell>
                             </TableRow>
                         ))}
                     </TableBody>

@@ -162,6 +162,19 @@ module.exports = {
                         { partyName: newName },
                         { where: { partyName: oldName, partyType: 'customer' } }
                     );
+                    await createAuditLog({
+                        userId: req.user?.id,
+                        userName: req.user?.name || req.user?.username,
+                        userRole: req.user?.role,
+                        action: 'UPDATE',
+                        entityType: 'CUSTOMER_NAME_CHANGE',
+                        entityId: req.params.customerId,
+                        entityName: newName,
+                        oldValues: { name: oldName },
+                        newValues: { name: newName },
+                        description: `Customer renamed: "${oldName}" → "${newName}"`,
+                        ipAddress: getClientIP(req)
+                    });
                 }
             }
 

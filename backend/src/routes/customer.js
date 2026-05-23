@@ -80,4 +80,28 @@ module.exports = (router) => {
             authenticate,
             Controller.customer.getCustomerWithTransactions
         );
+
+    // Get all customer name change logs
+    router.get('/customers/logs/name-changes', authenticate, authorize('admin'), async (req, res) => {
+        try {
+            const db = require('../models');
+            const logs = await db.sequelize.query(`
+                SELECT
+                    al."entityId" as "customerId",
+                    al."entityName" as "newName",
+                    al."oldValues"->>'name' as "oldName",
+                    al."newValues"->>'name' as "currentName",
+                    al."userName",
+                    al."userRole",
+                    al."createdAt"
+                FROM audit_logs al
+                WHERE al."entityType" = 'CUSTOMER_NAME_CHANGE'
+                ORDER BY al."createdAt" DESC
+                LIMIT 200
+            `, { type: db.Sequelize.QueryTypes.SELECT });
+            res.json({ status: 200, data: logs });
+        } catch (err) {
+            res.status(500).json({ status: 500, message: err.message });
+        }
+    });
 };
