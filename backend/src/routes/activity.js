@@ -41,20 +41,18 @@ module.exports = (router) => {
                     order: [['createdAt', 'DESC']]
                 }),
 
-                // Customers created today
+                // Customers created today (no isDeleted column in this table)
                 db.customer.findAll({
                     where: {
-                        isDeleted: false,
                         createdAt: { [Op.between]: [dayStart, dayEnd] }
                     },
                     attributes: ['id', 'name', 'mobile', 'openingBalance', 'createdAt'],
                     order: [['createdAt', 'DESC']]
                 }),
 
-                // Suppliers created today
+                // Suppliers created today (no isDeleted column in this table)
                 db.supplier.findAll({
                     where: {
-                        isDeleted: false,
                         createdAt: { [Op.between]: [dayStart, dayEnd] }
                     },
                     attributes: ['id', 'name', 'mobile', 'openingBalance', 'createdAt'],
