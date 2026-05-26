@@ -5,7 +5,7 @@ import {
     InputLabel, Grid, IconButton, Tooltip, Dialog, DialogTitle, DialogContent,
     DialogActions, Button, Alert, Tabs, Tab
 } from '@mui/material';
-import { Visibility, Warning, Delete, RemoveCircle, HighlightOff, Refresh, Scale, FitnessCenter, Telegram, PersonOff, Payment, DriveFileRenameOutline } from '@mui/icons-material';
+import { Visibility, Warning, Delete, RemoveCircle, HighlightOff, Refresh, Scale, FitnessCenter, Telegram, PersonOff, Payment, DriveFileRenameOutline, Receipt, EditNote, DeleteSweep } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
 
@@ -58,13 +58,16 @@ export const BillAuditLogs = () => {
                     {sending ? 'Sending...' : sent ? 'Sent to Telegram!' : 'Send Report to Telegram'}
                 </Button>
             </Box>
-            <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
+            <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }} variant="scrollable" scrollButtons="auto">
                 <Tab label="Item Deletions" icon={<Delete fontSize="small" />} iconPosition="start" />
                 <Tab label="Weight Fetches" icon={<FitnessCenter fontSize="small" />} iconPosition="start" />
                 <Tab label="Customer Deleted" icon={<PersonOff fontSize="small" />} iconPosition="start" />
                 <Tab label="Customer Payments" icon={<Payment fontSize="small" />} iconPosition="start" />
                 <Tab label="Supplier Payments" icon={<Payment fontSize="small" />} iconPosition="start" />
                 <Tab label="Name Changes" icon={<DriveFileRenameOutline fontSize="small" />} iconPosition="start" />
+                <Tab label="Invoice Edits" icon={<EditNote fontSize="small" />} iconPosition="start" />
+                <Tab label="Invoice Deletions" icon={<DeleteSweep fontSize="small" />} iconPosition="start" />
+                <Tab label="Receipt Deletions" icon={<Receipt fontSize="small" />} iconPosition="start" />
             </Tabs>
             {activeTab === 0 && <DeletionLogs />}
             {activeTab === 1 && <WeightLogs />}
@@ -72,6 +75,9 @@ export const BillAuditLogs = () => {
             {activeTab === 3 && <CustomerPaymentLogs />}
             {activeTab === 4 && <SupplierPaymentLogs />}
             {activeTab === 5 && <NameChangeLogs />}
+            {activeTab === 6 && <OrderChangeLogs action="UPDATE" title="Invoice Edit History" color="info.main" />}
+            {activeTab === 7 && <OrderChangeLogs action="DELETE" title="Invoice Deletion History" color="error.main" />}
+            {activeTab === 8 && <PaymentDeletionLogs />}
         </Box>
     );
 };
@@ -945,6 +951,194 @@ const NameChangeLogs = () => {
                                 <TableCell>{log.userName || '—'}</TableCell>
                             </TableRow>
                         ))}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
+    );
+};
+
+const OrderChangeLogs = ({ action, title, color }) => {
+    const [logs, setLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+
+    const fetchLogs = useCallback(async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const params = new URLSearchParams({ entityType: 'ORDER', action, limit: '300' });
+            if (startDate) params.append('startDate', startDate);
+            if (endDate) params.append('endDate', endDate);
+            const res = await axios.get(`/api/dashboard/audit-logs?${params}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setLogs(res.data?.data?.rows || res.data?.rows || []);
+        } catch (err) {
+            console.error('Failed to fetch order logs:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [action, startDate, endDate]);
+
+    useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Typography variant="subtitle1" fontWeight={700} color={color}>{title}</Typography>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <TextField type="date" size="small" label="From" value={startDate}
+                        onChange={e => setStartDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 150 }} />
+                    <TextField type="date" size="small" label="To" value={endDate}
+                        onChange={e => setEndDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 150 }} />
+                    <IconButton size="small" onClick={fetchLogs}><Refresh fontSize="small" /></IconButton>
+                </Box>
+            </Box>
+            {!loading && logs.length === 0 && (
+                <Alert severity="success">No records found.</Alert>
+            )}
+            <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                <Table stickyHeader size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Date & Time</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Invoice / Customer</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Done By</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Role</TableCell>
+                            {action === 'DELETE' && <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }} align="right">Value</TableCell>}
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Description</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
+                        ) : logs.map((log) => {
+                            const old = log.oldValues || {};
+                            const nv = log.newValues || {};
+                            const value = action === 'DELETE' ? Number(old.total || old.grandTotal || 0) : null;
+                            return (
+                                <TableRow key={log.id} hover sx={{ bgcolor: action === 'DELETE' ? '#ffebee' : 'inherit' }}>
+                                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                        {moment(log.createdAt).format('DD-MM-YYYY HH:mm')}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Typography variant="body2" fontWeight={600} fontFamily="monospace">
+                                            {old.orderNumber || nv.orderNumber || log.entityName || `#${log.entityId}`}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            {old.customerName || nv.customerName || '—'}
+                                        </Typography>
+                                    </TableCell>
+                                    <TableCell>{log.userName || '—'}</TableCell>
+                                    <TableCell>
+                                        <Chip size="small" label={log.userRole || '—'} variant="outlined" />
+                                    </TableCell>
+                                    {action === 'DELETE' && (
+                                        <TableCell align="right">
+                                            <Typography fontWeight={700} color="error.main">
+                                                {value > 0 ? `₹${value.toLocaleString('en-IN')}` : '—'}
+                                            </Typography>
+                                        </TableCell>
+                                    )}
+                                    <TableCell sx={{ maxWidth: 280 }}>
+                                        <Typography variant="caption" color="text.secondary">{log.description || '—'}</Typography>
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
+    );
+};
+
+const PaymentDeletionLogs = () => {
+    const [logs, setLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+
+    const fetchLogs = useCallback(async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const params = new URLSearchParams({ entityType: 'PAYMENT', action: 'DELETE', limit: '300' });
+            if (startDate) params.append('startDate', startDate);
+            if (endDate) params.append('endDate', endDate);
+            const res = await axios.get(`/api/dashboard/audit-logs?${params}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setLogs(res.data?.data?.rows || res.data?.rows || []);
+        } catch (err) {
+            console.error('Failed to fetch payment deletion logs:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [startDate, endDate]);
+
+    useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Typography variant="subtitle1" fontWeight={700} color="error.main">Receipt / Payment Deletion History</Typography>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <TextField type="date" size="small" label="From" value={startDate}
+                        onChange={e => setStartDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 150 }} />
+                    <TextField type="date" size="small" label="To" value={endDate}
+                        onChange={e => setEndDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 150 }} />
+                    <IconButton size="small" onClick={fetchLogs}><Refresh fontSize="small" /></IconButton>
+                </Box>
+            </Box>
+            {!loading && logs.length === 0 && (
+                <Alert severity="success">No receipt deletions recorded.</Alert>
+            )}
+            <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                <Table stickyHeader size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Date & Time</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Payment No.</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Customer</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }} align="right">Amount Deleted</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Deleted By</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Role</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
+                        ) : logs.map((log) => {
+                            const old = log.oldValues || {};
+                            const amount = Number(old.amount || 0);
+                            return (
+                                <TableRow key={log.id} hover sx={{ bgcolor: '#ffebee' }}>
+                                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                        {moment(log.createdAt).format('DD-MM-YYYY HH:mm')}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Typography variant="body2" fontFamily="monospace" fontSize={12}>
+                                            {old.paymentNumber || log.entityName || `#${log.entityId}`}
+                                        </Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Typography variant="body2" fontWeight={600}>{old.partyName || '—'}</Typography>
+                                    </TableCell>
+                                    <TableCell align="right">
+                                        <Typography fontWeight={700} color="error.main">
+                                            {amount > 0 ? `₹${amount.toLocaleString('en-IN')}` : '—'}
+                                        </Typography>
+                                    </TableCell>
+                                    <TableCell>{log.userName || '—'}</TableCell>
+                                    <TableCell>
+                                        <Chip size="small" label={log.userRole || '—'} variant="outlined" />
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })}
                     </TableBody>
                 </Table>
             </TableContainer>
