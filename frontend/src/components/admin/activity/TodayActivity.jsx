@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box, Typography, Card, CardContent, Chip, TextField, IconButton,
-    CircularProgress, Alert, Tooltip, Paper, Divider
+    CircularProgress, Alert, Tooltip, Paper
 } from '@mui/material';
 import {
     Refresh, Receipt, Payment, PersonAdd, Business, ShoppingBag,
