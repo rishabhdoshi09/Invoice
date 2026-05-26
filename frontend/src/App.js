@@ -26,6 +26,7 @@ import { GstExportTool } from "./components/admin/gstExport/GstExportTool";
 import { StockManagement } from "./components/admin/stock/StockManagement";
 import LedgerModule from "./components/admin/ledger/LedgerModule";
 import BillAuditLogs from "./components/admin/audit/BillAuditLogs";
+import { Loans } from "./components/admin/loans/Loans";
 import { CircularProgress, Box } from "@mui/material";
 import { NotificationProvider } from "./components/common/SmartNotifications";
 import { KeyboardShortcutsHelp, useKeyboardShortcutsHelp } from "./components/common/KeyboardShortcuts";
@@ -186,6 +187,7 @@ const AppContent = () => {
           <Route path="day-start" element={<DayStart />} />
           <Route path="ledger" element={<ProtectedRoute adminOnly><LedgerModule /></ProtectedRoute>} />
           <Route path="bill-audit" element={<ProtectedRoute adminOnly><BillAuditLogs /></ProtectedRoute>} />
+          <Route path="loans" element={<Loans />} />
           <Route path="backup" element={<ProtectedRoute adminOnly><DatabaseBackup /></ProtectedRoute>} />
           <Route 
             path="admin-dashboard" 

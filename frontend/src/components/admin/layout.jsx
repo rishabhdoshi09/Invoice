@@ -12,7 +12,7 @@ import {
     Folder as FolderIcon, Menu as MenuIcon, Shop, People, ShoppingCart,
     Payment, Assessment, CloudDownload, Dashboard, Logout, AccountCircle,
     Group, Today, AccountBalance, Calculate, Inventory, Search, Book,
-    Security, BackupOutlined, MoreHoriz,
+    Security, BackupOutlined, MoreHoriz, Handshake,
 } from '@mui/icons-material';
 import { GlobalSearch } from '../common/GlobalSearch';
 import { NotificationBell } from '../common/SmartNotifications';
@@ -146,6 +146,7 @@ export const Layout = () =>  {
         { key: 'suppliers',      label: 'Suppliers',      icon: <People />,         path: 'suppliers' },
         { key: 'purchases',      label: 'Purchases',      icon: <ShoppingCart />,   path: 'purchases' },
         { key: 'payments',       label: 'Payments',       icon: <Payment />,        path: 'payments' },
+        { key: 'loans',          label: 'Loans',          icon: <Handshake />,      path: 'loans' },
         { key: 'daily-payments', label: 'Daily Payments', icon: <Today />,          path: 'daily-payments' },
         { key: 'stock',          label: 'Stock',          icon: <Inventory />,      path: 'stock' },
         { key: 'products',       label: 'Products',       icon: <FolderIcon />,     path: 'products' },

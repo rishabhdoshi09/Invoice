@@ -5,7 +5,7 @@ import {
     InputLabel, Grid, IconButton, Tooltip, Dialog, DialogTitle, DialogContent,
     DialogActions, Button, Alert, Tabs, Tab
 } from '@mui/material';
-import { Visibility, Warning, Delete, RemoveCircle, HighlightOff, Refresh, Scale, FitnessCenter, Telegram, PersonOff, Payment, DriveFileRenameOutline, Receipt, EditNote, DeleteSweep } from '@mui/icons-material';
+import { Visibility, Warning, Delete, RemoveCircle, HighlightOff, Refresh, Scale, FitnessCenter, Telegram, PersonOff, Payment, DriveFileRenameOutline, Receipt, EditNote, DeleteSweep, AccountBalance } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
 
@@ -68,6 +68,7 @@ export const BillAuditLogs = () => {
                 <Tab label="Invoice Edits" icon={<EditNote fontSize="small" />} iconPosition="start" />
                 <Tab label="Invoice Deletions" icon={<DeleteSweep fontSize="small" />} iconPosition="start" />
                 <Tab label="Receipt Deletions" icon={<Receipt fontSize="small" />} iconPosition="start" />
+                <Tab label="Loan Changes" icon={<AccountBalance fontSize="small" />} iconPosition="start" />
             </Tabs>
             {activeTab === 0 && <DeletionLogs />}
             {activeTab === 1 && <WeightLogs />}
@@ -78,6 +79,7 @@ export const BillAuditLogs = () => {
             {activeTab === 6 && <OrderChangeLogs action="UPDATE" title="Invoice Edit History" color="info.main" />}
             {activeTab === 7 && <OrderChangeLogs action="DELETE" title="Invoice Deletion History" color="error.main" />}
             {activeTab === 8 && <PaymentDeletionLogs />}
+            {activeTab === 9 && <GenericAuditLog entityType="LOAN" title="Loan Audit Trail" />}
         </Box>
     );
 };
@@ -1139,6 +1141,96 @@ const PaymentDeletionLogs = () => {
                                 </TableRow>
                             );
                         })}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
+    );
+};
+
+const GenericAuditLog = ({ entityType, title }) => {
+    const [logs, setLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [action, setAction] = useState('');
+
+    const fetchLogs = useCallback(async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const params = new URLSearchParams({ entityType, limit: '300' });
+            if (action) params.append('action', action);
+            if (startDate) params.append('startDate', startDate);
+            if (endDate) params.append('endDate', endDate);
+            const res = await axios.get(`/api/dashboard/audit-logs?${params}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setLogs(res.data?.data?.rows || res.data?.rows || []);
+        } catch (err) {
+            console.error('Failed to fetch audit logs:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [entityType, action, startDate, endDate]);
+
+    useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+    const actionColors = { CREATE: 'success', UPDATE: 'info', DELETE: 'error' };
+
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Typography variant="subtitle1" fontWeight={700}>{title}</Typography>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <FormControl size="small" sx={{ width: 120 }}>
+                        <InputLabel>Action</InputLabel>
+                        <Select value={action} label="Action" onChange={e => setAction(e.target.value)}>
+                            <MenuItem value="">All</MenuItem>
+                            <MenuItem value="CREATE">Create</MenuItem>
+                            <MenuItem value="UPDATE">Update</MenuItem>
+                            <MenuItem value="DELETE">Delete</MenuItem>
+                        </Select>
+                    </FormControl>
+                    <TextField type="date" size="small" label="From" value={startDate}
+                        onChange={e => setStartDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 150 }} />
+                    <TextField type="date" size="small" label="To" value={endDate}
+                        onChange={e => setEndDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 150 }} />
+                    <IconButton size="small" onClick={fetchLogs}><Refresh fontSize="small" /></IconButton>
+                </Box>
+            </Box>
+            {!loading && logs.length === 0 && <Alert severity="info">No records found.</Alert>}
+            <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                <Table stickyHeader size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Date & Time</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Action</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Record</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Done By</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Role</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Description</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
+                        ) : logs.map(log => (
+                            <TableRow key={log.id} hover sx={{ bgcolor: log.action === 'DELETE' ? '#ffebee' : 'inherit' }}>
+                                <TableCell sx={{ whiteSpace: 'nowrap' }}>{moment(log.createdAt).format('DD-MM-YYYY HH:mm')}</TableCell>
+                                <TableCell>
+                                    <Chip size="small" label={log.action} color={actionColors[log.action] || 'default'} variant="outlined" />
+                                </TableCell>
+                                <TableCell>
+                                    <Typography variant="body2" fontWeight={600}>{log.entityName || `#${log.entityId}`}</Typography>
+                                </TableCell>
+                                <TableCell>{log.userName || '—'}</TableCell>
+                                <TableCell><Chip size="small" label={log.userRole || '—'} variant="outlined" /></TableCell>
+                                <TableCell sx={{ maxWidth: 280 }}>
+                                    <Typography variant="caption" color="text.secondary">{log.description || '—'}</Typography>
+                                </TableCell>
+                            </TableRow>
+                        ))}
                     </TableBody>
                 </Table>
             </TableContainer>
