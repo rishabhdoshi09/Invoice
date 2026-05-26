@@ -1,7 +1,7 @@
 const { authenticate } = require('../middleware/auth');
 const db = require('../models');
 const { Op } = require('sequelize');
-const moment = require('moment');
+const moment = require('moment-timezone');
 
 module.exports = (router) => {
     /**
