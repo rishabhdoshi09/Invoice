@@ -87,7 +87,7 @@ module.exports = (router) => {
             orders.forEach(o => feed.push({
                 id: `order-${o.id}`, time: o.createdAt, action: 'CREATE', entityType: 'ORDER',
                 title: `Invoice ${o.orderNumber}`,
-                subtitle: o.customerName,
+                subtitle: o.customerName || 'Cash Sale',
                 amount: Number(o.total),
                 meta: `Date: ${o.orderDate}`
             }));
