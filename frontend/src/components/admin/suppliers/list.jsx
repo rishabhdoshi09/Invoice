@@ -10,7 +10,7 @@ import {
 import {
     Delete, Visibility, Refresh, Add, Payment, Close,
     Search, Download, Print, AccountBalance, ShoppingBag, CheckCircle,
-    KeyboardArrowDown, Save
+    KeyboardArrowDown, Save, Edit
 } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
@@ -571,6 +571,7 @@ export const ListSuppliers = () => {
     const [entryMode, setEntryMode] = useState(null);
     const [successMsg, setSuccessMsg] = useState('');
     const [prefilledSupplier, setPrefilledSupplier] = useState(null);
+    const [editingName, setEditingName] = useState(null); // { id, value }
     useEffect(() => { fetchSuppliers(); }, []);
 
     const fetchSuppliers = async () => {
@@ -595,6 +596,20 @@ export const ListSuppliers = () => {
         setSuccessMsg(msg);
         setTimeout(() => setSuccessMsg(''), 3500);
         fetchSuppliers();
+    };
+
+    const handleInlineNameSave = async (id, newName) => {
+        const trimmed = newName.trim();
+        setEditingName(null);
+        const original = suppliers.find(s => s.id === id);
+        if (!trimmed || trimmed === original?.name) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`/api/suppliers/${id}`, { name: trimmed }, { headers: { Authorization: `Bearer ${token}` } });
+            setSuppliers(prev => prev.map(s => s.id === id ? { ...s, name: trimmed } : s));
+        } catch (e) {
+            alert('Failed to rename: ' + (e.response?.data?.message || e.message));
+        }
     };
 
     // ── Delete handlers ──
@@ -831,7 +846,26 @@ export const ListSuppliers = () => {
                             ) : paginatedSuppliers.map(sup => (
                                 <TableRow key={sup.id} hover data-testid={`supplier-row-${sup.id}`} sx={{ '& td': { py: 0.6 } }}>
                                     <TableCell>
-                                        <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.85rem' }}>{sup.name}</Typography>
+                                        {editingName?.id === sup.id ? (
+                                            <TextField
+                                                size="small" autoFocus
+                                                value={editingName.value}
+                                                onChange={e => setEditingName({ id: sup.id, value: e.target.value })}
+                                                onBlur={() => handleInlineNameSave(sup.id, editingName.value)}
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter') handleInlineNameSave(sup.id, editingName.value);
+                                                    if (e.key === 'Escape') setEditingName(null);
+                                                }}
+                                                sx={{ width: 180 }}
+                                                inputProps={{ style: { fontWeight: 600, fontSize: '0.85rem' } }}
+                                            />
+                                        ) : (
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer' }}
+                                                onClick={() => setEditingName({ id: sup.id, value: sup.name })}>
+                                                <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.85rem' }}>{sup.name}</Typography>
+                                                <Edit sx={{ fontSize: 13, color: 'text.disabled', opacity: 0, '.MuiTableRow-root:hover &': { opacity: 1 } }} />
+                                            </Box>
+                                        )}
                                         {sup.gstin && <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>{sup.gstin}</Typography>}
                                     </TableCell>
                                     <TableCell><Typography variant="body2" sx={{ fontSize: '0.83rem' }}>{sup.mobile || '-'}</Typography></TableCell>
