@@ -1,5 +1,7 @@
 const Services = require('../services');
 const Validations = require('../validations');
+const { createAuditLog } = require('../middleware/auditLogger');
+const getClientIP = (req) => req.headers['x-forwarded-for'] || req.connection?.remoteAddress || '';
 
 module.exports = {
     createSupplier: async (req, res) => {
@@ -139,6 +141,33 @@ module.exports = {
                     status: 400,
                     message: error.details[0].message
                 });
+            }
+
+            // Cascade name change to all payments referencing this supplier by name
+            if (value.name) {
+                const db = require('../models');
+                const existing = await db.supplier.findOne({ where: { id: req.params.supplierId } });
+                if (existing && existing.name !== value.name) {
+                    const oldName = existing.name;
+                    const newName = value.name;
+                    await db.payment.update(
+                        { partyName: newName },
+                        { where: { partyName: oldName, partyType: 'supplier' } }
+                    );
+                    await createAuditLog({
+                        userId: req.user?.id,
+                        userName: req.user?.name || req.user?.username,
+                        userRole: req.user?.role,
+                        action: 'UPDATE',
+                        entityType: 'SUPPLIER_NAME_CHANGE',
+                        entityId: req.params.supplierId,
+                        entityName: newName,
+                        oldValues: { name: oldName },
+                        newValues: { name: newName },
+                        description: `Supplier renamed: "${oldName}" → "${newName}"`,
+                        ipAddress: getClientIP(req)
+                    });
+                }
             }
 
             // Set currentBalance equal to openingBalance if provided in the update payload

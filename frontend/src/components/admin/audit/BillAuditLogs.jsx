@@ -64,7 +64,8 @@ export const BillAuditLogs = () => {
                 <Tab label="Customer Deleted" icon={<PersonOff fontSize="small" />} iconPosition="start" />
                 <Tab label="Customer Payments" icon={<Payment fontSize="small" />} iconPosition="start" />
                 <Tab label="Supplier Payments" icon={<Payment fontSize="small" />} iconPosition="start" />
-                <Tab label="Name Changes" icon={<DriveFileRenameOutline fontSize="small" />} iconPosition="start" />
+                <Tab label="Customer Name Changes" icon={<DriveFileRenameOutline fontSize="small" />} iconPosition="start" />
+                <Tab label="Supplier Name Changes" icon={<DriveFileRenameOutline fontSize="small" />} iconPosition="start" />
                 <Tab label="Invoice Edits" icon={<EditNote fontSize="small" />} iconPosition="start" />
                 <Tab label="Invoice Deletions" icon={<DeleteSweep fontSize="small" />} iconPosition="start" />
                 <Tab label="Receipt Deletions" icon={<Receipt fontSize="small" />} iconPosition="start" />
@@ -75,11 +76,12 @@ export const BillAuditLogs = () => {
             {activeTab === 2 && <CustomerDeleteLogs />}
             {activeTab === 3 && <CustomerPaymentLogs />}
             {activeTab === 4 && <SupplierPaymentLogs />}
-            {activeTab === 5 && <NameChangeLogs />}
-            {activeTab === 6 && <OrderChangeLogs action="UPDATE" title="Invoice Edit History" color="info.main" />}
-            {activeTab === 7 && <OrderChangeLogs action="DELETE" title="Invoice Deletion History" color="error.main" />}
-            {activeTab === 8 && <PaymentDeletionLogs />}
-            {activeTab === 9 && <GenericAuditLog entityType="LOAN" title="Loan Audit Trail" />}
+            {activeTab === 5 && <NameChangeLogs endpoint="/api/customers/logs/name-changes" title="Customer Name Change History" />}
+            {activeTab === 6 && <NameChangeLogs endpoint="/api/suppliers/logs/name-changes" title="Supplier Name Change History" />}
+            {activeTab === 7 && <OrderChangeLogs action="UPDATE" title="Invoice Edit History" color="info.main" />}
+            {activeTab === 8 && <OrderChangeLogs action="DELETE" title="Invoice Deletion History" color="error.main" />}
+            {activeTab === 9 && <PaymentDeletionLogs />}
+            {activeTab === 10 && <GenericAuditLog entityType="LOAN" title="Loan Audit Trail" />}
         </Box>
     );
 };
@@ -892,7 +894,7 @@ const SupplierPaymentLogs = () => {
     );
 };
 
-const NameChangeLogs = () => {
+const NameChangeLogs = ({ endpoint, title }) => {
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -900,7 +902,7 @@ const NameChangeLogs = () => {
         setLoading(true);
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.get('/api/customers/logs/name-changes', {
+            const res = await axios.get(endpoint, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setLogs(res.data?.data || []);
@@ -909,7 +911,7 @@ const NameChangeLogs = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [endpoint]);
 
     useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
@@ -917,7 +919,7 @@ const NameChangeLogs = () => {
         <Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="subtitle1" fontWeight={700} color="primary">
-                    Customer Name Change History
+                    {title}
                 </Typography>
                 <IconButton size="small" onClick={fetchLogs}><Refresh fontSize="small" /></IconButton>
             </Box>
