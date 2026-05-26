@@ -5,7 +5,8 @@ import {
 } from '@mui/material';
 import {
     Refresh, Receipt, Payment, PersonAdd, Business, ShoppingBag,
-    Delete, CallMade, CallReceived, Store
+    Delete, CallMade, CallReceived, DeleteForever, PersonRemove,
+    RemoveShoppingCart, MoneyOff, WarningAmber
 } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
@@ -143,83 +144,176 @@ export const TodayActivity = () => {
             ) : filtered.length === 0 ? (
                 <Alert severity="info">No activity found{filter !== 'ALL' ? ` for filter: ${filter}` : ''}.</Alert>
             ) : (
-                <Paper variant="outlined">
-                    {filtered.map((entry, idx) => {
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {filtered.map((entry) => {
                         const cfg = TYPE_CONFIG[entry.entityType] || TYPE_CONFIG['PAYMENT'];
                         const isDelete = entry.action === 'DELETE';
-                        return (
-                            <React.Fragment key={entry.id}>
-                                <Box sx={{
-                                    display: 'flex', alignItems: 'flex-start', gap: 2, px: 2, py: 1.5,
-                                    bgcolor: isDelete ? '#fff8f8' : 'inherit',
-                                    '&:hover': { bgcolor: isDelete ? '#ffefef' : '#fafafa' }
+
+                        if (isDelete) {
+                            const ENTITY_LABEL = {
+                                ORDER: 'Invoice', PAYMENT: 'Payment',
+                                CUSTOMER: 'Customer', SUPPLIER: 'Supplier', PURCHASE: 'Purchase'
+                            };
+                            const ENTITY_ICON = {
+                                ORDER: <Receipt sx={{ fontSize: 18 }} />,
+                                PAYMENT: entry.partyType === 'customer'
+                                    ? <CallReceived sx={{ fontSize: 18 }} />
+                                    : <CallMade sx={{ fontSize: 18 }} />,
+                                CUSTOMER: <PersonRemove sx={{ fontSize: 18 }} />,
+                                SUPPLIER: <Business sx={{ fontSize: 18 }} />,
+                                PURCHASE: <RemoveShoppingCart sx={{ fontSize: 18 }} />
+                            };
+                            return (
+                                <Paper key={entry.id} variant="outlined" sx={{
+                                    border: '1.5px solid #ef9a9a',
+                                    bgcolor: '#fff5f5',
+                                    borderRadius: 2,
+                                    overflow: 'hidden'
                                 }}>
-                                    {/* Time */}
-                                    <Box sx={{ minWidth: 52, textAlign: 'right', mt: 0.3 }}>
-                                        <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', fontSize: '0.72rem' }}>
+                                    {/* Red header bar */}
+                                    <Box sx={{
+                                        bgcolor: '#c62828', color: '#fff',
+                                        px: 2, py: 0.75,
+                                        display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'space-between'
+                                    }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <DeleteForever sx={{ fontSize: 16 }} />
+                                            <Typography variant="caption" fontWeight={700} sx={{ letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                                                {ENTITY_LABEL[entry.entityType] || entry.entityType} Deleted
+                                            </Typography>
+                                        </Box>
+                                        <Typography variant="caption" sx={{ opacity: 0.85, fontFamily: 'monospace' }}>
                                             {moment(entry.time).format('HH:mm')}
                                         </Typography>
                                     </Box>
 
-                                    {/* Type badge */}
-                                    <Box sx={{
-                                        width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                                        bgcolor: isDelete ? '#ffebee' : cfg.bg,
-                                        color: isDelete ? '#c62828' : cfg.color,
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                    }}>
-                                        {isDelete ? <Delete sx={{ fontSize: 16 }} /> : cfg.icon}
-                                    </Box>
-
-                                    {/* Content */}
-                                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                                            <Typography variant="body2" fontWeight={600} sx={{
-                                                textDecoration: isDelete ? 'line-through' : 'none',
-                                                color: isDelete ? 'text.secondary' : 'text.primary'
-                                            }}>
-                                                {entry.title}
-                                            </Typography>
-                                            {isDelete && (
-                                                <Chip label="DELETED" size="small" color="error" variant="filled"
-                                                    sx={{ fontSize: '0.65rem', height: 18 }} />
-                                            )}
-                                            {!isDelete && (
-                                                <Chip
-                                                    label={cfg.label}
-                                                    size="small"
-                                                    sx={{ fontSize: '0.65rem', height: 18, bgcolor: cfg.bg, color: cfg.color, fontWeight: 600 }}
-                                                />
-                                            )}
-                                        </Box>
-                                        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mt: 0.3 }}>
-                                            {entry.subtitle && (
-                                                <Typography variant="caption" color="text.secondary">{entry.subtitle}</Typography>
-                                            )}
-                                            {entry.meta && (
-                                                <Typography variant="caption" color="text.disabled">{entry.meta}</Typography>
-                                            )}
-                                        </Box>
-                                    </Box>
-
-                                    {/* Amount */}
-                                    {entry.amount > 0 && (
-                                        <Typography variant="body2" fontWeight={700} sx={{
-                                            fontFamily: 'monospace',
-                                            color: isDelete ? '#c62828' :
-                                                   entry.entityType === 'PAYMENT_IN' ? '#2e7d32' :
-                                                   entry.entityType === 'PAYMENT_OUT' ? '#e65100' : '#1a237e',
-                                            whiteSpace: 'nowrap'
+                                    {/* Body */}
+                                    <Box sx={{ px: 2, py: 1.5, display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+                                        {/* Icon */}
+                                        <Box sx={{
+                                            width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                                            bgcolor: '#ffebee', color: '#c62828',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center', mt: 0.25
                                         }}>
-                                            {fmt(entry.amount)}
-                                        </Typography>
-                                    )}
+                                            {ENTITY_ICON[entry.entityType] || <Delete sx={{ fontSize: 18 }} />}
+                                        </Box>
+
+                                        {/* Details */}
+                                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                                            {/* Title row */}
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.25 }}>
+                                                <Typography variant="body2" fontWeight={700} sx={{ color: '#b71c1c', textDecoration: 'line-through' }}>
+                                                    {entry.title}
+                                                </Typography>
+                                                {entry.subtitle && (
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        — {entry.subtitle}
+                                                    </Typography>
+                                                )}
+                                            </Box>
+
+                                            {/* Meta row */}
+                                            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                                                {entry.date && (
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        Date: {entry.date}
+                                                    </Typography>
+                                                )}
+                                                {entry.extra && (
+                                                    <Typography variant="caption" sx={{ color: '#c62828', fontWeight: 600 }}>
+                                                        {entry.extra}
+                                                    </Typography>
+                                                )}
+                                            </Box>
+
+                                            {/* Deleted by row */}
+                                            {entry.deletedBy && (
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+                                                    <WarningAmber sx={{ fontSize: 13, color: '#e65100' }} />
+                                                    <Typography variant="caption" sx={{ color: '#e65100', fontWeight: 600 }}>
+                                                        Deleted by {entry.deletedBy}
+                                                        {entry.deletedByRole ? ` (${entry.deletedByRole})` : ''}
+                                                    </Typography>
+                                                </Box>
+                                            )}
+                                        </Box>
+
+                                        {/* Amount */}
+                                        {entry.amount > 0 && (
+                                            <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+                                                <Typography variant="body1" fontWeight={700} sx={{ color: '#b71c1c', fontFamily: 'monospace' }}>
+                                                    {fmt(entry.amount)}
+                                                </Typography>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, justifyContent: 'flex-end' }}>
+                                                    <MoneyOff sx={{ fontSize: 12, color: '#c62828' }} />
+                                                    <Typography variant="caption" sx={{ color: '#c62828' }}>voided</Typography>
+                                                </Box>
+                                            </Box>
+                                        )}
+                                    </Box>
+                                </Paper>
+                            );
+                        }
+
+                        // Normal CREATE entry
+                        return (
+                            <Paper key={entry.id} variant="outlined" sx={{
+                                display: 'flex', alignItems: 'flex-start', gap: 2, px: 2, py: 1.5,
+                                '&:hover': { bgcolor: '#fafafa' }
+                            }}>
+                                {/* Time */}
+                                <Box sx={{ minWidth: 46, textAlign: 'right', mt: 0.4 }}>
+                                    <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', fontSize: '0.72rem' }}>
+                                        {moment(entry.time).format('HH:mm')}
+                                    </Typography>
                                 </Box>
-                                {idx < filtered.length - 1 && <Divider />}
-                            </React.Fragment>
+
+                                {/* Type badge */}
+                                <Box sx={{
+                                    width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                                    bgcolor: cfg.bg, color: cfg.color,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                }}>
+                                    {cfg.icon}
+                                </Box>
+
+                                {/* Content */}
+                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                        <Typography variant="body2" fontWeight={600}>
+                                            {entry.title}
+                                        </Typography>
+                                        <Chip
+                                            label={cfg.label}
+                                            size="small"
+                                            sx={{ fontSize: '0.65rem', height: 18, bgcolor: cfg.bg, color: cfg.color, fontWeight: 600 }}
+                                        />
+                                    </Box>
+                                    <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mt: 0.3 }}>
+                                        {entry.subtitle && (
+                                            <Typography variant="caption" color="text.secondary">{entry.subtitle}</Typography>
+                                        )}
+                                        {entry.meta && (
+                                            <Typography variant="caption" color="text.disabled">{entry.meta}</Typography>
+                                        )}
+                                    </Box>
+                                </Box>
+
+                                {/* Amount */}
+                                {entry.amount > 0 && (
+                                    <Typography variant="body2" fontWeight={700} sx={{
+                                        fontFamily: 'monospace',
+                                        color: entry.entityType === 'PAYMENT_IN' ? '#2e7d32' :
+                                               entry.entityType === 'PAYMENT_OUT' ? '#e65100' : '#1a237e',
+                                        whiteSpace: 'nowrap'
+                                    }}>
+                                        {fmt(entry.amount)}
+                                    </Typography>
+                                )}
+                            </Paper>
                         );
                     })}
-                </Paper>
+                </Box>
             )}
 
             {!loading && filtered.length > 0 && (

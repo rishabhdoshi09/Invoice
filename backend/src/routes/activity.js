@@ -127,13 +127,64 @@ module.exports = (router) => {
 
             deletions.forEach(d => {
                 const old = d.oldValues || {};
+                let details = {};
+
+                if (d.entityType === 'ORDER') {
+                    details = {
+                        ref: old.orderNumber || d.entityName,
+                        party: old.customerName || 'Cash Sale',
+                        amount: Number(old.total || old.grandTotal || 0),
+                        date: old.orderDate || '',
+                        extra: old.paidAmount > 0 ? `Paid: ₹${Number(old.paidAmount).toLocaleString('en-IN')}` : 'Unpaid'
+                    };
+                } else if (d.entityType === 'PAYMENT') {
+                    details = {
+                        ref: old.paymentNumber || d.entityName,
+                        party: old.partyName || '',
+                        partyType: old.partyType,
+                        amount: Number(old.amount || 0),
+                        date: old.paymentDate || '',
+                        extra: old.referenceNumber ? `Ref: ${old.referenceNumber}` : (old.notes || '')
+                    };
+                } else if (d.entityType === 'CUSTOMER') {
+                    details = {
+                        ref: old.name || d.entityName,
+                        party: old.mobile || '',
+                        amount: Number(old.currentBalance || old.openingBalance || 0),
+                        date: '',
+                        extra: old.currentBalance > 0 ? `Balance due: ₹${Number(old.currentBalance).toLocaleString('en-IN')}` : ''
+                    };
+                } else if (d.entityType === 'SUPPLIER') {
+                    details = {
+                        ref: old.name || d.entityName,
+                        party: old.mobile || '',
+                        amount: Number(old.currentBalance || old.openingBalance || 0),
+                        date: '',
+                        extra: ''
+                    };
+                } else if (d.entityType === 'PURCHASE') {
+                    details = {
+                        ref: old.billNumber || d.entityName,
+                        party: old.supplierName || '',
+                        amount: Number(old.total || 0),
+                        date: old.billDate || '',
+                        extra: ''
+                    };
+                }
+
                 feed.push({
-                    id: `del-${d.id}`, time: d.createdAt, action: 'DELETE', entityType: d.entityType,
-                    title: `Deleted ${d.entityType}: ${d.entityName || old.orderNumber || old.paymentNumber || old.billNumber || old.name || d.entityId}`,
-                    subtitle: old.customerName || old.partyName || old.name || '',
-                    amount: Number(old.total || old.amount || old.grandTotal || 0),
-                    meta: `By: ${d.userName || '—'} (${d.userRole || '—'})`,
-                    deletedBy: d.userName
+                    id: `del-${d.id}`,
+                    time: d.createdAt,
+                    action: 'DELETE',
+                    entityType: d.entityType,
+                    title: details.ref || d.entityName || d.entityId,
+                    subtitle: details.party,
+                    amount: details.amount,
+                    date: details.date,
+                    extra: details.extra,
+                    deletedBy: d.userName,
+                    deletedByRole: d.userRole,
+                    partyType: details.partyType
                 });
             });
 
