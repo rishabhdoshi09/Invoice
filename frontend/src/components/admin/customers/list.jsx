@@ -666,6 +666,7 @@ export const ListCustomers = () => {
                 <tfoot><tr class="total-row"><td colspan="3">TOTAL</td><td class="debit">${fmt(totalDebit)}</td><td class="credit">${fmt(totalCredit)}</td><td class="balance">${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</td></tr></tfoot>
             </table>
             <div class="closing">Closing Balance: ${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</div>
+            // eslint-disable-next-line no-useless-concat
             <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }</` + `script>
             </body></html>`;
         const w = window.open('', '_blank');
@@ -1731,7 +1732,6 @@ export const ListCustomers = () => {
                         <DialogActions>
                             {detailsDialog.tab === 5 && (() => {
                                 const c = detailsDialog.customer;
-                                const fmt = v => `₹${Math.abs(v || 0).toLocaleString('en-IN')}`;
                                 const entries = [];
                                 if (c.openingBalance && Number(c.openingBalance) !== 0) {
                                     entries.push({ id: 'opening', date: null, sortKey: '0000', particulars: 'Opening Balance', refNo: '-', debit: Number(c.openingBalance) > 0 ? Number(c.openingBalance) : 0, credit: Number(c.openingBalance) < 0 ? Math.abs(Number(c.openingBalance)) : 0 });
