@@ -4,8 +4,7 @@ import {
     TableHead, TableRow, TextField, Dialog, DialogContent, DialogActions, 
     Typography, IconButton, Chip, Tooltip, Grid, Paper, Alert,
     FormControl, InputLabel, Select, MenuItem, CircularProgress, Autocomplete,
-    InputAdornment, TablePagination, Collapse, Switch, FormControlLabel,
-    List, ListItem, ListItemText, ListItemSecondaryAction
+    InputAdornment, TablePagination, Collapse, Switch, FormControlLabel
 } from '@mui/material';
 import {
     Delete, Visibility, Refresh, Add, Payment, Close,
@@ -727,7 +726,7 @@ export const ListSuppliers = () => {
                 <tfoot><tr class="total-row"><td colspan="3">TOTAL</td><td class="debit">${fmt(totalDebit)}</td><td class="credit">${fmt(totalCredit)}</td><td class="balance">${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</td></tr></tfoot>
             </table>
             <div class="closing">Closing Balance: ${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</div>
-            <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }<\/script>
+            <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }</script>
             </body></html>`;
         const w = window.open('', '_blank');
         w.document.write(html);

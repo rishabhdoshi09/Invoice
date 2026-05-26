@@ -3,12 +3,12 @@ import {
     Box, Button, Card, CardContent, Typography, Table, TableBody, TableCell,
     TableContainer, TableHead, TableRow, Paper, Chip, TextField, Dialog,
     DialogTitle, DialogContent, DialogActions, IconButton, Tooltip, Alert,
-    ToggleButtonGroup, ToggleButton, InputAdornment, CircularProgress, Divider,
+    ToggleButtonGroup, ToggleButton, InputAdornment, CircularProgress,
     Collapse
 } from '@mui/material';
 import {
     Add, Delete, KeyboardArrowDown, KeyboardArrowUp, Search,
-    CallMade, CallReceived, Refresh, AccountBalance
+    CallMade, CallReceived, Refresh
 } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
