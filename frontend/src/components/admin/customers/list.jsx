@@ -666,8 +666,7 @@ export const ListCustomers = () => {
                 <tfoot><tr class="total-row"><td colspan="3">TOTAL</td><td class="debit">${fmt(totalDebit)}</td><td class="credit">${fmt(totalCredit)}</td><td class="balance">${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</td></tr></tfoot>
             </table>
             <div class="closing">Closing Balance: ${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</div>
-            // eslint-disable-next-line no-useless-concat
-            <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }</` + `script>
+            <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }</script>
             </body></html>`;
         const w = window.open('', '_blank');
         w.document.write(html);
