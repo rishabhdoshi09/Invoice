@@ -34,7 +34,7 @@ try {
 }
 
 // ─── Customer Ledger Dialog (Tally-style) ─────────────────────────
-const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, onReceipt, onSale, onDeleteReceipt }) => {
+const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, onReceipt, onSale, onDeleteReceipt, onEditInvoice, onDeleteInvoice }) => {
     if (!customer) return null;
     const c = customer;
 
@@ -149,7 +149,7 @@ const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, on
                                         <TableCell align="right" sx={{ fontWeight: 700 }}>
                                             {fmt(e.balance)} {e.balance >= 0 ? 'Dr' : 'Cr'}
                                         </TableCell>
-                                        <TableCell align="center" sx={{ p: 0 }}>
+                                        <TableCell align="center" sx={{ p: 0, whiteSpace: 'nowrap' }}>
                                             {e.type === 'receipt' && onDeleteReceipt && (
                                                 <Tooltip title="Delete receipt">
                                                     <IconButton size="small" onClick={() => onDeleteReceipt(e.id)}
@@ -157,6 +157,26 @@ const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, on
                                                         <Delete sx={{ fontSize: 15 }} />
                                                     </IconButton>
                                                 </Tooltip>
+                                            )}
+                                            {e.type === 'invoice' && (
+                                                <>
+                                                    {onEditInvoice && (
+                                                        <Tooltip title="Edit invoice">
+                                                            <IconButton size="small" onClick={() => onEditInvoice(e.id)}
+                                                                sx={{ color: '#1565c0', opacity: 0.6, '&:hover': { opacity: 1 } }}>
+                                                                <Edit sx={{ fontSize: 15 }} />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    )}
+                                                    {onDeleteInvoice && (
+                                                        <Tooltip title="Delete invoice">
+                                                            <IconButton size="small" onClick={() => onDeleteInvoice(e.id)}
+                                                                sx={{ color: '#c62828', opacity: 0.6, '&:hover': { opacity: 1 } }}>
+                                                                <Delete sx={{ fontSize: 15 }} />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    )}
+                                                </>
                                             )}
                                         </TableCell>
                                     </TableRow>
@@ -331,7 +351,6 @@ export const ListCustomers = () => {
             await axios.delete(`/api/payments/${paymentId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            // Re-fetch customer to refresh the ledger
             const customerId = ledgerDialog.customer?.id;
             if (!customerId) return;
             const { data } = await axios.get(`/api/customers/${customerId}/transactions`, {
@@ -340,6 +359,29 @@ export const ListCustomers = () => {
             setLedgerDialog(prev => ({ ...prev, customer: data.data }));
         } catch (err) {
             alert(err?.response?.data?.message || 'Failed to delete receipt.');
+        }
+    };
+
+    const handleEditInvoice = (orderId) => {
+        setLedgerDialog({ open: false, customer: null });
+        navigate(`/orders/edit/${orderId}`);
+    };
+
+    const handleDeleteInvoice = async (orderId) => {
+        if (!window.confirm('Delete this invoice? This cannot be undone.')) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`/api/orders/${orderId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const customerId = ledgerDialog.customer?.id;
+            if (!customerId) return;
+            const { data } = await axios.get(`/api/customers/${customerId}/transactions`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setLedgerDialog(prev => ({ ...prev, customer: data.data }));
+        } catch (err) {
+            alert(err?.response?.data?.message || 'Failed to delete invoice.');
         }
     };
 
@@ -1837,6 +1879,8 @@ export const ListCustomers = () => {
                 onReceipt={(c) => { setLedgerDialog({ open: false, customer: null }); handleQuickReceiptFromTable(c); }}
                 onSale={(c) => { setLedgerDialog({ open: false, customer: null }); handleCreateSale(c); }}
                 onDeleteReceipt={handleDeleteReceipt}
+                onEditInvoice={handleEditInvoice}
+                onDeleteInvoice={handleDeleteInvoice}
             />
 
             {/* Customer Ledger Statement (date-range PDF) */}
