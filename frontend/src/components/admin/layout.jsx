@@ -12,7 +12,7 @@ import {
     Folder as FolderIcon, Menu as MenuIcon, Shop, People, ShoppingCart,
     Payment, Assessment, CloudDownload, Dashboard, Logout, AccountCircle,
     Group, Today, AccountBalance, Calculate, Inventory, Search, Book,
-    Security, BackupOutlined, MoreHoriz, Handshake,
+    Security, BackupOutlined, MoreHoriz, Handshake, Timeline,
 } from '@mui/icons-material';
 import { GlobalSearch } from '../common/GlobalSearch';
 import { NotificationBell } from '../common/SmartNotifications';
@@ -140,6 +140,7 @@ export const Layout = () =>  {
 
     // Core business pages
     const corePages = [
+        { key: 'activity',       label: 'Activity',       icon: <Timeline />,       path: 'activity' },
         { key: 'day-start',      label: 'Day Start',      icon: <AccountBalance />, path: 'day-start' },
         { key: 'orders',         label: 'Orders',         icon: <Shop />,           path: 'orders' },
         { key: 'customers',      label: 'Customers',      icon: <People />,         path: 'customers' },

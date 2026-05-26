@@ -157,6 +157,45 @@ const server = app.listen(PORT, async () => {
     // Do NOT call sequelize.sync() here — it bypasses migration history and
     // causes non-deterministic schema drift across environments.
 
+    // ── Bootstrap new tables that may not exist yet ─────────────────────────
+    try {
+      await db.sequelize.query(`
+        CREATE TABLE IF NOT EXISTS "loans" (
+          "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          "loanNumber" VARCHAR(255) UNIQUE NOT NULL,
+          "type" VARCHAR(10) NOT NULL CHECK ("type" IN ('given','received')),
+          "partyName" VARCHAR(255) NOT NULL,
+          "partyMobile" VARCHAR(255),
+          "principalAmount" DECIMAL(15,2) NOT NULL,
+          "balanceAmount" DECIMAL(15,2) NOT NULL,
+          "loanDate" VARCHAR(255) NOT NULL,
+          "notes" TEXT,
+          "status" VARCHAR(10) DEFAULT 'active' CHECK ("status" IN ('active','settled')),
+          "isDeleted" BOOLEAN DEFAULT false,
+          "deletedAt" TIMESTAMPTZ,
+          "deletedBy" UUID,
+          "deletedByName" VARCHAR(255),
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await db.sequelize.query(`
+        CREATE TABLE IF NOT EXISTS "loan_transactions" (
+          "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          "loanId" UUID NOT NULL REFERENCES "loans"("id") ON DELETE CASCADE,
+          "amount" DECIMAL(15,2) NOT NULL,
+          "transactionDate" VARCHAR(255) NOT NULL,
+          "notes" TEXT,
+          "recordedBy" VARCHAR(255),
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      console.log('[STARTUP] loans tables ready.');
+    } catch (e) {
+      console.warn('[STARTUP] loans table bootstrap:', e.message);
+    }
+
     // Start scheduled jobs (async, non-blocking)
     try {
       require('./src/scheduler').init(db);
