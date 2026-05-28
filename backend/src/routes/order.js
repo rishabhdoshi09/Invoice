@@ -1,11 +1,9 @@
 const Controller = require('../controller');
 const { authenticate, canModify } = require('../middleware/auth');
-const { auditMiddleware, captureOriginal } = require('../middleware/auditLogger');
 const { makeFinancialWriteGuard } = require('../middleware/financialGuard');
-const db = require('../models');
 
 // Single guard instance shared across all order routes
-const financialWriteGuard = makeFinancialWriteGuard(db);
+const financialWriteGuard = makeFinancialWriteGuard(require('../models'));
 
 module.exports = (router) => {
     // Orders - require authentication for all operations
@@ -14,7 +12,6 @@ module.exports = (router) => {
         .post(
             authenticate,           // Must be logged in
             financialWriteGuard,    // Block writes when audit declares HALT
-            auditMiddleware('ORDER'),
             Controller.order.createOrder
         )
         .get(
@@ -32,16 +29,12 @@ module.exports = (router) => {
             authenticate,
             canModify,              // Admin only for editing
             financialWriteGuard,    // Block writes when audit declares HALT
-            captureOriginal(db.order, 'orderId'),
-            auditMiddleware('ORDER'),
             Controller.order.updateOrder
         )
         .delete(
             authenticate,
             canModify,              // Admin only for deletion
             financialWriteGuard,    // Deletion reverses ledger entries — block during HALT
-            captureOriginal(db.order, 'orderId'),
-            auditMiddleware('ORDER'),
             Controller.order.deleteOrder
         );
 
@@ -59,8 +52,6 @@ module.exports = (router) => {
         .patch(
             authenticate,
             financialWriteGuard,    // Block writes when audit declares HALT
-            captureOriginal(db.order, 'orderId'),
-            auditMiddleware('ORDER'),
             Controller.order.togglePaymentStatus
         );
 
