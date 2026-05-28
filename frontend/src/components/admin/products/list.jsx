@@ -1,6 +1,6 @@
 import { Box, Button, Card, CardContent, Modal, Paper, TableContainer, Table, TableHead, TableBody, TableCell, TableRow, TextField  } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
-import { useState, useMemo, Children } from 'react';
+import { useState, useMemo } from 'react';
 import { CreateProduct } from './create';
 import { EditProduct } from './edit';
 import { deleteProductAction, updateProductAction } from '../../../store/products';
@@ -76,44 +76,40 @@ export const ListProjects = () =>  {
             </TableRow>
           </TableHead>
           <TableBody>
-            {
-              Children.toArray(productList.map((productObj) => {
-                return(
-                  <TableRow>
-                    <TableCell sx={{ minWidth: 160 }}>
-                      {inlineNameId === productObj.id ? (
-                        <TextField
-                          size="small"
-                          autoFocus
-                          value={inlineNameVal}
-                          onChange={(e) => setInlineNameVal(e.target.value)}
-                          onBlur={() => commitInlineName(productObj)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') commitInlineName(productObj);
-                            if (e.key === 'Escape') setInlineNameId('');
-                          }}
-                          sx={{ minWidth: 140 }}
-                        />
-                      ) : (
-                        <Box
-                          onClick={() => startInlineName(productObj)}
-                          sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline', color: '#1976d2' } }}
-                          title="Click to edit name"
-                        >
-                          {productObj.name}
-                        </Box>
-                      )}
-                    </TableCell>
-                    <TableCell>{productObj.type.toUpperCase()}</TableCell>
-                    <TableCell>{productObj.pricePerKg}</TableCell>
-                    <TableCell>
-                      <Button variant='outlined' sx={{margin: '5px'}} onClick={()=>{ setEditProductId(productObj.id); setOpen(true)}}>Edit</Button>
-                      <Button variant='outlined' sx={{margin: '5px'}} onClick={()=>{ dispatch(deleteProductAction(productObj.id))}}>Delete</Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              }))
-            }
+            {productList.map((productObj) => (
+              <TableRow key={productObj.id}>
+                <TableCell sx={{ minWidth: 160 }}>
+                  {inlineNameId === productObj.id ? (
+                    <TextField
+                      size="small"
+                      autoFocus
+                      value={inlineNameVal}
+                      onChange={(e) => setInlineNameVal(e.target.value)}
+                      onBlur={() => commitInlineName(productObj)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') commitInlineName(productObj);
+                        if (e.key === 'Escape') setInlineNameId('');
+                      }}
+                      sx={{ minWidth: 140 }}
+                    />
+                  ) : (
+                    <Box
+                      onClick={() => startInlineName(productObj)}
+                      sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline', color: '#1976d2' } }}
+                      title="Click to edit name"
+                    >
+                      {productObj.name}
+                    </Box>
+                  )}
+                </TableCell>
+                <TableCell>{productObj.type ? productObj.type.toUpperCase() : ''}</TableCell>
+                <TableCell>{productObj.pricePerKg}</TableCell>
+                <TableCell>
+                  <Button variant='outlined' sx={{margin: '5px'}} onClick={()=>{ setEditProductId(productObj.id); setOpen(true)}}>Edit</Button>
+                  <Button variant='outlined' sx={{margin: '5px'}} onClick={()=>{ dispatch(deleteProductAction(productObj.id))}}>Delete</Button>
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </TableContainer>
