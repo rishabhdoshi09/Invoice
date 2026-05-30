@@ -37,7 +37,8 @@ import {
     ExpandLess,
     Visibility,
     PictureAsPdf,
-    Warning
+    Warning,
+    EventBusy
 } from '@mui/icons-material';
 import {
     ResponsiveContainer,
@@ -619,6 +620,69 @@ export const DayStart = () => {
                     </Grid>
                 </Grid>
             </Paper>
+
+            {/* Backdated invoices warning — only shown for today */}
+            {isToday && (realTimeSummary?.backdatedOrdersCreatedToday?.length > 0) && (() => {
+                const bdOrders = realTimeSummary.backdatedOrdersCreatedToday;
+                const bdTotal = bdOrders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+                const bdCash  = bdOrders
+                    .filter(o => o.paymentMode === 'CASH')
+                    .reduce((s, o) => s + (Number(o.paidAmount) || 0), 0);
+                const fmt = n => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+                return (
+                    <Paper sx={{ mb: 3, border: '2px solid #f57c00', borderRadius: 2, overflow: 'hidden' }}>
+                        <Box sx={{ bgcolor: '#e65100', color: '#fff', px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <EventBusy sx={{ fontSize: 20 }} />
+                            <Typography variant="subtitle2" fontWeight={700} sx={{ letterSpacing: 0.3 }}>
+                                {bdOrders.length} Backdated Invoice{bdOrders.length > 1 ? 's' : ''} Created Today — NOT in Today's Cash Drawer
+                            </Typography>
+                        </Box>
+                        <Box sx={{ px: 2, py: 1.5 }}>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                These invoices were physically created today but carry a past date. Cash collected for them is counted in their respective invoice dates, <strong>not today</strong>.
+                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 2, mb: 1.5, flexWrap: 'wrap' }}>
+                                <Chip label={`Total value: ${fmt(bdTotal)}`} size="small" sx={{ bgcolor: '#fff3e0', color: '#e65100', fontWeight: 700 }} />
+                                {bdCash > 0 && (
+                                    <Chip label={`Cash collected: ${fmt(bdCash)}`} size="small" sx={{ bgcolor: '#ffebee', color: '#c62828', fontWeight: 700 }} icon={<Warning sx={{ fontSize: '14px !important', color: '#c62828 !important' }} />} />
+                                )}
+                            </Box>
+                            <TableContainer>
+                                <Table size="small">
+                                    <TableHead>
+                                        <TableRow sx={{ '& th': { bgcolor: '#fff8e1', fontWeight: 700, fontSize: '0.78rem', py: 0.75 } }}>
+                                            <TableCell>Invoice #</TableCell>
+                                            <TableCell>Customer</TableCell>
+                                            <TableCell>Invoice Date</TableCell>
+                                            <TableCell>Mode</TableCell>
+                                            <TableCell align="right">Total</TableCell>
+                                            <TableCell>Status</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {bdOrders.map(o => (
+                                            <TableRow key={o.id} hover>
+                                                <TableCell><Typography variant="body2" fontWeight={700} sx={{ fontFamily: 'monospace' }}>{o.orderNumber}</Typography></TableCell>
+                                                <TableCell>{o.customerName || 'Walk-in'}</TableCell>
+                                                <TableCell>
+                                                    <Chip label={o.orderDate} size="small" color="warning" variant="outlined" sx={{ fontSize: '0.72rem', height: 20 }} />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Chip label={o.paymentMode || 'CREDIT'} size="small" color={o.paymentMode === 'CASH' ? 'primary' : 'default'} sx={{ fontSize: '0.72rem', height: 20 }} />
+                                                </TableCell>
+                                                <TableCell align="right"><Typography fontWeight={700}>{fmt(o.total)}</Typography></TableCell>
+                                                <TableCell>
+                                                    <Chip label={o.paymentStatus} size="small" color={o.paymentStatus === 'paid' ? 'success' : o.paymentStatus === 'partial' ? 'warning' : 'error'} sx={{ fontSize: '0.72rem', height: 20 }} />
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                        </Box>
+                    </Paper>
+                );
+            })()}
 
             {/* Inline Expanded Details — shows records when a card is clicked */}
             <Collapse in={!!expandedCard} timeout={300}>

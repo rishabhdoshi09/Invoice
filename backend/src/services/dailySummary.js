@@ -469,6 +469,24 @@ module.exports = {
         // Paid CASH orders only — unpaid/partial CASH orders move to credit
         const paidCashOrders = cashOrders.filter(o => o.paymentStatus === 'paid');
 
+        // Backdated orders: created today (by wall-clock) but invoiced on a different date.
+        // These are physically collected today but NOT included in today's cash drawer.
+        // Only computed when viewing today — irrelevant for historical dates.
+        let backdatedOrdersCreatedToday = [];
+        const isViewingToday = dateYYYYMMDD === moment().tz('Asia/Kolkata').format('YYYY-MM-DD');
+        if (isViewingToday) {
+            const todayStart = moment().tz('Asia/Kolkata').startOf('day').toDate();
+            const todayEnd   = moment().tz('Asia/Kolkata').endOf('day').toDate();
+            backdatedOrdersCreatedToday = await db.order.findAll({
+                where: {
+                    createdAt: { [db.Sequelize.Op.between]: [todayStart, todayEnd] },
+                    orderDate: { [db.Sequelize.Op.notIn]: [dateDDMMYYYY, dateDDMMYYYY_slash, dateYYYYMMDD] },
+                    isDeleted: false
+                },
+                raw: true
+            });
+        }
+
         return {
             date: dateDDMMYYYY,
             // Orders breakdown
@@ -519,8 +537,15 @@ module.exports = {
             expenseRecords: payments.filter(p => p.partyType === 'expense').map(p => ({
                 id: p.id, paymentNumber: p.paymentNumber, partyName: p.partyName,
                 amount: Number(p.amount), referenceType: p.referenceType,
-                referenceNumber: p.referenceNumber, notes: p.notes, 
+                referenceNumber: p.referenceNumber, notes: p.notes,
                 paymentDate: p.paymentDate, createdAt: p.createdAt
+            })),
+            // Backdated invoices created today but counted in another date's drawer
+            backdatedOrdersCreatedToday: backdatedOrdersCreatedToday.map(o => ({
+                id: o.id, orderNumber: o.orderNumber, customerName: o.customerName,
+                orderDate: o.orderDate, total: Number(o.total),
+                paidAmount: Number(o.paidAmount), paymentMode: o.paymentMode,
+                paymentStatus: o.paymentStatus, createdAt: o.createdAt
             }))
         };
     }
