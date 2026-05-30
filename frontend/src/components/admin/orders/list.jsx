@@ -518,6 +518,18 @@ export const ListOrders = () => {
                 </Box>
             </Box>
 
+            {/* Backdated invoices alert */}
+            {(() => {
+                const backdated = rows.filter(r => isBackdated(r.orderDate));
+                if (!backdated.length || filters.date) return null;
+                const total = backdated.reduce((s, r) => s + (Number(r.total) || 0), 0);
+                return (
+                    <Alert severity="warning" sx={{ mb: 2 }} icon={<Warning fontSize="inherit" />}>
+                        <strong>{backdated.length} backdated invoice{backdated.length > 1 ? 's' : ''}</strong> on this page (marked <strong>Back</strong>) — total ₹{total.toLocaleString('en-IN')}. These are counted in their invoice date, not today's cash drawer.
+                    </Alert>
+                );
+            })()}
+
             {/* Filters */}
             <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
                 <TextField
