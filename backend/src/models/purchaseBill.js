@@ -74,6 +74,10 @@ module.exports = (sequelize, Sequelize) => {
             deletedByName: {
                 type: Sequelize.STRING,
                 allowNull: true
+            },
+            notes: {
+                type: Sequelize.TEXT,
+                allowNull: true
             }
         }
     );

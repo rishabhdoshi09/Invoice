@@ -39,6 +39,7 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
     const [purDate, setPurDate] = useState(moment().format('YYYY-MM-DD'));
     const [purItems, setPurItems] = useState([{ name: '', qty: '', price: '', total: 0 }]);
     const [purPaid, setPurPaid] = useState(false);
+    const [purNotes, setPurNotes] = useState('');
 
     useEffect(() => {
         setTimeout(() => firstRef.current?.focus(), 100);
@@ -127,13 +128,14 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
                 paymentStatus: purPaid ? 'paid' : 'unpaid',
                 paidAmount: purPaid ? purTotal : 0,
                 subTotal: purTotal, tax: 0, taxPercent: 0, total: purTotal,
+                notes: purNotes.trim() || null,
                 purchaseItems: valid.map(i => ({
                     name: i.name, quantity: parseFloat(i.qty),
                     price: parseFloat(i.price), totalPrice: i.total
                 }))
             }, { headers });
             const name = purSup.name;
-            setPurBill(''); setPurItems([{ name: '', qty: '', price: '', total: 0 }]); setPurPaid(false);
+            setPurBill(''); setPurItems([{ name: '', qty: '', price: '', total: 0 }]); setPurPaid(false); setPurNotes('');
             onDone(`Purchase ₹${purTotal.toLocaleString('en-IN')} from ${name}`);
         } catch (e) { alert(e.response?.data?.message || e.message); }
         finally { setSaving(false); }
@@ -268,6 +270,7 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
                         <TextField data-testid="purchase-bill-input" size="small" label="Bill #" value={purBill} onChange={e => setPurBill(e.target.value)} sx={{ width: 110 }} placeholder="Auto" />
                         <TextField data-testid="purchase-date-input" size="small" type="date" label="Date" value={purDate} onChange={e => setPurDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 150 }} />
                         <FormControlLabel control={<Switch checked={purPaid} onChange={e => setPurPaid(e.target.checked)} size="small" />} label={<Typography variant="body2">{purPaid ? 'Paid' : 'Credit'}</Typography>} />
+                        <TextField size="small" label="Notes" value={purNotes} onChange={e => setPurNotes(e.target.value)} placeholder="Optional" sx={{ width: 200 }} />
                         <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Typography variant="h6" data-testid="purchase-total-display" sx={{ fontWeight: 700, fontFamily: 'monospace', color: purPaid ? 'success.main' : 'warning.dark' }}>
                                 ₹{purTotal.toLocaleString('en-IN')}
@@ -363,7 +366,7 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
         ledgerEntries.push({
             id: p.id,
             date: dateStr, sortKey: sortStr,
-            particulars: 'Purchase',
+            particulars: 'Purchase' + (p.notes ? ` — ${p.notes}` : ''),
             refNo: p.billNumber || '-',
             debit: Number(p.total) || 0, credit: 0,
             type: 'purchase', raw: p

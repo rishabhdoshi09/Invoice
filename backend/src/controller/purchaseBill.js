@@ -261,7 +261,8 @@ module.exports = {
                     total:         Number(purchase.total),
                     paidAmount:    Number(purchase.paidAmount),
                     dueAmount:     Number(purchase.dueAmount),
-                    paymentStatus: purchase.paymentStatus
+                    paymentStatus: purchase.paymentStatus,
+                    notes:         purchase.notes || null
                 },
                 newValues: null,
                 description: `DELETED purchase bill ${purchase.billNumber} (₹${purchase.total})`,
