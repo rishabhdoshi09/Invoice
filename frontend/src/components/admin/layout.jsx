@@ -6,6 +6,7 @@ import { ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, Folde
 import { GlobalSearch } from '../common/GlobalSearch';
 import { NotificationBell } from '../common/SmartNotifications';
 import { KeyboardShortcutsHelp } from '../common/KeyboardShortcuts';
+import { AiAssistant } from './AiAssistant';
 import { useSelector, useDispatch } from 'react-redux';
 
 import { Loader } from '../common/loader';
@@ -401,6 +402,7 @@ export const Layout = () =>  {
         
         {/* Keyboard Shortcuts Help Dialog */}
         <KeyboardShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+        <AiAssistant />
         </>
     );
 }
