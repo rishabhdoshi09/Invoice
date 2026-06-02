@@ -173,18 +173,19 @@ export const DayStart = () => {
     const supplierPayments = Number(realTimeSummary?.supplierPayments) || 0;
     const supplierPaymentsCount = Number(realTimeSummary?.supplierPaymentsCount) || 0;
     const expenses = Number(realTimeSummary?.expenses) || 0;
-    
-    // Expected cash = Opening + Cash Sales (CASH mode orders ONLY) + Customer Receipts - Supplier Payments - Expenses
-    // Cash Sales = SUM(total) from orders WHERE paymentMode='CASH' (set at creation, never changes)
-    // Customer Receipts = all customer payments excluding synthetic PAY-TOGGLE records
-    const expectedCash = openingBalance + cashSales + customerPayments - supplierPayments - expenses;
-    const netCashFlow = cashSales + customerPayments - supplierPayments - expenses;
+    const loansCashIn = Number(realTimeSummary?.loansCashIn) || 0;
+    const loansCashOut = Number(realTimeSummary?.loansCashOut) || 0;
+
+    // Expected cash = Opening + Cash Sales + Customer Receipts + Loans In - Supplier Payments - Expenses - Loans Out
+    const expectedCash = openingBalance + cashSales + customerPayments + loansCashIn - supplierPayments - expenses - loansCashOut;
+    const netCashFlow = cashSales + customerPayments + loansCashIn - supplierPayments - expenses - loansCashOut;
 
     // Prepare chart data
     const cashInflowData = [
         { name: 'Opening Balance', value: openingBalance, color: '#9c27b0' },
         { name: 'Cash Sales', value: cashSales, color: '#2196f3' },
         { name: 'Customer Receipts', value: customerPayments, color: '#4caf50' },
+        { name: 'Loan Repayments In', value: loansCashIn, color: '#00acc1' },
     ].filter(item => item.value > 0);
 
     const barChartData = [
@@ -192,6 +193,8 @@ export const DayStart = () => {
         { name: 'Cash Sales', amount: cashSales, fill: '#2196f3' },
         { name: 'Credit Sales', amount: creditSales, fill: '#ff5722' },
         { name: 'Received', amount: customerPayments, fill: '#4caf50' },
+        { name: 'Loans In', amount: loansCashIn, fill: '#00acc1' },
+        { name: 'Loans Out', amount: -loansCashOut, fill: '#0077b6' },
         { name: 'Paid Out', amount: -supplierPayments, fill: '#ff9800' },
         { name: 'Expenses', amount: -expenses, fill: '#f44336' },
         { name: 'Expected', amount: expectedCash, fill: '#00bcd4' },
@@ -579,8 +582,52 @@ export const DayStart = () => {
                             <br/><Visibility sx={{ fontSize: 14, color: '#999', mt: 0.5 }} />
                         </Box>
                     </Grid>
+
+                    {/* Loan Cash Flow — only shown when there is loan activity today */}
+                    {(loansCashIn > 0 || loansCashOut > 0) && (<>
+                        {loansCashIn > 0 && <>
+                            <Grid item xs={12} md={0.5} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Typography variant="h4" color="text.secondary">+</Typography>
+                            </Grid>
+                            <Grid item xs={12} md={2}>
+                                <Box
+                                    onClick={() => setExpandedCard(prev => prev === 'loansIn' ? null : 'loansIn')}
+                                    sx={{ textAlign: 'center', p: 2, bgcolor: expandedCard === 'loansIn' ? '#b2ebf2' : '#e0f7fa', borderRadius: 2, cursor: 'pointer', border: expandedCard === 'loansIn' ? '2px solid #00acc1' : '2px solid transparent', '&:hover': { bgcolor: '#b2ebf2' }, transition: 'all 0.2s' }}
+                                >
+                                    <Typography variant="body2" color="text.secondary">Loan Repayments In</Typography>
+                                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#00838f' }}>
+                                        +₹{loansCashIn.toLocaleString('en-IN')}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        {(realTimeSummary?.loanCashInRecords || []).length} entries
+                                    </Typography>
+                                    <br/><Visibility sx={{ fontSize: 14, color: '#999', mt: 0.5 }} />
+                                </Box>
+                            </Grid>
+                        </>}
+                        {loansCashOut > 0 && <>
+                            <Grid item xs={12} md={0.5} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Typography variant="h4" color="text.secondary">−</Typography>
+                            </Grid>
+                            <Grid item xs={12} md={2}>
+                                <Box
+                                    onClick={() => setExpandedCard(prev => prev === 'loansOut' ? null : 'loansOut')}
+                                    sx={{ textAlign: 'center', p: 2, bgcolor: expandedCard === 'loansOut' ? '#bbdefb' : '#e3f2fd', borderRadius: 2, cursor: 'pointer', border: expandedCard === 'loansOut' ? '2px solid #0077b6' : '2px solid transparent', '&:hover': { bgcolor: '#bbdefb' }, transition: 'all 0.2s' }}
+                                >
+                                    <Typography variant="body2" color="text.secondary">Loans Given Out</Typography>
+                                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#01579b' }}>
+                                        −₹{loansCashOut.toLocaleString('en-IN')}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        {(realTimeSummary?.loanCashOutRecords || []).length} entries
+                                    </Typography>
+                                    <br/><Visibility sx={{ fontSize: 14, color: '#999', mt: 0.5 }} />
+                                </Box>
+                            </Grid>
+                        </>}
+                    </>)}
                 </Grid>
-                
+
                 {/* Result Line */}
                 <Divider sx={{ my: 3 }} />
                 
@@ -710,10 +757,14 @@ export const DayStart = () => {
                             {expandedCard === 'customerReceipts' && <People color="success" />}
                             {expandedCard === 'supplierPayments' && <LocalShipping color="warning" />}
                             {expandedCard === 'expenses' && <Receipt sx={{ color: '#d32f2f' }} />}
-                            {expandedCard === 'cashSales' ? `Cash Sales — ${cashOrdersCount} Orders` : 
+                            {expandedCard === 'loansIn' && <AccountBalance sx={{ color: '#00838f' }} />}
+                            {expandedCard === 'loansOut' && <AccountBalance sx={{ color: '#01579b' }} />}
+                            {expandedCard === 'cashSales' ? `Cash Sales — ${cashOrdersCount} Orders` :
                              expandedCard === 'creditSales' ? `Credit Sales — ${creditOrdersCount} Orders` :
-                             expandedCard === 'customerReceipts' ? `Customer Receipts — ${customerReceiptsCount} Receipts` : 
-                             expandedCard === 'supplierPayments' ? `Supplier Payments — ${supplierPaymentsCount} Payments` : 
+                             expandedCard === 'customerReceipts' ? `Customer Receipts — ${customerReceiptsCount} Receipts` :
+                             expandedCard === 'supplierPayments' ? `Supplier Payments — ${supplierPaymentsCount} Payments` :
+                             expandedCard === 'loansIn' ? `Loan Repayments In — ${(realTimeSummary?.loanCashInRecords || []).length} Entries` :
+                             expandedCard === 'loansOut' ? `Loans Given Out — ${(realTimeSummary?.loanCashOutRecords || []).length} Entries` :
                              `Expenses — ${Number(realTimeSummary?.expensesCount) || 0} Records`}
                         </Typography>
                         <IconButton onClick={() => setExpandedCard(null)} size="small"><ExpandLess /></IconButton>
@@ -903,6 +954,73 @@ export const DayStart = () => {
                                             <TableCell></TableCell>
                                         </TableRow>
                                     )}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+                    {/* LOANS IN */}
+                    {expandedCard === 'loansIn' && (
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>#</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Loan #</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Party</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Notes</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {(realTimeSummary?.loanCashInRecords || []).map((r, idx) => (
+                                        <TableRow key={r.id} hover sx={{ '&:nth-of-type(odd)': { bgcolor: 'rgba(0,0,0,0.02)' } }}>
+                                            <TableCell>{idx + 1}</TableCell>
+                                            <TableCell><Typography variant="body2" fontWeight="bold" sx={{ fontFamily: 'monospace' }}>{r.loanNumber || '-'}</Typography></TableCell>
+                                            <TableCell><Typography fontWeight="bold">{r.partyName}</Typography></TableCell>
+                                            <TableCell><Chip label={r.isRepayment ? 'Repayment' : 'New Loan'} size="small" color="info" sx={{ fontSize: '0.7rem', height: 20 }} /></TableCell>
+                                            <TableCell><Typography variant="body2" color="text.secondary">{r.notes || '-'}</Typography></TableCell>
+                                            <TableCell align="right"><Typography fontWeight="bold" sx={{ color: '#00838f' }}>+₹{Number(r.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                        </TableRow>
+                                    ))}
+                                    <TableRow sx={{ bgcolor: '#b2ebf2' }}>
+                                        <TableCell colSpan={5}><Typography fontWeight="bold">Total</Typography></TableCell>
+                                        <TableCell align="right"><Typography fontWeight="bold" variant="h6" sx={{ color: '#00838f' }}>₹{loansCashIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+
+                    {/* LOANS OUT */}
+                    {expandedCard === 'loansOut' && (
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>#</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Loan #</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Party</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Notes</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {(realTimeSummary?.loanCashOutRecords || []).map((r, idx) => (
+                                        <TableRow key={r.id} hover sx={{ '&:nth-of-type(odd)': { bgcolor: 'rgba(0,0,0,0.02)' } }}>
+                                            <TableCell>{idx + 1}</TableCell>
+                                            <TableCell><Typography variant="body2" fontWeight="bold" sx={{ fontFamily: 'monospace' }}>{r.loanNumber || '-'}</Typography></TableCell>
+                                            <TableCell><Typography fontWeight="bold">{r.partyName}</Typography></TableCell>
+                                            <TableCell><Chip label={r.isRepayment ? 'Repayment' : 'New Loan'} size="small" color="warning" sx={{ fontSize: '0.7rem', height: 20 }} /></TableCell>
+                                            <TableCell><Typography variant="body2" color="text.secondary">{r.notes || '-'}</Typography></TableCell>
+                                            <TableCell align="right"><Typography fontWeight="bold" sx={{ color: '#01579b' }}>−₹{Number(r.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                        </TableRow>
+                                    ))}
+                                    <TableRow sx={{ bgcolor: '#bbdefb' }}>
+                                        <TableCell colSpan={5}><Typography fontWeight="bold">Total</Typography></TableCell>
+                                        <TableCell align="right"><Typography fontWeight="bold" variant="h6" sx={{ color: '#01579b' }}>₹{loansCashOut.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                    </TableRow>
                                 </TableBody>
                             </Table>
                         </TableContainer>
@@ -1153,7 +1271,7 @@ export const DayStart = () => {
             <Box sx={{ mt: 3 }}>
                 <Alert severity="info">
                     <Typography variant="body2">
-                        <strong>Formula:</strong> Expected Cash = Opening Balance + Sales + Customer Receipts − Supplier Payments − Expenses
+                        <strong>Formula:</strong> Expected Cash = Opening Balance + Cash Sales + Customer Receipts + Loan Repayments In − Supplier Payments − Expenses − Loans Given Out
                     </Typography>
                 </Alert>
             </Box>

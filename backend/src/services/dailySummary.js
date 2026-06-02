@@ -469,6 +469,58 @@ module.exports = {
         // Paid CASH orders only — unpaid/partial CASH orders move to credit
         const paidCashOrders = cashOrders.filter(o => o.paymentStatus === 'paid');
 
+        // ── Loan cash flow for this date ──────────────────────────────────────
+        // Initial loans: loanDate matches today
+        // Repayments:    loan_transactions.transactionDate matches today
+        let loansCashIn = 0, loansCashOut = 0;
+        let loanCashInRecords = [], loanCashOutRecords = [];
+        try {
+            // New loans disbursed/received today
+            const loansToday = await db.loan.findAll({
+                where: {
+                    loanDate: { [db.Sequelize.Op.in]: [dateDDMMYYYY, dateDDMMYYYY_slash, dateYYYYMMDD] },
+                    isDeleted: false
+                },
+                raw: true
+            });
+            loansToday.forEach(l => {
+                const amt = Number(l.principalAmount) || 0;
+                const rec = { id: l.id, loanNumber: l.loanNumber, partyName: l.partyName, amount: amt, notes: l.notes, date: l.loanDate, isRepayment: false };
+                if (l.type === 'given') {
+                    loansCashOut += amt;
+                    loanCashOutRecords.push(rec);
+                } else {
+                    loansCashIn += amt;
+                    loanCashInRecords.push(rec);
+                }
+            });
+
+            // Repayments today
+            const repayments = await db.loanTransaction.findAll({
+                where: {
+                    transactionDate: { [db.Sequelize.Op.in]: [dateDDMMYYYY, dateDDMMYYYY_slash, dateYYYYMMDD] }
+                },
+                include: [{ model: db.loan, as: 'loan', attributes: ['type', 'partyName', 'loanNumber'], required: true }],
+                raw: true,
+                nest: true
+            });
+            repayments.forEach(t => {
+                const amt = Number(t.amount) || 0;
+                const rec = { id: t.id, loanNumber: t.loan?.loanNumber, partyName: t.loan?.partyName, amount: amt, notes: t.notes, date: t.transactionDate, isRepayment: true };
+                if (t.loan?.type === 'given') {
+                    // Someone repaid us — cash IN
+                    loansCashIn += amt;
+                    loanCashInRecords.push(rec);
+                } else {
+                    // We repaid someone — cash OUT
+                    loansCashOut += amt;
+                    loanCashOutRecords.push(rec);
+                }
+            });
+        } catch (e) {
+            console.warn('[getRealTimeSummary] Loan cash flow skipped:', e.message);
+        }
+
         // Backdated orders: created today (by wall-clock) but invoiced on a different date.
         // These are physically collected today but NOT included in today's cash drawer.
         // Only computed when viewing today — irrelevant for historical dates.
@@ -511,6 +563,11 @@ module.exports = {
             // Expenses (cash going out)
             expensesCount: payments.filter(p => p.partyType === 'expense').length,
             expenses: expensePayments,
+            // Loan cash flow
+            loansCashIn,
+            loansCashOut,
+            loanCashInRecords,
+            loanCashOutRecords,
             // Individual records for inline detail view (only paid CASH orders)
             cashOrderRecords: paidCashOrders.map(o => ({
                 id: o.id, orderNumber: o.orderNumber, customerName: o.customerName,
