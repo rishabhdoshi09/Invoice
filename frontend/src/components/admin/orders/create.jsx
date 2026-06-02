@@ -429,6 +429,33 @@ export const CreateOrder = () => {
   const orderItemsRef = useRef(orderProps.orderItems || []);
   useEffect(() => { orderItemsRef.current = orderProps.orderItems || []; }, [orderProps.orderItems]);
 
+  // ── Draft auto-save / restore ─────────────────────────────────────────────
+  // Saves current bill to sessionStorage every time it changes.
+  // Restored on mount so a session-expired redirect doesn't lose the bill.
+  const DRAFT_KEY = 'invoice_draft';
+  useEffect(() => {
+    // Don't persist empty or just-initialised drafts
+    if (orderProps.orderItems?.length > 0 || orderProps.customerName) {
+      try {
+        sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ orderProps, isCreditSale }));
+      } catch {}
+    }
+  }, [orderProps, isCreditSale]);
+
+  // Restore draft once on mount (only if the form is still empty)
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved?.orderProps?.orderItems?.length > 0 || saved?.orderProps?.customerName) {
+        setOrderProps(saved.orderProps);
+        if (saved.isCreditSale !== undefined) setIsCreditSale(saved.isCreditSale);
+      }
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -1480,7 +1507,8 @@ export const CreateOrder = () => {
       setArchivedOrderProps(savedOrder);
       setArchivedPdfUrl(newPdfUrl || pdfUrl || "");
       setLastInvoiceTotal(savedOrder.total);
-      
+      sessionStorage.removeItem('invoice_draft'); // draft served its purpose
+
       // Save recently submitted order for display until new item is added
       setRecentlySubmittedOrder({
         orderNumber: savedOrder.orderNumber,

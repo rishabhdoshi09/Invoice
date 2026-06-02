@@ -42,8 +42,10 @@ export const Login = () => {
 
         try {
             await login(formData.username, formData.password);
-            // Navigate to orders page after successful login
-            navigate('/orders', { replace: true });
+            // Redirect back to where the user was (e.g. mid-invoice) if saved
+            const returnTo = sessionStorage.getItem('auth_return_to');
+            sessionStorage.removeItem('auth_return_to');
+            navigate(returnTo || '/orders', { replace: true });
         } catch (err) {
             setError(err.toString());
         } finally {
