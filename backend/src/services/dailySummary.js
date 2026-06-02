@@ -476,10 +476,21 @@ module.exports = {
         let loanCashInRecords = [], loanCashOutRecords = [];
         let loanQueryError = null;
         try {
-            // Use raw SQL to avoid any ORM association-loading issues
-            const dateValues = [dateDDMMYYYY, dateDDMMYYYY_slash, dateYYYYMMDD];
-            const placeholders = dateValues.map((_, i) => `:d${i}`).join(', ');
-            const bindParams = Object.fromEntries(dateValues.map((v, i) => [`d${i}`, v]));
+            // Cover every plausible date format a user could have typed
+            const m = moment(date, ['YYYY-MM-DD', 'DD-MM-YYYY', 'DD/MM/YYYY']);
+            const dateVariants = [
+                m.format('DD-MM-YYYY'),   // 02-06-2026
+                m.format('DD/MM/YYYY'),   // 02/06/2026
+                m.format('YYYY-MM-DD'),   // 2026-06-02
+                m.format('D-M-YYYY'),     // 2-6-2026  (no leading zeros)
+                m.format('D/M/YYYY'),     // 2/6/2026
+                m.format('D-M-YY'),       // 2-6-26
+                m.format('DD-MM-YY'),     // 02-06-26
+            ];
+            const placeholders = dateVariants.map((_, i) => `:d${i}`).join(', ');
+            const bindParams = Object.fromEntries(dateVariants.map((v, i) => [`d${i}`, v]));
+
+            console.log(`[Loans] querying date variants: ${dateVariants.join(' | ')}`);
 
             // New loans disbursed/received today
             const loansToday = await db.sequelize.query(
@@ -488,7 +499,7 @@ module.exports = {
                  WHERE "loanDate" IN (${placeholders}) AND "isDeleted" = false`,
                 { replacements: bindParams, type: db.sequelize.QueryTypes.SELECT }
             );
-            console.log(`[Loans] date=${dateDDMMYYYY} new loans=${loansToday.length}`);
+            console.log(`[Loans] new loans today: ${loansToday.length}`);
             loansToday.forEach(l => {
                 const amt = Number(l.principalAmount) || 0;
                 const rec = { id: l.id, loanNumber: l.loanNumber, partyName: l.partyName, amount: amt, notes: l.notes, date: l.loanDate, isRepayment: false };
@@ -496,7 +507,7 @@ module.exports = {
                 else { loansCashIn += amt; loanCashInRecords.push(rec); }
             });
 
-            // Repayments today — raw SQL join to avoid ORM association issues
+            // Repayments today — raw SQL join, broad date format coverage
             const repayments = await db.sequelize.query(
                 `SELECT t.id, t.amount, t."transactionDate", t.notes,
                         l.type as "loanType", l."partyName", l."loanNumber"
@@ -505,14 +516,26 @@ module.exports = {
                  WHERE t."transactionDate" IN (${placeholders})`,
                 { replacements: bindParams, type: db.sequelize.QueryTypes.SELECT }
             );
-            console.log(`[Loans] repayments found=${repayments.length}`);
+            console.log(`[Loans] repayments found: ${repayments.length}`);
             repayments.forEach(t => {
                 const amt = Number(t.amount) || 0;
                 const rec = { id: t.id, loanNumber: t.loanNumber, partyName: t.partyName, amount: amt, notes: t.notes, date: t.transactionDate, isRepayment: true };
-                console.log(`[Loans]   repayment: type=${t.loanType} amt=${amt} date=${t.transactionDate}`);
+                console.log(`[Loans]   -> type=${t.loanType} amt=${amt} stored_date="${t.transactionDate}"`);
                 if (t.loanType === 'given') { loansCashIn += amt; loanCashInRecords.push(rec); }
                 else { loansCashOut += amt; loanCashOutRecords.push(rec); }
             });
+
+            // Also dump ALL recent transactions for debugging
+            const allRecent = await db.sequelize.query(
+                `SELECT t."transactionDate", t.amount, l.type as "loanType"
+                 FROM loan_transactions t
+                 INNER JOIN loans l ON l.id = t."loanId"
+                 ORDER BY t."createdAt" DESC LIMIT 5`,
+                { type: db.sequelize.QueryTypes.SELECT }
+            );
+            if (allRecent.length > 0) {
+                console.log(`[Loans] last 5 txns in DB:`, allRecent.map(r => `${r.transactionDate}(${r.loanType})`).join(', '));
+            }
         } catch (e) {
             loanQueryError = e.message;
             console.error('[getRealTimeSummary] Loan cash flow error:', e.message, e.stack);

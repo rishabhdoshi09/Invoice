@@ -592,49 +592,45 @@ export const DayStart = () => {
                         </Grid>
                     )}
 
-                    {/* Loan Cash Flow — only shown when there is loan activity today */}
-                    {(loansCashIn > 0 || loansCashOut > 0) && (<>
-                        {loansCashIn > 0 && <>
-                            <Grid item xs={12} md={0.5} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <Typography variant="h4" color="text.secondary">+</Typography>
-                            </Grid>
-                            <Grid item xs={12} md={2}>
-                                <Box
-                                    onClick={() => setExpandedCard(prev => prev === 'loansIn' ? null : 'loansIn')}
-                                    sx={{ textAlign: 'center', p: 2, bgcolor: expandedCard === 'loansIn' ? '#b2ebf2' : '#e0f7fa', borderRadius: 2, cursor: 'pointer', border: expandedCard === 'loansIn' ? '2px solid #00acc1' : '2px solid transparent', '&:hover': { bgcolor: '#b2ebf2' }, transition: 'all 0.2s' }}
-                                >
-                                    <Typography variant="body2" color="text.secondary">Loan Repayments In</Typography>
-                                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#00838f' }}>
-                                        +₹{loansCashIn.toLocaleString('en-IN')}
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                        {(realTimeSummary?.loanCashInRecords || []).length} entries
-                                    </Typography>
-                                    <br/><Visibility sx={{ fontSize: 14, color: '#999', mt: 0.5 }} />
-                                </Box>
-                            </Grid>
-                        </>}
-                        {loansCashOut > 0 && <>
-                            <Grid item xs={12} md={0.5} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <Typography variant="h4" color="text.secondary">−</Typography>
-                            </Grid>
-                            <Grid item xs={12} md={2}>
-                                <Box
-                                    onClick={() => setExpandedCard(prev => prev === 'loansOut' ? null : 'loansOut')}
-                                    sx={{ textAlign: 'center', p: 2, bgcolor: expandedCard === 'loansOut' ? '#bbdefb' : '#e3f2fd', borderRadius: 2, cursor: 'pointer', border: expandedCard === 'loansOut' ? '2px solid #0077b6' : '2px solid transparent', '&:hover': { bgcolor: '#bbdefb' }, transition: 'all 0.2s' }}
-                                >
-                                    <Typography variant="body2" color="text.secondary">Loans Given Out</Typography>
-                                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#01579b' }}>
-                                        −₹{loansCashOut.toLocaleString('en-IN')}
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                        {(realTimeSummary?.loanCashOutRecords || []).length} entries
-                                    </Typography>
-                                    <br/><Visibility sx={{ fontSize: 14, color: '#999', mt: 0.5 }} />
-                                </Box>
-                            </Grid>
-                        </>}
-                    </>)}
+                    {/* Loan Cash Flow — always render so missing data is visible */}
+                    <>
+                        <Grid item xs={12} md={0.5} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Typography variant="h4" color="text.secondary">+</Typography>
+                        </Grid>
+                        <Grid item xs={12} md={2}>
+                            <Box
+                                onClick={() => loansCashIn > 0 && setExpandedCard(prev => prev === 'loansIn' ? null : 'loansIn')}
+                                sx={{ textAlign: 'center', p: 2, bgcolor: expandedCard === 'loansIn' ? '#b2ebf2' : '#e0f7fa', borderRadius: 2, cursor: loansCashIn > 0 ? 'pointer' : 'default', border: expandedCard === 'loansIn' ? '2px solid #00acc1' : '2px solid transparent', '&:hover': loansCashIn > 0 ? { bgcolor: '#b2ebf2' } : {}, transition: 'all 0.2s' }}
+                            >
+                                <Typography variant="body2" color="text.secondary">Loan Repayments In</Typography>
+                                <Typography variant="h5" sx={{ fontWeight: 'bold', color: loansCashIn > 0 ? '#00838f' : 'text.disabled' }}>
+                                    +₹{loansCashIn.toLocaleString('en-IN')}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    {(realTimeSummary?.loanCashInRecords || []).length} entries
+                                </Typography>
+                                {loansCashIn > 0 && <><br/><Visibility sx={{ fontSize: 14, color: '#999', mt: 0.5 }} /></>}
+                            </Box>
+                        </Grid>
+                        <Grid item xs={12} md={0.5} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Typography variant="h4" color="text.secondary">−</Typography>
+                        </Grid>
+                        <Grid item xs={12} md={2}>
+                            <Box
+                                onClick={() => loansCashOut > 0 && setExpandedCard(prev => prev === 'loansOut' ? null : 'loansOut')}
+                                sx={{ textAlign: 'center', p: 2, bgcolor: expandedCard === 'loansOut' ? '#bbdefb' : '#e3f2fd', borderRadius: 2, cursor: loansCashOut > 0 ? 'pointer' : 'default', border: expandedCard === 'loansOut' ? '2px solid #0077b6' : '2px solid transparent', '&:hover': loansCashOut > 0 ? { bgcolor: '#bbdefb' } : {}, transition: 'all 0.2s' }}
+                            >
+                                <Typography variant="body2" color="text.secondary">Loans Given Out</Typography>
+                                <Typography variant="h5" sx={{ fontWeight: 'bold', color: loansCashOut > 0 ? '#01579b' : 'text.disabled' }}>
+                                    −₹{loansCashOut.toLocaleString('en-IN')}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    {(realTimeSummary?.loanCashOutRecords || []).length} entries
+                                </Typography>
+                                {loansCashOut > 0 && <><br/><Visibility sx={{ fontSize: 14, color: '#999', mt: 0.5 }} /></>}
+                            </Box>
+                        </Grid>
+                    </>
                 </Grid>
 
                 {/* Result Line */}
