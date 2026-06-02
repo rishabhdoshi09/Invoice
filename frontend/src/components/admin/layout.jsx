@@ -16,6 +16,7 @@ import {
 } from '@mui/icons-material';
 import { GlobalSearch } from '../common/GlobalSearch';
 import { NotificationBell } from '../common/SmartNotifications';
+import { AiAssistant } from './AiAssistant';
 import { useSelector, useDispatch } from 'react-redux';
 
 import { Loader } from '../common/loader';
@@ -410,6 +411,9 @@ export const Layout = () =>  {
                 <Outlet />
             </Box>
         </Box>
+
+        {/* AI Assistant — floating chat button on every page */}
+        <AiAssistant />
 
         {/* Mobile bottom navigation — quick access to the 4 most-used sections */}
         {isMobile && (
