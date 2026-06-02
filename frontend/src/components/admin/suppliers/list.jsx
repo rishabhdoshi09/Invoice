@@ -349,8 +349,11 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
 
     // Opening balance
     if (s.openingBalance && Number(s.openingBalance) !== 0) {
+        const obDate = s.openingBalanceDate ? moment(s.openingBalanceDate) : null;
+        const obDateStr = obDate?.isValid() ? obDate.format('DD/MM/YYYY') : null;
+        const obSortKey = obDate?.isValid() ? obDate.toISOString() : '0000-00-00T00:00:00';
         ledgerEntries.push({
-            id: 'opening', date: null, sortKey: '0000-00-00T00:00:00',
+            id: 'opening', date: obDateStr, sortKey: obSortKey,
             particulars: 'Opening Balance', refNo: '-',
             debit: Number(s.openingBalance) > 0 ? Number(s.openingBalance) : 0,
             credit: Number(s.openingBalance) < 0 ? Math.abs(Number(s.openingBalance)) : 0,
@@ -574,6 +577,8 @@ export const ListSuppliers = () => {
     const [successMsg, setSuccessMsg] = useState('');
     const [prefilledSupplier, setPrefilledSupplier] = useState(null);
     const [editingName, setEditingName] = useState(null); // { id, value }
+    const [editDialog, setEditDialog] = useState({ open: false, supplier: null, saving: false });
+    const [editForm, setEditForm] = useState({ name: '', mobile: '', gstin: '', openingBalance: '', openingBalanceDate: '' });
     useEffect(() => { fetchSuppliers(); }, []);
 
     const fetchSuppliers = async () => {
@@ -611,6 +616,42 @@ export const ListSuppliers = () => {
             setSuppliers(prev => prev.map(s => s.id === id ? { ...s, name: trimmed } : s));
         } catch (e) {
             alert('Failed to rename: ' + (e.response?.data?.message || e.message));
+        }
+    };
+
+    const openEditDialog = (sup) => {
+        setEditForm({
+            name: sup.name || '',
+            mobile: sup.mobile || '',
+            gstin: sup.gstin || '',
+            openingBalance: sup.openingBalance != null ? String(sup.openingBalance) : '',
+            openingBalanceDate: sup.openingBalanceDate ? moment(sup.openingBalanceDate).format('YYYY-MM-DD') : ''
+        });
+        setEditDialog({ open: true, supplier: sup, saving: false });
+    };
+
+    const handleEditSave = async () => {
+        const { supplier } = editDialog;
+        if (!editForm.name.trim()) return;
+        setEditDialog(prev => ({ ...prev, saving: true }));
+        try {
+            const token = localStorage.getItem('token');
+            const payload = {
+                name: editForm.name.trim(),
+                mobile: editForm.mobile.trim(),
+                gstin: editForm.gstin.trim().toUpperCase(),
+                openingBalance: editForm.openingBalance !== '' ? parseFloat(editForm.openingBalance) : undefined,
+                openingBalanceDate: editForm.openingBalanceDate || null
+            };
+            await axios.put(`/api/suppliers/${supplier.id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
+            setEditDialog({ open: false, supplier: null, saving: false });
+            fetchSuppliers();
+            if (detailsDialog.open && detailsDialog.supplier?.id === supplier.id) {
+                fetchSupplierDetails(supplier.id);
+            }
+        } catch (e) {
+            alert('Failed to save: ' + (e.response?.data?.message || e.message));
+            setEditDialog(prev => ({ ...prev, saving: false }));
         }
     };
 
@@ -896,6 +937,11 @@ export const ListSuppliers = () => {
                                                     <Visibility fontSize="small" />
                                                 </IconButton>
                                             </Tooltip>
+                                            <Tooltip title="Edit Supplier">
+                                                <IconButton data-testid={`edit-supplier-${sup.id}`} size="small" onClick={() => openEditDialog(sup)} sx={{ color: '#f57c00' }}>
+                                                    <Edit fontSize="small" />
+                                                </IconButton>
+                                            </Tooltip>
                                             <Tooltip title="Quick Pay">
                                                 <IconButton data-testid={`pay-supplier-${sup.id}`} size="small" onClick={() => handlePayFromTable(sup)} sx={{ color: '#2e7d32' }}>
                                                     <Payment fontSize="small" />
@@ -940,6 +986,29 @@ export const ListSuppliers = () => {
                 onDownload={handleLedgerDownload}
                 onPrint={handleLedgerPrint}
             />
+
+            {/* Supplier Edit Dialog */}
+            <Dialog open={editDialog.open} onClose={() => setEditDialog({ open: false, supplier: null, saving: false })} maxWidth="xs" fullWidth>
+                <Box sx={{ bgcolor: '#f57c00', color: '#fff', px: 2.5, py: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700 }}>Edit Supplier</Typography>
+                    <IconButton onClick={() => setEditDialog({ open: false, supplier: null, saving: false })} sx={{ color: '#fff' }} size="small">
+                        <Close />
+                    </IconButton>
+                </Box>
+                <DialogContent sx={{ pt: 2 }}>
+                    <TextField fullWidth label="Name *" value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} size="small" sx={{ mb: 2 }} />
+                    <TextField fullWidth label="Mobile" value={editForm.mobile} onChange={e => setEditForm(p => ({ ...p, mobile: e.target.value }))} size="small" sx={{ mb: 2 }} />
+                    <TextField fullWidth label="GSTIN" value={editForm.gstin} onChange={e => setEditForm(p => ({ ...p, gstin: e.target.value.toUpperCase() }))} size="small" sx={{ mb: 2 }} />
+                    <TextField fullWidth label="Opening Balance (₹)" type="number" value={editForm.openingBalance} onChange={e => setEditForm(p => ({ ...p, openingBalance: e.target.value }))} size="small" sx={{ mb: 2 }} />
+                    <TextField fullWidth label="Opening Balance Date" type="date" value={editForm.openingBalanceDate} onChange={e => setEditForm(p => ({ ...p, openingBalanceDate: e.target.value }))} size="small" InputLabelProps={{ shrink: true }} helperText="Date from which opening balance is effective" />
+                </DialogContent>
+                <DialogActions sx={{ px: 2, pb: 2 }}>
+                    <Button onClick={() => setEditDialog({ open: false, supplier: null, saving: false })}>Cancel</Button>
+                    <Button variant="contained" onClick={handleEditSave} disabled={editDialog.saving || !editForm.name.trim()} sx={{ bgcolor: '#f57c00' }}>
+                        {editDialog.saving ? <CircularProgress size={20} /> : 'Save'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 };

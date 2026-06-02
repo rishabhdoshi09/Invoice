@@ -111,7 +111,7 @@ export const DayStart = () => {
         isFetching: fetchingRealTime,
         isError: realTimeError,
         refetch: refetchRealTime
-    } = useGetRealTimeSummaryQuery(selectedDate);
+    } = useGetRealTimeSummaryQuery(selectedDate, { refetchOnMountOrArgChange: true });
 
     const {
         data: cachedSummaryData,

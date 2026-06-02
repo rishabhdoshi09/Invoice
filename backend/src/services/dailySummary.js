@@ -475,6 +475,7 @@ module.exports = {
         let loansCashIn = 0, loansCashOut = 0;
         let loanCashInRecords = [], loanCashOutRecords = [];
         try {
+            console.log(`[Loans] Querying for date: ${dateDDMMYYYY} | ${dateDDMMYYYY_slash} | ${dateYYYYMMDD}`);
             // New loans disbursed/received today
             const loansToday = await db.loan.findAll({
                 where: {
@@ -483,6 +484,7 @@ module.exports = {
                 },
                 raw: true
             });
+            console.log(`[Loans] New loans today: ${loansToday.length}`);
             loansToday.forEach(l => {
                 const amt = Number(l.principalAmount) || 0;
                 const rec = { id: l.id, loanNumber: l.loanNumber, partyName: l.partyName, amount: amt, notes: l.notes, date: l.loanDate, isRepayment: false };
@@ -504,7 +506,9 @@ module.exports = {
                 raw: true,
                 nest: true
             });
+            console.log(`[Loans] Repayments today: ${repayments.length}`);
             repayments.forEach(t => {
+                console.log(`[Loans]   txn loanType=${t.loan?.type} amount=${t.amount} date=${t.transactionDate}`);
                 const amt = Number(t.amount) || 0;
                 const rec = { id: t.id, loanNumber: t.loan?.loanNumber, partyName: t.loan?.partyName, amount: amt, notes: t.notes, date: t.transactionDate, isRepayment: true };
                 if (t.loan?.type === 'given') {
@@ -518,7 +522,7 @@ module.exports = {
                 }
             });
         } catch (e) {
-            console.warn('[getRealTimeSummary] Loan cash flow skipped:', e.message);
+            console.error('[getRealTimeSummary] Loan cash flow error:', e.message, e.stack);
         }
 
         // Backdated orders: created today (by wall-clock) but invoiced on a different date.

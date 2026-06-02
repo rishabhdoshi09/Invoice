@@ -204,6 +204,14 @@ const server = app.listen(PORT, async () => {
       console.warn('[STARTUP] purchaseBills notes column bootstrap:', e.message);
     }
 
+    // Add openingBalanceDate to suppliers if it doesn't exist yet
+    try {
+      await db.sequelize.query(`ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "openingBalanceDate" DATE`);
+      console.log('[STARTUP] suppliers.openingBalanceDate column ready.');
+    } catch (e) {
+      console.warn('[STARTUP] suppliers openingBalanceDate column bootstrap:', e.message);
+    }
+
     // Start scheduled jobs (async, non-blocking)
     try {
       require('./src/scheduler').init(db);

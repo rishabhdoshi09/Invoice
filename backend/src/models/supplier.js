@@ -27,6 +27,10 @@ module.exports = (sequelize, Sequelize) => {
             openingBalance: {
                 type: Sequelize.DECIMAL(15, 2)
             },
+            openingBalanceDate: {
+                type: Sequelize.DATEONLY,
+                allowNull: true
+            },
             currentBalance: {
                 type: Sequelize.DECIMAL(15, 2)
             }

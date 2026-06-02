@@ -41,8 +41,11 @@ const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, on
     const ledgerEntries = [];
 
     if (c.openingBalance && Number(c.openingBalance) !== 0) {
+        const obDate = c.openingBalanceDate ? moment(c.openingBalanceDate) : null;
+        const obDateStr = obDate?.isValid() ? obDate.format('DD/MM/YYYY') : null;
+        const obSortKey = obDate?.isValid() ? obDate.toISOString() : '0000-00-00T00:00:00';
         ledgerEntries.push({
-            id: 'opening', date: null, sortKey: '0000-00-00T00:00:00',
+            id: 'opening', date: obDateStr, sortKey: obSortKey,
             particulars: 'Opening Balance', refNo: '-',
             debit: Number(c.openingBalance) > 0 ? Number(c.openingBalance) : 0,
             credit: Number(c.openingBalance) < 0 ? Math.abs(Number(c.openingBalance)) : 0,
@@ -252,6 +255,10 @@ export const ListCustomers = () => {
     // Inline name editing
     const [editingName, setEditingName] = useState(null); // { id, value }
 
+    // Full edit dialog for customer
+    const [editDialog, setEditDialog] = useState({ open: false, customer: null, saving: false });
+    const [editForm, setEditForm] = useState({ name: '', mobile: '', gstin: '', openingBalance: '', openingBalanceDate: '' });
+
     const handleInlineNameSave = async (id, newName) => {
         const trimmed = newName.trim();
         setEditingName(null);
@@ -263,6 +270,43 @@ export const ListCustomers = () => {
             setCustomers(prev => prev.map(c => c.id === id ? { ...c, name: trimmed } : c));
         } catch (e) {
             alert('Failed to rename: ' + (e.response?.data?.message || e.message));
+        }
+    };
+
+    const openCustomerEditDialog = (customer) => {
+        setEditForm({
+            name: customer.name || '',
+            mobile: customer.mobile || '',
+            gstin: customer.gstin || '',
+            openingBalance: customer.openingBalance != null ? String(customer.openingBalance) : '',
+            openingBalanceDate: customer.openingBalanceDate ? moment(customer.openingBalanceDate).format('YYYY-MM-DD') : ''
+        });
+        setEditDialog({ open: true, customer, saving: false });
+    };
+
+    const handleCustomerEditSave = async () => {
+        const { customer } = editDialog;
+        if (!editForm.name.trim()) return;
+        setEditDialog(prev => ({ ...prev, saving: true }));
+        try {
+            const token = localStorage.getItem('token');
+            const payload = {
+                name: editForm.name.trim(),
+                mobile: editForm.mobile.trim(),
+                gstin: editForm.gstin.trim().toUpperCase(),
+                openingBalance: editForm.openingBalance !== '' ? parseFloat(editForm.openingBalance) : undefined,
+                openingBalanceDate: editForm.openingBalanceDate || null
+            };
+            await axios.put(`/api/customers/${customer.id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
+            setEditDialog({ open: false, customer: null, saving: false });
+            fetchCustomers();
+            // Refresh open details dialog if it's this customer
+            if (detailsDialog.open && detailsDialog.customer?.id === customer.id) {
+                refreshDetailsCustomer();
+            }
+        } catch (e) {
+            alert('Failed to save: ' + (e.response?.data?.message || e.message));
+            setEditDialog(prev => ({ ...prev, saving: false }));
         }
     };
 
@@ -1268,6 +1312,11 @@ export const ListCustomers = () => {
                                                         <AccountBalance fontSize="small" color="primary" />
                                                     </IconButton>
                                                 </Tooltip>
+                                                <Tooltip title="Edit Customer">
+                                                    <IconButton size="small" onClick={() => openCustomerEditDialog(customer)} sx={{ color: '#f57c00' }}>
+                                                        <Edit fontSize="small" />
+                                                    </IconButton>
+                                                </Tooltip>
                                                 <Tooltip title="Delete">
                                                     <IconButton size="small" onClick={() => handleDelete(customer.id, customer.name)}>
                                                         <Delete fontSize="small" color="error" />
@@ -1713,7 +1762,8 @@ export const ListCustomers = () => {
                                 const fmt = v => `₹${Math.abs(v || 0).toLocaleString('en-IN')}`;
                                 const entries = [];
                                 if (c.openingBalance && Number(c.openingBalance) !== 0) {
-                                    entries.push({ id: 'opening', date: null, sortKey: '0000', particulars: 'Opening Balance', refNo: '-', debit: Number(c.openingBalance) > 0 ? Number(c.openingBalance) : 0, credit: Number(c.openingBalance) < 0 ? Math.abs(Number(c.openingBalance)) : 0, type: 'opening' });
+                                    const obD = c.openingBalanceDate ? moment(c.openingBalanceDate) : null;
+                                    entries.push({ id: 'opening', date: obD?.isValid() ? obD.format('DD/MM/YYYY') : null, sortKey: obD?.isValid() ? obD.toISOString() : '0000', particulars: 'Opening Balance', refNo: '-', debit: Number(c.openingBalance) > 0 ? Number(c.openingBalance) : 0, credit: Number(c.openingBalance) < 0 ? Math.abs(Number(c.openingBalance)) : 0, type: 'opening' });
                                 }
                                 (c.orders || []).forEach(o => {
                                     const d = o.orderDate ? moment(o.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(o.createdAt);
@@ -1889,6 +1939,29 @@ export const ListCustomers = () => {
                 open={!!statementCustomer}
                 onClose={() => setStatementCustomer(null)}
             />
+
+            {/* Customer Edit Dialog */}
+            <Dialog open={editDialog.open} onClose={() => setEditDialog({ open: false, customer: null, saving: false })} maxWidth="xs" fullWidth>
+                <Box sx={{ bgcolor: '#1565c0', color: '#fff', px: 2.5, py: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700 }}>Edit Customer</Typography>
+                    <IconButton onClick={() => setEditDialog({ open: false, customer: null, saving: false })} sx={{ color: '#fff' }} size="small">
+                        <Close />
+                    </IconButton>
+                </Box>
+                <DialogContent sx={{ pt: 2 }}>
+                    <TextField fullWidth label="Name *" value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} size="small" sx={{ mb: 2 }} />
+                    <TextField fullWidth label="Mobile" value={editForm.mobile} onChange={e => setEditForm(p => ({ ...p, mobile: e.target.value }))} size="small" sx={{ mb: 2 }} />
+                    <TextField fullWidth label="GSTIN" value={editForm.gstin} onChange={e => setEditForm(p => ({ ...p, gstin: e.target.value.toUpperCase() }))} size="small" sx={{ mb: 2 }} />
+                    <TextField fullWidth label="Opening Balance (₹)" type="number" value={editForm.openingBalance} onChange={e => setEditForm(p => ({ ...p, openingBalance: e.target.value }))} size="small" sx={{ mb: 2 }} />
+                    <TextField fullWidth label="Opening Balance Date" type="date" value={editForm.openingBalanceDate} onChange={e => setEditForm(p => ({ ...p, openingBalanceDate: e.target.value }))} size="small" InputLabelProps={{ shrink: true }} helperText="Date from which opening balance is effective" />
+                </DialogContent>
+                <DialogActions sx={{ px: 2, pb: 2 }}>
+                    <Button onClick={() => setEditDialog({ open: false, customer: null, saving: false })}>Cancel</Button>
+                    <Button variant="contained" onClick={handleCustomerEditSave} disabled={editDialog.saving || !editForm.name.trim()}>
+                        {editDialog.saving ? <CircularProgress size={20} /> : 'Save'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 };

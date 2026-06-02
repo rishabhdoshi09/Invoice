@@ -9,11 +9,12 @@ module.exports = {
             address: Joi.string().trim().allow("").optional(),
             gstin: Joi.string().trim().allow("").optional(),
             openingBalance: Joi.number().optional(),
+            openingBalanceDate: Joi.string().allow("", null).optional(),
             currentBalance: Joi.number().optional()
         });
         return Joi.validate(supplierObj, schema);
     },
-    
+
     validateUpdateSupplierObj: (supplierObj) => {
         const schema = Joi.object().keys({
             name: Joi.string().trim().optional(),
@@ -22,6 +23,7 @@ module.exports = {
             address: Joi.string().trim().allow("").optional(),
             gstin: Joi.string().trim().allow("").optional(),
             openingBalance: Joi.number().optional(),
+            openingBalanceDate: Joi.string().allow("", null).optional(),
             currentBalance: Joi.number().optional()
         });
         return Joi.validate(supplierObj, schema);

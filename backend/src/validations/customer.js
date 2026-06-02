@@ -9,6 +9,7 @@ module.exports = {
             address: Joi.string().trim().allow("").optional(),
             gstin: Joi.string().trim().allow("").optional(),
             openingBalance: Joi.number().optional(),
+            openingBalanceDate: Joi.string().allow("", null).optional(),
             currentBalance: Joi.number().optional()
         });
         return Joi.validate(customerObj, schema);
@@ -22,6 +23,7 @@ module.exports = {
             address: Joi.string().trim().allow("").optional(),
             gstin: Joi.string().trim().allow("").optional(),
             openingBalance: Joi.number().optional(),
+            openingBalanceDate: Joi.string().allow("", null).optional(),
             currentBalance: Joi.number().optional(),
             notes: Joi.string().trim().allow("", null).optional()
         });
