@@ -545,7 +545,7 @@ export const CreateOrder = () => {
       const subTotal = Number((orderProps.subTotal + lineTotal).toFixed(2));
       const tax = Number((subTotal * (orderProps.taxPercent / 100)).toFixed(2));
       const newItem = {
-        subTotal, tax, total: subTotal + tax,
+        subTotal, tax, total: Math.round(subTotal + tax),
         orderItems: [...orderProps.orderItems, {
           productId: values.id,
           name: values.name,
@@ -1383,7 +1383,7 @@ export const CreateOrder = () => {
           ...prevOrder,
           subTotal,
           tax,
-          total: subTotal + tax,
+          total: Math.round(subTotal + tax),
           orderItems: [...prevOrder.orderItems, { ...item, sortOrder: prevOrder.orderItems.length }]
         };
         try { generatePdf(next); } catch {}
@@ -1408,8 +1408,8 @@ export const CreateOrder = () => {
           ...prev, 
           subTotal, 
           tax, 
-          total: subTotal + tax, 
-          orderItems: prev.orderItems.filter((_, i) => i !== index) 
+          total: Math.round(subTotal + tax),
+          orderItems: prev.orderItems.filter((_, i) => i !== index)
         };
 
         // Silent audit log — fire and forget, don't block UI
