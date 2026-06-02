@@ -474,54 +474,47 @@ module.exports = {
         // Repayments:    loan_transactions.transactionDate matches today
         let loansCashIn = 0, loansCashOut = 0;
         let loanCashInRecords = [], loanCashOutRecords = [];
+        let loanQueryError = null;
         try {
-            console.log(`[Loans] Querying for date: ${dateDDMMYYYY} | ${dateDDMMYYYY_slash} | ${dateYYYYMMDD}`);
+            // Use raw SQL to avoid any ORM association-loading issues
+            const dateValues = [dateDDMMYYYY, dateDDMMYYYY_slash, dateYYYYMMDD];
+            const placeholders = dateValues.map((_, i) => `:d${i}`).join(', ');
+            const bindParams = Object.fromEntries(dateValues.map((v, i) => [`d${i}`, v]));
+
             // New loans disbursed/received today
-            const loansToday = await db.loan.findAll({
-                where: {
-                    loanDate: { [db.Sequelize.Op.in]: [dateDDMMYYYY, dateDDMMYYYY_slash, dateYYYYMMDD] },
-                    isDeleted: false
-                },
-                raw: true
-            });
-            console.log(`[Loans] New loans today: ${loansToday.length}`);
+            const loansToday = await db.sequelize.query(
+                `SELECT id, "loanNumber", type, "partyName", "principalAmount", notes, "loanDate"
+                 FROM loans
+                 WHERE "loanDate" IN (${placeholders}) AND "isDeleted" = false`,
+                { replacements: bindParams, type: db.sequelize.QueryTypes.SELECT }
+            );
+            console.log(`[Loans] date=${dateDDMMYYYY} new loans=${loansToday.length}`);
             loansToday.forEach(l => {
                 const amt = Number(l.principalAmount) || 0;
                 const rec = { id: l.id, loanNumber: l.loanNumber, partyName: l.partyName, amount: amt, notes: l.notes, date: l.loanDate, isRepayment: false };
-                if (l.type === 'given') {
-                    loansCashOut += amt;
-                    loanCashOutRecords.push(rec);
-                } else {
-                    loansCashIn += amt;
-                    loanCashInRecords.push(rec);
-                }
+                if (l.type === 'given') { loansCashOut += amt; loanCashOutRecords.push(rec); }
+                else { loansCashIn += amt; loanCashInRecords.push(rec); }
             });
 
-            // Repayments today
-            const repayments = await db.loanTransaction.findAll({
-                where: {
-                    transactionDate: { [db.Sequelize.Op.in]: [dateDDMMYYYY, dateDDMMYYYY_slash, dateYYYYMMDD] }
-                },
-                include: [{ model: db.loan, as: 'loan', attributes: ['type', 'partyName', 'loanNumber'], required: true }],
-                raw: true,
-                nest: true
-            });
-            console.log(`[Loans] Repayments today: ${repayments.length}`);
+            // Repayments today — raw SQL join to avoid ORM association issues
+            const repayments = await db.sequelize.query(
+                `SELECT t.id, t.amount, t."transactionDate", t.notes,
+                        l.type as "loanType", l."partyName", l."loanNumber"
+                 FROM loan_transactions t
+                 INNER JOIN loans l ON l.id = t."loanId"
+                 WHERE t."transactionDate" IN (${placeholders})`,
+                { replacements: bindParams, type: db.sequelize.QueryTypes.SELECT }
+            );
+            console.log(`[Loans] repayments found=${repayments.length}`);
             repayments.forEach(t => {
-                console.log(`[Loans]   txn loanType=${t.loan?.type} amount=${t.amount} date=${t.transactionDate}`);
                 const amt = Number(t.amount) || 0;
-                const rec = { id: t.id, loanNumber: t.loan?.loanNumber, partyName: t.loan?.partyName, amount: amt, notes: t.notes, date: t.transactionDate, isRepayment: true };
-                if (t.loan?.type === 'given') {
-                    // Someone repaid us — cash IN
-                    loansCashIn += amt;
-                    loanCashInRecords.push(rec);
-                } else {
-                    // We repaid someone — cash OUT
-                    loansCashOut += amt;
-                    loanCashOutRecords.push(rec);
-                }
+                const rec = { id: t.id, loanNumber: t.loanNumber, partyName: t.partyName, amount: amt, notes: t.notes, date: t.transactionDate, isRepayment: true };
+                console.log(`[Loans]   repayment: type=${t.loanType} amt=${amt} date=${t.transactionDate}`);
+                if (t.loanType === 'given') { loansCashIn += amt; loanCashInRecords.push(rec); }
+                else { loansCashOut += amt; loanCashOutRecords.push(rec); }
             });
         } catch (e) {
+            loanQueryError = e.message;
             console.error('[getRealTimeSummary] Loan cash flow error:', e.message, e.stack);
         }
 
@@ -572,6 +565,7 @@ module.exports = {
             loansCashOut,
             loanCashInRecords,
             loanCashOutRecords,
+            loanQueryError,
             // Individual records for inline detail view (only paid CASH orders)
             cashOrderRecords: paidCashOrders.map(o => ({
                 id: o.id, orderNumber: o.orderNumber, customerName: o.customerName,

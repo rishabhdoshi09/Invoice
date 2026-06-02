@@ -583,6 +583,15 @@ export const DayStart = () => {
                         </Box>
                     </Grid>
 
+                    {/* Loan query error indicator */}
+                    {realTimeSummary?.loanQueryError && (
+                        <Grid item xs={12}>
+                            <Alert severity="error" sx={{ py: 0.5 }}>
+                                Loan cash flow unavailable: {realTimeSummary.loanQueryError}
+                            </Alert>
+                        </Grid>
+                    )}
+
                     {/* Loan Cash Flow — only shown when there is loan activity today */}
                     {(loansCashIn > 0 || loansCashOut > 0) && (<>
                         {loansCashIn > 0 && <>
