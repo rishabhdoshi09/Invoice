@@ -82,8 +82,9 @@ async function assertOrderInvariants(orderId, transaction, options = {}) {
     }
 
     // ── INV-2: subTotal + tax = total ─────────────────────────────────────────
+    // total is rounded to nearest rupee (Math.round), so allow up to ₹0.50 gap
     const expectedTotal = round2(subTotal + tax);
-    if (Math.abs(expectedTotal - total) > TOLERANCE) {
+    if (Math.abs(expectedTotal - total) > 0.5) {
         throw new InvariantError(
             `INV-2 [${orderNumber}]: total mismatch. ` +
             `subTotal(${subTotal}) + tax(${tax}) = ${expectedTotal}, stored total=${total}`,
