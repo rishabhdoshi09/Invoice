@@ -212,6 +212,28 @@ const server = app.listen(PORT, async () => {
       console.warn('[STARTUP] suppliers openingBalanceDate column bootstrap:', e.message);
     }
 
+    // Auto-initialize chart of accounts if accounts table is empty
+    try {
+      const [countRows] = await db.sequelize.query(
+        `SELECT COUNT(*) as cnt FROM accounts`,
+        { type: db.sequelize.QueryTypes.SELECT }
+      );
+      const { ensureGSTAccounts } = require('./src/services/accountingEngine');
+      if (Number(countRows.cnt) === 0) {
+        const LedgerService = require('./src/services/ledgerService');
+        const ledgerSvc = new LedgerService(db);
+        await ledgerSvc.initializeChartOfAccounts();
+        await ensureGSTAccounts().catch(() => {});
+        console.log('[STARTUP] Chart of accounts initialized automatically.');
+      } else {
+        // Ensure GST sub-accounts exist (idempotent)
+        await ensureGSTAccounts().catch(() => {});
+        console.log('[STARTUP] Chart of accounts ready.');
+      }
+    } catch (e) {
+      console.warn('[STARTUP] Chart of accounts bootstrap:', e.message);
+    }
+
     // Start scheduled jobs (async, non-blocking)
     try {
       require('./src/scheduler').init(db);
@@ -225,10 +247,17 @@ const server = app.listen(PORT, async () => {
     setTimeout(async () => {
       try {
         const SelfAuditService = require('./src/services/selfAuditService');
+        const { clearHaltCache } = require('./src/middleware/financialGuard');
         const report = await new SelfAuditService(db).run({ writeHistory: true, triggeredBy: 'startup' });
         console.log(`[STARTUP AUDIT] Status: ${report.summary.overallStatus} — ` +
           `PASS=${report.summary.counts.PASS} FAIL=${report.summary.counts.FAIL} ` +
           `SKIP=${report.summary.counts.SKIP} (${report.durationMs}ms)`);
+
+        // If current audit is not HALT, clear any stale HALT from a previous run
+        if (report.summary.overallStatus !== 'HALT') {
+          clearHaltCache();
+          console.log('[STARTUP AUDIT] No HALT detected — stale guard cache cleared.');
+        }
       } catch (e) {
         console.warn('[STARTUP AUDIT] Failed (non-fatal):', e.message);
       }
