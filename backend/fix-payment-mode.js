@@ -128,6 +128,27 @@ async function run() {
         console.log('=== ALL ORDERS — AFTER FIX ===');
         console.table(afterAll);
 
+        // ── FIX C: CASH orders stuck as 'partial' due to rounding ────────────
+        // These are CASH orders where total is a decimal (e.g. 2168.30) but
+        // paidAmount is an integer (2168) — diff ≤ ₹0.50. The customer paid
+        // in full at POS; the "partial" label is wrong.
+        // Fix: set paidAmount=total, dueAmount=0, paymentStatus='paid'.
+        const [fixCResult] = await db.sequelize.query(`
+            UPDATE orders
+            SET "paymentStatus" = 'paid',
+                "dueAmount"     = 0,
+                "paidAmount"    = "total",
+                "updatedAt"     = NOW()
+            WHERE "paymentMode"    = 'CASH'
+              AND "paymentStatus"  = 'partial'
+              AND "total" - "paidAmount" > 0
+              AND "total" - "paidAmount" <= 0.50
+              AND "isDeleted" = false
+            RETURNING "orderNumber", "orderDate", "total", "paidAmount"
+        `);
+        console.log(`\nFIX C: Fixed ${fixCResult.length} CASH orders from partial → paid (rounding)`);
+        if (fixCResult.length > 0) console.table(fixCResult);
+
         console.log('\nDone. Restart the server and check the cash drawer.');
         process.exit(0);
     } catch (err) {
