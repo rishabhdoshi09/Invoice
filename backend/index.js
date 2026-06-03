@@ -212,56 +212,7 @@ const server = app.listen(PORT, async () => {
       console.warn('[STARTUP] suppliers openingBalanceDate column bootstrap:', e.message);
     }
 
-    // Two-step rounding fix using journal_batches as ground truth.
-    // INVOICE_CASH batch = cash was collected at POS → must be paymentMode=CASH.
-    // No INVOICE_CASH batch = credit sale → must be paymentMode=CREDIT.
-    try {
-      // Step 1: REVERT — orders incorrectly changed to CASH by a previous migration
-      //         but have no INVOICE_CASH journal batch (= were credit orders, not POS cash)
-      const [reverted] = await db.sequelize.query(`
-        UPDATE orders o
-        SET "paymentMode" = 'CREDIT'
-        WHERE "isDeleted" = false
-          AND "paymentMode" = 'CASH'
-          AND NOT EXISTS (
-            SELECT 1 FROM journal_batches jb
-            WHERE jb."referenceId" = o.id
-              AND jb."referenceType" = 'INVOICE_CASH'
-              AND jb."isReversed" = false
-          )
-        RETURNING id
-      `);
-      if (reverted.rowCount > 0) {
-        console.log(`[STARTUP] Reverted ${reverted.rowCount} order(s) incorrectly marked CASH (no INVOICE_CASH batch).`);
-      }
-
-      // Step 2: FIX — orders marked CREDIT but have an INVOICE_CASH batch
-      //         = genuine POS cash sales, just got CREDIT tag due to rounding bug
-      const [fixed] = await db.sequelize.query(`
-        UPDATE orders o
-        SET
-          total                = ROUND(total::numeric),
-          "paidAmount"         = ROUND(total::numeric),
-          "originalPaidAmount" = ROUND(total::numeric),
-          "dueAmount"          = 0,
-          "paymentStatus"      = 'paid',
-          "paymentMode"        = 'CASH'
-        WHERE "isDeleted" = false
-          AND "paymentMode" = 'CREDIT'
-          AND EXISTS (
-            SELECT 1 FROM journal_batches jb
-            WHERE jb."referenceId" = o.id
-              AND jb."referenceType" = 'INVOICE_CASH'
-              AND jb."isReversed" = false
-          )
-        RETURNING id
-      `);
-      if (fixed.rowCount > 0) {
-        console.log(`[STARTUP] Fixed ${fixed.rowCount} order(s) POS cash sales incorrectly stored as CREDIT.`);
-      }
-    } catch (e) {
-      console.warn('[STARTUP] Rounding fix migration:', e.message);
-    }
+    // Note: paymentMode rounding fix migrations removed — handled by targeted script.
 
     // Auto-initialize chart of accounts if accounts table is empty
     try {
