@@ -316,11 +316,58 @@ export const TodayActivity = () => {
                 </Box>
             )}
 
-            {!loading && filtered.length > 0 && (
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'right' }}>
-                    {filtered.length} entries
-                </Typography>
-            )}
+            {!loading && filtered.length > 0 && (() => {
+                const invoiceEntries  = filtered.filter(e => e.entityType === 'ORDER'       && e.action !== 'DELETE');
+                const paymentInEntries = filtered.filter(e => e.entityType === 'PAYMENT_IN' && e.action !== 'DELETE');
+                const paymentOutEntries = filtered.filter(e => e.entityType === 'PAYMENT_OUT' && e.action !== 'DELETE');
+                const purchaseEntries  = filtered.filter(e => e.entityType === 'PURCHASE'   && e.action !== 'DELETE');
+
+                const invoiceTotal   = invoiceEntries.reduce((s, e)    => s + (Number(e.amount) || 0), 0);
+                const paymentInTotal = paymentInEntries.reduce((s, e)  => s + (Number(e.amount) || 0), 0);
+                const paymentOutTotal = paymentOutEntries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+                const purchaseTotal  = purchaseEntries.reduce((s, e)   => s + (Number(e.amount) || 0), 0);
+
+                const totals = [
+                    invoiceTotal   > 0 && { label: `Invoices (${invoiceEntries.length})`,    value: invoiceTotal,    color: '#1a237e' },
+                    paymentInTotal > 0 && { label: `Payments In (${paymentInEntries.length})`, value: paymentInTotal, color: '#2e7d32' },
+                    paymentOutTotal> 0 && { label: `Payments Out (${paymentOutEntries.length})`, value: paymentOutTotal, color: '#e65100' },
+                    purchaseTotal  > 0 && { label: `Purchases (${purchaseEntries.length})`,  value: purchaseTotal,  color: '#4527a0' },
+                ].filter(Boolean);
+
+                if (totals.length === 0) {
+                    return (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'right' }}>
+                            {filtered.length} entries
+                        </Typography>
+                    );
+                }
+
+                return (
+                    <Paper variant="outlined" sx={{ mt: 2, px: 2, py: 1.5, bgcolor: '#f8f9fa', borderRadius: 2 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                            <Typography variant="caption" color="text.secondary">{filtered.length} entries</Typography>
+                            <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center' }}>
+                                {totals.map(t => (
+                                    <Box key={t.label} sx={{ textAlign: 'right' }}>
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{t.label}</Typography>
+                                        <Typography variant="body2" fontWeight={700} sx={{ color: t.color, fontFamily: 'monospace' }}>
+                                            {fmt(t.value)}
+                                        </Typography>
+                                    </Box>
+                                ))}
+                                {totals.length > 1 && (
+                                    <Box sx={{ textAlign: 'right', borderLeft: '2px solid #e0e0e0', pl: 2 }}>
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>Total</Typography>
+                                        <Typography variant="body2" fontWeight={700} sx={{ fontFamily: 'monospace', color: '#212121' }}>
+                                            {fmt(totals.reduce((s, t) => s + t.value, 0))}
+                                        </Typography>
+                                    </Box>
+                                )}
+                            </Box>
+                        </Box>
+                    </Paper>
+                );
+            })()}
         </Box>
     );
 };
