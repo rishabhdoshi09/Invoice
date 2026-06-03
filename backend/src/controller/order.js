@@ -73,8 +73,8 @@ module.exports = {
             const taxPercent = typeof orderObj.taxPercent === 'number' ? orderObj.taxPercent : 0;
             const computedTax = round2(computedSubTotal * taxPercent / 100);
 
-            // 4. Grand total
-            const computedTotal = round2(computedSubTotal + computedTax);
+            // 4. Grand total — rounded to nearest rupee (matches frontend Math.round)
+            const computedTotal = Math.round(computedSubTotal + computedTax);
 
             // Override client-supplied values with server-computed values
             orderObj.subTotal = computedSubTotal;
