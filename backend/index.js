@@ -213,9 +213,7 @@ const server = app.listen(PORT, async () => {
     }
 
     // Fix orders incorrectly stored as CREDIT due to frontend/backend rounding mismatch.
-    // When the frontend sent paidAmount=Math.round(total) but backend computed total with
-    // decimals, paidAmount < total by < ₹1 → paymentMode=CREDIT instead of CASH.
-    // Uses originalPaidAmount > 0 to distinguish true cash sales from legitimate credit orders.
+    // Uses COALESCE(originalPaidAmount, paidAmount) since older orders may have NULL originalPaidAmount.
     try {
       const [fixed] = await db.sequelize.query(`
         UPDATE orders
@@ -229,8 +227,8 @@ const server = app.listen(PORT, async () => {
         WHERE
           "isDeleted" = false
           AND "paymentMode" = 'CREDIT'
-          AND "originalPaidAmount" > 0
-          AND ABS("originalPaidAmount"::numeric - total::numeric) < 1
+          AND COALESCE("originalPaidAmount", "paidAmount")::numeric > 0
+          AND ABS(COALESCE("originalPaidAmount", "paidAmount")::numeric - total::numeric) < 1
         RETURNING id
       `);
       if (fixed.rowCount > 0) {
