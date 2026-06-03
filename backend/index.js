@@ -212,28 +212,29 @@ const server = app.listen(PORT, async () => {
       console.warn('[STARTUP] suppliers openingBalanceDate column bootstrap:', e.message);
     }
 
-    // Fix orders incorrectly marked Partial due to frontend/backend rounding mismatch.
-    // These are cash sales where paidAmount was Math.round(total) but backend stored
-    // the unrounded total, making paidAmount < total by < ₹1 → paymentMode=CREDIT.
+    // Fix orders incorrectly stored as CREDIT due to frontend/backend rounding mismatch.
+    // When the frontend sent paidAmount=Math.round(total) but backend computed total with
+    // decimals, paidAmount < total by < ₹1 → paymentMode=CREDIT instead of CASH.
+    // Uses originalPaidAmount > 0 to distinguish true cash sales from legitimate credit orders.
     try {
       const [fixed] = await db.sequelize.query(`
         UPDATE orders
         SET
-          total       = ROUND(total::numeric),
-          "paidAmount" = ROUND(total::numeric),
-          "dueAmount"  = 0,
-          "paymentStatus" = 'paid',
-          "paymentMode"   = 'CASH'
+          total            = ROUND(total::numeric),
+          "paidAmount"     = ROUND(total::numeric),
+          "originalPaidAmount" = ROUND(total::numeric),
+          "dueAmount"      = 0,
+          "paymentStatus"  = 'paid',
+          "paymentMode"    = 'CASH'
         WHERE
           "isDeleted" = false
           AND "paymentMode" = 'CREDIT'
-          AND "paymentStatus" = 'partial'
-          AND "paidAmount" > 0
-          AND ABS("paidAmount"::numeric - total::numeric) < 1
+          AND "originalPaidAmount" > 0
+          AND ABS("originalPaidAmount"::numeric - total::numeric) < 1
         RETURNING id
       `);
       if (fixed.rowCount > 0) {
-        console.log(`[STARTUP] Fixed ${fixed.rowCount} order(s) incorrectly marked Partial due to rounding.`);
+        console.log(`[STARTUP] Fixed ${fixed.rowCount} order(s) incorrectly stored as CREDIT due to rounding.`);
       }
     } catch (e) {
       console.warn('[STARTUP] Rounding fix migration:', e.message);
