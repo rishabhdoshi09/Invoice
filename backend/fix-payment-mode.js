@@ -149,6 +149,44 @@ async function run() {
         console.log(`\nFIX C: Fixed ${fixCResult.length} CASH orders from partial → paid (rounding)`);
         if (fixCResult.length > 0) console.table(fixCResult);
 
+        // ── FIX D: Set advanceAmount for overpayment orders ───────────────────
+        // Orders where paidAmount > total but advanceAmount is 0 or not set.
+        // These are POS cash sales where frontend rounded UP (e.g. 830.80 → 831).
+        // The ₹0.20 excess belongs in advanceAmount, not floating as an inconsistency.
+        const [fixDResult] = await db.sequelize.query(`
+            UPDATE orders
+            SET "advanceAmount" = ROUND(CAST("paidAmount" AS NUMERIC) - CAST(total AS NUMERIC), 2),
+                "dueAmount"     = 0,
+                "paymentStatus" = 'paid',
+                "updatedAt"     = NOW()
+            WHERE "isDeleted" = false
+              AND CAST("paidAmount" AS NUMERIC) > CAST(total AS NUMERIC) + 0.01
+              AND CAST("paidAmount" AS NUMERIC) - CAST(total AS NUMERIC) <= 0.50
+              AND CAST(COALESCE("advanceAmount", 0) AS NUMERIC) = 0
+            RETURNING "orderNumber", "total", "paidAmount", "advanceAmount"
+        `);
+        console.log(`\nFIX D: Set advanceAmount for ${fixDResult.length} overpayment orders`);
+        if (fixDResult.length > 0) console.table(fixDResult);
+
+        // ── FIX E: Restore paidAmount for historical CASH orders with paidAmount=0 ──
+        // These have originalPaidAmount > 0 (set at creation) but paidAmount was
+        // reset to 0 by an old migration. Restore paidAmount = originalPaidAmount.
+        const [fixEResult] = await db.sequelize.query(`
+            UPDATE orders
+            SET "paidAmount"    = "originalPaidAmount",
+                "dueAmount"     = 0,
+                "advanceAmount" = 0,
+                "paymentStatus" = 'paid',
+                "updatedAt"     = NOW()
+            WHERE "paymentMode"         = 'CASH'
+              AND "isDeleted"           = false
+              AND CAST("paidAmount" AS NUMERIC)         = 0
+              AND CAST("originalPaidAmount" AS NUMERIC) > 0
+            RETURNING "orderNumber", "orderDate", "total", "originalPaidAmount"
+        `);
+        console.log(`\nFIX E: Restored paidAmount for ${fixEResult.length} historical CASH orders with paidAmount=0`);
+        if (fixEResult.length > 0) console.table(fixEResult);
+
         console.log('\nDone. Restart the server and check the cash drawer.');
         process.exit(0);
     } catch (err) {

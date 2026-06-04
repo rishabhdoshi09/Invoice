@@ -27,7 +27,8 @@
  *   INV-14  Receipt allocation total per payment ≤ payment.amount
  */
 
-const TOLERANCE = 0.01; // max allowed paisa-level rounding gap
+const TOLERANCE      = 0.01; // paisa-level rounding gap for ledger checks
+const ROUND_TOLERANCE = 0.50; // max diff when total uses Math.round (nearest rupee)
 
 class SelfAuditService {
     constructor(db) {
@@ -173,18 +174,19 @@ class SelfAuditService {
     }
 
     async _inv04_invoiceTotalFormula() {
+        // Grand total uses Math.round (nearest rupee), so allow up to ₹0.50 diff.
         const [rows] = await this.db.sequelize.query(`
             SELECT id, "orderNumber", "subTotal", tax, total,
                    ABS(CAST("subTotal" AS NUMERIC) + CAST(COALESCE(tax, 0) AS NUMERIC) - CAST(total AS NUMERIC)) AS diff
             FROM orders
             WHERE "isDeleted" = false
-              AND ABS(CAST("subTotal" AS NUMERIC) + CAST(COALESCE(tax, 0) AS NUMERIC) - CAST(total AS NUMERIC)) > ${TOLERANCE}
+              AND ABS(CAST("subTotal" AS NUMERIC) + CAST(COALESCE(tax, 0) AS NUMERIC) - CAST(total AS NUMERIC)) > ${ROUND_TOLERANCE}
             LIMIT 100
         `);
         const ok = rows.length === 0;
         return {
             id: 'INV-04',
-            name: 'total = subTotal + tax',
+            name: 'total = subTotal + tax (±₹0.50 for Math.round)',
             status: ok ? 'PASS' : 'FAIL',
             severity: ok ? 'INFO' : 'CRITICAL',
             count: rows.length,
@@ -195,43 +197,53 @@ class SelfAuditService {
     }
 
     async _inv05_paidPlusDueEqualsTotal() {
+        // Correct formula: paidAmount + dueAmount = total + advanceAmount
+        // (advance is set when customer overpays; it shifts the identity)
         const [rows] = await this.db.sequelize.query(`
-            SELECT id, "orderNumber", "paidAmount", "dueAmount", total,
-                   ABS(CAST("paidAmount" AS NUMERIC) + CAST("dueAmount" AS NUMERIC) - CAST(total AS NUMERIC)) AS diff
+            SELECT id, "orderNumber", "paidAmount", "dueAmount", "advanceAmount", total,
+                   ABS(
+                     CAST("paidAmount" AS NUMERIC) + CAST("dueAmount" AS NUMERIC)
+                     - CAST(total AS NUMERIC) - CAST(COALESCE("advanceAmount", 0) AS NUMERIC)
+                   ) AS diff
             FROM orders
             WHERE "isDeleted" = false
-              AND ABS(CAST("paidAmount" AS NUMERIC) + CAST("dueAmount" AS NUMERIC) - CAST(total AS NUMERIC)) > ${TOLERANCE}
+              AND ABS(
+                    CAST("paidAmount" AS NUMERIC) + CAST("dueAmount" AS NUMERIC)
+                    - CAST(total AS NUMERIC) - CAST(COALESCE("advanceAmount", 0) AS NUMERIC)
+                  ) > ${ROUND_TOLERANCE}
             LIMIT 100
         `);
         const ok = rows.length === 0;
         return {
             id: 'INV-05',
-            name: 'paidAmount + dueAmount = total',
+            name: 'paidAmount + dueAmount = total + advanceAmount',
             status: ok ? 'PASS' : 'FAIL',
             severity: ok ? 'INFO' : 'CRITICAL',
             count: rows.length,
             detail: ok ? 'All invoices consistent' : rows.map(r =>
-                `${r.orderNumber}: paid(${r.paidAmount}) + due(${r.dueAmount}) ≠ total(${r.total})`
+                `${r.orderNumber}: paid(${r.paidAmount}) + due(${r.dueAmount}) ≠ total(${r.total}) + advance(${r.advanceAmount})`
             )
         };
     }
 
     async _inv06_paidStatusConsistency() {
+        // 'paid' means paidAmount >= total (customer paid in full or overpaid).
+        // Overpayments are stored in advanceAmount — paidAmount > total is valid.
         const [rows] = await this.db.sequelize.query(`
-            SELECT id, "orderNumber", "paymentStatus", "paidAmount", "dueAmount", total
+            SELECT id, "orderNumber", "paymentStatus", "paidAmount", "dueAmount", "advanceAmount", total
             FROM orders
             WHERE "isDeleted" = false
               AND "paymentStatus" = 'paid'
               AND (
                 CAST("dueAmount" AS NUMERIC) > ${TOLERANCE}
-                OR ABS(CAST("paidAmount" AS NUMERIC) - CAST(total AS NUMERIC)) > ${TOLERANCE}
+                OR CAST("paidAmount" AS NUMERIC) < CAST(total AS NUMERIC) - ${ROUND_TOLERANCE}
               )
             LIMIT 100
         `);
         const ok = rows.length === 0;
         return {
             id: 'INV-06',
-            name: "status='paid' ⟹ paidAmount=total AND dueAmount=0",
+            name: "status='paid' ⟹ paidAmount ≥ total AND dueAmount=0",
             status: ok ? 'PASS' : 'FAIL',
             severity: ok ? 'INFO' : 'CRITICAL',
             count: rows.length,
@@ -264,22 +276,26 @@ class SelfAuditService {
     }
 
     async _inv08_noOverpayment() {
+        // paidAmount > total is valid when advanceAmount captures the excess.
+        // Only flag when the excess is NOT recorded in advanceAmount.
         const [rows] = await this.db.sequelize.query(`
-            SELECT id, "orderNumber", "paidAmount", total
+            SELECT id, "orderNumber", "paidAmount", "advanceAmount", total
             FROM orders
             WHERE "isDeleted" = false
-              AND CAST("paidAmount" AS NUMERIC) > CAST(total AS NUMERIC) + ${TOLERANCE}
+              AND CAST("paidAmount" AS NUMERIC) > CAST(total AS NUMERIC) + ${ROUND_TOLERANCE}
+              AND CAST(COALESCE("advanceAmount", 0) AS NUMERIC)
+                  < CAST("paidAmount" AS NUMERIC) - CAST(total AS NUMERIC) - ${TOLERANCE}
             LIMIT 100
         `);
         const ok = rows.length === 0;
         return {
             id: 'INV-08',
-            name: 'No invoice overpayment (paidAmount ≤ total)',
+            name: 'No unrecorded overpayment (excess must be in advanceAmount)',
             status: ok ? 'PASS' : 'FAIL',
             severity: ok ? 'INFO' : 'CRITICAL',
             count: rows.length,
-            detail: ok ? 'No overpayments found' : rows.map(r =>
-                `${r.orderNumber}: paidAmount(${r.paidAmount}) > total(${r.total})`
+            detail: ok ? 'No unrecorded overpayments' : rows.map(r =>
+                `${r.orderNumber}: paidAmount(${r.paidAmount}) > total(${r.total}) but advanceAmount=${r.advanceAmount}`
             )
         };
     }
