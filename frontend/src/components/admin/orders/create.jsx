@@ -1536,7 +1536,7 @@ export const CreateOrder = () => {
         }
       });
 
-      setOrderProps(initialOrderProps);
+      setOrderProps({ ...initialOrderProps, orderDate: getTodayStr() });
       formik.resetForm();
       setLocalPriceValue('');
       setFetchedViaScale(false);
