@@ -147,6 +147,37 @@ module.exports = {
                 value.currentBalance = value.openingBalance;
             }
 
+            // If name is changing, fetch old name first then cascade to orders/payments
+            if (value.name) {
+                const db = require('../models');
+                const existing = await db.customer.findOne({ where: { id: req.params.customerId } });
+                if (existing && existing.name !== value.name) {
+                    const oldName = existing.name;
+                    const newName = value.name;
+                    await db.order.update(
+                        { customerName: newName },
+                        { where: { customerName: oldName } }
+                    );
+                    await db.payment.update(
+                        { partyName: newName },
+                        { where: { partyName: oldName, partyType: 'customer' } }
+                    );
+                    await createAuditLog({
+                        userId: req.user?.id,
+                        userName: req.user?.name || req.user?.username,
+                        userRole: req.user?.role,
+                        action: 'UPDATE',
+                        entityType: 'CUSTOMER_NAME_CHANGE',
+                        entityId: req.params.customerId,
+                        entityName: newName,
+                        oldValues: { name: oldName },
+                        newValues: { name: newName },
+                        description: `Customer renamed: "${oldName}" → "${newName}"`,
+                        ipAddress: getClientIP(req)
+                    });
+                }
+            }
+
             const response = await Services.customer.updateCustomer(
                 { id: req.params.customerId },
                 value
@@ -180,6 +211,15 @@ module.exports = {
             
             if (!customer) {
                 return res.status(400).send({ status: 400, message: "customer doesn't exist" });
+            }
+
+            // Block deletion if customer has outstanding balance
+            const balance = Number(customer.currentBalance) || 0;
+            if (balance > 0) {
+                return res.status(400).send({
+                    status: 400,
+                    message: `Cannot delete "${customer.name}" — outstanding balance of ₹${balance.toLocaleString('en-IN')} exists. Clear the balance first.`
+                });
             }
 
             await db.sequelize.transaction(async (transaction) => {
@@ -442,6 +482,16 @@ module.exports = {
                 message: `Linked orphan "${orphanName}" to "${target.name}". ${ordersResult?.rowCount || 0} orders, ${paymentsResult?.rowCount || 0} payments linked.`,
                 data: { ordersLinked: ordersResult?.rowCount || 0, paymentsLinked: paymentsResult?.rowCount || 0 }
             });
+        } catch (error) {
+            return res.status(500).json({ status: 500, message: error.message });
+        }
+    },
+
+    getOverdueCustomers: async (req, res) => {
+        try {
+            const days = parseInt(req.query.days) || 20;
+            const data = await Services.customer.getOverdueCustomers(days);
+            return res.status(200).json({ status: 200, data });
         } catch (error) {
             return res.status(500).json({ status: 500, message: error.message });
         }

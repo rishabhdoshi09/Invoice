@@ -1,28 +1,29 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { 
-    Box, 
-    Button, 
-    Card, 
-    CardContent, 
-    Table, 
-    TableBody, 
-    TableCell, 
-    TableContainer, 
-    TableHead, 
-    TableRow, 
-    Dialog, 
-    DialogTitle, 
-    DialogContent, 
+import {
+    Box,
+    Button,
+    Card,
+    CardContent,
+    Table,
+    TableBody,
+    TableCell,
+    TableContainer,
+    TableHead,
+    TableRow,
+    Dialog,
+    DialogTitle,
+    DialogContent,
     DialogContentText,
-    DialogActions, 
-    Typography, 
-    TextField, 
-    Select, 
-    MenuItem, 
-    FormControl, 
-    InputLabel, 
+    DialogActions,
+    Typography,
+    TextField,
+    Select,
+    MenuItem,
+    FormControl,
+    InputLabel,
     Chip,
     Grid,
+    Menu as MuiMenu,
     Paper,
     IconButton,
     Tooltip,
@@ -72,28 +73,19 @@ export const DailyPayments = () => {
         isLoading: loadingSummary,
         isFetching: fetchingSummary,
         refetch: refetchSummary 
-    } = useGetDailySummaryQuery(selectedDate, {
-        refetchOnFocus: true,
-        refetchOnReconnect: true,
-    });
-    
-    const { 
-        data: outstandingReceivables = [], 
+    } = useGetDailySummaryQuery(selectedDate);
+
+    const {
+        data: outstandingReceivables = [],
         isLoading: loadingReceivables,
-        refetch: refetchReceivables 
-    } = useGetOutstandingReceivablesQuery(undefined, {
-        refetchOnFocus: true,
-        refetchOnReconnect: true,
-    });
-    
-    const { 
-        data: outstandingPayables = [], 
+        refetch: refetchReceivables
+    } = useGetOutstandingReceivablesQuery(undefined);
+
+    const {
+        data: outstandingPayables = [],
         isLoading: loadingPayables,
-        refetch: refetchPayables 
-    } = useGetOutstandingPayablesQuery(undefined, {
-        refetchOnFocus: true,
-        refetchOnReconnect: true,
-    });
+        refetch: refetchPayables
+    } = useGetOutstandingPayablesQuery(undefined);
     
     const [createPaymentMutation, { isLoading: isSubmitting }] = useCreatePaymentMutation();
     const [deletePaymentMutation, { isLoading: deletingPayment }] = useDeletePaymentMutation();
@@ -122,6 +114,9 @@ export const DailyPayments = () => {
     
     // Details dialog for summary cards — now inline expanded section
     const [expandedCard, setExpandedCard] = useState(null); // 'all' | 'customers' | 'suppliers' | 'expenses' | null
+
+    // Add button dropdown menu
+    const [addMenuAnchor, setAddMenuAnchor] = useState(null);
     
     // Simple form for quick expense recording
     const [simpleForm, setSimpleForm] = useState({
@@ -527,35 +522,34 @@ export const DailyPayments = () => {
                             <Refresh />
                         </IconButton>
                     </Tooltip>
-                    <Button variant="contained" onClick={() => handleOpenDialog('simple')} startIcon={<Add />}>
-                        Quick Expense
+                    <Button
+                        variant="contained"
+                        startIcon={<Add />}
+                        onClick={(e) => setAddMenuAnchor(e.currentTarget)}
+                    >
+                        Add Payment
                     </Button>
-                    <Button 
-                        variant="contained" 
-                        color="warning"
-                        onClick={() => {
-                            setFormData({
-                                paymentDate: selectedDate,
-                                partyId: '',
-                                partyName: '',
-                                partyType: 'supplier',
-                                amount: '',
-                                referenceType: 'advance',
-                                referenceId: '',
-                                referenceNumber: '',
-                                notes: ''
-                            });
+                    <MuiMenu
+                        anchorEl={addMenuAnchor}
+                        open={Boolean(addMenuAnchor)}
+                        onClose={() => setAddMenuAnchor(null)}
+                    >
+                        <MenuItem onClick={() => { setAddMenuAnchor(null); handleOpenDialog('simple'); }}>
+                            Quick Expense
+                        </MenuItem>
+                        <MenuItem onClick={() => {
+                            setAddMenuAnchor(null);
+                            setFormData({ paymentDate: selectedDate, partyId: '', partyName: '', partyType: 'supplier', amount: '', referenceType: 'advance', referenceId: '', referenceNumber: '', notes: '' });
                             setSelectedPartyOutstanding(null);
                             setDialogMode('advanced');
                             setOpenDialog(true);
-                        }}
-                        startIcon={<LocalShipping />}
-                    >
-                        Supplier Advance
-                    </Button>
-                    <Button variant="outlined" onClick={() => handleOpenDialog('advanced')}>
-                        Other Payment
-                    </Button>
+                        }}>
+                            Supplier Payment
+                        </MenuItem>
+                        <MenuItem onClick={() => { setAddMenuAnchor(null); handleOpenDialog('advanced'); }}>
+                            Customer / Other
+                        </MenuItem>
+                    </MuiMenu>
                 </Box>
             </Box>
 

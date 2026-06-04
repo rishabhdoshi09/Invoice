@@ -1,6 +1,7 @@
 const db = require('../models');
 const LedgerService = require('../services/ledgerService');
 const LedgerMigrationService = require('../services/ledgerMigrationService');
+const { ensureGSTAccounts } = require('../services/accountingEngine');
 
 const ledgerService = new LedgerService(db);
 const migrationService = new LedgerMigrationService(db);
@@ -14,6 +15,8 @@ module.exports = {
     initializeAccounts: async (req, res) => {
         try {
             const result = await ledgerService.initializeChartOfAccounts();
+            // Also seed GST sub-accounts (CGST/SGST/IGST payable + input credit)
+            await ensureGSTAccounts().catch(e => console.warn('[LEDGER] GST accounts seed failed:', e.message));
             return res.json({ status: 200, message: 'Chart of accounts initialized', data: result });
         } catch (error) {
             console.error('Error initializing accounts:', error);
@@ -432,6 +435,143 @@ module.exports = {
             });
         } catch (error) {
             console.error('Error in cash receipt backfill:', error);
+            return res.status(500).json({ status: 500, message: error.message });
+        }
+    },
+
+    /**
+     * GET /api/customers/:customerId/statement?from=YYYY-MM-DD&to=YYYY-MM-DD
+     * Returns full ledger statement for a customer:
+     * - Customer info + opening balance
+     * - All orders in the period
+     * - All payments received in the period
+     * - Running balance per transaction
+     * - Closing balance
+     */
+    getCustomerStatement: async (req, res) => {
+        try {
+            const { customerId } = req.params;
+            const { from, to } = req.query;
+
+            const customer = await db.customer.findByPk(customerId, { raw: true });
+            if (!customer) {
+                return res.status(404).json({ status: 404, message: 'Customer not found' });
+            }
+
+            // Build date filters
+            const fromDate = from ? new Date(from) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+            const toDate   = to   ? new Date(to)   : new Date();
+            toDate.setHours(23, 59, 59, 999);
+
+            // Orders in period
+            const orders = await db.order.findAll({
+                where: {
+                    customerId,
+                    isDeleted: false,
+                    createdAt: { [db.Sequelize.Op.between]: [fromDate, toDate] }
+                },
+                order: [['orderDate', 'ASC'], ['createdAt', 'ASC']],
+                raw: true
+            });
+
+            // Payments received in period
+            const payments = await db.payment.findAll({
+                where: {
+                    partyType: 'customer',
+                    partyId: customerId,
+                    isDeleted: false,
+                    createdAt: { [db.Sequelize.Op.between]: [fromDate, toDate] }
+                },
+                order: [['paymentDate', 'ASC'], ['createdAt', 'ASC']],
+                raw: true
+            });
+
+            // Opening balance = currentBalance minus transactions in period
+            // Simple approach: calculate balance before fromDate
+            const ordersBeforePeriod = await db.order.findAll({
+                where: {
+                    customerId,
+                    isDeleted: false,
+                    createdAt: { [db.Sequelize.Op.lt]: fromDate }
+                },
+                raw: true
+            });
+            const paymentsBeforePeriod = await db.payment.findAll({
+                where: {
+                    partyType: 'customer',
+                    partyId: customerId,
+                    isDeleted: false,
+                    createdAt: { [db.Sequelize.Op.lt]: fromDate }
+                },
+                raw: true
+            });
+
+            const openingFromOrders   = ordersBeforePeriod.reduce((s, o) => s + Number(o.dueAmount || 0), 0);
+            const openingFromPayments = paymentsBeforePeriod.reduce((s, p) => s + Number(p.amount || 0), 0);
+            const openingBalance = Number(customer.openingBalance || 0) + openingFromOrders - openingFromPayments;
+
+            // Build chronological transaction list with running balance
+            const transactions = [];
+            let runningBalance = openingBalance;
+
+            const parseTxnDate = (dateStr) => {
+                if (!dateStr) return new Date(0);
+                const m = String(dateStr).match(/^(\d{2})-(\d{2})-(\d{4})$/);
+                return m ? new Date(`${m[3]}-${m[2]}-${m[1]}`) : new Date(dateStr);
+            };
+
+            // Merge orders + payments sorted strictly by actual transaction date
+            const allTxns = [
+                ...orders.map(o => ({ ...o, _type: 'invoice', _txnDate: parseTxnDate(o.orderDate || o.createdAt) })),
+                ...payments.map(p => ({ ...p, _type: 'payment', _txnDate: parseTxnDate(p.paymentDate || p.createdAt) }))
+            ].sort((a, b) => a._txnDate - b._txnDate);
+
+            for (const txn of allTxns) {
+                if (txn._type === 'invoice') {
+                    runningBalance += Number(txn.total || 0);
+                    transactions.push({
+                        date:        txn.orderDate || txn.createdAt,
+                        type:        'Invoice',
+                        reference:   txn.orderNumber,
+                        description: txn.notes || txn.staffNotes || '',
+                        debit:       Number(txn.total || 0),
+                        credit:      0,
+                        balance:     runningBalance
+                    });
+                } else {
+                    runningBalance -= Number(txn.amount || 0);
+                    transactions.push({
+                        date:        txn.paymentDate || txn.createdAt,
+                        type:        'Payment',
+                        reference:   txn.paymentNumber || '',
+                        description: txn.notes || txn.paymentMethod || '',
+                        debit:       0,
+                        credit:      Number(txn.amount || 0),
+                        balance:     runningBalance
+                    });
+                }
+            }
+
+            return res.json({
+                status: 200,
+                data: {
+                    customer: {
+                        id:     customer.id,
+                        name:   customer.name,
+                        mobile: customer.mobile,
+                        gstin:  customer.gstin,
+                        address: customer.address
+                    },
+                    period:         { from: fromDate, to: toDate },
+                    openingBalance,
+                    closingBalance: runningBalance,
+                    totalInvoiced:  orders.reduce((s, o) => s + Number(o.total || 0), 0),
+                    totalPaid:      payments.reduce((s, p) => s + Number(p.amount || 0), 0),
+                    transactions
+                }
+            });
+        } catch (error) {
+            console.error('Error generating customer statement:', error);
             return res.status(500).json({ status: 500, message: error.message });
         }
     }

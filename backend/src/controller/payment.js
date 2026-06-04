@@ -1,4 +1,4 @@
-const uuidv4 = require('uuid/v4');
+const { v4: uuidv4 } = require('uuid');
 const Services = require('../services');
 const Validations = require('../validations');
 const db = require('../models');
@@ -18,39 +18,63 @@ module.exports = {
                 });
             }
 
+            // REFERENCE INTEGRITY: validate referenced entity exists before creating payment
+            if (value.referenceId) {
+                if (value.referenceType === 'order') {
+                    const referencedOrder = await db.order.findOne({
+                        where: { id: value.referenceId, isDeleted: false }
+                    });
+                    if (!referencedOrder) {
+                        return res.status(400).send({
+                            status: 400,
+                            message: `Referenced order (${value.referenceId}) does not exist or has been deleted`
+                        });
+                    }
+                } else if (value.referenceType === 'purchase') {
+                    const referencedPurchase = await db.purchaseBill.findOne({
+                        where: { id: value.referenceId, isDeleted: false }
+                    });
+                    if (!referencedPurchase) {
+                        return res.status(400).send({
+                            status: 400,
+                            message: `Referenced purchase bill (${value.referenceId}) does not exist or has been deleted`
+                        });
+                    }
+                }
+            }
+
+            // IDEMPOTENCY: if caller supplied a key and we already have a payment for it,
+            // return the existing record without side-effects (safe retry).
+            if (value.idempotencyKey) {
+                const existing = await db.payment.findOne({
+                    where: { idempotencyKey: value.idempotencyKey, isDeleted: false }
+                });
+                if (existing) {
+                    return res.status(200).send({
+                        status: 200,
+                        message: 'payment recorded successfully',
+                        data: existing,
+                        idempotent: true
+                    });
+                }
+            }
+
             const result = await db.sequelize.transaction(async (transaction) => {
                 const response = await Services.payment.createPayment(value, transaction);
 
-                // Dynamically get the Cash/Bank Ledger ID (old single-entry system)
-                let CASH_BANK_LEDGER_ID = null;
-                const cashBankLedger = await Services.ledger.getLedgerByName('Cash Account');
-                if (cashBankLedger) {
-                    CASH_BANK_LEDGER_ID = cashBankLedger.id;
-                }
-                
-                // Create ledger entries for payment
-                const ledgerEntries = [];
-
-                if (value.partyType === 'customer') {
-                    // Customer payment received: Cash/Bank (Debit) to Customer (Credit)
-                    // Look up customer by partyId first, then by name
-                    let customer = null;
-                    if (value.partyId) {
-                        customer = await Services.customer.getCustomer({ id: value.partyId });
-                    }
-                    
-                    // If not found by ID, find or create by exact name
-                    if (!customer && value.partyName && value.partyName.trim()) {
-                        customer = await db.customer.findOne({ 
+                // ── Resolve partyId for customer/supplier payments ────────────────────
+                // If partyId was not supplied, try to find or create the party by name.
+                // All DB operations are within the transaction for atomicity.
+                if (value.partyType === 'customer' && !response.partyId) {
+                    if (value.partyName && value.partyName.trim()) {
+                        let customer = await db.customer.findOne({
                             where: db.Sequelize.where(
                                 db.Sequelize.fn('LOWER', db.Sequelize.fn('TRIM', db.Sequelize.col('name'))),
                                 value.partyName.trim().toLowerCase()
                             ),
                             transaction
                         });
-                        
                         if (!customer) {
-                            const uuidv4 = require('uuid/v4');
                             customer = await db.customer.create({
                                 id: uuidv4(),
                                 name: value.partyName.trim(),
@@ -58,259 +82,131 @@ module.exports = {
                                 openingBalance: 0,
                                 currentBalance: 0
                             }, { transaction });
-                            console.log(`CREATED new customer from payment: "${customer.name}" (ID: ${customer.id})`);
+                            console.log(`[PAYMENT] Created new customer from payment: "${customer.name}" (ID: ${customer.id})`);
                         }
-                        
                         await response.update({ partyId: customer.id }, { transaction });
                     }
-                    
-                    // Always record the cash receipt (old ledger system)
-                    if (CASH_BANK_LEDGER_ID) {
-                        ledgerEntries.push({
-                            ledgerId: CASH_BANK_LEDGER_ID,
-                            entryDate: value.paymentDate,
-                            debit: value.amount,
-                            credit: 0,
-                            description: `Payment received from ${value.partyName || customer?.name || 'Customer'} - ${value.referenceType}`,
-                            referenceType: 'payment',
-                            referenceId: response.id
-                        });
-                    }
-                    
-                    // If customer has a ledger, record the credit entry
-                    if (customer && customer.ledgerId) {
-                        ledgerEntries.push({
-                            ledgerId: customer.ledgerId,
-                            entryDate: value.paymentDate,
-                            debit: 0,
-                            credit: value.amount,
-                            description: `Payment received from ${value.partyName || customer.name} - ${value.referenceType}`,
-                            referenceType: 'payment',
-                            referenceId: response.id
-                        });
-                    }
-                    
-                    // Update customer balance if found
-                    if (customer) {
-                        await customer.update({
-                            currentBalance: Math.max(0, (customer.currentBalance || 0) - value.amount)
-                        }, { transaction });
-                    }
-                } else if (value.partyType === 'supplier') {
-                    // Supplier payment made: Supplier (Debit) to Cash/Bank (Credit)
-                    // Look up supplier by partyId first, then by name
-                    let supplier = null;
-                    if (value.partyId) {
-                        supplier = await Services.supplier.getSupplier({ id: value.partyId });
-                    }
-                    
-                    // If not found by ID, find or create by exact name
-                    if (!supplier && value.partyName && value.partyName.trim()) {
-                        supplier = await db.supplier.findOne({ 
+                }
+
+                if (value.partyType === 'supplier' && !response.partyId) {
+                    if (value.partyName && value.partyName.trim()) {
+                        let supplier = await db.supplier.findOne({
                             where: db.Sequelize.where(
                                 db.Sequelize.fn('LOWER', db.Sequelize.fn('TRIM', db.Sequelize.col('name'))),
                                 value.partyName.trim().toLowerCase()
                             ),
                             transaction
                         });
-                        
                         if (!supplier) {
-                            const uuidv4 = require('uuid/v4');
                             supplier = await db.supplier.create({
                                 id: uuidv4(),
                                 name: value.partyName.trim(),
                                 openingBalance: 0,
                                 currentBalance: 0
                             }, { transaction });
-                            console.log(`CREATED new supplier from payment: "${supplier.name}" (ID: ${supplier.id})`);
+                            console.log(`[PAYMENT] Created new supplier from payment: "${supplier.name}" (ID: ${supplier.id})`);
                         }
-                        
                         await response.update({ partyId: supplier.id }, { transaction });
                     }
-                    
-                    // Always record the cash payment (old ledger system)
-                    if (CASH_BANK_LEDGER_ID) {
-                        ledgerEntries.push({
-                            ledgerId: CASH_BANK_LEDGER_ID,
-                            entryDate: value.paymentDate,
-                            debit: 0,
-                            credit: value.amount,
-                            description: `Payment to ${value.partyName || supplier?.name || 'Supplier'} - ${value.referenceType}`,
-                            referenceType: 'payment',
-                            referenceId: response.id
-                        });
-                    }
-                    
-                    // If supplier has a ledger, record the debit entry
-                    if (supplier && supplier.ledgerId) {
-                        ledgerEntries.push({
-                            ledgerId: supplier.ledgerId,
-                            entryDate: value.paymentDate,
-                            debit: value.amount,
-                            credit: 0,
-                            description: `Payment to ${value.partyName || supplier.name} - ${value.referenceType}`,
-                            referenceType: 'payment',
-                            referenceId: response.id
-                        });
-                    }
-                    
-                    // Update supplier balance if found (reduce balance when payment is made)
-                    if (supplier) {
-                        await supplier.update({
-                            currentBalance: Math.max(0, (supplier.currentBalance || 0) - value.amount)
-                        }, { transaction });
-                    }
-                } else if (value.partyType === 'expense') {
-                    // Simple expense: Cash/Bank (Credit) - money going out
-                    // Try to get or create an Expenses ledger
-                    let expenseLedger = await Services.ledger.getLedgerByName('Expenses');
-                    if (!expenseLedger) {
-                        // If no expense ledger, just record the cash outflow
-                        if (CASH_BANK_LEDGER_ID) {
-                            ledgerEntries.push({
-                                ledgerId: CASH_BANK_LEDGER_ID,
-                                entryDate: value.paymentDate,
-                                debit: 0,
-                                credit: value.amount,
-                                description: `Expense: ${value.partyName} - ${value.notes || ''}`,
-                                referenceType: 'payment',
-                                referenceId: response.id
-                            });
-                        }
-                    } else if (CASH_BANK_LEDGER_ID) {
-                        // Double entry: Expense (Debit) to Cash/Bank (Credit)
-                        ledgerEntries.push({
-                            ledgerId: expenseLedger.id,
-                            entryDate: value.paymentDate,
-                            debit: value.amount,
-                            credit: 0,
-                            description: `Expense: ${value.partyName} - ${value.notes || ''}`,
-                            referenceType: 'payment',
-                            referenceId: response.id
-                        });
-                        ledgerEntries.push({
-                            ledgerId: CASH_BANK_LEDGER_ID,
-                            entryDate: value.paymentDate,
-                            debit: 0,
-                            credit: value.amount,
-                            description: `Expense: ${value.partyName} - ${value.notes || ''}`,
-                            referenceType: 'payment',
-                            referenceId: response.id
-                        });
-                    }
                 }
 
-                if (ledgerEntries.length > 0) {
-                    await db.ledgerEntry.bulkCreate(ledgerEntries, { transaction });
-                }
-
-                // === NEW DOUBLE-ENTRY LEDGER: Real-time posting ===
-                // Non-blocking: if Chart of Accounts isn't set up, log warning but don't crash payment creation
-                if (value.partyType === 'customer') {
-                    try {
-                        const accountsExist = await db.account.count({ transaction });
-                        if (accountsExist > 0) {
-                            const customerIdForLedger = response.partyId || value.partyId;
-                            await postPaymentToLedger(
-                                { ...value, id: response.id, paymentNumber: response.paymentNumber, createdAt: new Date() },
-                                customerIdForLedger,
-                                value.partyName,
-                                transaction
-                            );
-                        } else {
-                            console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — payment ${response.paymentNumber} not posted to ledger`);
-                        }
-                    } catch (ledgerError) {
-                        console.error(`[LEDGER] Failed to post payment ${response.paymentNumber}:`, ledgerError.message);
-                        // Don't crash payment creation — ledger posting is supplementary
+                // ── Double-entry ledger posting (AccountingEngine is sole source of truth) ──
+                // The old single-entry ledger system has been removed. All postings go through
+                // the AccountingEngine which produces balanced journal batches.
+                const accountsExist = await db.account.count({ transaction });
+                if (accountsExist > 0) {
+                    if (value.partyType === 'customer') {
+                        const customerIdForLedger = response.partyId || value.partyId;
+                        await postPaymentToLedger(
+                            { ...value, id: response.id, paymentNumber: response.paymentNumber, createdAt: new Date() },
+                            customerIdForLedger,
+                            value.partyName,
+                            transaction
+                        );
+                    } else if (value.partyType === 'supplier') {
+                        const supplierIdForLedger = response.partyId || value.partyId;
+                        await postSupplierPaymentToLedger(
+                            { ...value, id: response.id, paymentNumber: response.paymentNumber, createdAt: new Date() },
+                            supplierIdForLedger,
+                            value.partyName,
+                            transaction
+                        );
                     }
+                } else {
+                    console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — payment ${response.paymentNumber} not posted to ledger`);
                 }
 
-                // === NEW DOUBLE-ENTRY LEDGER: Supplier payment posting ===
-                if (value.partyType === 'supplier') {
-                    try {
-                        const accountsExist = await db.account.count({ transaction });
-                        if (accountsExist > 0) {
-                            const supplierIdForLedger = response.partyId || value.partyId;
-                            await postSupplierPaymentToLedger(
-                                { ...value, id: response.id, paymentNumber: response.paymentNumber, createdAt: new Date() },
-                                supplierIdForLedger,
-                                value.partyName,
-                                transaction
-                            );
-                        } else {
-                            console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — supplier payment ${response.paymentNumber} not posted to ledger`);
-                        }
-                    } catch (ledgerError) {
-                        console.error(`[LEDGER] Failed to post supplier payment ${response.paymentNumber}:`, ledgerError.message);
-                    }
-                }
-
-                // Payment recorded. Order status is NOT auto-updated.
-                // Order status changes ONLY via explicit receipt allocation or manual toggle.
+                // ── Purchase bill: update paidAmount/dueAmount with SELECT FOR UPDATE ────
+                // Uses atomic increment on paidAmount to prevent lost-update races.
+                // dueAmount clamped to 0 (overpayment stored as advanceAmount).
                 if (value.referenceType === 'order' && value.referenceId) {
                     console.log(`[PAYMENT] Payment against order ${value.referenceId}: ₹${value.amount} — order status NOT auto-updated. Use Allocate tab.`);
                 } else if (value.partyType === 'customer' && value.partyName && !value.referenceId) {
                     console.log(`[PAYMENT] On-Account receipt from ${value.partyName}: ₹${value.amount} — requires manual allocation`);
                 } else if (value.referenceType === 'purchase' && value.referenceId) {
-                    const purchase = await Services.purchaseBill.getPurchaseBill({ id: value.referenceId });
+                    // Lock the row to prevent concurrent payment races
+                    const purchase = await db.purchaseBill.findByPk(value.referenceId, {
+                        transaction,
+                        lock: transaction.LOCK.UPDATE
+                    });
                     if (purchase) {
-                        const newPaidAmount = (purchase.paidAmount || 0) + value.amount;
-                        const newDueAmount = purchase.total - newPaidAmount;
+                        const round2 = (n) => Math.round(n * 100) / 100;
+                        const newPaidAmount = round2((Number(purchase.paidAmount) || 0) + Number(value.amount));
+                        const total = Number(purchase.total) || 0;
+                        const newDueAmount     = round2(Math.max(0, total - newPaidAmount));
+                        const newAdvanceAmount = round2(Math.max(0, newPaidAmount - total));
                         let paymentStatus = 'unpaid';
-                        
-                        if (newPaidAmount >= purchase.total) {
-                            paymentStatus = 'paid';
-                        } else if (newPaidAmount > 0) {
-                            paymentStatus = 'partial';
-                        }
+                        if (newPaidAmount >= total - 0.01) paymentStatus = 'paid';
+                        else if (newPaidAmount > 0.01)    paymentStatus = 'partial';
 
-                        await Services.purchaseBill.updatePurchaseBill(
-                            { id: value.referenceId },
-                            { 
-                                paidAmount: newPaidAmount, 
-                                dueAmount: newDueAmount,
-                                paymentStatus: paymentStatus
-                            }
+                        await db.purchaseBill.update(
+                            { paidAmount: newPaidAmount, dueAmount: newDueAmount, advanceAmount: newAdvanceAmount, paymentStatus },
+                            { where: { id: value.referenceId }, transaction }
                         );
 
-                        // Update supplier balance
-                        const supplier = await Services.supplier.getSupplier({ id: purchase.supplierId });
-                        if (supplier) {
-                            const newBalance = (supplier.currentBalance || 0) - value.amount;
-                            await Services.supplier.updateSupplier(
-                                { id: purchase.supplierId },
-                                { currentBalance: newBalance }
+                        // Reduce supplier outstanding balance (atomic, inside transaction)
+                        if (purchase.supplierId) {
+                            await db.supplier.update(
+                                { currentBalance: db.sequelize.literal(`"currentBalance" - ${Number(value.amount)}`) },
+                                { where: { id: purchase.supplierId }, transaction }
                             );
                         }
                     }
                 }
 
+                // Audit log INSIDE transaction — failure rolls back the payment write.
+                await createAuditLog({
+                    userId: req.user?.id,
+                    userName: req.user?.name || req.user?.username || 'System',
+                    userRole: req.user?.role || 'unknown',
+                    action: 'CREATE',
+                    entityType: 'PAYMENT',
+                    entityId: response.id,
+                    entityName: response.paymentNumber,
+                    oldValues: null,
+                    newValues: {
+                        paymentNumber: response.paymentNumber,
+                        amount: Number(value.amount),
+                        partyType: value.partyType,
+                        partyName: value.partyName,
+                        referenceType: value.referenceType || null,
+                        paymentDate: value.paymentDate || null
+                    },
+                    description: `Payment created: ${response.paymentNumber} | ₹${value.amount} | ${value.partyName} (${value.partyType})`,
+                    ipAddress: getClientIP(req),
+                    userAgent: req.headers['user-agent'],
+                    transaction
+                });
+
                 return response;
             });
 
-            // Audit trail — payment created
-            await createAuditLog({
-                userId: req.user?.id,
-                userName: req.user?.name || req.user?.username || 'System',
-                userRole: req.user?.role || 'unknown',
-                action: 'CREATE',
-                entityType: 'PAYMENT',
-                entityId: result.id,
-                entityName: result.paymentNumber,
-                oldValues: null,
-                newValues: {
-                    paymentNumber: result.paymentNumber,
-                    amount: Number(value.amount),
-                    partyType: value.partyType,
-                    partyName: value.partyName,
-                    referenceType: value.referenceType || null,
-                    paymentDate: value.paymentDate || null
-                },
-                description: `Payment created: ${result.paymentNumber} | ₹${value.amount} | ${value.partyName} (${value.partyType})`,
-                ipAddress: getClientIP(req),
-                userAgent: req.headers['user-agent']
-            }).catch(e => console.warn('[AUDIT] Payment create log failed:', e.message));
+            // ── Human-readable log line for every payment ─────────────────────
+            const arrow  = value.partyType === 'customer' ? '→ IN ' : '← OUT';
+            const party  = value.partyType === 'customer' ? 'Customer' : 'Supplier';
+            const amt    = `₹${Number(value.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            const ref    = value.referenceId ? ` | Ref: ${value.referenceNumber || value.referenceId}` : '';
+            console.log(`[PAYMENT] ${arrow} ${result.paymentNumber} ${amt} | ${party}: ${value.partyName}${ref} | ${value.paymentDate}`);
 
             return res.status(200).send({
                 status: 200,
@@ -405,68 +301,60 @@ module.exports = {
                 if (payment.referenceType === 'order' && payment.referenceId) {
                     console.log(`[PAYMENT DELETE] Payment against order ${payment.referenceId} deleted: ₹${payment.amount} — order status NOT auto-reversed.`);
                 } else if (payment.referenceType === 'purchase' && payment.referenceId) {
-                    const purchase = await Services.purchaseBill.getPurchaseBill({ id: payment.referenceId });
+                    // Lock the row before reverting to prevent concurrent races
+                    const purchase = await db.purchaseBill.findByPk(payment.referenceId, {
+                        transaction,
+                        lock: transaction.LOCK.UPDATE
+                    });
                     if (purchase) {
-                        const newPaidAmount = Math.max(0, (Number(purchase.paidAmount) || 0) - Number(payment.amount));
-                        const newDueAmount = Number(purchase.total) - newPaidAmount;
+                        const round2 = (n) => Math.round(n * 100) / 100;
+                        const newPaidAmount    = round2(Math.max(0, (Number(purchase.paidAmount) || 0) - Number(payment.amount)));
+                        const total            = Number(purchase.total) || 0;
+                        const newDueAmount     = round2(Math.max(0, total - newPaidAmount));
+                        const newAdvanceAmount = round2(Math.max(0, newPaidAmount - total));
                         let paymentStatus = 'unpaid';
-                        
-                        if (newPaidAmount >= Number(purchase.total)) {
-                            paymentStatus = 'paid';
-                        } else if (newPaidAmount > 0) {
-                            paymentStatus = 'partial';
-                        }
+                        if (newPaidAmount >= total - 0.01) paymentStatus = 'paid';
+                        else if (newPaidAmount > 0.01)    paymentStatus = 'partial';
 
                         await db.purchaseBill.update(
-                            { 
-                                paidAmount: newPaidAmount, 
-                                dueAmount: newDueAmount,
-                                paymentStatus: paymentStatus
-                            },
+                            { paidAmount: newPaidAmount, dueAmount: newDueAmount, advanceAmount: newAdvanceAmount, paymentStatus },
                             { where: { id: payment.referenceId }, transaction }
                         );
 
-                        // Update supplier balance (add back the payment amount)
+                        // Restore supplier outstanding balance atomically (HIGH-06).
+                        // Atomic SQL increment — eliminates lost-update race under concurrent deletes.
                         if (purchase.supplierId) {
-                            const supplier = await db.supplier.findByPk(purchase.supplierId);
-                            if (supplier) {
-                                await supplier.update({
-                                    currentBalance: (Number(supplier.currentBalance) || 0) + Number(payment.amount)
-                                }, { transaction });
-                            }
+                            await db.supplier.update(
+                                { currentBalance: db.sequelize.literal(`"currentBalance" + ${Number(payment.amount)}`) },
+                                { where: { id: purchase.supplierId }, transaction }
+                            );
                         }
                     }
                 }
-                
-                // Reverse customer balance if this was a customer payment
+
+                // Reverse customer balance if this was a customer payment.
+                // Atomic SQL increment — no read-modify-write race under concurrent deletes (HIGH-06).
                 if (payment.partyType === 'customer' && payment.partyId) {
-                    const customer = await db.customer.findByPk(payment.partyId);
-                    if (customer) {
-                        await customer.update({
-                            currentBalance: (Number(customer.currentBalance) || 0) + Number(payment.amount)
-                        }, { transaction });
-                    }
+                    await db.customer.update(
+                        { currentBalance: db.sequelize.literal(`"currentBalance" + ${Number(payment.amount)}`) },
+                        { where: { id: payment.partyId }, transaction }
+                    );
                 }
 
-                // Reverse supplier balance for standalone supplier payments (advance, etc.)
+                // Reverse supplier balance for standalone supplier payments (advance, etc.).
+                // Purchase-linked reversals are handled above via the purchase block (HIGH-06).
                 if (payment.partyType === 'supplier' && payment.partyId && payment.referenceType !== 'purchase') {
-                    const supplier = await db.supplier.findByPk(payment.partyId);
-                    if (supplier) {
-                        await supplier.update({
-                            currentBalance: (Number(supplier.currentBalance) || 0) + Number(payment.amount)
-                        }, { transaction });
-                    }
+                    await db.supplier.update(
+                        { currentBalance: db.sequelize.literal(`"currentBalance" + ${Number(payment.amount)}`) },
+                        { where: { id: payment.partyId }, transaction }
+                    );
                 }
 
                 // Create REVERSAL journal batch in the new ledger (swap debit/credit)
-                try {
-                    const accountsExist = await db.account.count({ transaction });
-                    if (accountsExist > 0) {
-                        await reversePaymentLedger(payment, transaction);
-                    }
-                } catch (ledgerError) {
-                    console.error(`[LEDGER] Payment reversal failed for ${payment.paymentNumber}:`, ledgerError.message);
-                    // Don't crash delete if ledger reversal fails
+                // Blocking when CoA is initialized so delete and ledger are always in sync.
+                const accountsExist = await db.account.count({ transaction });
+                if (accountsExist > 0) {
+                    await reversePaymentLedger(payment, transaction);
                 }
                 
                 // Soft delete the payment (preserve for audit trail)
@@ -479,29 +367,32 @@ module.exports = {
                     },
                     { where: { id: req.params.paymentId }, transaction }
                 );
-            });
 
-            // Audit trail — payment deleted
-            await createAuditLog({
-                userId: req.user?.id,
-                userName: req.user?.name || req.user?.username || 'System',
-                userRole: req.user?.role || 'unknown',
-                action: 'DELETE',
-                entityType: 'PAYMENT',
-                entityId: payment.id,
-                entityName: payment.paymentNumber,
-                oldValues: {
-                    paymentNumber: payment.paymentNumber,
-                    amount: Number(payment.amount),
-                    partyType: payment.partyType,
-                    partyName: payment.partyName,
-                    paymentDate: payment.paymentDate
-                },
-                newValues: null,
-                description: `Payment deleted: ${payment.paymentNumber} | ₹${payment.amount} | ${payment.partyName} (${payment.partyType})`,
-                ipAddress: getClientIP(req),
-                userAgent: req.headers['user-agent']
-            }).catch(e => console.warn('[AUDIT] Payment delete log failed:', e.message));
+                // Audit log INSIDE the transaction — if this write fails the entire
+                // deletion rolls back. A deleted payment with no audit trail is
+                // indistinguishable from money that was never received.
+                await createAuditLog({
+                    userId: req.user?.id,
+                    userName: req.user?.name || req.user?.username || 'System',
+                    userRole: req.user?.role || 'unknown',
+                    action: 'DELETE',
+                    entityType: 'PAYMENT',
+                    entityId: payment.id,
+                    entityName: payment.paymentNumber,
+                    oldValues: {
+                        paymentNumber: payment.paymentNumber,
+                        amount: Number(payment.amount),
+                        partyType: payment.partyType,
+                        partyName: payment.partyName,
+                        paymentDate: payment.paymentDate
+                    },
+                    newValues: null,
+                    description: `Payment deleted: ${payment.paymentNumber} | ₹${payment.amount} | ${payment.partyName} (${payment.partyType})`,
+                    ipAddress: getClientIP(req),
+                    userAgent: req.headers['user-agent'],
+                    transaction
+                });
+            });
 
             return res.status(200).send({
                 status: 200,
@@ -521,65 +412,80 @@ module.exports = {
     getDailySummary: async (req, res) => {
         try {
             const date = req.query.date || new Date().toISOString().split('T')[0];
-            
-            // Get all payments for the specific date
-            const { rows: payments } = await Services.payment.listPayments({
-                date: date,
-                limit: 1000,
-                offset: 0
-            });
 
-            // Calculate summaries — force Number() since Sequelize may return strings
-            const totalAmount = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-            const customerPayments = payments.filter(p => p.partyType === 'customer');
-            const supplierPayments = payments.filter(p => p.partyType === 'supplier');
-            const expensePayments = payments.filter(p => p.partyType === 'expense');
-            
-            const customerTotal = customerPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-            const supplierTotal = supplierPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-            const expenseTotal = expensePayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            // Use SQL aggregation — accurate at any volume, no 1000-record cap.
+            // Previously this fetched up to 1000 payment rows and summed them in JS,
+            // which silently truncated totals on busy days.
+            const [aggRows] = await db.sequelize.query(`
+                SELECT
+                    "partyType",
+                    "referenceType",
+                    COUNT(*)                                       AS cnt,
+                    COALESCE(SUM(CAST(amount AS NUMERIC)), 0)      AS total
+                FROM payments
+                WHERE "isDeleted" = false
+                  AND (
+                      "paymentDate" = :date
+                      OR "paymentDate" = TO_CHAR(TO_DATE(:date, 'YYYY-MM-DD'), 'DD-MM-YYYY')
+                      OR "paymentDate" = TO_CHAR(TO_DATE(:date, 'YYYY-MM-DD'), 'DD/MM/YYYY')
+                  )
+                GROUP BY "partyType", "referenceType"
+            `, { replacements: { date } });
 
-            // Group by reference type
-            const orderPayments = payments.filter(p => p.referenceType === 'order');
-            const purchasePayments = payments.filter(p => p.referenceType === 'purchase');
-            const advancePayments = payments.filter(p => p.referenceType === 'advance');
+            // Fold aggregate rows into summary buckets
+            const sum = (partyType, referenceType) => {
+                const row = aggRows.find(r =>
+                    r.partytype === partyType &&
+                    (referenceType === null ? r.referencetype === null : r.referencetype === referenceType)
+                );
+                return row ? { count: Number(row.cnt), amount: Number(row.total) } : { count: 0, amount: 0 };
+            };
+
+            const allPartyTypes = [...new Set(aggRows.map(r => r.partytype))];
+            const totalCount  = aggRows.reduce((s, r) => s + Number(r.cnt),   0);
+            const totalAmount = aggRows.reduce((s, r) => s + Number(r.total), 0);
+
+            const customerRows = aggRows.filter(r => r.partytype === 'customer');
+            const supplierRows = aggRows.filter(r => r.partytype === 'supplier');
+            const expenseRows  = aggRows.filter(r => r.partytype === 'expense');
+
+            const customerTotal = customerRows.reduce((s, r) => s + Number(r.total), 0);
+            const supplierTotal = supplierRows.reduce((s, r) => s + Number(r.total), 0);
+            const expenseTotal  = expenseRows.reduce((s, r)  => s + Number(r.total), 0);
+            const customerCount = customerRows.reduce((s, r) => s + Number(r.cnt),   0);
+            const supplierCount = supplierRows.reduce((s, r) => s + Number(r.cnt),   0);
+            const expenseCount  = expenseRows.reduce((s, r)  => s + Number(r.cnt),   0);
+
+            const orderRows    = aggRows.filter(r => r.referencetype === 'order');
+            const purchaseRows = aggRows.filter(r => r.referencetype === 'purchase');
+            const advanceRows  = aggRows.filter(r => r.referencetype === 'advance');
 
             return res.status(200).send({
                 status: 200,
                 message: 'daily summary fetched successfully',
                 data: {
-                    date: date,
-                    totalCount: payments.length,
-                    totalAmount: totalAmount,
+                    date,
+                    totalCount,
+                    totalAmount,
                     summary: {
-                        customers: {
-                            count: customerPayments.length,
-                            amount: customerTotal
-                        },
-                        suppliers: {
-                            count: supplierPayments.length,
-                            amount: supplierTotal
-                        },
-                        expenses: {
-                            count: expensePayments.length,
-                            amount: expenseTotal
-                        }
+                        customers: { count: customerCount, amount: customerTotal },
+                        suppliers: { count: supplierCount, amount: supplierTotal },
+                        expenses:  { count: expenseCount,  amount: expenseTotal  }
                     },
                     byReferenceType: {
-                        orders: {
-                            count: orderPayments.length,
-                            amount: orderPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+                        orders:    {
+                            count:  orderRows.reduce((s, r) => s + Number(r.cnt),   0),
+                            amount: orderRows.reduce((s, r) => s + Number(r.total), 0)
                         },
                         purchases: {
-                            count: purchasePayments.length,
-                            amount: purchasePayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+                            count:  purchaseRows.reduce((s, r) => s + Number(r.cnt),   0),
+                            amount: purchaseRows.reduce((s, r) => s + Number(r.total), 0)
                         },
-                        advances: {
-                            count: advancePayments.length,
-                            amount: advancePayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+                        advances:  {
+                            count:  advanceRows.reduce((s, r) => s + Number(r.cnt),   0),
+                            amount: advanceRows.reduce((s, r) => s + Number(r.total), 0)
                         }
-                    },
-                    payments: payments
+                    }
                 }
             });
 

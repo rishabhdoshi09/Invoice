@@ -1,4 +1,4 @@
-const uuidv4 = require('uuid/v4');
+const { v4: uuidv4 } = require('uuid');
 const db = require('../models');
 
 module.exports = {
@@ -88,12 +88,12 @@ module.exports = {
                     isDeleted: false
                 },
                 attributes: ['id', 'orderNumber', 'orderDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus', 'createdAt', 'customerId'],
-                order: [['createdAt', 'ASC']]
+                order: [['orderDate', 'ASC'], ['createdAt', 'ASC']]
             });
 
             // Get all non-deleted payments from this customer
             const payments = await db.payment.findAll({
-                where: { 
+                where: {
                     [db.Sequelize.Op.or]: [
                         { partyId: customerId },
                         {
@@ -105,7 +105,7 @@ module.exports = {
                     ...(db.payment.rawAttributes.isDeleted ? { isDeleted: false } : {})
                 },
                 attributes: ['id', 'paymentNumber', 'paymentDate', 'amount', 'referenceType', 'referenceId', 'notes', 'createdAt'],
-                order: [['createdAt', 'ASC']]
+                order: [['paymentDate', 'ASC'], ['createdAt', 'ASC']]
             });
 
             // Get receipt allocations for this customer's orders
@@ -180,9 +180,15 @@ module.exports = {
                 };
             });
 
-            // Sort orders by date DESC for display (most recent first)
-            ordersWithDerivedDue.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-            paymentsWithAllocation.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            const parseEntryDate = (dateStr) => {
+                if (!dateStr) return new Date(0);
+                const m = String(dateStr).match(/^(\d{2})-(\d{2})-(\d{4})$/);
+                return m ? new Date(`${m[3]}-${m[2]}-${m[1]}`) : new Date(dateStr);
+            };
+
+            // Sort strictly by invoice/payment date DESC for display (most recent first)
+            ordersWithDerivedDue.sort((a, b) => parseEntryDate(b.orderDate) - parseEntryDate(a.orderDate));
+            paymentsWithAllocation.sort((a, b) => parseEntryDate(b.paymentDate) - parseEntryDate(a.paymentDate));
 
             // Get toggle history (payment status changes) for this customer's orders
             let toggleHistory = [];
@@ -282,6 +288,98 @@ module.exports = {
                 count: customers.length,
                 rows: customers
             };
+        } catch (error) {
+            console.log(error);
+            throw new Error(error);
+        }
+    },
+
+    getOverdueCustomers: async (days = 20) => {
+        try {
+            const parseDate = (s) => {
+                if (!s) return null;
+                const m = String(s).match(/^(\d{2})-(\d{2})-(\d{4})$/);
+                return m ? new Date(`${m[3]}-${m[2]}-${m[1]}`) : new Date(s);
+            };
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const cutoff = new Date(today);
+            cutoff.setDate(cutoff.getDate() - days);
+
+            const customers = await db.customer.findAll({ raw: true });
+
+            // Bulk fetch for performance
+            const allOrders = await db.order.findAll({
+                where: { isDeleted: false },
+                attributes: ['id', 'customerId', 'customerName', 'orderDate', 'total', 'createdAt'],
+                raw: true
+            });
+
+            const paymentWhere = { partyType: 'customer' };
+            if (db.payment.rawAttributes.isDeleted) paymentWhere.isDeleted = false;
+            const allPayments = await db.payment.findAll({
+                where: paymentWhere,
+                attributes: ['id', 'partyId', 'partyName', 'paymentNumber', 'amount'],
+                raw: true
+            });
+
+            const results = [];
+
+            for (const customer of customers) {
+                const orders = allOrders
+                    .filter(o => o.customerId === customer.id || (!o.customerId && o.customerName === customer.name))
+                    .map(o => ({ ...o, _date: parseDate(o.orderDate) || new Date(o.createdAt) }))
+                    .sort((a, b) => a._date - b._date);
+
+                const payments = allPayments.filter(p =>
+                    p.partyId === customer.id || (!p.partyId && p.partyName === customer.name)
+                );
+
+                const totalPaid = payments
+                    .filter(p => !String(p.paymentNumber || '').startsWith('PAY-TOGGLE-'))
+                    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+                const openingBalance = Number(customer.openingBalance) || 0;
+                const totalSales = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+                const netBalance = openingBalance + totalSales - totalPaid;
+
+                if (netBalance <= 0.01) continue;
+
+                // FIFO: payments cover opening balance first, then oldest invoices
+                let available = Math.max(0, totalPaid - openingBalance);
+                let oldestOverdueDate = null;
+                let unpaidCount = 0;
+
+                for (const order of orders) {
+                    const invoiceTotal = Number(order.total) || 0;
+                    if (available >= invoiceTotal) {
+                        available -= invoiceTotal;
+                    } else {
+                        available = 0;
+                        if (order._date <= cutoff) {
+                            if (!oldestOverdueDate) oldestOverdueDate = order._date;
+                            unpaidCount++;
+                        }
+                    }
+                }
+
+                if (!oldestOverdueDate) continue;
+
+                const daysOverdue = Math.floor((today - oldestOverdueDate) / (1000 * 60 * 60 * 24));
+                results.push({
+                    id: customer.id,
+                    name: customer.name,
+                    mobile: customer.mobile,
+                    oldest_overdue_date: oldestOverdueDate,
+                    unpaid_invoices: String(unpaidCount),
+                    total_outstanding: Math.round(netBalance * 100) / 100,
+                    days_overdue: daysOverdue
+                });
+            }
+
+            results.sort((a, b) => b.days_overdue - a.days_overdue || b.total_outstanding - a.total_outstanding);
+            return results;
         } catch (error) {
             console.log(error);
             throw new Error(error);

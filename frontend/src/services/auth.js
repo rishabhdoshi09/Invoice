@@ -34,9 +34,13 @@ export const setupAxiosInterceptor = () => {
         (response) => response,
         (error) => {
             if (error.response?.status === 401) {
-                // Token expired or invalid
                 const currentPath = window.location.pathname;
                 if (currentPath !== '/login') {
+                    // Save current URL so we can redirect back after login
+                    const returnTo = window.location.pathname + window.location.search;
+                    if (returnTo !== '/login') {
+                        sessionStorage.setItem('auth_return_to', returnTo);
+                    }
                     alert('Session expired. Please login again.');
                     setToken(null);
                     localStorage.removeItem('user');

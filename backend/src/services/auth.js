@@ -1,7 +1,7 @@
 const db = require('../models');
 const { generateToken } = require('../middleware/auth');
 const { logAuthEvent } = require('../middleware/auditLogger');
-const uuidv4 = require('uuid/v4');
+const { v4: uuidv4 } = require('uuid');
 
 module.exports = {
     // Check if any users exist (for initial setup)
@@ -221,7 +221,10 @@ module.exports = {
         return true;
     },
 
-    // Change own password
+    // Change own password.
+    // HR-JWT: Incrementing tokenVersion immediately invalidates ALL existing tokens
+    // for this user across all devices and sessions. Anyone who has a stolen token
+    // can no longer use it after the password is changed.
     changePassword: async (userId, currentPassword, newPassword) => {
         const user = await db.user.findOne({
             where: { id: userId, isDeleted: false }
@@ -236,8 +239,20 @@ module.exports = {
             throw new Error('Current password is incorrect');
         }
 
-        await user.update({ password: newPassword });
+        // Atomically increment tokenVersion to invalidate all previous sessions.
+        await user.update({
+            password:     newPassword,
+            tokenVersion: db.sequelize.literal('"tokenVersion" + 1')
+        });
 
+        return true;
+    },
+
+    // Admin-initiated: force-expire all sessions for a user (e.g. suspected compromise).
+    forceLogoutUser: async (userId, adminReq) => {
+        const user = await db.user.findOne({ where: { id: userId, isDeleted: false } });
+        if (!user) throw new Error('User not found');
+        await user.update({ tokenVersion: db.sequelize.literal('"tokenVersion" + 1') });
         return true;
     }
 };

@@ -1,7 +1,9 @@
 const Controller = require('../controller');
-const { authenticate, optionalAuth, canModify } = require('../middleware/auth');
-const { auditMiddleware, captureOriginal } = require('../middleware/auditLogger');
-const db = require('../models');
+const { authenticate, canModify } = require('../middleware/auth');
+const { makeFinancialWriteGuard } = require('../middleware/financialGuard');
+
+// Single guard instance shared across all order routes
+const financialWriteGuard = makeFinancialWriteGuard(require('../models'));
 
 module.exports = (router) => {
     // Orders - require authentication for all operations
@@ -9,7 +11,7 @@ module.exports = (router) => {
         .route('/orders')
         .post(
             authenticate,           // Must be logged in
-            auditMiddleware('ORDER'),
+            financialWriteGuard,    // Block writes when audit declares HALT
             Controller.order.createOrder
         )
         .get(
@@ -26,15 +28,13 @@ module.exports = (router) => {
         .put(
             authenticate,
             canModify,              // Admin only for editing
-            captureOriginal(db.order, 'orderId'),
-            auditMiddleware('ORDER'),
+            financialWriteGuard,    // Block writes when audit declares HALT
             Controller.order.updateOrder
         )
         .delete(
             authenticate,
             canModify,              // Admin only for deletion
-            captureOriginal(db.order, 'orderId'),
-            auditMiddleware('ORDER'),
+            financialWriteGuard,    // Deletion reverses ledger entries — block during HALT
             Controller.order.deleteOrder
         );
 
@@ -51,8 +51,7 @@ module.exports = (router) => {
         .route('/orders/:orderId/payment-status')
         .patch(
             authenticate,
-            captureOriginal(db.order, 'orderId'),
-            auditMiddleware('ORDER'),
+            financialWriteGuard,    // Block writes when audit declares HALT
             Controller.order.togglePaymentStatus
         );
 

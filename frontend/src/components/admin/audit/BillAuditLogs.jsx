@@ -5,7 +5,7 @@ import {
     InputLabel, Grid, IconButton, Tooltip, Dialog, DialogTitle, DialogContent,
     DialogActions, Button, Alert, Tabs, Tab
 } from '@mui/material';
-import { Visibility, Warning, Delete, RemoveCircle, HighlightOff, Refresh, Scale, FitnessCenter, Telegram } from '@mui/icons-material';
+import { Visibility, Warning, Delete, RemoveCircle, HighlightOff, Refresh, Scale, FitnessCenter, Telegram, PersonOff, Payment, DriveFileRenameOutline, Receipt, EditNote, DeleteSweep, AccountBalance } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
 
@@ -58,12 +58,30 @@ export const BillAuditLogs = () => {
                     {sending ? 'Sending...' : sent ? 'Sent to Telegram!' : 'Send Report to Telegram'}
                 </Button>
             </Box>
-            <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
+            <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }} variant="scrollable" scrollButtons="auto">
                 <Tab label="Item Deletions" icon={<Delete fontSize="small" />} iconPosition="start" />
                 <Tab label="Weight Fetches" icon={<FitnessCenter fontSize="small" />} iconPosition="start" />
+                <Tab label="Customer Deleted" icon={<PersonOff fontSize="small" />} iconPosition="start" />
+                <Tab label="Customer Payments" icon={<Payment fontSize="small" />} iconPosition="start" />
+                <Tab label="Supplier Payments" icon={<Payment fontSize="small" />} iconPosition="start" />
+                <Tab label="Customer Name Changes" icon={<DriveFileRenameOutline fontSize="small" />} iconPosition="start" />
+                <Tab label="Supplier Name Changes" icon={<DriveFileRenameOutline fontSize="small" />} iconPosition="start" />
+                <Tab label="Invoice Edits" icon={<EditNote fontSize="small" />} iconPosition="start" />
+                <Tab label="Invoice Deletions" icon={<DeleteSweep fontSize="small" />} iconPosition="start" />
+                <Tab label="Receipt Deletions" icon={<Receipt fontSize="small" />} iconPosition="start" />
+                <Tab label="Loan Changes" icon={<AccountBalance fontSize="small" />} iconPosition="start" />
             </Tabs>
             {activeTab === 0 && <DeletionLogs />}
             {activeTab === 1 && <WeightLogs />}
+            {activeTab === 2 && <CustomerDeleteLogs />}
+            {activeTab === 3 && <CustomerPaymentLogs />}
+            {activeTab === 4 && <SupplierPaymentLogs />}
+            {activeTab === 5 && <NameChangeLogs endpoint="/api/customers/logs/name-changes" title="Customer Name Change History" />}
+            {activeTab === 6 && <NameChangeLogs endpoint="/api/suppliers/logs/name-changes" title="Supplier Name Change History" />}
+            {activeTab === 7 && <OrderChangeLogs action="UPDATE" title="Invoice Edit History" color="info.main" />}
+            {activeTab === 8 && <OrderChangeLogs action="DELETE" title="Invoice Deletion History" color="error.main" />}
+            {activeTab === 9 && <PaymentDeletionLogs />}
+            {activeTab === 10 && <GenericAuditLog entityType="LOAN" title="Loan Audit Trail" />}
         </Box>
     );
 };
@@ -571,6 +589,650 @@ const WeightLogs = () => {
                                 </TableRow>
                             ))
                         )}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
+    );
+};
+
+const CustomerDeleteLogs = () => {
+    const [logs, setLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchLogs = useCallback(async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get('/api/dashboard/audit-logs?entityType=CUSTOMER&action=DELETE&limit=200', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setLogs(res.data?.data?.rows || res.data?.rows || []);
+        } catch (err) {
+            console.error('Failed to fetch customer delete logs:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="subtitle1" fontWeight={700} color="error.main">
+                    Customer Deletion History
+                </Typography>
+                <IconButton size="small" onClick={fetchLogs}><Refresh fontSize="small" /></IconButton>
+            </Box>
+
+            {logs.length === 0 && !loading && (
+                <Alert severity="success">No customer deletions recorded.</Alert>
+            )}
+
+            <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                <Table stickyHeader size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Time</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Customer Name</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Balance at Deletion</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Deleted By</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Description</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
+                        ) : logs.map((log) => {
+                            const old = log.oldValues || {};
+                            const balance = Number(old.currentBalance) || 0;
+                            return (
+                                <TableRow key={log.id} hover sx={{ bgcolor: balance > 0 ? '#fff3e0' : 'inherit' }}>
+                                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                        {moment(log.createdAt).format('DD-MM-YYYY HH:mm')}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Typography variant="body2" fontWeight={600}>{log.entityName || old.name || '—'}</Typography>
+                                        {old.mobile && <Typography variant="caption" color="text.secondary">{old.mobile}</Typography>}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Chip
+                                            size="small"
+                                            label={balance > 0 ? `₹${balance.toLocaleString('en-IN')}` : '₹0'}
+                                            color={balance > 0 ? 'error' : 'default'}
+                                            variant={balance > 0 ? 'filled' : 'outlined'}
+                                        />
+                                    </TableCell>
+                                    <TableCell>{log.userName || '—'}</TableCell>
+                                    <TableCell sx={{ maxWidth: 300 }}>
+                                        <Typography variant="caption" color="text.secondary">{log.description || '—'}</Typography>
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
+    );
+};
+
+const CustomerPaymentLogs = () => {
+    const [payments, setPayments] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [date, setDate] = useState(moment().format('YYYY-MM-DD'));
+    const [totalIn, setTotalIn] = useState(0);
+
+    const fetchPayments = useCallback(async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`/api/payments?partyType=customer&date=${date}&limit=200`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const rows = res.data?.data?.rows || res.data?.rows || [];
+            setPayments(rows);
+            setTotalIn(rows.reduce((s, p) => s + Number(p.amount || 0), 0));
+        } catch (err) {
+            console.error('Failed to fetch customer payments:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [date]);
+
+    useEffect(() => { fetchPayments(); }, [fetchPayments]);
+
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Typography variant="subtitle1" fontWeight={700} color="success.main">
+                        Customer Payments Received
+                    </Typography>
+                    {!loading && (
+                        <Chip
+                            label={`Total IN: ₹${totalIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                            color="success"
+                            size="small"
+                            variant="filled"
+                        />
+                    )}
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <TextField
+                        type="date"
+                        size="small"
+                        label="Date"
+                        value={date}
+                        onChange={e => setDate(e.target.value)}
+                        InputLabelProps={{ shrink: true }}
+                        sx={{ width: 160 }}
+                    />
+                    <IconButton size="small" onClick={fetchPayments}><Refresh fontSize="small" /></IconButton>
+                </Box>
+            </Box>
+
+            {!loading && payments.length === 0 && (
+                <Alert severity="info">No customer payments recorded on {moment(date).format('DD-MM-YYYY')}.</Alert>
+            )}
+
+            <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                <Table stickyHeader size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Time</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Payment No.</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Customer</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }} align="right">Amount</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Reference</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Notes</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
+                        ) : payments.map((p) => (
+                            <TableRow key={p.id} hover>
+                                <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                    {moment(p.createdAt).format('HH:mm')}
+                                </TableCell>
+                                <TableCell>
+                                    <Typography variant="body2" fontFamily="monospace" fontSize={12}>{p.paymentNumber}</Typography>
+                                </TableCell>
+                                <TableCell>
+                                    <Typography variant="body2" fontWeight={600}>{p.partyName || '—'}</Typography>
+                                    {p.partyMobile && <Typography variant="caption" color="text.secondary">{p.partyMobile}</Typography>}
+                                </TableCell>
+                                <TableCell align="right">
+                                    <Typography variant="body2" fontWeight={700} color="success.main">
+                                        ₹{Number(p.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </Typography>
+                                </TableCell>
+                                <TableCell>
+                                    {p.referenceNumber
+                                        ? <Chip size="small" label={p.referenceNumber} variant="outlined" />
+                                        : <Typography variant="caption" color="text.secondary">On Account</Typography>}
+                                </TableCell>
+                                <TableCell sx={{ maxWidth: 200 }}>
+                                    <Typography variant="caption" color="text.secondary">{p.notes || '—'}</Typography>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
+    );
+};
+
+const SupplierPaymentLogs = () => {
+    const [payments, setPayments] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [date, setDate] = useState(moment().format('YYYY-MM-DD'));
+    const [totalOut, setTotalOut] = useState(0);
+
+    const fetchPayments = useCallback(async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`/api/payments?partyType=supplier&date=${date}&limit=200`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const rows = res.data?.data?.rows || res.data?.rows || [];
+            setPayments(rows);
+            setTotalOut(rows.reduce((s, p) => s + Number(p.amount || 0), 0));
+        } catch (err) {
+            console.error('Failed to fetch supplier payments:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [date]);
+
+    useEffect(() => { fetchPayments(); }, [fetchPayments]);
+
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Typography variant="subtitle1" fontWeight={700} color="error.main">
+                        Supplier Payments Made
+                    </Typography>
+                    {!loading && (
+                        <Chip
+                            label={`Total OUT: ₹${totalOut.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                            color="error"
+                            size="small"
+                            variant="filled"
+                        />
+                    )}
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <TextField
+                        type="date"
+                        size="small"
+                        label="Date"
+                        value={date}
+                        onChange={e => setDate(e.target.value)}
+                        InputLabelProps={{ shrink: true }}
+                        sx={{ width: 160 }}
+                    />
+                    <IconButton size="small" onClick={fetchPayments}><Refresh fontSize="small" /></IconButton>
+                </Box>
+            </Box>
+
+            {!loading && payments.length === 0 && (
+                <Alert severity="info">No supplier payments recorded on {moment(date).format('DD-MM-YYYY')}.</Alert>
+            )}
+
+            <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                <Table stickyHeader size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Time</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Payment No.</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Supplier</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }} align="right">Amount</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Reference</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Notes</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
+                        ) : payments.map((p) => (
+                            <TableRow key={p.id} hover>
+                                <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                    {moment(p.createdAt).format('HH:mm')}
+                                </TableCell>
+                                <TableCell>
+                                    <Typography variant="body2" fontFamily="monospace" fontSize={12}>{p.paymentNumber}</Typography>
+                                </TableCell>
+                                <TableCell>
+                                    <Typography variant="body2" fontWeight={600}>{p.partyName || '—'}</Typography>
+                                    {p.partyMobile && <Typography variant="caption" color="text.secondary">{p.partyMobile}</Typography>}
+                                </TableCell>
+                                <TableCell align="right">
+                                    <Typography variant="body2" fontWeight={700} color="error.main">
+                                        ₹{Number(p.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </Typography>
+                                </TableCell>
+                                <TableCell>
+                                    {p.referenceNumber
+                                        ? <Chip size="small" label={p.referenceNumber} variant="outlined" />
+                                        : <Typography variant="caption" color="text.secondary">Advance</Typography>}
+                                </TableCell>
+                                <TableCell sx={{ maxWidth: 200 }}>
+                                    <Typography variant="caption" color="text.secondary">{p.notes || '—'}</Typography>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
+    );
+};
+
+const NameChangeLogs = ({ endpoint, title }) => {
+    const [logs, setLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchLogs = useCallback(async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(endpoint, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setLogs(res.data?.data || []);
+        } catch (err) {
+            console.error('Failed to fetch name change logs:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [endpoint]);
+
+    useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="subtitle1" fontWeight={700} color="primary">
+                    {title}
+                </Typography>
+                <IconButton size="small" onClick={fetchLogs}><Refresh fontSize="small" /></IconButton>
+            </Box>
+
+            {!loading && logs.length === 0 && (
+                <Alert severity="info">No name changes recorded yet. Future changes will appear here.</Alert>
+            )}
+
+            <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                <Table stickyHeader size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Date & Time</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Changed From → To</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Changed By</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow><TableCell colSpan={3} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
+                        ) : logs.map((log, i) => (
+                            <TableRow key={i} hover>
+                                <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                    {moment(log.createdAt).format('DD-MM-YYYY HH:mm')}
+                                </TableCell>
+                                <TableCell>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <Typography variant="body2" color="error.main" fontWeight={600}>{log.oldName || '—'}</Typography>
+                                        <Typography variant="body2" color="text.secondary">→</Typography>
+                                        <Typography variant="body2" color="success.main" fontWeight={600}>{log.currentName || log.newName || '—'}</Typography>
+                                    </Box>
+                                </TableCell>
+                                <TableCell>{log.userName || '—'}</TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
+    );
+};
+
+const OrderChangeLogs = ({ action, title, color }) => {
+    const [logs, setLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+
+    const fetchLogs = useCallback(async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const params = new URLSearchParams({ entityType: 'ORDER', action, limit: '300' });
+            if (startDate) params.append('startDate', startDate);
+            if (endDate) params.append('endDate', endDate);
+            const res = await axios.get(`/api/dashboard/audit-logs?${params}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setLogs(res.data?.data?.rows || res.data?.rows || []);
+        } catch (err) {
+            console.error('Failed to fetch order logs:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [action, startDate, endDate]);
+
+    useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Typography variant="subtitle1" fontWeight={700} color={color}>{title}</Typography>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <TextField type="date" size="small" label="From" value={startDate}
+                        onChange={e => setStartDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 150 }} />
+                    <TextField type="date" size="small" label="To" value={endDate}
+                        onChange={e => setEndDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 150 }} />
+                    <IconButton size="small" onClick={fetchLogs}><Refresh fontSize="small" /></IconButton>
+                </Box>
+            </Box>
+            {!loading && logs.length === 0 && (
+                <Alert severity="success">No records found.</Alert>
+            )}
+            <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                <Table stickyHeader size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Date & Time</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Invoice / Customer</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Done By</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Role</TableCell>
+                            {action === 'DELETE' && <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }} align="right">Value</TableCell>}
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Description</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
+                        ) : logs.map((log) => {
+                            const old = log.oldValues || {};
+                            const nv = log.newValues || {};
+                            const value = action === 'DELETE' ? Number(old.total || old.grandTotal || 0) : null;
+                            return (
+                                <TableRow key={log.id} hover sx={{ bgcolor: action === 'DELETE' ? '#ffebee' : 'inherit' }}>
+                                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                        {moment(log.createdAt).format('DD-MM-YYYY HH:mm')}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Typography variant="body2" fontWeight={600} fontFamily="monospace">
+                                            {old.orderNumber || nv.orderNumber || log.entityName || `#${log.entityId}`}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            {old.customerName || nv.customerName || '—'}
+                                        </Typography>
+                                    </TableCell>
+                                    <TableCell>{log.userName || '—'}</TableCell>
+                                    <TableCell>
+                                        <Chip size="small" label={log.userRole || '—'} variant="outlined" />
+                                    </TableCell>
+                                    {action === 'DELETE' && (
+                                        <TableCell align="right">
+                                            <Typography fontWeight={700} color="error.main">
+                                                {value > 0 ? `₹${value.toLocaleString('en-IN')}` : '—'}
+                                            </Typography>
+                                        </TableCell>
+                                    )}
+                                    <TableCell sx={{ maxWidth: 280 }}>
+                                        <Typography variant="caption" color="text.secondary">{log.description || '—'}</Typography>
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
+    );
+};
+
+const PaymentDeletionLogs = () => {
+    const [logs, setLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+
+    const fetchLogs = useCallback(async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const params = new URLSearchParams({ entityType: 'PAYMENT', action: 'DELETE', limit: '300' });
+            if (startDate) params.append('startDate', startDate);
+            if (endDate) params.append('endDate', endDate);
+            const res = await axios.get(`/api/dashboard/audit-logs?${params}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setLogs(res.data?.data?.rows || res.data?.rows || []);
+        } catch (err) {
+            console.error('Failed to fetch payment deletion logs:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [startDate, endDate]);
+
+    useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Typography variant="subtitle1" fontWeight={700} color="error.main">Receipt / Payment Deletion History</Typography>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <TextField type="date" size="small" label="From" value={startDate}
+                        onChange={e => setStartDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 150 }} />
+                    <TextField type="date" size="small" label="To" value={endDate}
+                        onChange={e => setEndDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 150 }} />
+                    <IconButton size="small" onClick={fetchLogs}><Refresh fontSize="small" /></IconButton>
+                </Box>
+            </Box>
+            {!loading && logs.length === 0 && (
+                <Alert severity="success">No receipt deletions recorded.</Alert>
+            )}
+            <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                <Table stickyHeader size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Date & Time</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Payment No.</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Customer</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }} align="right">Amount Deleted</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Deleted By</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Role</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
+                        ) : logs.map((log) => {
+                            const old = log.oldValues || {};
+                            const amount = Number(old.amount || 0);
+                            return (
+                                <TableRow key={log.id} hover sx={{ bgcolor: '#ffebee' }}>
+                                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                        {moment(log.createdAt).format('DD-MM-YYYY HH:mm')}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Typography variant="body2" fontFamily="monospace" fontSize={12}>
+                                            {old.paymentNumber || log.entityName || `#${log.entityId}`}
+                                        </Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Typography variant="body2" fontWeight={600}>{old.partyName || '—'}</Typography>
+                                    </TableCell>
+                                    <TableCell align="right">
+                                        <Typography fontWeight={700} color="error.main">
+                                            {amount > 0 ? `₹${amount.toLocaleString('en-IN')}` : '—'}
+                                        </Typography>
+                                    </TableCell>
+                                    <TableCell>{log.userName || '—'}</TableCell>
+                                    <TableCell>
+                                        <Chip size="small" label={log.userRole || '—'} variant="outlined" />
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Box>
+    );
+};
+
+const GenericAuditLog = ({ entityType, title }) => {
+    const [logs, setLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [action, setAction] = useState('');
+
+    const fetchLogs = useCallback(async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const params = new URLSearchParams({ entityType, limit: '300' });
+            if (action) params.append('action', action);
+            if (startDate) params.append('startDate', startDate);
+            if (endDate) params.append('endDate', endDate);
+            const res = await axios.get(`/api/dashboard/audit-logs?${params}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setLogs(res.data?.data?.rows || res.data?.rows || []);
+        } catch (err) {
+            console.error('Failed to fetch audit logs:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [entityType, action, startDate, endDate]);
+
+    useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+    const actionColors = { CREATE: 'success', UPDATE: 'info', DELETE: 'error' };
+
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Typography variant="subtitle1" fontWeight={700}>{title}</Typography>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <FormControl size="small" sx={{ width: 120 }}>
+                        <InputLabel>Action</InputLabel>
+                        <Select value={action} label="Action" onChange={e => setAction(e.target.value)}>
+                            <MenuItem value="">All</MenuItem>
+                            <MenuItem value="CREATE">Create</MenuItem>
+                            <MenuItem value="UPDATE">Update</MenuItem>
+                            <MenuItem value="DELETE">Delete</MenuItem>
+                        </Select>
+                    </FormControl>
+                    <TextField type="date" size="small" label="From" value={startDate}
+                        onChange={e => setStartDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 150 }} />
+                    <TextField type="date" size="small" label="To" value={endDate}
+                        onChange={e => setEndDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 150 }} />
+                    <IconButton size="small" onClick={fetchLogs}><Refresh fontSize="small" /></IconButton>
+                </Box>
+            </Box>
+            {!loading && logs.length === 0 && <Alert severity="info">No records found.</Alert>}
+            <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                <Table stickyHeader size="small">
+                    <TableHead>
+                        <TableRow>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Date & Time</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Action</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Record</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Done By</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Role</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: '#f5f5f5' }}>Description</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}>Loading...</TableCell></TableRow>
+                        ) : logs.map(log => (
+                            <TableRow key={log.id} hover sx={{ bgcolor: log.action === 'DELETE' ? '#ffebee' : 'inherit' }}>
+                                <TableCell sx={{ whiteSpace: 'nowrap' }}>{moment(log.createdAt).format('DD-MM-YYYY HH:mm')}</TableCell>
+                                <TableCell>
+                                    <Chip size="small" label={log.action} color={actionColors[log.action] || 'default'} variant="outlined" />
+                                </TableCell>
+                                <TableCell>
+                                    <Typography variant="body2" fontWeight={600}>{log.entityName || `#${log.entityId}`}</Typography>
+                                </TableCell>
+                                <TableCell>{log.userName || '—'}</TableCell>
+                                <TableCell><Chip size="small" label={log.userRole || '—'} variant="outlined" /></TableCell>
+                                <TableCell sx={{ maxWidth: 280 }}>
+                                    <Typography variant="caption" color="text.secondary">{log.description || '—'}</Typography>
+                                </TableCell>
+                            </TableRow>
+                        ))}
                     </TableBody>
                 </Table>
             </TableContainer>

@@ -1,10 +1,12 @@
 
-const uuidv4 = require('uuid/v4');
+const { v4: uuidv4 } = require('uuid');
 const Services = require('../services');
 const Validations = require('../validations');
 const db = require('../models');
 const { createAuditLog } = require('../middleware/auditLogger');
 const { postInvoiceToLedger, reverseInvoiceLedger, postPaymentStatusToggleToLedger, postInvoiceCashReceiptToLedger } = require('../services/realTimeLedger');
+const { assertOrderInvariants } = require('../services/orderInvariants');
+const { updateStock } = require('../services/accountingEngine');
 const telegram = require('../services/telegramAlert');
 
 // Helper to get client IP
@@ -31,13 +33,76 @@ module.exports = {
 
             let { orderItems, ...orderObj } = value;
 
+            // === SERVER-SIDE MATH: Ignore client totals entirely ===
+            // Recalculate every monetary field from the raw line items.
+            const round2 = (n) => Math.round(n * 100) / 100;
+
+            // === HR-GST: Server-side GST split cross-validation ===
+            // Reject requests where the client-supplied GST components are inconsistent
+            // with each other or with the declared tax amount.
+            // Rule 1: IGST is inter-state; CGST+SGST is intra-state. They are mutually exclusive.
+            const clientCgst  = Number(req.body.cgst || 0);
+            const clientSgst  = Number(req.body.sgst || 0);
+            const clientIgst  = Number(req.body.igst || 0);
+            if (clientIgst > 0 && (clientCgst > 0 || clientSgst > 0)) {
+                return res.status(400).send({
+                    status:  400,
+                    message: 'GST validation error: IGST (inter-state) and CGST/SGST (intra-state) cannot both be non-zero on the same invoice.'
+                });
+            }
+            // Rule 2: declared GST splits must sum to the declared tax amount.
+            const clientTax   = Number(req.body.tax || 0);
+            const clientSplit = round2(clientCgst + clientSgst + clientIgst);
+            if (clientTax > 0 && Math.abs(clientSplit - clientTax) > 0.02) {
+                return res.status(400).send({
+                    status:  400,
+                    message: `GST validation error: cgst(${clientCgst}) + sgst(${clientSgst}) + igst(${clientIgst}) = ${clientSplit}, but tax = ${clientTax}. Splits must sum to tax.`
+                });
+            }
+
+            // 1. Recompute each line total (qty × rate)
+            orderItems = orderItems.map(item => ({
+                ...item,
+                totalPrice: round2(item.quantity * item.productPrice)
+            }));
+
+            // 2. Recompute subTotal from line totals
+            const computedSubTotal = round2(orderItems.reduce((s, i) => s + i.totalPrice, 0));
+
+            // 3. Recompute tax from taxPercent (if supplied) or accept as a rate on subTotal
+            const taxPercent = typeof orderObj.taxPercent === 'number' ? orderObj.taxPercent : 0;
+            const computedTax = round2(computedSubTotal * taxPercent / 100);
+
+            // 4. Grand total — rounded to nearest rupee (matches frontend Math.round)
+            const computedTotal = Math.round(computedSubTotal + computedTax);
+
+            // Override client-supplied values with server-computed values
+            orderObj.subTotal = computedSubTotal;
+            orderObj.tax = computedTax;
+            orderObj.taxPercent = taxPercent;
+            orderObj.total = computedTotal;
+
             // paidAmount MUST be explicitly set by frontend.
             // No default to "fully paid" — prevents silent data corruption.
             if (orderObj.paidAmount === undefined || orderObj.paidAmount === null) {
                 orderObj.paidAmount = 0; // Default: unpaid (safe default)
             }
-            orderObj.dueAmount = orderObj.total - orderObj.paidAmount;
-            
+            orderObj.paidAmount = round2(orderObj.paidAmount);
+
+            // PHASE 1 FIX (C1/C2/C8): Capture the POS cash as an immutable field.
+            // originalPaidAmount is set ONCE here and protected by a DB trigger.
+            // All future paidAmount values are DERIVED:
+            //   paidAmount = originalPaidAmount + SUM(active receipt_allocations)
+            // This makes it structurally impossible for allocation delete/undo to
+            // erase the POS cash component.
+            orderObj.originalPaidAmount = orderObj.paidAmount;
+
+            // dueAmount / advanceAmount: mutually exclusive, both always >= 0
+            //   dueAmount     = MAX(0, total - paidAmount)  → customer still owes us
+            //   advanceAmount = MAX(0, paidAmount - total)  → excess becomes advance credit
+            orderObj.dueAmount     = round2(Math.max(0, orderObj.total - orderObj.paidAmount));
+            orderObj.advanceAmount = round2(Math.max(0, orderObj.paidAmount - orderObj.total));
+
             if (orderObj.paidAmount === 0) {
                 orderObj.paymentStatus = 'unpaid';
                 orderObj.paymentMode = 'CREDIT';
@@ -55,6 +120,22 @@ module.exports = {
                 orderObj.createdByName = req.user.name || req.user.username;
             }
 
+            // IDEMPOTENCY: If client supplies a key, return existing order on duplicate
+            if (orderObj.idempotencyKey) {
+                const existing = await db.order.findOne({
+                    where: { idempotencyKey: orderObj.idempotencyKey }
+                });
+                if (existing) {
+                    console.log(`[IDEMPOTENCY] Duplicate order request for key ${orderObj.idempotencyKey} — returning existing order ${existing.orderNumber}`);
+                    return res.status(200).send({
+                        status: 200,
+                        message: 'order created successfully',
+                        data: existing,
+                        idempotent: true
+                    });
+                }
+            }
+
             let linkSuggestion = null;
             const result = await db.sequelize.transaction(async (transaction) => {
                 // Generate invoice number INSIDE transaction (only if everything else is valid)
@@ -69,61 +150,56 @@ module.exports = {
                 const hasCustomerMobile = orderObj.customerMobile && orderObj.customerMobile.trim();
                 
                 if (orderObj.customerId) {
-                    // Frontend explicitly passed customerId — user confirmed the link
-                    const confirmed = await db.customer.findByPk(orderObj.customerId, { transaction });
-                    if (confirmed && orderObj.dueAmount > 0) {
-                        await confirmed.update({
-                            currentBalance: (Number(confirmed.currentBalance) || 0) + orderObj.dueAmount
-                        }, { transaction });
+                    // Frontend explicitly passed customerId — user confirmed the link.
+                    // Use atomic increment to avoid lost-update under concurrent orders (CRIT-06).
+                    if (orderObj.dueAmount > 0) {
+                        await db.customer.update(
+                            { currentBalance: db.sequelize.literal(`"currentBalance" + ${orderObj.dueAmount}`) },
+                            { where: { id: orderObj.customerId }, transaction }
+                        );
                     }
                     console.log(`Order: CONFIRMED link to customer ID ${orderObj.customerId}`);
                 } else if (hasCustomerName || hasCustomerMobile) {
-                    try {
-                        // Search for existing match
-                        let existingCustomer = null;
-                        if (hasCustomerMobile) {
-                            existingCustomer = await db.customer.findOne({
-                                where: { mobile: orderObj.customerMobile.trim() },
-                                transaction
-                            });
-                        }
-                        if (!existingCustomer && hasCustomerName) {
-                            existingCustomer = await db.customer.findOne({
-                                where: db.Sequelize.where(
-                                    db.Sequelize.fn('LOWER', db.Sequelize.fn('TRIM', db.Sequelize.col('name'))),
-                                    orderObj.customerName.trim().toLowerCase()
-                                ),
-                                transaction
-                            });
-                        }
+                    // Search for existing match — propagate errors so the transaction rolls back (MED-05)
+                    let existingCustomer = null;
+                    if (hasCustomerMobile) {
+                        existingCustomer = await db.customer.findOne({
+                            where: { mobile: orderObj.customerMobile.trim() },
+                            transaction
+                        });
+                    }
+                    if (!existingCustomer && hasCustomerName) {
+                        existingCustomer = await db.customer.findOne({
+                            where: db.Sequelize.where(
+                                db.Sequelize.fn('LOWER', db.Sequelize.fn('TRIM', db.Sequelize.col('name'))),
+                                orderObj.customerName.trim().toLowerCase()
+                            ),
+                            transaction
+                        });
+                    }
 
-                        if (existingCustomer) {
-                            // Match found — DON'T auto-link. Order created with customerName only.
-                            // Return suggestion for frontend to prompt user.
-                            linkSuggestion = {
-                                customerId: existingCustomer.id,
-                                name: existingCustomer.name,
-                                mobile: existingCustomer.mobile,
-                                currentBalance: existingCustomer.currentBalance
-                            };
-                            // Order stays with customerName but NO customerId until user confirms
-                            console.log(`Order: Match found "${existingCustomer.name}" — NOT auto-linked. Awaiting user confirmation.`);
-                        } else {
-                            // No match — create new customer
-                            const customerName = hasCustomerName ? orderObj.customerName.trim() : orderObj.customerMobile.trim();
-                            const newCustomer = await db.customer.create({
-                                id: uuidv4(),
-                                name: customerName,
-                                mobile: hasCustomerMobile ? orderObj.customerMobile.trim() : null,
-                                address: orderObj.customerAddress || null,
-                                openingBalance: 0,
-                                currentBalance: orderObj.dueAmount > 0 ? orderObj.dueAmount : 0
-                            }, { transaction });
-                            orderObj.customerId = newCustomer.id;
-                            console.log(`Order: CREATED new customer "${customerName}" (ID: ${newCustomer.id})`);
-                        }
-                    } catch (customerError) {
-                        console.error('Failed to handle customer:', customerError);
+                    if (existingCustomer) {
+                        // Match found — DON'T auto-link. Return suggestion for frontend.
+                        linkSuggestion = {
+                            customerId: existingCustomer.id,
+                            name: existingCustomer.name,
+                            mobile: existingCustomer.mobile,
+                            currentBalance: existingCustomer.currentBalance
+                        };
+                        console.log(`Order: Match found "${existingCustomer.name}" — NOT auto-linked. Awaiting user confirmation.`);
+                    } else {
+                        // No match — create new customer. Error propagates to roll back the transaction.
+                        const customerName = hasCustomerName ? orderObj.customerName.trim() : orderObj.customerMobile.trim();
+                        const newCustomer = await db.customer.create({
+                            id: uuidv4(),
+                            name: customerName,
+                            mobile: hasCustomerMobile ? orderObj.customerMobile.trim() : null,
+                            address: orderObj.customerAddress || null,
+                            openingBalance: 0,
+                            currentBalance: orderObj.dueAmount > 0 ? orderObj.dueAmount : 0
+                        }, { transaction });
+                        orderObj.customerId = newCustomer.id;
+                        console.log(`Order: CREATED new customer "${customerName}" (ID: ${newCustomer.id})`);
                     }
                 }
                 
@@ -140,125 +216,79 @@ module.exports = {
                 });
                 await Services.orderItems.addOrderItems(orderItems, transaction);
 
-                // Update daily summary
-                try {
-                    await Services.dailySummary.recordOrderCreated(response, transaction);
-                } catch (summaryError) {
-                    console.error('Failed to update daily summary:', summaryError);
-                    // Don't fail the order creation for summary issues
-                }
-
-                // Dynamically get the Sales and Cash/Bank Ledger IDs (old single-entry system)
-                // Non-blocking: if old ledger accounts not set up, skip
-                try {
-                    const salesLedger = await Services.ledger.getLedgerByName('Sales Account');
-                    const cashBankLedger = await Services.ledger.getLedgerByName('Cash Account');
-                    
-                    if (salesLedger && cashBankLedger) {
-                        const SALES_LEDGER_ID = salesLedger.id;
-                        const CASH_BANK_LEDGER_ID = cashBankLedger.id;
-
-                // Create ledger entries for sale
-                const ledgerEntries = [];
-                
-                // 1. Debit Customer/Receivable (if not fully paid)
-                if (orderObj.dueAmount > 0 && orderObj.customerId) {
-                    // Assuming customer has a ledgerId
-                    const customer = await Services.customer.getCustomer({ id: orderObj.customerId });
-                    if (customer && customer.ledgerId) {
-                        ledgerEntries.push({
-                            ledgerId: customer.ledgerId, 
-                            entryDate: orderObj.orderDate,
-                            debit: orderObj.dueAmount, // Receivable is debited (asset increases)
-                            credit: 0,
-                            description: `Sale to ${customer.name} (Due Amount)`,
-                            referenceType: 'order',
-                            referenceId: orderId
-                        });
+                // Deduct stock for each item that has a linked product
+                for (const item of orderItems) {
+                    if (item.productId) {
+                        await updateStock(
+                            item.productId,
+                            Number(item.quantity),
+                            'OUT',
+                            orderId,
+                            'sale',
+                            transaction,
+                            orderObj.orderDate || new Date()
+                        );
                     }
                 }
 
-                // 2. Debit Cash/Bank (if partially or fully paid)
-                if (orderObj.paidAmount > 0) {
-                    ledgerEntries.push({
-                        ledgerId: CASH_BANK_LEDGER_ID, 
-                        entryDate: orderObj.orderDate,
-                        debit: orderObj.paidAmount, // Cash/Bank is debited (asset increases)
-                        credit: 0,
-                        description: `Sale to ${orderObj.customerName} (Paid Amount)`,
-                        referenceType: 'order',
-                        referenceId: orderId
-                    });
-                }
-
-                // 3. Credit Sales
-                ledgerEntries.push({
-                    ledgerId: SALES_LEDGER_ID, 
-                    entryDate: orderObj.orderDate,
-                    debit: 0,
-                    credit: orderObj.total, // Sales is credited (income increases)
-                    description: `Sale to ${orderObj.customerName} (Total)`,
-                    referenceType: 'order',
-                    referenceId: orderId
-                });
-
-                if (ledgerEntries.length > 0) {
-                    await db.ledgerEntry.bulkCreate(ledgerEntries, { transaction });
-                }
-                    } else {
-                        console.warn('[OLD LEDGER] Sales Account or Cash Account ledger not found — skipping old ledger entries');
-                    }
-                } catch (oldLedgerError) {
-                    console.warn('[OLD LEDGER] Skipped:', oldLedgerError.message);
-                }
+                // Update daily summary — intentionally NOT wrapped in try/catch.
+                // If this fails (e.g. day is closed, DB constraint), the error
+                // propagates and rolls back the entire order creation. Silent drift
+                // in the summary table is worse than a visible failure.
+                await Services.dailySummary.recordOrderCreated(response, transaction);
 
                 // === NEW DOUBLE-ENTRY LEDGER: Real-time posting ===
-                // Non-blocking: if Chart of Accounts isn't set up, log warning but don't crash order creation
-                if (orderObj.customerId) {
-                    try {
-                        const accountsExist = await db.account.count({ transaction });
-                        if (accountsExist > 0) {
-                            await postInvoiceToLedger(
-                                { ...orderObj, id: orderId, createdAt: new Date() },
-                                transaction
-                            );
-                            // If order is paid (fully or partially), also post the cash receipt
-                            if (orderObj.paidAmount > 0) {
-                                await postInvoiceCashReceiptToLedger(
-                                    { ...orderObj, id: orderId, createdAt: new Date() },
-                                    transaction
-                                );
-                            }
-                        } else {
-                            console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — invoice ${orderObj.orderNumber} not posted to ledger`);
-                        }
-                    } catch (ledgerError) {
-                        console.error(`[LEDGER] Failed to post invoice ${orderObj.orderNumber}:`, ledgerError.message);
-                        // Don't crash order creation — ledger posting is supplementary
+                // Non-blocking when CoA is not initialized; blocking (throws) when it IS initialized.
+                // Posted for ALL orders, including walk-in (no customerId) — postInvoiceToLedger
+                // and postInvoiceCashReceiptToLedger both use a generic Walk-in Customer account
+                // when customerId is null, so every sale gets a journal entry.
+                const accountsExist = await db.account.count({ transaction });
+                if (accountsExist > 0) {
+                    await postInvoiceToLedger(
+                        { ...orderObj, id: orderId, createdAt: new Date() },
+                        transaction
+                    );
+                    if (orderObj.paidAmount > 0) {
+                        await postInvoiceCashReceiptToLedger(
+                            { ...orderObj, id: orderId, createdAt: new Date() },
+                            transaction
+                        );
                     }
+                } else {
+                    console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — invoice ${orderObj.orderNumber} not posted to ledger`);
                 }
 
-                return await Services.order.getOrder({id: orderId }, transaction);
-            });
+                // === PRE-COMMIT INVARIANT CHECK (Phase 4) ===
+                // Runs inside the transaction. Any violation throws InvariantError
+                // which rolls back the entire transaction — nothing is persisted.
+                // skipLedgerCheck=true because ledger posting just happened above;
+                // the check for INV-7 is done separately after postInvoiceToLedger.
+                await assertOrderInvariants(orderId, transaction, { skipLedgerCheck: true });
 
-            // Audit log for order creation
-            await createAuditLog({
-                userId: req.user?.id,
-                userName: req.user?.name || req.user?.username || 'Anonymous',
-                userRole: req.user?.role || 'unknown',
-                action: 'CREATE',
-                entityType: 'ORDER',
-                entityId: result.id,
-                entityName: result.orderNumber,
-                newValues: {
-                    orderNumber: result.orderNumber,
-                    total: result.total,
-                    customerName: result.customerName,
-                    itemCount: orderItems.length
-                },
-                description: `Created order ${result.orderNumber} for ₹${result.total}`,
-                ipAddress: getClientIP(req),
-                userAgent: req.headers['user-agent']
+                const createdOrder = await Services.order.getOrder({id: orderId }, transaction);
+
+                // Audit log INSIDE transaction — failure rolls back the order write.
+                await createAuditLog({
+                    userId: req.user?.id,
+                    userName: req.user?.name || req.user?.username || 'Anonymous',
+                    userRole: req.user?.role || 'unknown',
+                    action: 'CREATE',
+                    entityType: 'ORDER',
+                    entityId: createdOrder.id,
+                    entityName: createdOrder.orderNumber,
+                    newValues: {
+                        orderNumber: createdOrder.orderNumber,
+                        total: createdOrder.total,
+                        customerName: createdOrder.customerName,
+                        itemCount: orderItems.length
+                    },
+                    description: `Created order ${createdOrder.orderNumber} for ₹${createdOrder.total}`,
+                    ipAddress: getClientIP(req),
+                    userAgent: req.headers['user-agent'],
+                    transaction
+                });
+
+                return createdOrder;
             });
 
             // Mark recent weight fetches as consumed for this user
@@ -378,9 +408,24 @@ module.exports = {
             
             console.log(`Updating order ${orderId}...`);
 
-            // INVOICE IMMUTABILITY GUARD: Prevent direct mutation of financial fields
-            // These fields can only change through proper receipt/adjustment entries
-            const IMMUTABLE_FINANCIAL_FIELDS = ['paidAmount', 'dueAmount', 'paymentStatus'];
+            // INVOICE IMMUTABILITY GUARD: Prevent direct mutation of financial fields.
+            // These fields can only change through proper receipt/adjustment entries.
+            //
+            // originalPaidAmount — write-once POS cash anchor; ledger re-posting after
+            //   an edit depends on this value. Zeroing it causes INVOICE_CASH batch to
+            //   be skipped on repost, breaking global DR=CR and triggering a HALT.
+            // paymentMode — determines CASH vs CREDIT in getRealTimeSummary cash drawer.
+            //   Changing it retroactively moves an order between cash/credit buckets.
+            // paymentToggleSequence — monotonic counter; going backward would collide
+            //   ledger referenceIds and corrupt the toggle idempotency guard.
+            const IMMUTABLE_FINANCIAL_FIELDS = [
+                'paidAmount',
+                'dueAmount',
+                'paymentStatus',
+                'originalPaidAmount',
+                'paymentMode',
+                'paymentToggleSequence',
+            ];
             const attemptedFinancialChanges = IMMUTABLE_FINANCIAL_FIELDS.filter(f => orderData[f] !== undefined);
             if (attemptedFinancialChanges.length > 0) {
                 console.warn(`[IMMUTABILITY] Blocked direct edit of financial fields: ${attemptedFinancialChanges.join(', ')} on order ${orderId}`);
@@ -389,74 +434,150 @@ module.exports = {
                     message: `Cannot directly edit payment fields (${attemptedFinancialChanges.join(', ')}). Use "Record Payment" or adjustment entries instead.`
                 });
             }
-            
+
+            // HR-GST: Same cross-validation as createOrder — prevent inconsistent GST splits
+            // being injected via an edit even though createOrder would have rejected them.
+            const round2 = (n) => Math.round(n * 100) / 100;
+            const editCgst = Number(req.body.cgst || 0);
+            const editSgst = Number(req.body.sgst || 0);
+            const editIgst = Number(req.body.igst || 0);
+            if (editIgst > 0 && (editCgst > 0 || editSgst > 0)) {
+                return res.status(400).send({
+                    status: 400,
+                    message: 'GST validation error: IGST (inter-state) and CGST/SGST (intra-state) cannot both be non-zero on the same invoice.'
+                });
+            }
+            const editTax = Number(req.body.tax || 0);
+            const editSplit = round2(editCgst + editSgst + editIgst);
+            if (editTax > 0 && Math.abs(editSplit - editTax) > 0.02) {
+                return res.status(400).send({
+                    status: 400,
+                    message: `GST validation error: cgst(${editCgst}) + sgst(${editSgst}) + igst(${editIgst}) = ${editSplit}, but tax = ${editTax}. Splits must sum to tax.`
+                });
+            }
+
             // Update order in transaction
             const result = await db.sequelize.transaction(async (transaction) => {
                 // Update order basic info (exclude orderItems from update)
                 const { orderItems: _, ...updateFields } = orderData;
-                
+
                 // Add modified by info
                 if (req.user) {
                     updateFields.modifiedBy = req.user.id;
                     updateFields.modifiedByName = req.user.name || req.user.username;
                 }
-                
-                await Services.order.updateOrder(
-                    { id: orderId },
-                    updateFields
-                );
-                
-                // Update order items if provided
+
+                // === SERVER-SIDE MATH: Recalculate totals if line items are being edited ===
+                let financialFieldsChanged = false;
+
                 if (orderItems && orderItems.length > 0) {
-                    // Bulk update existing items instead of delete + insert
-                    const updatePromises = orderItems.map(item => {
-                        return db.orderItems.update(
+                    const recomputedItems = orderItems.map(item => ({
+                        ...item,
+                        totalPrice: round2(item.quantity * item.productPrice)
+                    }));
+                    const computedSubTotal = round2(recomputedItems.reduce((s, i) => s + i.totalPrice, 0));
+                    const taxPercent = typeof updateFields.taxPercent === 'number'
+                        ? updateFields.taxPercent
+                        : (typeof originalOrder.taxPercent === 'number' ? originalOrder.taxPercent : 0);
+                    const computedTax = round2(computedSubTotal * taxPercent / 100);
+                    const computedTotal = round2(computedSubTotal + computedTax);
+
+                    updateFields.subTotal = computedSubTotal;
+                    updateFields.tax = computedTax;
+                    updateFields.total = computedTotal;
+                    // Recalculate dueAmount / advanceAmount (paidAmount stays — only receipt/toggle can change it)
+                    const currentPaid = Number(originalOrder.paidAmount) || 0;
+                    updateFields.dueAmount     = round2(Math.max(0, computedTotal - currentPaid));
+                    updateFields.advanceAmount = round2(Math.max(0, currentPaid - computedTotal));
+
+                    financialFieldsChanged = Math.abs(computedTotal - Number(originalOrder.total)) > 0.001;
+
+                    // Bulk update line items
+                    const updatePromises = recomputedItems.map(item =>
+                        db.orderItems.update(
                             {
                                 quantity: item.quantity,
                                 productPrice: item.productPrice,
                                 totalPrice: item.totalPrice
                             },
-                            {
-                                where: { id: item.id },
-                                transaction
-                            }
-                        );
-                    });
-                    
+                            { where: { id: item.id }, transaction }
+                        )
+                    );
                     await Promise.all(updatePromises);
                 }
-                
-                // Return updated order with items (fetch outside transaction for speed)
+
+                await Services.order.updateOrder(
+                    { id: orderId },
+                    updateFields,
+                    transaction
+                );
+
+                // === L5 IMMUTABLE LEDGER: Reverse old entries and re-post if total changed ===
+                if (financialFieldsChanged) {
+                    // Fetch the updated order for ledger posting
+                    const updatedOrder = await db.order.findOne({ where: { id: orderId }, transaction });
+                    try {
+                        await reverseInvoiceLedger(originalOrder, transaction);
+                        await postInvoiceToLedger(updatedOrder, transaction);
+                        // C8 FIX: When re-posting the cash receipt after an edit we must use
+                        // the ORIGINAL creation-time paidAmount (from the existing INVOICE_CASH
+                        // batch), NOT updatedOrder.paidAmount which may have grown due to receipt
+                        // allocations added after invoice creation.  Using the current paidAmount
+                        // would double-count all subsequent allocations as POS cash.
+                        // The reverseInvoiceLedger call above already reversed the original
+                        // INVOICE_CASH batch.  We re-post only if the original had POS cash.
+                        // C8 FIX: Use originalPaidAmount (immutable POS cash set at creation),
+                        // NOT paidAmount (which includes post-creation receipt allocations).
+                        const originalPaidAtCreation = Number(originalOrder.originalPaidAmount) || 0;
+                        if (originalPaidAtCreation > 0) {
+                            // Re-post using original creation-time paid amount, not current
+                            await postInvoiceCashReceiptToLedger(
+                                { ...updatedOrder.get({ plain: true }), paidAmount: originalPaidAtCreation },
+                                transaction
+                            );
+                        }
+                        console.log(`[LEDGER] Edit corrected: reversed + reposted invoice ${updatedOrder.orderNumber}`);
+                    } catch (ledgerErr) {
+                        console.error(`[LEDGER] Edit reversal/repost failed for ${orderId}: ${ledgerErr.message}`);
+                        throw ledgerErr; // block the edit if ledger is misconfigured
+                    }
+                }
+
+                // === PRE-COMMIT INVARIANT CHECK (Phase 4) ===
+                await assertOrderInvariants(orderId, transaction, { skipLedgerCheck: false });
+
+                // Audit log INSIDE transaction — failure rolls back the order update (HIGH-11)
+                const updatedForAudit = await db.order.findOne({ where: { id: orderId }, transaction });
+                await createAuditLog({
+                    userId:     req.user?.id,
+                    userName:   req.user?.name || req.user?.username || 'Anonymous',
+                    userRole:   req.user?.role || 'unknown',
+                    action:     'UPDATE',
+                    entityType: 'ORDER',
+                    entityId:   orderId,
+                    entityName: originalOrder.orderNumber,
+                    oldValues: {
+                        total:         originalOrder.total,
+                        customerName:  originalOrder.customerName,
+                        paymentStatus: originalOrder.paymentStatus
+                    },
+                    newValues: {
+                        total:         updatedForAudit?.total,
+                        customerName:  updatedForAudit?.customerName,
+                        paymentStatus: updatedForAudit?.paymentStatus
+                    },
+                    description: `Updated order ${originalOrder.orderNumber}`,
+                    ipAddress:   getClientIP(req),
+                    userAgent:   req.headers['user-agent'],
+                    transaction
+                });
+
                 return orderId;
             });
-            
+
             // Fetch complete order data after transaction
             const completeOrder = await Services.order.getOrder({ id: result });
-            
-            // Audit log for order update
-            await createAuditLog({
-                userId: req.user?.id,
-                userName: req.user?.name || req.user?.username || 'Anonymous',
-                userRole: req.user?.role || 'unknown',
-                action: 'UPDATE',
-                entityType: 'ORDER',
-                entityId: orderId,
-                entityName: originalOrder.orderNumber,
-                oldValues: {
-                    total: originalOrder.total,
-                    customerName: originalOrder.customerName,
-                    paymentStatus: originalOrder.paymentStatus
-                },
-                newValues: {
-                    total: completeOrder.total,
-                    customerName: completeOrder.customerName,
-                    paymentStatus: completeOrder.paymentStatus
-                },
-                description: `Updated order ${originalOrder.orderNumber}`,
-                ipAddress: getClientIP(req),
-                userAgent: req.headers['user-agent']
-            });
-            
+
             console.log(`Order ${orderId} updated successfully`);
             
             return res.status(200).send({
@@ -512,19 +633,31 @@ module.exports = {
                     console.error('Failed to update daily summary for deletion:', summaryError);
                 }
 
-                // CRITICAL: Reverse customer balance if this was a credit sale
-                if (order.customerId && order.paymentStatus !== 'paid') {
-                    try {
-                        const customer = await db.customer.findByPk(order.customerId);
-                        if (customer) {
-                            const dueAmount = Number(order.dueAmount) || Number(order.total) || 0;
-                            await customer.update({
-                                currentBalance: Math.max(0, (Number(customer.currentBalance) || 0) - dueAmount)
-                            }, { transaction });
-                            console.log(`Reversed customer ${customer.name} balance by ${dueAmount}`);
+                // Reverse customer balance atomically.
+                // On create: currentBalance += dueAmount (if dueAmount > 0).
+                // On delete: reverse that — currentBalance -= dueAmount.
+                // advanceAmount (overpayment) never affected currentBalance on create, so nothing to reverse there.
+                if (order.customerId && Number(order.dueAmount) > 0) {
+                    await db.customer.update(
+                        { currentBalance: db.sequelize.literal(`"currentBalance" - ${Number(order.dueAmount)}`) },
+                        { where: { id: order.customerId }, transaction }
+                    );
+                    console.log(`[DELETE] Reversed customer balance by ₹${order.dueAmount} for order ${order.orderNumber}`);
+                }
+
+                // Reverse stock: add back the units deducted when this order was created
+                if (order.orderItems && order.orderItems.length > 0) {
+                    for (const item of order.orderItems) {
+                        if (item.productId) {
+                            await updateStock(
+                                item.productId,
+                                Number(item.quantity),
+                                'IN',
+                                order.id,
+                                'sale_reversal',
+                                transaction
+                            );
                         }
-                    } catch (custError) {
-                        console.error('Failed to reverse customer balance:', custError);
                     }
                 }
 
@@ -754,11 +887,13 @@ module.exports = {
                     throw new Error(`Payment status was already changed to "${lockedOrder.paymentStatus}" by another user. Please refresh and try again.`);
                 }
 
-                // Update order payment status — toggle is ONLY a status marker
-                // paidAmount stays as-is (reflects actual cash at POS, set at creation)
-                // paymentMode NEVER changes (CASH/CREDIT is determined at creation)
+                // Update order payment status.
+                // paidAmount is kept consistent with the status so financial state is never invalid
+                // (dueAmount=0 with paidAmount=0 would create a ghost receivable).
+                // paymentMode NEVER changes (CASH/CREDIT is determined at creation).
                 const updateData = {
                     paymentStatus: newStatus,
+                    paidAmount: newStatus === 'paid' ? order.total : 0,
                     dueAmount: newStatus === 'paid' ? 0 : order.total,
                     modifiedBy: req.user?.id,
                     modifiedByName: changedByTrimmed // Use the provided name for audit
@@ -827,41 +962,55 @@ module.exports = {
                 // Update daily summary when payment status changes
                 await Services.dailySummary.recordPaymentStatusChange(order, oldStatus, newStatus, transaction);
 
-                // Update customer balance if customer exists
+                // Update customer balance atomically if customer exists.
+                // Atomic SQL avoids lost-update races under concurrent toggle requests.
                 if (customerIdToUpdate) {
-                    const customer = await db.customer.findByPk(customerIdToUpdate, { transaction });
-                    if (customer) {
-                        // If marking as paid, reduce customer balance
-                        // If marking as unpaid, increase customer balance
-                        const balanceChange = newStatus === 'paid' 
-                            ? -Number(order.total)  // Reduce balance when paid
-                            : Number(order.total);  // Increase balance when unpaid
-                        
-                        await customer.update({
-                            currentBalance: Math.max(0, (Number(customer.currentBalance) || 0) + balanceChange)
-                        }, { transaction });
+                    // If marking as paid, reduce balance by dueAmount (what was owed before this toggle)
+                    // If marking as unpaid, increase balance by total (creating the receivable)
+                    const balanceChange = newStatus === 'paid'
+                        ? -Number(lockedOrder.dueAmount)
+                        : Number(lockedOrder.total);
+                    if (balanceChange !== 0) {
+                        await db.customer.update(
+                            { currentBalance: db.sequelize.literal(`"currentBalance" + ${balanceChange}`) },
+                            { where: { id: customerIdToUpdate }, transaction }
+                        );
                     }
                 }
 
                 // === DOUBLE-ENTRY LEDGER: Post payment toggle ===
-                // Non-blocking: if Chart of Accounts isn't set up, log warning but don't crash
+                // SEQUENCE FIX (CR-TOGGLE): atomically increment paymentToggleSequence
+                // BEFORE posting so every toggle event gets a unique ledger referenceId.
+                // This prevents the idempotency-key collision that caused silent ledger
+                // corruption on the 3rd+ toggle of the same direction.
                 if (customerIdToUpdate) {
-                    try {
-                        const accountsExist = await db.account.count({ transaction });
-                        if (accountsExist > 0) {
-                            await postPaymentStatusToggleToLedger(
-                                { ...order.toJSON ? order.toJSON() : order, customerId: customerIdToUpdate },
-                                oldStatus,
-                                newStatus,
-                                changedByTrimmed,
-                                transaction
-                            );
-                        } else {
-                            console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — toggle for ${order.orderNumber} not posted to ledger`);
-                        }
-                    } catch (ledgerError) {
-                        console.error(`[LEDGER] Failed to post toggle for ${order.orderNumber}:`, ledgerError.message);
-                        // Don't crash toggle — ledger posting is supplementary
+                    const accountsExist = await db.account.count({ transaction });
+                    if (accountsExist > 0) {
+                        // Step 1: Atomically increment the sequence counter on the locked row.
+                        await db.order.update(
+                            { paymentToggleSequence: db.sequelize.literal('"paymentToggleSequence" + 1') },
+                            { where: { id: orderId }, transaction }
+                        );
+                        // Step 2: Re-read the row to get the new sequence value.
+                        const freshOrder = await db.order.findByPk(orderId, { transaction });
+                        const toggleSeq  = freshOrder.paymentToggleSequence;
+
+                        await postPaymentStatusToggleToLedger(
+                            {
+                                ...(order.toJSON ? order.toJSON() : order),
+                                customerId:        customerIdToUpdate,
+                                dueAmount:         lockedOrder.dueAmount,
+                                originalPaidAmount: lockedOrder.originalPaidAmount,
+                                total:             lockedOrder.total
+                            },
+                            oldStatus,
+                            newStatus,
+                            changedByTrimmed,
+                            transaction,
+                            toggleSeq   // <-- unique per toggle event
+                        );
+                    } else {
+                        console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — toggle for ${order.orderNumber} not posted to ledger`);
                     }
                 }
                 
@@ -885,7 +1034,7 @@ module.exports = {
                 },
                 newValues: {
                     paymentStatus: newStatus,
-                    paidAmount: Number(order.paidAmount), // paidAmount unchanged by toggle
+                    paidAmount: newStatus === 'paid' ? Number(order.total) : 0,
                     dueAmount: newStatus === 'paid' ? 0 : Number(order.total),
                     paymentMode: order.paymentMode // paymentMode never changes
                 },
@@ -944,11 +1093,12 @@ module.exports = {
                 // Link order to existing customer
                 await order.update({ customerId: customer.id }, { transaction });
 
-                // Update customer balance
+                // Update customer balance atomically
                 if (Number(order.dueAmount) > 0) {
-                    await customer.update({
-                        currentBalance: (Number(customer.currentBalance) || 0) + Number(order.dueAmount)
-                    }, { transaction });
+                    await db.customer.update(
+                        { currentBalance: db.sequelize.literal(`"currentBalance" + ${Number(order.dueAmount)}`) },
+                        { where: { id: customer.id }, transaction }
+                    );
                 }
             });
 

@@ -29,6 +29,7 @@ export const ListPurchases = () => {
     const [billNumber, setBillNumber] = useState('');
     const [billDate, setBillDate] = useState(moment().format('YYYY-MM-DD'));
     const [isPaid, setIsPaid] = useState(false);
+    const [notes, setNotes] = useState('');
     const [items, setItems] = useState([{ name: '', quantity: '', price: '', totalPrice: 0 }]);
     const [saving, setSaving] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
@@ -143,6 +144,7 @@ export const ListPurchases = () => {
         setBillNumber('');
         setBillDate(moment().format('YYYY-MM-DD'));
         setIsPaid(false);
+        setNotes('');
         setItems([{ name: '', quantity: '', price: '', totalPrice: 0 }]);
     };
 
@@ -171,6 +173,7 @@ export const ListPurchases = () => {
                 tax: 0,
                 taxPercent: 0,
                 total: grandTotal,
+                notes: notes.trim() || null,
                 purchaseItems: validItems.map(item => ({
                     name: item.name,
                     quantity: parseFloat(item.quantity),
@@ -343,6 +346,16 @@ export const ListPurchases = () => {
                             value={billDate}
                             onChange={(e) => setBillDate(e.target.value)}
                             InputLabelProps={{ shrink: true }}
+                        />
+                    </Grid>
+                    <Grid item xs={12} sm={5}>
+                        <TextField
+                            fullWidth
+                            size="small"
+                            label="Notes"
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            placeholder="Optional — e.g. transport charges, reference"
                         />
                     </Grid>
                     <Grid item xs={6} sm={1.5}>
@@ -536,6 +549,11 @@ export const ListPurchases = () => {
                                             <TableCell colSpan={7} sx={{ py: 0, bgcolor: '#fafafa' }}>
                                                 <Collapse in={expandedRows[purchase.id]} timeout="auto" unmountOnExit>
                                                     <Box sx={{ py: 1.5, px: 2 }}>
+                                                        {purchase.notes && (
+                                                            <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontStyle: 'italic' }}>
+                                                                📝 {purchase.notes}
+                                                            </Typography>
+                                                        )}
                                                         <Typography variant="caption" sx={{ fontWeight: 600, color: '#1976d2' }}>
                                                             Items ({purchase.purchaseItems?.length || 0})
                                                         </Typography>

@@ -34,9 +34,9 @@ module.exports= {
             throw error;
         }
     },
-    updateOrder: async (filterObj, updateObj) => {
+    updateOrder: async (filterObj, updateObj, transaction = null) => {
         try {
-            const res = await Dao.order.updateOrder(filterObj, updateObj);
+            const res = await Dao.order.updateOrder(filterObj, updateObj, transaction);
             return res;
         } catch (error) {
             throw error;

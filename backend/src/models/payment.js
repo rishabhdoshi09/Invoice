@@ -30,7 +30,7 @@ module.exports = (sequelize, Sequelize) => {
                 allowNull: false
             },
             amount: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 allowNull: false
             },
             referenceType: {
@@ -44,6 +44,11 @@ module.exports = (sequelize, Sequelize) => {
             referenceNumber: {
                 type: Sequelize.STRING,
                 allowNull: true
+            },
+            idempotencyKey: {
+                type: Sequelize.STRING,
+                allowNull: true,
+                unique: true
             },
             notes: {
                 type: Sequelize.TEXT

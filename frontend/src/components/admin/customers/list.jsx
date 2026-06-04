@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { CustomerStatement } from './CustomerStatement';
 import { useNavigate } from 'react-router-dom';
 import { 
     Box, Button, Card, CardContent, Table, TableBody, TableCell, TableContainer, 
@@ -8,9 +9,9 @@ import {
     InputAdornment, TablePagination, Collapse, Switch, FormControlLabel,
     List, ListItem, ListItemText, ListItemSecondaryAction, Badge
 } from '@mui/material';
-import { 
-    Delete, Visibility, Refresh, Add, Receipt, People, Close, 
-    ShoppingCart, Search, Download, CheckCircle,
+import {
+    Delete, Visibility, Refresh, Add, Receipt, People, Close,
+    ShoppingCart, Search, Download, CheckCircle, Edit,
     KeyboardArrowDown, KeyboardArrowUp, PersonAdd, Warning,
     History, Phone, Email, AccountBalance, TipsAndUpdates, Print, WhatsApp
 } from '@mui/icons-material';
@@ -32,11 +33,199 @@ try {
     console.warn('pdfMake fonts not loaded:', e);
 }
 
+// ─── Customer Ledger Dialog (Tally-style) ─────────────────────────
+const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, onReceipt, onSale, onDeleteReceipt, onEditInvoice, onDeleteInvoice }) => {
+    if (!customer) return null;
+    const c = customer;
+
+    const ledgerEntries = [];
+
+    if (c.openingBalance && Number(c.openingBalance) !== 0) {
+        const obDate = c.openingBalanceDate ? moment(c.openingBalanceDate) : null;
+        const obDateStr = obDate?.isValid() ? obDate.format('DD/MM/YYYY') : null;
+        const obSortKey = obDate?.isValid() ? obDate.toISOString() : '0000-00-00T00:00:00';
+        ledgerEntries.push({
+            id: 'opening', date: obDateStr, sortKey: obSortKey,
+            particulars: 'Opening Balance', refNo: '-',
+            debit: Number(c.openingBalance) > 0 ? Number(c.openingBalance) : 0,
+            credit: Number(c.openingBalance) < 0 ? Math.abs(Number(c.openingBalance)) : 0,
+            type: 'opening'
+        });
+    }
+
+    (c.orders || []).forEach(o => {
+        const d = o.orderDate ? moment(o.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(o.createdAt);
+        const dateStr = d.isValid() ? d.format('DD/MM/YYYY') : '-';
+        const sortStr = d.isValid() ? d.toISOString() : '9999-12-31T23:59:59';
+        ledgerEntries.push({
+            id: o.id, date: dateStr, sortKey: sortStr,
+            particulars: 'Invoice',
+            refNo: o.orderNumber || '-',
+            debit: Number(o.total) || 0, credit: 0,
+            type: 'invoice', raw: o
+        });
+    });
+
+    (c.payments || []).forEach(p => {
+        const d = p.paymentDate ? moment(p.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(p.createdAt);
+        ledgerEntries.push({
+            id: p.id,
+            date: d.isValid() ? d.format('DD/MM/YYYY') : '-',
+            sortKey: d.isValid() ? d.toISOString() : '9999-12-31T23:59:59',
+            particulars: 'Receipt' + (p.notes ? ` — ${p.notes}` : ''),
+            refNo: p.paymentNumber || '-',
+            debit: 0, credit: Number(p.amount) || 0,
+            type: 'receipt', raw: p
+        });
+    });
+
+    ledgerEntries.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+
+    let runBal = 0;
+    ledgerEntries.forEach(e => { runBal += e.debit - e.credit; e.balance = runBal; });
+
+    const totalDebit = ledgerEntries.reduce((sum, e) => sum + e.debit, 0);
+    const totalCredit = ledgerEntries.reduce((sum, e) => sum + e.credit, 0);
+    const closingBal = totalDebit - totalCredit;
+    const fmt = v => `₹${Math.abs(v || 0).toLocaleString('en-IN')}`;
+
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
+            PaperProps={{ sx: { borderRadius: '4px', overflow: 'hidden', border: '2px solid #1a237e' } }}>
+            <Box sx={{ bgcolor: '#0d1b4a', color: '#fff', px: 2.5, py: 1.2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: 0.5, fontSize: '1.1rem' }}>{c.name}</Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.7, fontSize: '0.72rem' }}>
+                        {[c.mobile, c.gstin && `GSTIN: ${c.gstin}`, 'Customer Ledger'].filter(Boolean).join(' | ')}
+                    </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <Box sx={{ textAlign: 'right' }}>
+                        <Typography variant="caption" sx={{ opacity: 0.6 }}>Closing Balance</Typography>
+                        <Typography variant="body1" sx={{ fontWeight: 700, fontFamily: 'monospace', fontSize: '1rem' }}>
+                            {fmt(closingBal)} {closingBal >= 0 ? 'Dr' : 'Cr'}
+                        </Typography>
+                    </Box>
+                    <IconButton onClick={onClose} sx={{ color: '#fff' }}><Close /></IconButton>
+                </Box>
+            </Box>
+
+            <DialogContent sx={{ p: 0 }}>
+                <TableContainer sx={{ maxHeight: 420 }}>
+                    <Table size="small" stickyHeader sx={{
+                        '& td, & th': { borderRight: '1px solid #e0e0e0', py: 0.5, px: 1, fontSize: '0.82rem', fontFamily: "'Roboto Mono', monospace" },
+                        '& th': { bgcolor: '#e8eaf6', fontWeight: 700, color: '#1a237e', borderBottom: '2px solid #1a237e', fontSize: '0.78rem' },
+                        '& td:last-child, & th:last-child': { borderRight: 'none' }
+                    }}>
+                        <TableHead>
+                            <TableRow>
+                                <TableCell width={85}>Date</TableCell>
+                                <TableCell>Particulars</TableCell>
+                                <TableCell width={110}>Vch No.</TableCell>
+                                <TableCell align="right" width={100}>Debit</TableCell>
+                                <TableCell align="right" width={100}>Credit</TableCell>
+                                <TableCell align="right" width={110}>Balance</TableCell>
+                                <TableCell width={40}></TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {ledgerEntries.length === 0 ? (
+                                <TableRow><TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary', fontFamily: 'Roboto' }}>No transactions yet</TableCell></TableRow>
+                            ) : (
+                                ledgerEntries.map(e => (
+                                    <TableRow key={`${e.type}-${e.id}`} hover sx={{
+                                        bgcolor: e.type === 'opening' ? '#fffde7' : e.type === 'receipt' ? '#f1f8e9' : '#fff',
+                                    }}>
+                                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{e.date || ''}</TableCell>
+                                        <TableCell sx={{ fontFamily: 'Roboto' }}>
+                                            <Typography variant="body2" sx={{ fontWeight: e.type === 'opening' ? 700 : 500, fontSize: '0.82rem' }}>
+                                                {e.particulars}
+                                            </Typography>
+                                        </TableCell>
+                                        <TableCell sx={{ color: '#666', fontSize: '0.75rem' }}>{e.refNo}</TableCell>
+                                        <TableCell align="right" sx={{ color: e.debit > 0 ? '#c62828' : 'transparent', fontWeight: 600 }}>
+                                            {e.debit > 0 ? fmt(e.debit) : ''}
+                                        </TableCell>
+                                        <TableCell align="right" sx={{ color: e.credit > 0 ? '#2e7d32' : 'transparent', fontWeight: 600 }}>
+                                            {e.credit > 0 ? fmt(e.credit) : ''}
+                                        </TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 700 }}>
+                                            {fmt(e.balance)} {e.balance >= 0 ? 'Dr' : 'Cr'}
+                                        </TableCell>
+                                        <TableCell align="center" sx={{ p: 0, whiteSpace: 'nowrap' }}>
+                                            {e.type === 'receipt' && onDeleteReceipt && (
+                                                <Tooltip title="Delete receipt">
+                                                    <IconButton size="small" onClick={() => onDeleteReceipt(e.id)}
+                                                        sx={{ color: '#c62828', opacity: 0.6, '&:hover': { opacity: 1 } }}>
+                                                        <Delete sx={{ fontSize: 15 }} />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            )}
+                                            {e.type === 'invoice' && (
+                                                <>
+                                                    {onEditInvoice && (
+                                                        <Tooltip title="Edit invoice">
+                                                            <IconButton size="small" onClick={() => onEditInvoice(e.id)}
+                                                                sx={{ color: '#1565c0', opacity: 0.6, '&:hover': { opacity: 1 } }}>
+                                                                <Edit sx={{ fontSize: 15 }} />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    )}
+                                                    {onDeleteInvoice && (
+                                                        <Tooltip title="Delete invoice">
+                                                            <IconButton size="small" onClick={() => onDeleteInvoice(e.id)}
+                                                                sx={{ color: '#c62828', opacity: 0.6, '&:hover': { opacity: 1 } }}>
+                                                                <Delete sx={{ fontSize: 15 }} />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    )}
+                                                </>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                        {ledgerEntries.length > 0 && (
+                            <TableBody>
+                                <TableRow sx={{ '& td': { borderTop: '2px solid #1a237e', bgcolor: '#e8eaf6', fontWeight: 700, py: 0.8 } }}>
+                                    <TableCell colSpan={3} sx={{ color: '#1a237e', fontSize: '0.82rem' }}>TOTAL</TableCell>
+                                    <TableCell align="right" sx={{ color: '#c62828' }}>{fmt(totalDebit)}</TableCell>
+                                    <TableCell align="right" sx={{ color: '#2e7d32' }}>{fmt(totalCredit)}</TableCell>
+                                    <TableCell align="right" sx={{ color: '#1a237e' }}>{fmt(closingBal)} {closingBal >= 0 ? 'Dr' : 'Cr'}</TableCell>
+                                    <TableCell />
+                                </TableRow>
+                            </TableBody>
+                        )}
+                    </Table>
+                </TableContainer>
+            </DialogContent>
+
+            <DialogActions sx={{ bgcolor: '#f5f5f5', borderTop: '1px solid #ddd', px: 2, py: 0.8, gap: 1 }}>
+                <Button onClick={() => onDownload(c, ledgerEntries, totalDebit, totalCredit, closingBal)} startIcon={<Download />} variant="outlined" size="small" sx={{ textTransform: 'none' }}>
+                    Download
+                </Button>
+                <Button onClick={() => onPrint(c, ledgerEntries, totalDebit, totalCredit, closingBal)} startIcon={<Print />} variant="outlined" size="small" sx={{ textTransform: 'none', mr: 'auto' }}>
+                    Print
+                </Button>
+                <Button onClick={() => onReceipt(c)} startIcon={<Receipt />} variant="contained" color="success" size="small" sx={{ textTransform: 'none' }}>
+                    Receive Payment
+                </Button>
+                <Button onClick={() => onSale(c)} startIcon={<ShoppingCart />} variant="contained" size="small" sx={{ textTransform: 'none' }}>
+                    New Sale
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+};
+
 export const ListCustomers = () => {
     const navigate = useNavigate();
     const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [detailsDialog, setDetailsDialog] = useState({ open: false, customer: null, tab: 0 });
+    const [statementCustomer, setStatementCustomer] = useState(null);
+    const [ledgerDialog, setLedgerDialog] = useState({ open: false, customer: null });
     
     // Search and Filter
     const [searchTerm, setSearchTerm] = useState('');
@@ -63,14 +252,64 @@ export const ListCustomers = () => {
     const [newCustomerName, setNewCustomerName] = useState('');
     const [newCustomerMobile, setNewCustomerMobile] = useState('');
 
-    // Quick Add Sale
-    const [saleCustomer, setSaleCustomer] = useState(null);
-    const [saleDate, setSaleDate] = useState(moment().format('YYYY-MM-DD'));
-    const [saleItems, setSaleItems] = useState([{ name: '', qty: '', price: '', total: 0 }]);
-    const [salePaid, setSalePaid] = useState(true);
-    const [saleNotes, setSaleNotes] = useState('');
-    const saleItemRef = useRef(null);
-    
+    // Inline name editing
+    const [editingName, setEditingName] = useState(null); // { id, value }
+
+    // Full edit dialog for customer
+    const [editDialog, setEditDialog] = useState({ open: false, customer: null, saving: false });
+    const [editForm, setEditForm] = useState({ name: '', mobile: '', gstin: '', openingBalance: '', openingBalanceDate: '' });
+
+    const handleInlineNameSave = async (id, newName) => {
+        const trimmed = newName.trim();
+        setEditingName(null);
+        const original = customers.find(c => c.id === id);
+        if (!trimmed || trimmed === original?.name) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`/api/customers/${id}`, { name: trimmed }, { headers: { Authorization: `Bearer ${token}` } });
+            setCustomers(prev => prev.map(c => c.id === id ? { ...c, name: trimmed } : c));
+        } catch (e) {
+            alert('Failed to rename: ' + (e.response?.data?.message || e.message));
+        }
+    };
+
+    const openCustomerEditDialog = (customer) => {
+        setEditForm({
+            name: customer.name || '',
+            mobile: customer.mobile || '',
+            gstin: customer.gstin || '',
+            openingBalance: customer.openingBalance != null ? String(customer.openingBalance) : '',
+            openingBalanceDate: customer.openingBalanceDate ? moment(customer.openingBalanceDate).format('YYYY-MM-DD') : ''
+        });
+        setEditDialog({ open: true, customer, saving: false });
+    };
+
+    const handleCustomerEditSave = async () => {
+        const { customer } = editDialog;
+        if (!editForm.name.trim()) return;
+        setEditDialog(prev => ({ ...prev, saving: true }));
+        try {
+            const token = localStorage.getItem('token');
+            const payload = {
+                name: editForm.name.trim(),
+                mobile: editForm.mobile.trim(),
+                gstin: editForm.gstin.trim().toUpperCase(),
+                openingBalance: editForm.openingBalance !== '' ? parseFloat(editForm.openingBalance) : undefined,
+                openingBalanceDate: editForm.openingBalanceDate || null
+            };
+            await axios.put(`/api/customers/${customer.id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
+            setEditDialog({ open: false, customer: null, saving: false });
+            fetchCustomers();
+            // Refresh open details dialog if it's this customer
+            if (detailsDialog.open && detailsDialog.customer?.id === customer.id) {
+                refreshDetailsCustomer();
+            }
+        } catch (e) {
+            alert('Failed to save: ' + (e.response?.data?.message || e.message));
+            setEditDialog(prev => ({ ...prev, saving: false }));
+        }
+    };
+
     // Expanded rows
     const [expandedOrder, setExpandedOrder] = useState(null);
     
@@ -119,7 +358,7 @@ export const ListCustomers = () => {
         }
     };
 
-    const fetchCustomerDetails = async (customerId) => {
+    const fetchCustomerDetails = async (customerId, openLedger = false) => {
         try {
             const token = localStorage.getItem('token');
             const { data } = await axios.get(`/api/customers/${customerId}/transactions`, {
@@ -127,9 +366,66 @@ export const ListCustomers = () => {
             });
             setExpandedOrder(null);
             setCustomerNotes(data.data?.notes || '');
-            setDetailsDialog({ open: true, customer: data.data, tab: 0 });
+            if (openLedger) {
+                setLedgerDialog({ open: true, customer: data.data });
+            } else {
+                setDetailsDialog({ open: true, customer: data.data, tab: 0 });
+            }
         } catch (error) {
             alert('Error fetching details');
+        }
+    };
+
+    const refreshDetailsCustomer = async () => {
+        if (!detailsDialog.customer?.id) return;
+        try {
+            const token = localStorage.getItem('token');
+            const { data } = await axios.get(`/api/customers/${detailsDialog.customer.id}/transactions`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setCustomerNotes(data.data?.notes || '');
+            setDetailsDialog(prev => ({ ...prev, customer: data.data }));
+        } catch (_) {}
+    };
+
+    const handleDeleteReceipt = async (paymentId) => {
+        if (!window.confirm('Delete this receipt? This cannot be undone.')) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`/api/payments/${paymentId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const customerId = ledgerDialog.customer?.id;
+            if (!customerId) return;
+            const { data } = await axios.get(`/api/customers/${customerId}/transactions`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setLedgerDialog(prev => ({ ...prev, customer: data.data }));
+        } catch (err) {
+            alert(err?.response?.data?.message || 'Failed to delete receipt.');
+        }
+    };
+
+    const handleEditInvoice = (orderId) => {
+        setLedgerDialog({ open: false, customer: null });
+        navigate(`/orders/edit/${orderId}`);
+    };
+
+    const handleDeleteInvoice = async (orderId) => {
+        if (!window.confirm('Delete this invoice? This cannot be undone.')) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`/api/orders/${orderId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const customerId = ledgerDialog.customer?.id;
+            if (!customerId) return;
+            const { data } = await axios.get(`/api/customers/${customerId}/transactions`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setLedgerDialog(prev => ({ ...prev, customer: data.data }));
+        } catch (err) {
+            alert(err?.response?.data?.message || 'Failed to delete invoice.');
         }
     };
 
@@ -358,96 +654,9 @@ export const ListCustomers = () => {
 
     // Quick receipt from table
     const handleQuickReceiptFromTable = (customer) => {
-        setActiveTab(2);
+        setActiveTab(1);
         setSelectedCustomer(customer);
         setReceiptAmount(customer.balance > 0 ? customer.balance.toString() : '');
-    };
-
-    // ========== QUICK ADD SALE ==========
-    const saleTotal = saleItems.reduce((s, i) => s + (i.total || 0), 0);
-
-    const handleSaleItemChange = (idx, field, value) => {
-        const updated = [...saleItems];
-        updated[idx][field] = value;
-        if (field === 'qty' || field === 'price') {
-            const q = parseFloat(updated[idx].qty) || 0;
-            const p = parseFloat(updated[idx].price) || 0;
-            updated[idx].total = Math.round(q * p * 100) / 100;
-        }
-        setSaleItems(updated);
-    };
-
-    const addSaleItem = () => {
-        setSaleItems([...saleItems, { name: '', qty: '', price: '', total: 0 }]);
-    };
-
-    const removeSaleItem = (idx) => {
-        if (saleItems.length <= 1) return;
-        setSaleItems(saleItems.filter((_, i) => i !== idx));
-    };
-
-    const handleQuickSale = async () => {
-        if (!saleCustomer) { alert('Select a customer'); return; }
-        const validItems = saleItems.filter(i => i.name.trim() && i.total > 0);
-        if (validItems.length === 0) { alert('Add at least one item with name and amount'); return; }
-
-        setSaving(true);
-        try {
-            const token = localStorage.getItem('token');
-            const total = validItems.reduce((s, i) => s + i.total, 0);
-            const paid = salePaid ? total : 0;
-
-            await axios.post('/api/orders', {
-                orderDate: moment(saleDate).format('DD-MM-YYYY'),
-                customerName: saleCustomer.name,
-                customerMobile: saleCustomer.mobile || '',
-                subTotal: total,
-                total: total,
-                paidAmount: paid,
-                dueAmount: total - paid,
-                paymentStatus: salePaid ? 'paid' : 'unpaid',
-                notes: saleNotes,
-                orderItems: validItems.map((item, idx) => ({
-                    name: item.name.trim(),
-                    quantity: parseFloat(item.qty) || 1,
-                    productPrice: parseFloat(item.price) || item.total,
-                    totalPrice: item.total,
-                    type: 'non-weighted',
-                    sortOrder: idx
-                }))
-            }, { headers: { Authorization: `Bearer ${token}` } });
-
-            showSuccess(`Sale ₹${total.toLocaleString('en-IN')} → ${saleCustomer.name} (${moment(saleDate).format('DD/MM/YY')})`);
-            // Offer WhatsApp send if customer has mobile
-            if (saleCustomer.mobile) {
-                const orderData = {
-                    orderDate: moment(saleDate).format('DD-MM-YYYY'),
-                    customerName: saleCustomer.name,
-                    total, paidAmount: paid, dueAmount: total - paid,
-                    paymentStatus: salePaid ? 'paid' : 'unpaid',
-                    items: validItems
-                };
-                setTimeout(() => {
-                    if (window.confirm(`Send invoice (₹${total.toLocaleString('en-IN')}) to ${saleCustomer.name} via WhatsApp?`)) {
-                        sendInvoiceViaWhatsApp(saleCustomer.mobile, orderData);
-                    }
-                }, 300);
-            }
-            // Batch mode: keep customer & date, clear items
-            setSaleItems([{ name: '', qty: '', price: '', total: 0 }]);
-            setSaleNotes('');
-            fetchCustomers();
-            setTimeout(() => saleItemRef.current?.focus(), 100);
-        } catch (error) {
-            alert('Error: ' + (error.response?.data?.message || error.message));
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleQuickSaleFromTable = (customer) => {
-        setActiveTab(1);
-        setSaleCustomer(customer);
     };
 
     // Navigate to create order
@@ -468,6 +677,86 @@ export const ListCustomers = () => {
         } catch (error) {
             alert('Error: ' + (error.response?.data?.message || error.message));
         }
+    };
+
+    const handleDeletePayment = async (paymentId) => {
+        if (!window.confirm('Delete this receipt? This cannot be undone.')) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`/api/payments/${paymentId}`, { headers: { Authorization: `Bearer ${token}` } });
+            const cid = detailsDialog.customer?.id;
+            if (cid) fetchCustomerDetails(cid);
+            fetchCustomers();
+        } catch (e) { alert(e.response?.data?.message || e.message); }
+    };
+
+    // Customer ledger download (CSV)
+    const handleLedgerDownload = (c, ledgerEntries, totalDebit, totalCredit, closingBal) => {
+        const fmt = v => Math.abs(v || 0).toFixed(2);
+        const header = [`Customer Ledger: ${c.name}`, c.mobile || '', c.gstin ? `GSTIN: ${c.gstin}` : '', `Generated: ${moment().format('DD/MM/YYYY')}`].filter(Boolean).join(' | ');
+        const cols = ['Date', 'Particulars', 'Vch No.', 'Debit', 'Credit', 'Balance'];
+        const rows = ledgerEntries.map(e => [e.date || '', e.particulars, e.refNo, fmt(e.debit), fmt(e.credit), `${fmt(e.balance)} ${e.balance >= 0 ? 'Dr' : 'Cr'}`]);
+        const totalsRow = ['TOTAL', '', '', fmt(totalDebit), fmt(totalCredit), `${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}`];
+        const csv = [[header], cols, ...rows, totalsRow].map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${c.name.replace(/\s+/g, '_')}_ledger_${moment().format('YYYY-MM-DD')}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    // Customer ledger print
+    const handleLedgerPrint = (c, ledgerEntries, totalDebit, totalCredit, closingBal) => {
+        const fmt = v => `₹${Math.abs(v || 0).toLocaleString('en-IN')}`;
+        const rows = ledgerEntries.map(e => `
+            <tr class="${e.type === 'opening' ? 'row-opening' : e.type === 'receipt' ? 'row-receipt' : 'row-invoice'}">
+                <td>${e.date || ''}</td>
+                <td>${e.particulars}</td>
+                <td>${e.refNo}</td>
+                <td class="debit">${e.debit > 0 ? fmt(e.debit) : ''}</td>
+                <td class="credit">${e.credit > 0 ? fmt(e.credit) : ''}</td>
+                <td class="balance">${fmt(e.balance)} ${e.balance >= 0 ? 'Dr' : 'Cr'}</td>
+            </tr>`).join('');
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${c.name} — Ledger</title>
+            <style>
+                body { font-family: 'Roboto Mono', monospace; font-size: 12px; margin: 20px; color: #222; }
+                h2 { color: #0d1b4a; margin-bottom: 2px; }
+                .meta { color: #666; font-size: 11px; margin-bottom: 16px; }
+                table { width: 100%; border-collapse: collapse; }
+                th { background: #e8eaf6; color: #1a237e; border-bottom: 2px solid #1a237e; padding: 6px 8px; text-align: left; font-size: 11px; }
+                td { padding: 4px 8px; border-bottom: 1px solid #e0e0e0; }
+                .debit { text-align: right; color: #c62828; font-weight: 700; }
+                .credit { text-align: right; color: #2e7d32; font-style: italic; }
+                .balance { text-align: right; font-weight: 700; }
+                .row-opening { background: #fffde7; }
+                .row-receipt { background: #f1f8e9; }
+                .total-row td { border-top: 2px solid #1a237e; background: #e8eaf6; font-weight: 700; color: #1a237e; }
+                .closing { margin-top: 12px; text-align: right; font-size: 13px; font-weight: 700; color: #0d1b4a; }
+                @media print {
+                    * { color: #000 !important; background: #fff !important; }
+                    .debit { font-weight: 700; }
+                    .credit { font-style: italic; text-decoration: underline; }
+                    .balance { font-weight: 700; }
+                    th { border-bottom: 2px solid #000 !important; }
+                    .total-row td { border-top: 2px solid #000 !important; border-bottom: 2px solid #000 !important; }
+                    td { border-bottom: 1px solid #ccc !important; }
+                }
+            </style></head><body>
+            <h2>${c.name}</h2>
+            <div class="meta">${[c.mobile, c.gstin && `GSTIN: ${c.gstin}`, `Printed: ${moment().format('DD/MM/YYYY hh:mm A')}`].filter(Boolean).join(' | ')}</div>
+            <table>
+                <thead><tr><th>Date</th><th>Particulars</th><th>Vch No.</th><th style="text-align:right">Debit</th><th style="text-align:right">Credit (italic)</th><th style="text-align:right">Balance</th></tr></thead>
+                <tbody>${rows}</tbody>
+                <tfoot><tr class="total-row"><td colspan="3">TOTAL</td><td class="debit">${fmt(totalDebit)}</td><td class="credit">${fmt(totalCredit)}</td><td class="balance">${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</td></tr></tfoot>
+            </table>
+            <div class="closing">Closing Balance: ${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</div>
+            <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }</script>
+            </body></html>`;
+        const w = window.open('', '_blank');
+        w.document.write(html);
+        w.document.close();
     };
 
     // Export
@@ -562,7 +851,6 @@ export const ListCustomers = () => {
             <Paper sx={{ mb: 2 }}>
                 <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
                     <Tab icon={<PersonAdd />} label="Add Customer" iconPosition="start" sx={{ minHeight: 48 }} data-testid="tab-add-customer" />
-                    <Tab icon={<ShoppingCart />} label="Quick Sale" iconPosition="start" sx={{ minHeight: 48, color: 'success.main' }} data-testid="tab-quick-sale" />
                     <Tab icon={<Badge badgeContent={customersWithDue} color="success"><Receipt /></Badge>} label="Receive Payment" iconPosition="start" sx={{ minHeight: 48 }} data-testid="tab-receive-payment" />
                     <Tab icon={<Badge badgeContent={customers.filter(c => c.balance < 0).length} color="warning"><AccountBalance /></Badge>} label="Advances" iconPosition="start" sx={{ minHeight: 48 }} data-testid="tab-advances" />
                     <Tab icon={<History />} label="Recent" iconPosition="start" sx={{ minHeight: 48 }} data-testid="tab-recent" />
@@ -663,125 +951,8 @@ export const ListCustomers = () => {
                         </Box>
                     )}
 
-                    {/* Tab 1: Quick Add Sale */}
+                    {/* Tab 1: Receive Payment */}
                     {activeTab === 1 && (
-                        <Box>
-                            <Grid container spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
-                                <Grid item xs={12} sm={3}>
-                                    <Autocomplete
-                                        size="small"
-                                        options={customers}
-                                        getOptionLabel={(o) => o.name || ''}
-                                        value={saleCustomer}
-                                        onChange={(e, v) => setSaleCustomer(v)}
-                                        renderInput={(params) => <TextField {...params} label="Customer *" data-testid="sale-customer-input" />}
-                                        renderOption={(props, option) => (
-                                            <li {...props}>
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                                                    <Typography variant="body2">{option.name}</Typography>
-                                                    {option.balance > 0 && <Chip label={`Due ₹${option.balance.toLocaleString('en-IN')}`} size="small" color="warning" sx={{ height: 18, fontSize: '0.65rem' }} />}
-                                                </Box>
-                                            </li>
-                                        )}
-                                    />
-                                </Grid>
-                                <Grid item xs={6} sm={2}>
-                                    <TextField
-                                        fullWidth size="small" type="date" label="Sale Date"
-                                        value={saleDate}
-                                        onChange={(e) => setSaleDate(e.target.value)}
-                                        InputLabelProps={{ shrink: true }}
-                                        data-testid="sale-date-input"
-                                    />
-                                </Grid>
-                                <Grid item xs={6} sm={2}>
-                                    <FormControlLabel
-                                        control={<Switch size="small" checked={salePaid} onChange={(e) => setSalePaid(e.target.checked)} data-testid="sale-paid-switch" />}
-                                        label={<Typography variant="body2" sx={{ fontWeight: 500, color: salePaid ? 'success.main' : 'warning.main' }}>{salePaid ? 'Cash (Paid)' : 'Credit (Due)'}</Typography>}
-                                    />
-                                </Grid>
-                                <Grid item xs={6} sm={2}>
-                                    <TextField fullWidth size="small" label="Notes" value={saleNotes} onChange={(e) => setSaleNotes(e.target.value)} placeholder="Optional" data-testid="sale-notes-input" />
-                                </Grid>
-                                <Grid item xs={6} sm={3}>
-                                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                        <Typography variant="h6" sx={{ fontWeight: 700, color: 'success.dark', whiteSpace: 'nowrap' }}>
-                                            ₹{saleTotal.toLocaleString('en-IN')}
-                                        </Typography>
-                                        <Button
-                                            fullWidth variant="contained" color="success"
-                                            onClick={handleQuickSale} disabled={saving}
-                                            startIcon={saving ? <CircularProgress size={16} /> : <ShoppingCart />}
-                                            data-testid="sale-submit-btn"
-                                        >
-                                            Add Sale
-                                        </Button>
-                                    </Box>
-                                </Grid>
-                            </Grid>
-
-                            {/* Item rows */}
-                            <Paper variant="outlined" sx={{ p: 1.5 }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>ITEMS ({saleItems.length})</Typography>
-                                    <Button size="small" startIcon={<Add />} onClick={addSaleItem} data-testid="sale-add-item-btn">Add Row</Button>
-                                </Box>
-                                {saleItems.map((item, idx) => (
-                                    <Grid container spacing={1} key={idx} alignItems="center" sx={{ mb: 0.5 }}>
-                                        <Grid item xs={5} sm={4}>
-                                            <TextField
-                                                fullWidth size="small" placeholder="Item name"
-                                                value={item.name}
-                                                onChange={(e) => handleSaleItemChange(idx, 'name', e.target.value)}
-                                                inputRef={idx === 0 ? saleItemRef : null}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' && idx === saleItems.length - 1 && item.name) addSaleItem();
-                                                }}
-                                                data-testid={`sale-item-name-${idx}`}
-                                            />
-                                        </Grid>
-                                        <Grid item xs={2} sm={2}>
-                                            <TextField
-                                                fullWidth size="small" placeholder="Qty" type="number"
-                                                value={item.qty}
-                                                onChange={(e) => handleSaleItemChange(idx, 'qty', e.target.value)}
-                                                data-testid={`sale-item-qty-${idx}`}
-                                            />
-                                        </Grid>
-                                        <Grid item xs={2} sm={2}>
-                                            <TextField
-                                                fullWidth size="small" placeholder="Price" type="number"
-                                                value={item.price}
-                                                onChange={(e) => handleSaleItemChange(idx, 'price', e.target.value)}
-                                                InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
-                                                data-testid={`sale-item-price-${idx}`}
-                                            />
-                                        </Grid>
-                                        <Grid item xs={2} sm={3}>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 70 }}>
-                                                    = ₹{(item.total || 0).toLocaleString('en-IN')}
-                                                </Typography>
-                                                {saleItems.length > 1 && (
-                                                    <IconButton size="small" onClick={() => removeSaleItem(idx)} data-testid={`sale-item-remove-${idx}`}>
-                                                        <Close fontSize="small" color="error" />
-                                                    </IconButton>
-                                                )}
-                                            </Box>
-                                        </Grid>
-                                    </Grid>
-                                ))}
-                            </Paper>
-                            {saleCustomer && (
-                                <Alert severity="info" sx={{ mt: 1, py: 0 }}>
-                                    Batch mode: After submission, customer &amp; date stay selected. Keep adding sales!
-                                </Alert>
-                            )}
-                        </Box>
-                    )}
-
-                    {/* Tab 2: Receive Payment */}
-                    {activeTab === 2 && (
                         <Box>
                             <Grid container spacing={2} alignItems="center">
                                 <Grid item xs={12} sm={4}>
@@ -902,8 +1073,8 @@ export const ListCustomers = () => {
                         </Box>
                     )}
 
-                    {/* Tab 4: Recent Activity */}
-                    {activeTab === 4 && (
+                    {/* Tab 3: Recent Activity */}
+                    {activeTab === 3 && (
                         <Box>
                             <Typography variant="subtitle2" sx={{ mb: 1 }}>Recent Customer Receipts</Typography>
                             {recentReceipts.length === 0 ? (
@@ -926,8 +1097,8 @@ export const ListCustomers = () => {
                         </Box>
                     )}
 
-                    {/* Tab 3: Advances */}
-                    {activeTab === 3 && (
+                    {/* Tab 2: Advances */}
+                    {activeTab === 2 && (
                         <Box>
                             <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <AccountBalance color="warning" fontSize="small" />
@@ -1045,7 +1216,27 @@ export const ListCustomers = () => {
                                 paginatedCustomers.map((customer) => (
                                     <TableRow key={customer.id} hover>
                                         <TableCell>
-                                            <Typography variant="body2" sx={{ fontWeight: 500 }}>{customer.name}</Typography>
+                                            {editingName?.id === customer.id ? (
+                                                <TextField
+                                                    size="small"
+                                                    autoFocus
+                                                    value={editingName.value}
+                                                    onChange={e => setEditingName({ id: customer.id, value: e.target.value })}
+                                                    onBlur={() => handleInlineNameSave(customer.id, editingName.value)}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') handleInlineNameSave(customer.id, editingName.value);
+                                                        if (e.key === 'Escape') setEditingName(null);
+                                                    }}
+                                                    sx={{ width: 160 }}
+                                                    inputProps={{ style: { fontWeight: 500, fontSize: '0.875rem' } }}
+                                                />
+                                            ) : (
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer' }}
+                                                    onClick={() => setEditingName({ id: customer.id, value: customer.name })}>
+                                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{customer.name}</Typography>
+                                                    <Edit sx={{ fontSize: 13, color: 'text.disabled', opacity: 0, '.MuiTableRow-root:hover &': { opacity: 1 } }} />
+                                                </Box>
+                                            )}
                                             {customer.gstin && <Typography variant="caption" color="text.secondary">{customer.gstin}</Typography>}
                                         </TableCell>
                                         <TableCell>
@@ -1083,12 +1274,12 @@ export const ListCustomers = () => {
                                         </TableCell>
                                         <TableCell align="center">
                                             <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-                                                <Tooltip title="Quick Sale">
+                                                <Tooltip title="New Sale">
                                                     <Button
                                                         size="small"
                                                         variant="outlined"
                                                         color="primary"
-                                                        onClick={() => handleQuickSaleFromTable(customer)}
+                                                        onClick={() => handleCreateSale(customer)}
                                                         sx={{ minWidth: 40, px: 1 }}
                                                         data-testid={`quick-sale-${customer.id}`}
                                                     >
@@ -1106,15 +1297,25 @@ export const ListCustomers = () => {
                                                         <Receipt fontSize="small" />
                                                     </Button>
                                                 </Tooltip>
-                                                <Tooltip title="View Details">
+                                                <Tooltip title="View Ledger">
                                                     <Button
                                                         size="small"
                                                         variant="contained"
-                                                        onClick={() => fetchCustomerDetails(customer.id)}
+                                                        onClick={() => fetchCustomerDetails(customer.id, true)}
                                                         sx={{ minWidth: 40, px: 1 }}
                                                     >
                                                         <Visibility fontSize="small" />
                                                     </Button>
+                                                </Tooltip>
+                                                <Tooltip title="Detailed Statement">
+                                                    <IconButton size="small" onClick={() => fetchCustomerDetails(customer.id)}>
+                                                        <AccountBalance fontSize="small" color="primary" />
+                                                    </IconButton>
+                                                </Tooltip>
+                                                <Tooltip title="Edit Customer">
+                                                    <IconButton size="small" onClick={() => openCustomerEditDialog(customer)} sx={{ color: '#f57c00' }}>
+                                                        <Edit fontSize="small" />
+                                                    </IconButton>
                                                 </Tooltip>
                                                 <Tooltip title="Delete">
                                                     <IconButton size="small" onClick={() => handleDelete(customer.id, customer.name)}>
@@ -1198,12 +1399,16 @@ export const ListCustomers = () => {
                                 </Grid>
                             </Grid>
 
-                            <Tabs value={detailsDialog.tab} onChange={(e, v) => setDetailsDialog({ ...detailsDialog, tab: v })}>
+                            <Tabs value={detailsDialog.tab} onChange={(e, v) => {
+                                setDetailsDialog(prev => ({ ...prev, tab: v }));
+                                if (v === 5) refreshDetailsCustomer();
+                            }}>
                                 <Tab label={`Invoices (${detailsDialog.customer.orders?.length || 0})`} />
                                 <Tab label={`Receipts (${detailsDialog.customer.payments?.length || 0})`} />
                                 <Tab label="Allocate" />
                                 <Tab label={`Toggle History (${detailsDialog.customer.toggleHistory?.length || 0})`} data-testid="customer-toggle-history-tab" />
                                 <Tab label="Notes" data-testid="customer-notes-tab" />
+                                <Tab label="Ledger" />
                             </Tabs>
 
                             {detailsDialog.tab === 0 && (
@@ -1317,12 +1522,13 @@ export const ListCustomers = () => {
                                                 <TableCell align="right">Allocated</TableCell>
                                                 <TableCell align="right">Unallocated</TableCell>
                                                 <TableCell>Notes</TableCell>
+                                                <TableCell align="center">Actions</TableCell>
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
                                             {detailsDialog.customer.payments?.length === 0 ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={6} align="center" sx={{ py: 2 }}>No receipts yet</TableCell>
+                                                    <TableCell colSpan={7} align="center" sx={{ py: 2 }}>No receipts yet</TableCell>
                                                 </TableRow>
                                             ) : (
                                                 detailsDialog.customer.payments?.map((p) => (
@@ -1338,6 +1544,13 @@ export const ListCustomers = () => {
                                                             )}
                                                         </TableCell>
                                                         <TableCell>{p.notes || '-'}</TableCell>
+                                                        <TableCell align="center" onClick={ev => ev.stopPropagation()}>
+                                                            <Tooltip title="Delete receipt">
+                                                                <IconButton size="small" onClick={() => handleDeletePayment(p.id)} sx={{ p: 0.2 }}>
+                                                                    <Delete sx={{ fontSize: 15, color: '#e57373' }} />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        </TableCell>
                                                     </TableRow>
                                                 ))
                                             )}
@@ -1542,8 +1755,104 @@ export const ListCustomers = () => {
                                     </Box>
                                 </Box>
                             )}
+
+                            {/* Tab 5: Ledger */}
+                            {detailsDialog.tab === 5 && (() => {
+                                const c = detailsDialog.customer;
+                                const fmt = v => `₹${Math.abs(v || 0).toLocaleString('en-IN')}`;
+                                const entries = [];
+                                if (c.openingBalance && Number(c.openingBalance) !== 0) {
+                                    const obD = c.openingBalanceDate ? moment(c.openingBalanceDate) : null;
+                                    entries.push({ id: 'opening', date: obD?.isValid() ? obD.format('DD/MM/YYYY') : null, sortKey: obD?.isValid() ? obD.toISOString() : '0000', particulars: 'Opening Balance', refNo: '-', debit: Number(c.openingBalance) > 0 ? Number(c.openingBalance) : 0, credit: Number(c.openingBalance) < 0 ? Math.abs(Number(c.openingBalance)) : 0, type: 'opening' });
+                                }
+                                (c.orders || []).forEach(o => {
+                                    const d = o.orderDate ? moment(o.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(o.createdAt);
+                                    entries.push({ id: o.id, date: d.isValid() ? d.format('DD/MM/YYYY') : '-', sortKey: d.isValid() ? d.toISOString() : '9999', particulars: `Invoice — ${o.orderNumber || ''}`, refNo: o.orderNumber || '-', debit: Number(o.total) || 0, credit: 0, type: 'invoice' });
+                                });
+                                (c.payments || []).forEach(p => {
+                                    const d = p.paymentDate ? moment(p.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(p.createdAt);
+                                    entries.push({ id: p.id, date: d.isValid() ? d.format('DD/MM/YYYY') : '-', sortKey: d.isValid() ? d.toISOString() : '9999', particulars: 'Receipt' + (p.notes ? ` — ${p.notes}` : ''), refNo: p.paymentNumber || '-', debit: 0, credit: Number(p.amount) || 0, type: 'receipt' });
+                                });
+                                entries.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+                                let runBal = 0;
+                                entries.forEach(e => { runBal += e.debit - e.credit; e.balance = runBal; });
+                                const totalDebit = entries.reduce((s, e) => s + e.debit, 0);
+                                const totalCredit = entries.reduce((s, e) => s + e.credit, 0);
+                                const closingBal = totalDebit - totalCredit;
+                                return (
+                                    <TableContainer sx={{ maxHeight: 360, mt: 1 }}>
+                                        <Table size="small" stickyHeader sx={{
+                                            '& td, & th': { borderRight: '1px solid #e0e0e0', py: 0.5, px: 1, fontSize: '0.8rem', fontFamily: "'Roboto Mono', monospace" },
+                                            '& th': { bgcolor: '#e8eaf6', fontWeight: 700, color: '#1a237e', borderBottom: '2px solid #1a237e', fontSize: '0.75rem' },
+                                        }}>
+                                            <TableHead>
+                                                <TableRow>
+                                                    <TableCell width={85}>Date</TableCell>
+                                                    <TableCell>Particulars</TableCell>
+                                                    <TableCell width={130}>Vch No.</TableCell>
+                                                    <TableCell align="right" width={100}>Debit</TableCell>
+                                                    <TableCell align="right" width={100}>Credit</TableCell>
+                                                    <TableCell align="right" width={110}>Balance</TableCell>
+                                                </TableRow>
+                                            </TableHead>
+                                            <TableBody>
+                                                {entries.length === 0 ? (
+                                                    <TableRow><TableCell colSpan={6} align="center" sx={{ py: 3, color: 'text.secondary' }}>No transactions yet</TableCell></TableRow>
+                                                ) : entries.map(e => (
+                                                    <TableRow key={e.id} sx={{ bgcolor: e.type === 'opening' ? '#fffde7' : e.type === 'receipt' ? '#f1f8e9' : 'inherit' }}>
+                                                        <TableCell>{e.date || ''}</TableCell>
+                                                        <TableCell>{e.particulars}</TableCell>
+                                                        <TableCell>{e.refNo}</TableCell>
+                                                        <TableCell align="right" sx={{ color: '#c62828', fontWeight: 700 }}>{e.debit > 0 ? fmt(e.debit) : ''}</TableCell>
+                                                        <TableCell align="right" sx={{ color: '#2e7d32', fontStyle: 'italic' }}>{e.credit > 0 ? fmt(e.credit) : ''}</TableCell>
+                                                        <TableCell align="right" sx={{ fontWeight: 700 }}>{fmt(e.balance)} {e.balance >= 0 ? 'Dr' : 'Cr'}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                                <TableRow sx={{ '& td': { borderTop: '2px solid #1a237e', bgcolor: '#e8eaf6', fontWeight: 700, color: '#1a237e' } }}>
+                                                    <TableCell colSpan={3}>TOTAL</TableCell>
+                                                    <TableCell align="right" sx={{ color: '#c62828 !important' }}>{fmt(totalDebit)}</TableCell>
+                                                    <TableCell align="right" sx={{ color: '#2e7d32 !important', fontStyle: 'italic' }}>{fmt(totalCredit)}</TableCell>
+                                                    <TableCell align="right">{fmt(closingBal)} {closingBal >= 0 ? 'Dr' : 'Cr'}</TableCell>
+                                                </TableRow>
+                                            </TableBody>
+                                        </Table>
+                                    </TableContainer>
+                                );
+                            })()}
                         </DialogContent>
                         <DialogActions>
+                            {detailsDialog.tab === 5 && (() => {
+                                const c = detailsDialog.customer;
+                                const entries = [];
+                                if (c.openingBalance && Number(c.openingBalance) !== 0) {
+                                    entries.push({ id: 'opening', date: null, sortKey: '0000', particulars: 'Opening Balance', refNo: '-', debit: Number(c.openingBalance) > 0 ? Number(c.openingBalance) : 0, credit: Number(c.openingBalance) < 0 ? Math.abs(Number(c.openingBalance)) : 0 });
+                                }
+                                (c.orders || []).forEach(o => {
+                                    const d = o.orderDate ? moment(o.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(o.createdAt);
+                                    entries.push({ id: o.id, date: d.isValid() ? d.format('DD/MM/YYYY') : '-', sortKey: d.isValid() ? d.toISOString() : '9999', particulars: `Invoice — ${o.orderNumber || ''}`, refNo: o.orderNumber || '-', debit: Number(o.total) || 0, credit: 0 });
+                                });
+                                (c.payments || []).forEach(p => {
+                                    const d = p.paymentDate ? moment(p.paymentDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(p.createdAt);
+                                    entries.push({ id: p.id, date: d.isValid() ? d.format('DD/MM/YYYY') : '-', sortKey: d.isValid() ? d.toISOString() : '9999', particulars: 'Receipt' + (p.notes ? ` — ${p.notes}` : ''), refNo: p.paymentNumber || '-', debit: 0, credit: Number(p.amount) || 0 });
+                                });
+                                entries.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+                                let runBal = 0;
+                                entries.forEach(e => { runBal += e.debit - e.credit; e.balance = runBal; });
+                                const totalDebit = entries.reduce((s, e) => s + e.debit, 0);
+                                const totalCredit = entries.reduce((s, e) => s + e.credit, 0);
+                                const closingBal = totalDebit - totalCredit;
+                                return (
+                                    <Button
+                                        startIcon={<Print />}
+                                        variant="outlined"
+                                        size="small"
+                                        sx={{ textTransform: 'none', mr: 'auto' }}
+                                        onClick={() => handleLedgerPrint(c, entries, totalDebit, totalCredit, closingBal)}
+                                    >
+                                        Print Ledger
+                                    </Button>
+                                );
+                            })()}
                             <Button onClick={() => handleCreateSale(detailsDialog.customer)} startIcon={<ShoppingCart />} color="primary">
                                 Create Sale
                             </Button>
@@ -1608,6 +1917,50 @@ export const ListCustomers = () => {
                         </Box>
                     )}
                 </DialogContent>
+            </Dialog>
+
+            {/* Customer Tally-style Ledger Dialog */}
+            <CustomerLedgerDialog
+                open={ledgerDialog.open}
+                customer={ledgerDialog.customer}
+                onClose={() => setLedgerDialog({ open: false, customer: null })}
+                onDownload={handleLedgerDownload}
+                onPrint={handleLedgerPrint}
+                onReceipt={(c) => { setLedgerDialog({ open: false, customer: null }); handleQuickReceiptFromTable(c); }}
+                onSale={(c) => { setLedgerDialog({ open: false, customer: null }); handleCreateSale(c); }}
+                onDeleteReceipt={handleDeleteReceipt}
+                onEditInvoice={handleEditInvoice}
+                onDeleteInvoice={handleDeleteInvoice}
+            />
+
+            {/* Customer Ledger Statement (date-range PDF) */}
+            <CustomerStatement
+                customer={statementCustomer}
+                open={!!statementCustomer}
+                onClose={() => setStatementCustomer(null)}
+            />
+
+            {/* Customer Edit Dialog */}
+            <Dialog open={editDialog.open} onClose={() => setEditDialog({ open: false, customer: null, saving: false })} maxWidth="xs" fullWidth>
+                <Box sx={{ bgcolor: '#1565c0', color: '#fff', px: 2.5, py: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700 }}>Edit Customer</Typography>
+                    <IconButton onClick={() => setEditDialog({ open: false, customer: null, saving: false })} sx={{ color: '#fff' }} size="small">
+                        <Close />
+                    </IconButton>
+                </Box>
+                <DialogContent sx={{ pt: 2 }}>
+                    <TextField fullWidth label="Name *" value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} size="small" sx={{ mb: 2 }} />
+                    <TextField fullWidth label="Mobile" value={editForm.mobile} onChange={e => setEditForm(p => ({ ...p, mobile: e.target.value }))} size="small" sx={{ mb: 2 }} />
+                    <TextField fullWidth label="GSTIN" value={editForm.gstin} onChange={e => setEditForm(p => ({ ...p, gstin: e.target.value.toUpperCase() }))} size="small" sx={{ mb: 2 }} />
+                    <TextField fullWidth label="Opening Balance (₹)" type="number" value={editForm.openingBalance} onChange={e => setEditForm(p => ({ ...p, openingBalance: e.target.value }))} size="small" sx={{ mb: 2 }} />
+                    <TextField fullWidth label="Opening Balance Date" type="date" value={editForm.openingBalanceDate} onChange={e => setEditForm(p => ({ ...p, openingBalanceDate: e.target.value }))} size="small" InputLabelProps={{ shrink: true }} helperText="Date from which opening balance is effective" />
+                </DialogContent>
+                <DialogActions sx={{ px: 2, pb: 2 }}>
+                    <Button onClick={() => setEditDialog({ open: false, customer: null, saving: false })}>Cancel</Button>
+                    <Button variant="contained" onClick={handleCustomerEditSave} disabled={editDialog.saving || !editForm.name.trim()}>
+                        {editDialog.saving ? <CircularProgress size={20} /> : 'Save'}
+                    </Button>
+                </DialogActions>
             </Dialog>
         </Box>
     );

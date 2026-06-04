@@ -23,6 +23,7 @@ module.exports = {
             paidAmount: Joi.number().greater(-1).optional(),
             dueAmount: Joi.number().greater(-1).optional(),
             paymentStatus: Joi.string().trim().valid('paid', 'partial', 'unpaid').optional(),
+            notes: Joi.string().trim().allow('', null).optional(),
             purchaseItems: Joi.array().items(purchaseItems).required()
         });
         return Joi.validate(purchaseObj, schema);

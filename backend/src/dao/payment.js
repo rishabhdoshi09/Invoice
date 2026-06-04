@@ -1,20 +1,20 @@
-const uuidv4 = require('uuid/v4');
+const { v4: uuidv4 } = require('uuid');
 const db = require('../models');
 
 module.exports = {
-    createPayment: async (payload) => {
+    createPayment: async (payload, transaction = null) => {
         try {
             // NORMALIZE DATE FORMAT: Always store as DD-MM-YYYY
             if (payload.paymentDate) {
                 const moment = require('moment-timezone');
-                // Try parsing with multiple formats
                 const parsedDate = moment(payload.paymentDate, ['YYYY-MM-DD', 'DD-MM-YYYY', 'DD/MM/YYYY'], true);
                 if (parsedDate.isValid()) {
                     payload.paymentDate = parsedDate.format('DD-MM-YYYY');
                 }
             }
-            
-            const res = await db.payment.create({ id: uuidv4(), ...payload });
+
+            const options = transaction ? { transaction } : {};
+            const res = await db.payment.create({ id: uuidv4(), ...payload }, options);
             return res;
         } catch (error) {
             console.log(error);
@@ -23,7 +23,7 @@ module.exports = {
     },
     getPayment: async (filterObj) => {
         try {
-            const res = await db.payment.findOne({ where: filterObj });
+            const res = await db.payment.findOne({ where: { ...filterObj, isDeleted: false } });
             return res;
         } catch (error) {
             console.log(error);
@@ -104,7 +104,11 @@ module.exports = {
     },
     deletePayment: async (filterObj) => {
         try {
-            const res = await db.payment.destroy({ where: filterObj });
+            // Soft delete — never hard-delete financial records (preserves audit trail)
+            const res = await db.payment.update(
+                { isDeleted: true, deletedAt: new Date() },
+                { where: filterObj }
+            );
             return res;
         } catch (error) {
             console.log(error);

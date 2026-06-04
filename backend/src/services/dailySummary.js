@@ -1,5 +1,5 @@
 const db = require('../models');
-const uuidv4 = require('uuid/v4');
+const { v4: uuidv4 } = require('uuid');
 const moment = require('moment-timezone');
 const { Op } = require('sequelize');
 
@@ -96,7 +96,10 @@ module.exports = {
     // IMPORTANT: totalSales only tracks PAID orders (cash sales)
     // Unpaid/credit sales are tracked via totalReceivables calculated dynamically
     recordOrderCreated: async (order, transaction = null) => {
-        const today = moment().format('YYYY-MM-DD');
+        // Use the order's own date so backdated orders go to the right summary row
+        const today = order.orderDate
+            ? moment(order.orderDate, ['DD-MM-YYYY', 'YYYY-MM-DD']).format('YYYY-MM-DD')
+            : moment().format('YYYY-MM-DD');
         const options = transaction ? { transaction } : {};
         
         let summary = await db.dailySummary.findOne({
@@ -366,11 +369,17 @@ module.exports = {
     //
     getRealTimeSummary: async (date) => {
         const dateDDMMYYYY = moment(date).format('DD-MM-YYYY');
-        
-        // Get all orders for this date (raw: true for reliable serialization)
+        const dateDDMMYYYY_slash = moment(date).format('DD/MM/YYYY');
+        const dateYYYYMMDD = moment(date).format('YYYY-MM-DD');
+
+        // Get all orders for this date — check all 3 stored formats
         const orders = await db.order.findAll({
             where: {
-                orderDate: dateDDMMYYYY,
+                [db.Sequelize.Op.or]: [
+                    { orderDate: dateDDMMYYYY },
+                    { orderDate: dateDDMMYYYY_slash },
+                    { orderDate: dateYYYYMMDD }
+                ],
                 isDeleted: false
             },
             raw: true
@@ -384,8 +393,11 @@ module.exports = {
         const unpaidOrders = orders.filter(o => o.paymentStatus === 'unpaid');
         const partialOrders = orders.filter(o => o.paymentStatus === 'partial');
         
-        // Cash Sales = total from CASH orders ONLY (paid at POS, not from paidAmount)
-        const cashFromTodaysOrders = cashOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+        // Cash Sales = cash actually received from CASH mode orders.
+        // Use paidAmount (not total) so partial CASH orders contribute their collected portion.
+        // Unpaid CASH orders contribute 0 (paidAmount=0); fully-paid contribute their total.
+        const cashFromTodaysOrders = cashOrders
+            .reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
         
         // Credit outstanding (what customers still owe from today)
         const creditOutstanding = orders.reduce((sum, o) => sum + (Number(o.dueAmount) || 0), 0);
@@ -393,17 +405,12 @@ module.exports = {
         // Total business done (all orders regardless of payment mode)
         const totalBusinessDone = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
         
-        // Get payments for this date - try multiple date formats
-        const dateYYYYMMDD = moment(date).format('YYYY-MM-DD');
-        const dateDDMMYYYY_dash = moment(date).format('DD-MM-YYYY');
-        const dateDDMMYYYY_slash = moment(date).format('DD/MM/YYYY');
-        
+        // Get payments for this date - try multiple date formats (vars already declared above)
         const payments = await db.payment.findAll({
             where: {
                 isDeleted: false,
                 [db.Sequelize.Op.or]: [
                     { paymentDate: dateDDMMYYYY },
-                    { paymentDate: dateDDMMYYYY_dash },
                     { paymentDate: dateDDMMYYYY_slash },
                     { paymentDate: dateYYYYMMDD }
                 ]
@@ -413,8 +420,11 @@ module.exports = {
         
         console.log(`[getRealTimeSummary] Date: ${dateDDMMYYYY}, Orders: ${orders.length} (CASH: ${cashOrders.length}, CREDIT: ${creditOrders.length}), Payments: ${payments.length}`);
         
-        // IDs of today's CASH orders — payments linked to these are ALREADY counted in Cash Sales
-        const todaysCashOrderIds = cashOrders.map(o => String(o.id));
+        // IDs of today's PAID CASH orders — payments linked to these are ALREADY counted in Cash Sales.
+        // Unpaid/partial CASH orders are no longer in cashSales, so their payments should NOT be excluded.
+        const todaysCashOrderIds = cashOrders
+            .filter(o => o.paymentStatus === 'paid')
+            .map(o => String(o.id));
         
         // Customer Receipts = customer payments EXCEPT:
         //   1. PAY-TOGGLE-* (legacy synthetic markers)
@@ -456,11 +466,104 @@ module.exports = {
             .filter(p => p.partyType === 'expense')
             .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         
+        // Paid CASH orders only — unpaid/partial CASH orders move to credit
+        const paidCashOrders = cashOrders.filter(o => o.paymentStatus === 'paid');
+
+        // ── Loan cash flow for this date ──────────────────────────────────────
+        // Initial loans: loanDate matches today
+        // Repayments:    loan_transactions.transactionDate matches today
+        let loansCashIn = 0, loansCashOut = 0;
+        let loanCashInRecords = [], loanCashOutRecords = [];
+        let loanQueryError = null;
+        try {
+            // Cover every plausible date format a user could have typed
+            const m = moment(date, ['YYYY-MM-DD', 'DD-MM-YYYY', 'DD/MM/YYYY']);
+            const dateVariants = [
+                m.format('DD-MM-YYYY'),   // 02-06-2026
+                m.format('DD/MM/YYYY'),   // 02/06/2026
+                m.format('YYYY-MM-DD'),   // 2026-06-02
+                m.format('D-M-YYYY'),     // 2-6-2026  (no leading zeros)
+                m.format('D/M/YYYY'),     // 2/6/2026
+                m.format('D-M-YY'),       // 2-6-26
+                m.format('DD-MM-YY'),     // 02-06-26
+            ];
+            const placeholders = dateVariants.map((_, i) => `:d${i}`).join(', ');
+            const bindParams = Object.fromEntries(dateVariants.map((v, i) => [`d${i}`, v]));
+
+            console.log(`[Loans] querying date variants: ${dateVariants.join(' | ')}`);
+
+            // New loans disbursed/received today
+            const loansToday = await db.sequelize.query(
+                `SELECT id, "loanNumber", type, "partyName", "principalAmount", notes, "loanDate"
+                 FROM loans
+                 WHERE "loanDate" IN (${placeholders}) AND "isDeleted" = false`,
+                { replacements: bindParams, type: db.sequelize.QueryTypes.SELECT }
+            );
+            console.log(`[Loans] new loans today: ${loansToday.length}`);
+            loansToday.forEach(l => {
+                const amt = Number(l.principalAmount) || 0;
+                const rec = { id: l.id, loanNumber: l.loanNumber, partyName: l.partyName, amount: amt, notes: l.notes, date: l.loanDate, isRepayment: false };
+                if (l.type === 'given') { loansCashOut += amt; loanCashOutRecords.push(rec); }
+                else { loansCashIn += amt; loanCashInRecords.push(rec); }
+            });
+
+            // Repayments today — raw SQL join, broad date format coverage
+            const repayments = await db.sequelize.query(
+                `SELECT t.id, t.amount, t."transactionDate", t.notes,
+                        l.type as "loanType", l."partyName", l."loanNumber"
+                 FROM loan_transactions t
+                 INNER JOIN loans l ON l.id = t."loanId"
+                 WHERE t."transactionDate" IN (${placeholders})`,
+                { replacements: bindParams, type: db.sequelize.QueryTypes.SELECT }
+            );
+            console.log(`[Loans] repayments found: ${repayments.length}`);
+            repayments.forEach(t => {
+                const amt = Number(t.amount) || 0;
+                const rec = { id: t.id, loanNumber: t.loanNumber, partyName: t.partyName, amount: amt, notes: t.notes, date: t.transactionDate, isRepayment: true };
+                console.log(`[Loans]   -> type=${t.loanType} amt=${amt} stored_date="${t.transactionDate}"`);
+                if (t.loanType === 'given') { loansCashIn += amt; loanCashInRecords.push(rec); }
+                else { loansCashOut += amt; loanCashOutRecords.push(rec); }
+            });
+
+            // Also dump ALL recent transactions for debugging
+            const allRecent = await db.sequelize.query(
+                `SELECT t."transactionDate", t.amount, l.type as "loanType"
+                 FROM loan_transactions t
+                 INNER JOIN loans l ON l.id = t."loanId"
+                 ORDER BY t."createdAt" DESC LIMIT 5`,
+                { type: db.sequelize.QueryTypes.SELECT }
+            );
+            if (allRecent.length > 0) {
+                console.log(`[Loans] last 5 txns in DB:`, allRecent.map(r => `${r.transactionDate}(${r.loanType})`).join(', '));
+            }
+        } catch (e) {
+            loanQueryError = e.message;
+            console.error('[getRealTimeSummary] Loan cash flow error:', e.message, e.stack);
+        }
+
+        // Backdated orders: created today (by wall-clock) but invoiced on a different date.
+        // These are physically collected today but NOT included in today's cash drawer.
+        // Only computed when viewing today — irrelevant for historical dates.
+        let backdatedOrdersCreatedToday = [];
+        const isViewingToday = dateYYYYMMDD === moment().tz('Asia/Kolkata').format('YYYY-MM-DD');
+        if (isViewingToday) {
+            const todayStart = moment().tz('Asia/Kolkata').startOf('day').toDate();
+            const todayEnd   = moment().tz('Asia/Kolkata').endOf('day').toDate();
+            backdatedOrdersCreatedToday = await db.order.findAll({
+                where: {
+                    createdAt: { [db.Sequelize.Op.between]: [todayStart, todayEnd] },
+                    orderDate: { [db.Sequelize.Op.notIn]: [dateDDMMYYYY, dateDDMMYYYY_slash, dateYYYYMMDD] },
+                    isDeleted: false
+                },
+                raw: true
+            });
+        }
+
         return {
             date: dateDDMMYYYY,
             // Orders breakdown
             totalOrders: orders.length,
-            cashOrdersCount: cashOrders.length,
+            cashOrdersCount: paidCashOrders.length,
             creditOrdersCount: creditOrders.length,
             paidOrdersCount: paidOrders.length,
             unpaidOrdersCount: unpaidOrders.length,
@@ -480,8 +583,14 @@ module.exports = {
             // Expenses (cash going out)
             expensesCount: payments.filter(p => p.partyType === 'expense').length,
             expenses: expensePayments,
-            // Individual records for inline detail view
-            cashOrderRecords: cashOrders.map(o => ({
+            // Loan cash flow
+            loansCashIn,
+            loansCashOut,
+            loanCashInRecords,
+            loanCashOutRecords,
+            loanQueryError,
+            // Individual records for inline detail view (only paid CASH orders)
+            cashOrderRecords: paidCashOrders.map(o => ({
                 id: o.id, orderNumber: o.orderNumber, customerName: o.customerName,
                 total: Number(o.total), paidAmount: Number(o.paidAmount), paymentStatus: o.paymentStatus,
                 paymentMode: o.paymentMode, createdAt: o.createdAt
@@ -506,8 +615,15 @@ module.exports = {
             expenseRecords: payments.filter(p => p.partyType === 'expense').map(p => ({
                 id: p.id, paymentNumber: p.paymentNumber, partyName: p.partyName,
                 amount: Number(p.amount), referenceType: p.referenceType,
-                referenceNumber: p.referenceNumber, notes: p.notes, 
+                referenceNumber: p.referenceNumber, notes: p.notes,
                 paymentDate: p.paymentDate, createdAt: p.createdAt
+            })),
+            // Backdated invoices created today but counted in another date's drawer
+            backdatedOrdersCreatedToday: backdatedOrdersCreatedToday.map(o => ({
+                id: o.id, orderNumber: o.orderNumber, customerName: o.customerName,
+                orderDate: o.orderDate, total: Number(o.total),
+                paidAmount: Number(o.paidAmount), paymentMode: o.paymentMode,
+                paymentStatus: o.paymentStatus, createdAt: o.createdAt
             }))
         };
     }

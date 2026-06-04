@@ -8,14 +8,25 @@ import {
   Button,
   Card,
   CardContent,
+  Divider,
   Grid,
+  IconButton,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
+  Tooltip,
   Typography,
   Select,
   MenuItem,
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
   Switch,
   FormControlLabel,
@@ -25,7 +36,7 @@ import {
 import { CreateProduct } from '../products/create';
 import pdfMake from 'pdfmake/build/pdfmake';
 import { generatePdfDefinition, generatePdfDefinition2 } from './helper';
-import { Delete, Sync, Info, WhatsApp } from '@mui/icons-material';
+import { Delete, Edit as EditIcon, Sync, Info, WhatsApp } from '@mui/icons-material';
 import { fetchWeightsAction, createOrderAction } from '../../../store/orders';
 import { ProductType } from '../../../enums/product';
 import { useAuth } from '../../../context/AuthContext';
@@ -58,50 +69,30 @@ const HIGHLIGHT_SX = {
   transition: 'all 0.15s'
 };
 
-const ORDER_SER_KEY = 'orderSeries_v1';
 const INVOICES_KEY = 'invoices_v1';
 const DAY_TOTAL_KEY = 'dayTotals_v1';
 
 const getTodayStr = () => moment().format("DD-MM-YYYY");
 
-const getStoredSeries = () => { try { const raw = localStorage.getItem(ORDER_SER_KEY); return raw ? JSON.parse(raw) : {}; } catch { return {}; } };
-const setStoredSeries = (obj) => { try { localStorage.setItem(ORDER_SER_KEY, JSON.stringify(obj)); } catch {} };
-const generateStartForToday = () => Math.floor(Math.random() * 100000) * 10 + 1;
-const nextOrderNumberForToday = () => {
-  const t = getTodayStr();
-  const d = getStoredSeries();
-  if (d.date !== t || typeof d.last !== 'number') {
-    const s = generateStartForToday();
-    setStoredSeries({ date: t, last: s });
-    return s;
-  }
-  const n = d.last + 1;
-  setStoredSeries({ date: t, last: n });
-  return n;
+// Convert DD-MM-YYYY → YYYY-MM-DD (for HTML <input type="date">)
+const toInputDate = (ddmmyyyy) => {
+  if (!ddmmyyyy || !String(ddmmyyyy).match(/^\d{2}-\d{2}-\d{4}$/)) return '';
+  const [d, m, y] = String(ddmmyyyy).split('-');
+  return `${y}-${m}-${d}`;
+};
+// Convert YYYY-MM-DD → DD-MM-YYYY (from HTML <input type="date">)
+const fromInputDate = (yyyymmdd) => {
+  if (!yyyymmdd || !String(yyyymmdd).match(/^\d{4}-\d{2}-\d{2}$/)) return getTodayStr();
+  const [y, m, d] = String(yyyymmdd).split('-');
+  return `${d}-${m}-${y}`;
 };
 
 const getStoredDayTotal=()=>{ try{const raw=localStorage.getItem(DAY_TOTAL_KEY); return raw?JSON.parse(raw):{};}catch{return{}} };
 const setStoredDayTotal=(o)=>{ try{localStorage.setItem(DAY_TOTAL_KEY,JSON.stringify(o));}catch{} };
 const ensureTodayRecord=()=>{ const t=getTodayStr(); const d=getStoredDayTotal(); if(!d||d.date!==t){const p={date:t,total:0}; setStoredDayTotal(p); return 0;} return Number(d.total||0); };
-// eslint-disable-next-line no-unused-vars
-const getTodayGrandTotal=()=>ensureTodayRecord();
-// eslint-disable-next-line no-unused-vars
-const addToTodayGrandTotal=(amt)=>{ const t=getTodayStr(); const d=getStoredDayTotal(); const base=(d&&d.date===t)?Number(d.total||0):0; const total=base+Number(amt||0); setStoredDayTotal({date:t,total}); try{window.dispatchEvent(new CustomEvent('DAY_TOTAL_UPDATED',{detail:total}))}catch{}; return total; };
-// eslint-disable-next-line no-unused-vars
 const subtractFromTodayGrandTotal=(amt)=>{ const t=getTodayStr(); const d=getStoredDayTotal(); const base=(d&&d.date===t)?Number(d.total||0):0; const total=Math.max(0,base-Number(amt||0)); setStoredDayTotal({date:t,total}); try{window.dispatchEvent(new CustomEvent('DAY_TOTAL_UPDATED',{detail:total}))}catch{}; return total; };
 const msToNextMidnight=()=>{ const now=new Date(); const next=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1,0,0,0,0); return next.getTime()-now.getTime(); };
 
-const PENDING_INVOICES_KEY = 'pendingInvoices_v1';
-// eslint-disable-next-line no-unused-vars
-const savePendingInvoice = (payload) => {
-  try {
-    const cur = JSON.parse(localStorage.getItem(PENDING_INVOICES_KEY) || '[]');
-    cur.push({ payload, ts: new Date().toISOString() });
-    localStorage.setItem(PENDING_INVOICES_KEY, JSON.stringify(cur));
-  } catch (e) {
-    console.warn('savePendingInvoice failed', e);
-  }
-};
 
 // Classify quick tags for your quick select
 const classifyQuickTag = (raw) => {
@@ -186,37 +177,7 @@ const isRestrictedPrice = (price) => {
   Minimal offline DB (self-contained)
 ------------------------- */
 function toNumber(n){ const x = Number(n); return Number.isFinite(x) ? x : 0; }
-// eslint-disable-next-line no-unused-vars
-function recomputeTotals(order) {
-  const sub = (order.orderItems || []).reduce((s, it) => s + toNumber(it.totalPrice), 0);
-  const tax = Math.round(sub * (toNumber(order.taxPercent) / 100));
-  const total = sub + tax;
-  return { subTotal: sub, tax, total };
-}
-// eslint-disable-next-line no-unused-vars
-function saveOrderLocal(orderProps) {
-  // Ensure order number + standardize dates
-  const localOrderNo = String(nextOrderNumberForToday());
-  const base = { ...orderProps, orderNumber: localOrderNo, orderDate: getTodayStr() };
-
-  // Normalize items and totals
-  const orderItems = (base.orderItems || []).map(it => ({
-    productId: it.productId || it.id || '',
-    name: it.name || it.altName || '',
-    quantity: toNumber(it.quantity),
-    productPrice: toNumber(it.productPrice),
-    totalPrice: toNumber(it.totalPrice),
-    altName: (it.altName || '').trim(),
-    type: it.type || ''
-  }));
-
-  const withItems = { ...base, orderItems };
-  const totals = recomputeTotals(withItems);
-  const finalObj = { ...withItems, ...totals };
-
-  // Note: Invoices are now stored server-side only
-  return finalObj;
-}
+function round2(n) { return Math.round(Number(n) * 100) / 100; }
 
 function loadAllInvoices() {
   try { return JSON.parse(localStorage.getItem(INVOICES_KEY) || '[]'); } catch { return []; }
@@ -254,16 +215,7 @@ export const CreateOrder = () => {
   const dispatch = useDispatch();
   const { isAdmin, isBillingStaff } = useAuth();
 
-  const rows = useSelector(
-    state => state?.productState?.products?.rows || {},
-    (a, b) => {
-      if (a === b) return true;
-      if (!a || !b) return false;
-      const keysA = Object.keys(a);
-      const keysB = Object.keys(b);
-      return keysA.length === keysB.length && keysA.every(k => a[k] === b[k]);
-    }
-  );
+  const rows = useSelector(state => state?.productState?.products?.rows || {});
   
   // Local state for customers fetched from API
   const [customers, setCustomers] = useState([]);
@@ -319,10 +271,19 @@ export const CreateOrder = () => {
   const [localPriceValue, setLocalPriceValue] = useState('');
   const priceUpdateTimeoutRef = useRef(null);
 
+  // 2xx price keypad editing phase: 'tens' → 'units' → reset
+  // Prevents relying on DOM selection timing for keypad digit placement
+  const twoXXPhaseRef = useRef(null);
+  // Flag: set true while applyDigitToPrice calls onPriceChange so onPriceChange
+  // skips its own physical-keyboard phase-advance logic (keypad handles it)
+  const skipPhaseAdvanceRef = useRef(false);
+
   // ref for modal price input to ensure focus works reliably
   const modalPriceRef = useRef(null);
   // ref for main productPrice input to focus after adding / selecting product
   const priceInputRef = useRef(null);
+  // ref for altName input so Tab from price jumps directly here
+  const altNameRef = useRef(null);
 
   const [selectedQuick, setSelectedQuick] = useState('');
   const clearQuickHighlight = () => setSelectedQuick('');
@@ -339,13 +300,17 @@ export const CreateOrder = () => {
   const [recentlySubmittedOrder, setRecentlySubmittedOrder] = useState(null);
 
   const [lastSubmitError, setLastSubmitError] = useState(null);
-  const [lastSubmitResponse, setLastSubmitResponse] = useState(null);
   const [lastInvoiceTotal, setLastInvoiceTotal] = useState(null);
   
   // Post-submit WhatsApp dialog
   const [whatsAppDialog, setWhatsAppDialog] = useState({ open: false, order: null });
 
-  const [suppressAutoSuggest, setSuppressAutoSuggest] = useState(false);
+  // Edit Note dialog (replaces window.prompt)
+  const [editNoteDialog, setEditNoteDialog] = useState({ open: false, index: -1, value: '' });
+
+  // Inline alt-name editing in the invoice table
+  const [inlineEditIndex, setInlineEditIndex] = useState(-1);
+  const [inlineEditValue, setInlineEditValue] = useState('');
 
   // NEW: switch to control whether product named "add" is allowed
   const [allowAddProductName, setAllowAddProductName] = useState(false);
@@ -355,13 +320,6 @@ export const CreateOrder = () => {
 
   // Admin guide visibility - hidden by default
   const [showAdminGuide, setShowAdminGuide] = useState(false);
-
-  // use suppressAutoSuggest in a small effect so eslint doesn't flag it as assigned but unused
-  useEffect(() => {
-    if (suppressAutoSuggest) {
-      // reserved for future behavior
-    }
-  }, [suppressAutoSuggest]);
 
   // bowl lock only
   const [bowlPriceLock, setBowlPriceLock] = useState(false);
@@ -471,12 +429,38 @@ export const CreateOrder = () => {
   const orderItemsRef = useRef(orderProps.orderItems || []);
   useEffect(() => { orderItemsRef.current = orderProps.orderItems || []; }, [orderProps.orderItems]);
 
-  // eslint-disable-next-line no-unused-vars
-  const [todayGrandTotal, setTodayGrandTotal] = useState(getTodayGrandTotal());
-  const [isSubmitting, setIsSubmitting] = useState(false); // Prevent double submission
+  // ── Draft auto-save / restore ─────────────────────────────────────────────
+  // Saves current bill to sessionStorage every time it changes.
+  // Restored on mount so a session-expired redirect doesn't lose the bill.
+  const DRAFT_KEY = 'invoice_draft';
+  useEffect(() => {
+    // Don't persist empty or just-initialised drafts
+    if (orderProps.orderItems?.length > 0 || orderProps.customerName) {
+      try {
+        sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ orderProps, isCreditSale }));
+      } catch {}
+    }
+  }, [orderProps, isCreditSale]);
+
+  // Restore draft once on mount (only if the form is still empty)
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved?.orderProps?.orderItems?.length > 0 || saved?.orderProps?.customerName) {
+        setOrderProps(saved.orderProps);
+        if (saved.isCreditSale !== undefined) setIsCreditSale(saved.isCreditSale);
+      }
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [inputValue, setInputValue] = useState('');
+  const [customerInputValue, setCustomerInputValue] = useState('');
   const [recentlyDeleted, setRecentlyDeleted] = useState([]);
 
   function formikSafeGet(field) {
@@ -485,7 +469,7 @@ export const CreateOrder = () => {
 
   const formik = useFormik({
     enableReinitialize: true,
-    initialValues: { id:"", type:"", name:"", altName:"", template:1, productPrice:"", quantity:0, totalPrice:0 },
+    initialValues: { id:"", type:"", name:"", altName:"", template:1, productPrice:"", quantity:"", totalPrice:0 },
     onSubmit: async (values) => {
       lastAddSucceededRef.current = false;
 
@@ -543,11 +527,25 @@ export const CreateOrder = () => {
 
       const price = Number(values?.productPrice) || 0;
       const qty = Number(values?.quantity) || 0;
+
+      // Warn if same product with same quantity and rate already exists
+      const duplicate = orderProps.orderItems.find(item =>
+        String(item.name).toLowerCase() === String(values.name).toLowerCase() &&
+        Number(item.quantity) === qty &&
+        Number(item.productPrice) === price
+      );
+      if (duplicate) {
+        const ok = window.confirm(
+          `"${values.name}" (Qty: ${qty}, Rate: ₹${price}) is already added.\nAdd again?`
+        );
+        if (!ok) return;
+      }
+
       const lineTotal = Number((price * qty).toFixed(2));
       const subTotal = Number((orderProps.subTotal + lineTotal).toFixed(2));
       const tax = Number((subTotal * (orderProps.taxPercent / 100)).toFixed(2));
       const newItem = {
-        subTotal, tax, total: subTotal + tax,
+        subTotal, tax, total: Math.round(subTotal + tax),
         orderItems: [...orderProps.orderItems, {
           productId: values.id,
           name: values.name,
@@ -594,6 +592,7 @@ export const CreateOrder = () => {
 
       formik.resetForm();
       setLocalPriceValue('');
+      twoXXPhaseRef.current = null;
       setSelectedProduct(null);
       setInputValue('');
       try { setFetchedViaScale(false); } catch {}
@@ -676,7 +675,7 @@ export const CreateOrder = () => {
     return true;
   }, [dispatch, formik]);
 
-  // Helper: focus main price input, with 2xx last-two-digit selection
+  // Helper: focus main price input, with 2xx tens-digit selection
   const focusMainPriceInput = useCallback(() => {
     try {
       setTimeout(() => {
@@ -684,11 +683,14 @@ export const CreateOrder = () => {
         if (!el || typeof el.focus !== 'function') return;
         el.focus();
         const val = String(el.value || '');
-               const len = val.length;
+        const len = val.length;
         if (typeof el.setSelectionRange === 'function') {
           const num = Number(val);
           if (Number.isFinite(num) && num >= 200 && num <= 299 && len >= 3) {
-            el.setSelectionRange(len - 2, len);
+            // Select only the TENS digit so keypad/physical typing goes digit-by-digit
+            // Phase ref drives keypad placement; physical keyboard auto-advances in onPriceChange
+            twoXXPhaseRef.current = 'tens';
+            el.setSelectionRange(len - 2, len - 1); // just tens
           } else {
             el.setSelectionRange(0, len);
           }
@@ -707,19 +709,38 @@ export const CreateOrder = () => {
 
     if (el) {
       const val = String(el.value || '');
+      const num = Number(val);
+
+      // 2xx range: place digit at the correct position (tens or units) using phase ref,
+      // without relying on DOM selection timing. Then advance selection for next digit.
+      if (!modalOpen && Number.isFinite(num) && num >= 200 && num <= 299 && val.length === 3) {
+        const phase = twoXXPhaseRef.current || 'tens';
+        const chars = val.split('');
+        chars[phase === 'tens' ? 1 : 2] = dStr;
+        const newVal = chars.join('');
+        skipPhaseAdvanceRef.current = true;
+        onPriceChange({ target: { value: newVal }, preventDefault: () => {} });
+        skipPhaseAdvanceRef.current = false;
+        if (phase === 'tens') {
+          twoXXPhaseRef.current = 'units';
+          setTimeout(() => { try { el.setSelectionRange(2, 3); } catch {} }, 0);
+        } else {
+          twoXXPhaseRef.current = 'tens';
+          setTimeout(() => { try { el.setSelectionRange(3, 3); } catch {} }, 0);
+        }
+        return;
+      }
+
       const start = el.selectionStart != null ? el.selectionStart : val.length;
       const end = el.selectionEnd != null ? el.selectionEnd : val.length;
       const newVal = val.slice(0, start) + dStr + val.slice(end);
 
       onPriceChange({ target: { value: newVal }, preventDefault: () => {} });
 
-      setTimeout(() => {
-        try {
-          el.focus();
-          const pos = start + dStr.length;
-          if (el.setSelectionRange) el.setSelectionRange(pos, pos);
-        } catch {}
-      }, 0);
+      try {
+        const pos = start + dStr.length;
+        if (el.setSelectionRange) el.setSelectionRange(pos, pos);
+      } catch {}
     } else {
       const cur = String(formik.values.productPrice || '');
       const newVal = cur + dStr;
@@ -801,7 +822,7 @@ export const CreateOrder = () => {
         setBowlProductIdLocked(null);
         maxPriceDigitsRef.current = null;
 
-        // focus price even for custom products (with 2xx selection logic)
+        // focus price for custom products (with 2xx selection logic)
         focusMainPriceInput();
         setTimeout(() => clearQuickHighlight(), 100);
         return;
@@ -870,7 +891,7 @@ export const CreateOrder = () => {
       // User should select product, set price, then press '=' to fetch weight and add
       // This allows the product to remain selected even without a connected scale
 
-      // After product selection, focus the productPrice input with 2xx logic
+      // After product selection, focus price
       if (!modalOpen) {
         focusMainPriceInput();
       }
@@ -889,7 +910,7 @@ export const CreateOrder = () => {
       maxPriceDigitsRef.current = null;
       clearQuickHighlight();
     }
-  }, [selectedProduct, formik, rows, weighingScaleHandler, allowAddProductName, modalOpen, focusMainPriceInput]);
+  }, [selectedProduct, formik, rows, allowAddProductName, modalOpen, focusMainPriceInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const attemptProductChange = useCallback(async (value) => {
     // Whenever user tries to change product, allow modal to show again for the new selection
@@ -916,6 +937,22 @@ export const CreateOrder = () => {
     } else {
       try { firstDigitLockRef.current = String(val || '').charAt(0) || firstDigitLockRef.current; } catch {}
     }
+    // For 200-299: select only the TENS digit and init phase for keypad digit-by-digit editing.
+    // Physical typing auto-advances selection to units in onPriceChange.
+    const num = Number(val);
+    if (Number.isFinite(num) && num >= 200 && num <= 299 && val.length >= 3) {
+      twoXXPhaseRef.current = 'tens';
+      const selStart = val.length - 2; // tens position
+      const selEnd = val.length - 1;   // just tens, not units
+      setTimeout(() => {
+        try {
+          const el = priceInputRef && priceInputRef.current;
+          if (el) el.setSelectionRange(selStart, selEnd);
+        } catch {}
+      }, 80);
+    } else {
+      twoXXPhaseRef.current = null;
+    }
   };
 
   const onPriceKeyDown = (e) => {
@@ -927,6 +964,16 @@ export const CreateOrder = () => {
       e.preventDefault();
       adjustPriceByStep(isUp ? 1 : -1, modalOpen ? modalPriceRef : priceInputRef);
       return;
+    }
+
+    // Tab from price → jump directly to altName (bypasses any focusable elements in between)
+    if (e.key === 'Tab' && !e.shiftKey && !modalOpen) {
+      const el = altNameRef && altNameRef.current;
+      if (el) {
+        e.preventDefault();
+        el.focus();
+        return;
+      }
     }
 
     const navKeys = ['ArrowLeft','ArrowRight','Tab','Home','End'];
@@ -1013,7 +1060,23 @@ export const CreateOrder = () => {
       
       // Update local state for display purposes (non-critical sync)
       setLocalPriceValue(rawInput);
-      
+
+      // For 2xx range: after physical keyboard types tens digit, auto-advance selection to units.
+      // skipPhaseAdvanceRef is set by applyDigitToPrice (keypad) so we don't double-advance.
+      if (!skipPhaseAdvanceRef.current) {
+        const newNum = Number(rawInput);
+        if (Number.isFinite(newNum) && newNum >= 200 && newNum <= 299 && rawInput.length === 3) {
+          if (twoXXPhaseRef.current === 'tens') {
+            twoXXPhaseRef.current = 'units';
+            setTimeout(() => {
+              try { const el = priceInputRef?.current; if (el) el.setSelectionRange(2, 3); } catch {}
+            }, 0);
+          } else if (twoXXPhaseRef.current === 'units') {
+            twoXXPhaseRef.current = 'tens';
+          }
+        }
+      }
+
       // Capture current quantity for the debounced callback
       const currentQuantity = Number(formik.values.quantity) || 0;
       
@@ -1320,7 +1383,7 @@ export const CreateOrder = () => {
           ...prevOrder,
           subTotal,
           tax,
-          total: subTotal + tax,
+          total: Math.round(subTotal + tax),
           orderItems: [...prevOrder.orderItems, { ...item, sortOrder: prevOrder.orderItems.length }]
         };
         try { generatePdf(next); } catch {}
@@ -1345,8 +1408,8 @@ export const CreateOrder = () => {
           ...prev, 
           subTotal, 
           tax, 
-          total: subTotal + tax, 
-          orderItems: prev.orderItems.filter((_, i) => i !== index) 
+          total: Math.round(subTotal + tax),
+          orderItems: prev.orderItems.filter((_, i) => i !== index)
         };
 
         // Silent audit log — fire and forget, don't block UI
@@ -1377,11 +1440,7 @@ export const CreateOrder = () => {
 
   // MAIN createOrder — now ONLINE-first (server)
   const createOrder = async () => {
-    // Prevent double submission
-    if (isSubmitting) {
-      console.log('Order submission already in progress, ignoring duplicate click');
-      return;
-    }
+    if (isSubmitting) return;
     
     // Credit sale validation: customer name is mandatory
     if (isCreditSale && !orderProps.customerName?.trim()) {
@@ -1390,14 +1449,11 @@ export const CreateOrder = () => {
     }
     
     setIsSubmitting(true);
-    setSuppressAutoSuggest(true);
     try {
       setLastSubmitError(null);
-      setLastSubmitResponse(null);
 
       if (!orderProps.orderItems || orderProps.orderItems.length === 0) {
         alert("Cannot create invoice: no items in the order.");
-        setSuppressAutoSuggest(false);
         setIsSubmitting(false);
         return;
       }
@@ -1416,7 +1472,6 @@ export const CreateOrder = () => {
         console.error("createOrder: invalid items", invalids);
         setLastSubmitError({ type: "validation", details: invalids });
         alert("Cannot create invoice — some items are invalid. See console or debug area for details.");
-        setSuppressAutoSuggest(false);
         setIsSubmitting(false);
         return;
       }
@@ -1433,14 +1488,6 @@ export const CreateOrder = () => {
         { type: 'Receivables', id: 'LIST' },
         { type: 'Dashboard', id: 'TODAY' }
       ]));
-
-      setLastSubmitResponse({
-        stage: "online_success",
-        note: "Order saved to server",
-        orderNumber: savedOrder.orderNumber,
-        total: savedOrder.total,
-        timestamp: new Date().toISOString(),
-      });
 
       // Note: Daily totals are now tracked server-side only to prevent duplicates
 
@@ -1460,7 +1507,8 @@ export const CreateOrder = () => {
       setArchivedOrderProps(savedOrder);
       setArchivedPdfUrl(newPdfUrl || pdfUrl || "");
       setLastInvoiceTotal(savedOrder.total);
-      
+      sessionStorage.removeItem('invoice_draft'); // draft served its purpose
+
       // Save recently submitted order for display until new item is added
       setRecentlySubmittedOrder({
         orderNumber: savedOrder.orderNumber,
@@ -1488,7 +1536,7 @@ export const CreateOrder = () => {
         }
       });
 
-      setOrderProps(initialOrderProps);
+      setOrderProps({ ...initialOrderProps, orderDate: getTodayStr() });
       formik.resetForm();
       setLocalPriceValue('');
       setFetchedViaScale(false);
@@ -1498,6 +1546,7 @@ export const CreateOrder = () => {
       setIsCreditSale(false); // Reset credit sale toggle
       setSelectedProduct(null); // Reset selected product
       setInputValue(''); // Reset input value
+      setCustomerInputValue(''); // Reset customer autocomplete input
       // Note: Keep archivedOrderProps/archivedPdfUrl to show the just-submitted order's PDF
       // User can start adding new items while viewing the submitted PDF
     } catch (err) {
@@ -1505,7 +1554,6 @@ export const CreateOrder = () => {
       setLastSubmitError({ type: "unexpected", message: String(err?.message || err), raw: err });
       alert("Something went wrong while creating the order. Check console / debug area.");
     } finally {
-      setSuppressAutoSuggest(false);
       setIsSubmitting(false);
     }
   };
@@ -1574,36 +1622,29 @@ export const CreateOrder = () => {
     return () => window.removeEventListener('keydown', handleShiftD);
   }, [removeItem, orderProps?.orderItems?.length]);
 
-  // Initialize today total and auto rollover at midnight
+  // Ensure today's localStorage total record exists; auto-reset at midnight
   useEffect(() => {
-    setTodayGrandTotal(ensureTodayRecord());
+    ensureTodayRecord();
     let timerId=null;
-    const arm=()=>{ const delay=Math.max(1000, msToNextMidnight()); timerId=setTimeout(()=>{ const t=ensureTodayRecord(); setTodayGrandTotal(t); arm(); }, delay); };
+    const arm=()=>{ const delay=Math.max(1000, msToNextMidnight()); timerId=setTimeout(()=>{ ensureTodayRecord(); arm(); }, delay); };
     arm();
     return () => { if (timerId) clearTimeout(timerId); };
   }, []);
 
-  // React to totals/invoice updates across tabs
+  // React to invoice updates across tabs
   useEffect(() => {
-    const onStorage=(e)=>{ 
-      if(e.key===DAY_TOTAL_KEY) setTodayGrandTotal(ensureTodayRecord());
-      if(e.key===INVOICES_KEY) refreshHistory();
-    };
-    const onInAppTotal=(e)=>{ const next=(e && e.detail!=null)?Number(e.detail):ensureTodayRecord(); setTodayGrandTotal(next); };
+    const onStorage=(e)=>{ if(e.key===INVOICES_KEY) refreshHistory(); };
     const onInAppInvoices=()=>refreshHistory();
     const onInvoiceDeleted=(e)=>{ const d=e?.detail||{}; const today=getTodayStr();
-      if(!d || (d.date && d.date!==today)) { setTodayGrandTotal(ensureTodayRecord()); return; }
-      const next=subtractFromTodayGrandTotal(Number(d.total||0)); setTodayGrandTotal(next);
+      if(d && d.date && d.date===today) subtractFromTodayGrandTotal(Number(d.total||0));
       refreshHistory();
     };
     window.addEventListener('storage', onStorage);
-    window.addEventListener('DAY_TOTAL_UPDATED', onInAppTotal);
     window.addEventListener('INVOICES_UPDATED', onInAppInvoices);
     window.addEventListener('INVOICE_DELETED', onInvoiceDeleted);
-    refreshHistory(); // initial load
+    refreshHistory();
     return () => {
       window.removeEventListener('storage', onStorage);
-      window.removeEventListener('DAY_TOTAL_UPDATED', onInAppTotal);
       window.removeEventListener('INVOICES_UPDATED', onInAppInvoices);
       window.removeEventListener('INVOICE_DELETED', onInvoiceDeleted);
     };
@@ -1759,6 +1800,41 @@ export const CreateOrder = () => {
             }}
           >
             <Grid container spacing={2}>
+              {/* Invoice Header Row: Date + Invoice Number */}
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', pb: 1, borderBottom: '2px solid #E3EAF4', mb: 1 }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 0.3, fontWeight: 600, letterSpacing: '0.05em' }}>INVOICE DATE</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <TextField
+                        type="date"
+                        size="small"
+                        value={toInputDate(orderProps.orderDate)}
+                        onChange={(e) => {
+                          const converted = fromInputDate(e.target.value);
+                          setOrderProps(prev => ({ ...prev, orderDate: converted }));
+                        }}
+                        InputLabelProps={{ shrink: true }}
+                        inputProps={{ max: toInputDate(getTodayStr()) }}
+                        sx={{ width: 155 }}
+                      />
+                      {orderProps.orderDate && orderProps.orderDate !== getTodayStr() && (
+                        <Chip label="Backdated" size="small" color="warning" variant="outlined" sx={{ fontSize: '0.72rem' }} />
+                      )}
+                      {orderProps.orderDate === getTodayStr() && (
+                        <Chip label="Today" size="small" color="success" variant="outlined" sx={{ fontSize: '0.72rem' }} />
+                      )}
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', ml: 2 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 0.3, fontWeight: 600, letterSpacing: '0.05em' }}>INVOICE NO.</Typography>
+                    <Typography variant="body1" fontWeight={700} color="primary.main" sx={{ letterSpacing: '0.05em' }}>
+                      {archivedOrderProps?.orderNumber || orderProps.orderNumber}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+
               {/* Credit Sale Toggle - Prominent Position */}
               <Grid item xs={12}>
                 <Box 
@@ -1812,25 +1888,27 @@ export const CreateOrder = () => {
               </Grid>
 
               <Grid item xs={12} md={4}>
-                <TextField 
-                  size="small" 
-                  id="customerName" 
-                  name="customerName" 
-                  label={isCreditSale ? "Customer Name *" : "Customer Name"} 
-                  value={orderProps.customerName} 
-                  onChange={(e)=>{ const { id, value } = e.target; setOrderProps((prevProps) => ({ ...prevProps, [id]: value })); }} 
+                <TextField
+                  size="small"
+                  id="customerName"
+                  name="customerName"
+                  label={isCreditSale ? "Customer Name *" : "Customer Name"}
+                  value={orderProps.customerName}
+                  onChange={(e)=>{ const { id, value } = e.target; setOrderProps((prevProps) => ({ ...prevProps, [id]: value })); }}
                   required={isCreditSale}
                   error={isCreditSale && !orderProps.customerName}
                   helperText={isCreditSale && !orderProps.customerName ? "Required for credit sale" : ""}
-                  fullWidth 
+                  fullWidth
+                  autoComplete="off"
+                  inputProps={{ autoComplete: 'off' }}
                   sx={isCreditSale ? { '& .MuiOutlinedInput-root': { borderColor: 'warning.main' } } : {}}
                 />
               </Grid>
               <Grid item xs={12} md={4}>
-                <TextField size="small" id="customerMobile" name="customerMobile" label="Customer Mobile" value={orderProps.customerMobile} onChange={(e)=>{ const { id, value } = e.target; setOrderProps((prevProps) => ({ ...prevProps, [id]: value })); }} fullWidth />
+                <TextField size="small" id="customerMobile" name="customerMobile" label="Customer Mobile" value={orderProps.customerMobile} onChange={(e)=>{ const { id, value } = e.target; setOrderProps((prevProps) => ({ ...prevProps, [id]: value })); }} fullWidth autoComplete="off" inputProps={{ autoComplete: 'off' }} />
               </Grid>
               <Grid item xs={12} md={4}>
-                <TextField size="small" type='number' id="taxPercent" name="taxPercent" label="Tax Percentage" value={orderProps.taxPercent} onChange={(e)=>{ const { id, value } = e.target; const obj = {}; if (id === 'taxPercent') { const taxPct = Number(value) || 0; obj['taxPercent'] = taxPct; const subTotal = orderProps.subTotal; obj['tax'] = Math.round(subTotal * (taxPct / 100)); obj['total'] = subTotal + obj['tax']; } setOrderProps((prevProps) => ({ ...prevProps, [id]: value, ...obj })); }} required fullWidth />
+                <TextField size="small" type='number' id="taxPercent" name="taxPercent" label="Tax Percentage" value={orderProps.taxPercent} onChange={(e)=>{ const { id, value } = e.target; const obj = {}; if (id === 'taxPercent') { const taxPct = Number(value) || 0; obj['taxPercent'] = taxPct; const subTotal = orderProps.subTotal; obj['tax'] = round2(subTotal * (taxPct / 100)); obj['total'] = round2(subTotal + obj['tax']); } setOrderProps((prevProps) => ({ ...prevProps, [id]: value, ...obj })); }} required fullWidth />
               </Grid>
 
               <Grid item xs={12} md={6} mt={2}>
@@ -1838,20 +1916,29 @@ export const CreateOrder = () => {
                   size="small"
                   options={customerOptions}
                   value={orderProps.customer || null}
+                  inputValue={customerInputValue}
+                  onInputChange={(_, val, reason) => {
+                    setCustomerInputValue(val);
+                    // If user cleared the field, also clear the orderProps customer
+                    if (reason === 'clear' || val === '') {
+                      setOrderProps(prev => ({ ...prev, customer: null, customerName: '', customerMobile: '' }));
+                    }
+                  }}
                   onChange={(_, val) => {
-                    // Auto-fill customerName and customerMobile when a customer is selected
+                    setCustomerInputValue(val?.name || '');
                     setOrderProps(prev => ({
-                      ...prev, 
+                      ...prev,
                       customer: val,
-                      customerName: val?.name || prev.customerName || '',
-                      customerMobile: val?.mobile || prev.customerMobile || ''
+                      customerName: val?.name || '',
+                      customerMobile: val?.mobile || ''
                     }));
                   }}
                   renderInput={(params) => (
-                    <TextField 
-                      {...params} 
-                      label="Select Customer from Database" 
+                    <TextField
+                      {...params}
+                      label="Select Customer from Database"
                       placeholder="Type to search customers..."
+                      inputProps={{ ...params.inputProps, autoComplete: 'off' }}
                     />
                   )}
                   getOptionLabel={(opt) => opt?.label || ''}
@@ -2080,7 +2167,7 @@ export const CreateOrder = () => {
                     )
                   }}
                 />
-                {/* Virtual keypad for 200–299 range: digits 6,7,8,9 */}
+                {/* Virtual keypad for 200–299 range: digits 6,7,8,9 replace tens digit */}
                 {show200sKeypad && !modalOpen && (
                   <Box sx={{ mt: 0.5, display: 'flex', gap: 1 }}>
                     {[6, 7, 8, 9].map((d) => (
@@ -2088,7 +2175,21 @@ export const CreateOrder = () => {
                         key={d}
                         size="small"
                         variant="outlined"
-                        onClick={() => applyDigitToPrice(d, priceInputRef)}
+                        tabIndex={-1}
+                        onMouseDown={(e) => {
+                          e.preventDefault(); // keep price input focused
+                          const cur = String(formik.values.productPrice || '');
+                          if (cur.length === 3 && cur.charAt(0) === '2') {
+                            const newVal = '2' + d + cur.charAt(2);
+                            onPriceChange({ target: { value: newVal }, preventDefault: () => {} });
+                            try {
+                              const el = priceInputRef.current;
+                              if (el) el.setSelectionRange(1, 3);
+                            } catch {}
+                          } else {
+                            applyDigitToPrice(d, priceInputRef);
+                          }
+                        }}
                       >
                         {d}
                       </Button>
@@ -2099,7 +2200,14 @@ export const CreateOrder = () => {
 
               <Grid item xs={12} md={6}>
                 <TextField size="small" id="altName" name="altName" label="Alternate Name (optional)" placeholder="Print this name instead"
-                  value={formik.values.altName} onChange={(e) => formik.setFieldValue('altName', e.target.value)} fullWidth />
+                  value={formik.values.altName} onChange={(e) => formik.setFieldValue('altName', e.target.value)} fullWidth
+                  inputRef={altNameRef}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === 'Tab') && !e.shiftKey) {
+                      e.preventDefault();
+                      focusMainPriceInput();
+                    }
+                  }} />
               </Grid>
 
               <Grid item xs={12} md={6}>
@@ -2133,79 +2241,186 @@ export const CreateOrder = () => {
               </Grid>
 
               <Grid item xs={12}>
-                <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
-                  Shortcuts: '/' for weight refresh, '=' to add product, Shift+D delete last item, Ctrl/Cmd+P print. Weighted: 3-digit prices only (100-399)
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  Shortcuts: <strong>/</strong> fetch weight · <strong>=</strong> add item · <strong>Shift+D</strong> delete last · <strong>Ctrl+P</strong> print
                 </Typography>
-                <Button variant="contained" onClick={createOrder} sx={{ float: "right", margin: "5px" }} disabled={orderProps.orderItems.length === 0 || isSubmitting}>
-                  {isSubmitting ? 'Submitting...' : 'Submit'}
-                </Button>
-                <Button
-                  variant="contained"
-                  onClick={addProductHandler}
-                  sx={{ float: "right", margin: "5px" }}
-                  disabled={
-                    formik.values.name === "" ||
-                    (!allowAddProductName && isAddName(formik.values.name)) ||
-                    (isWeighted && (formik.values.productPrice === "" || isWeightedPriceInvalid))
-                  }
-                >
-                  Add Product
-                </Button>
+                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                  <Button
+                    variant="outlined"
+                    onClick={addProductHandler}
+                    disabled={
+                      formik.values.name === "" ||
+                      (!allowAddProductName && isAddName(formik.values.name)) ||
+                      (isWeighted && (formik.values.productPrice === "" || isWeightedPriceInvalid))
+                    }
+                  >
+                    Add Item
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    onClick={createOrder}
+                    disabled={orderProps.orderItems.length === 0 || isSubmitting}
+                    sx={{ minWidth: 140 }}
+                  >
+                    {isSubmitting ? 'Saving…' : 'Create Invoice'}
+                  </Button>
+                </Box>
 
                 {lastSubmitError && (
-                  <Box sx={{ mt: 1, p: 1, border: '1px dashed red', backgroundColor: '#fff0f0' }}>
-                    <Typography variant="caption" color="error">Last submit error:</Typography>
-                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
-                      {lastSubmitError.message || JSON.stringify(lastSubmitError, null, 2)}
-                    </Typography>
-                  </Box>
+                  <Alert severity="error" sx={{ mt: 1 }}>
+                    {lastSubmitError.message || 'Invoice creation failed. Check details and try again.'}
+                  </Alert>
                 )}
-                {lastSubmitResponse && (
-                  <Box sx={{ mt: 1, p: 1, border: '1px dashed #888', backgroundColor: '#fafafa' }}>
-                    <Typography variant="caption">Last server payload/response:</Typography>
-                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
-                      {JSON.stringify(lastSubmitResponse, null, 2)}
-                    </Typography>
-                  </Box>
-                )}
-
               </Grid>
             </Grid>
           </Box>
           <br />
 
-          {orderProps.orderItems?.map((item, index) => (
-            <Card key={index} sx={{ padding: '5px 15px ', margin: '5px 2px' }}>
-              <Grid container>
-                <Grid item xs={10}>
-                  <Typography variant='body2'>
-                    Name: {(item.altName && item.altName.trim())
-                      ? `${item.altName.trim()} (Original: ${safeGetProductName(rows, item)})`
-                      : safeGetProductName(rows, item)
-                    } | Qty: {item.quantity} | Price: {item.totalPrice}
+          {/* Order Items Table */}
+          {orderProps.orderItems && orderProps.orderItems.length > 0 ? (
+            <TableContainer component={Paper} variant="outlined" sx={{ mt: 2 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ width: 36, fontWeight: 700 }}>#</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Product</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700 }}>Qty</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>Rate (₹)</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>Amount (₹)</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700 }}>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {orderProps.orderItems.map((item, index) => (
+                    <TableRow key={index} hover>
+                      <TableCell sx={{ color: 'text.secondary', fontWeight: 500 }}>{index + 1}</TableCell>
+                      <TableCell
+                        onClick={() => {
+                          if (inlineEditIndex !== index) {
+                            setInlineEditIndex(index);
+                            setInlineEditValue(item.altName || '');
+                          }
+                        }}
+                        sx={{ cursor: 'text', minWidth: 120 }}
+                      >
+                        {inlineEditIndex === index ? (
+                          <input
+                            autoFocus
+                            value={inlineEditValue}
+                            onChange={(e) => setInlineEditValue(e.target.value)}
+                            onBlur={() => {
+                              setOrderProps((prev) => {
+                                const updated = [...prev.orderItems];
+                                updated[index] = { ...updated[index], altName: inlineEditValue.trim() };
+                                const nextProps = { ...prev, orderItems: updated };
+                                try { generatePdf(nextProps); } catch {}
+                                return nextProps;
+                              });
+                              setInlineEditIndex(-1);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === 'Escape') {
+                                if (e.key === 'Enter') {
+                                  setOrderProps((prev) => {
+                                    const updated = [...prev.orderItems];
+                                    updated[index] = { ...updated[index], altName: inlineEditValue.trim() };
+                                    const nextProps = { ...prev, orderItems: updated };
+                                    try { generatePdf(nextProps); } catch {}
+                                    return nextProps;
+                                  });
+                                } else {
+                                  setInlineEditValue(item.altName || '');
+                                }
+                                setInlineEditIndex(-1);
+                              }
+                            }}
+                            placeholder={safeGetProductName(rows, item)}
+                            style={{
+                              width: '100%', border: 'none', borderBottom: '2px solid #1976d2',
+                              outline: 'none', fontSize: '0.875rem', fontWeight: 600,
+                              background: 'transparent', padding: '2px 0'
+                            }}
+                          />
+                        ) : (
+                          <>
+                            <Typography variant="body2" fontWeight={600}>
+                              {(item.altName && item.altName.trim())
+                                ? item.altName.trim()
+                                : safeGetProductName(rows, item)}
+                            </Typography>
+                            {item.altName && item.altName.trim() && (
+                              <Typography variant="caption" color="text.secondary">
+                                {safeGetProductName(rows, item)}
+                              </Typography>
+                            )}
+                          </>
+                        )}
+                      </TableCell>
+                      <TableCell align="center">{item.quantity}</TableCell>
+                      <TableCell align="right">₹{Number(item.productPrice).toLocaleString('en-IN')}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>
+                        ₹{Number(item.totalPrice).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell align="center">
+                        <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+                          <Tooltip title="Edit display name / note">
+                            <IconButton
+                              size="small"
+                              onClick={() => setEditNoteDialog({ open: true, index, value: item.altName || '' })}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Remove item">
+                            <IconButton size="small" color="error" onClick={() => removeItem(index)}>
+                              <Delete fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Box sx={{ mt: 2, py: 4, textAlign: 'center', border: '1px dashed #B0BEC5', borderRadius: 1, bgcolor: '#FAFAFA' }}>
+              <Typography color="text.secondary" variant="body2">No items added yet. Select a product and click <strong>Add Item</strong>.</Typography>
+            </Box>
+          )}
+
+          {/* Live Totals Summary */}
+          {orderProps.orderItems && orderProps.orderItems.length > 0 && (
+            <Box sx={{ mt: 2, p: 2, border: '2px solid #1565C0', borderRadius: 1, bgcolor: '#F0F7FF', maxWidth: 320, ml: 'auto' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="body2" color="text.secondary">Subtotal</Typography>
+                <Typography variant="body2" fontWeight={600}>₹{Number(orderProps.subTotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography>
+              </Box>
+              {Number(orderProps.taxPercent) > 0 && (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2" color="text.secondary">Tax ({orderProps.taxPercent}%)</Typography>
+                  <Typography variant="body2" fontWeight={600}>₹{Number(orderProps.tax).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography>
+                </Box>
+              )}
+              <Divider sx={{ my: 1 }} />
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="subtitle1" fontWeight={700} color="primary.dark">TOTAL</Typography>
+                <Typography variant="subtitle1" fontWeight={700} color="primary.dark">
+                  ₹{Number(orderProps.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </Typography>
+              </Box>
+              {isCreditSale && (
+                <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid #FF9800', display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="warning.main" fontWeight={600}>Due (Credit)</Typography>
+                  <Typography variant="body2" color="warning.main" fontWeight={600}>
+                    ₹{Number(orderProps.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </Typography>
-                </Grid>
-                <Grid item xs={2} sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                  <Button size="small" onClick={() => {
-                    const currentItem = orderProps.orderItems[index]; if (!currentItem) return;
-                    const currentNote = (currentItem.altName || "").trim();
-                    const suggested = currentNote || safeGetProductName(rows, currentItem);
-                    const newNote = window.prompt("Enter a note / alternate name for this product:", suggested);
-                    if (newNote !== null) {
-                      setOrderProps((prev) => {
-                        const updated = [...prev.orderItems];
-                        updated[index] = { ...updated[index], altName: String(newNote).trim() };
-                        const nextProps = { ...prev, orderItems: updated };
-                        try { generatePdf(nextProps); } catch {}
-                        return nextProps;
-                      });
-                    }
-                  }}>Edit Note</Button>
-                  <Button size="small" onClick={() => removeItem(index)}><Delete /></Button>
-                </Grid>
-              </Grid>
-            </Card>
-          ))}
+                </Box>
+              )}
+            </Box>
+          )}
+
 
           {/* Recently deleted items list - visible before and after submit */}
           {recentlyDeleted.length > 0 && (
@@ -2461,7 +2676,7 @@ export const CreateOrder = () => {
                     key={d}
                     size="small"
                     variant="outlined"
-                    onClick={() => applyDigitToPrice(d, modalPriceRef)}
+                    onMouseDown={(e) => { e.preventDefault(); applyDigitToPrice(d, modalPriceRef); }}
                   >
                     {d}
                   </Button>
@@ -2542,6 +2757,50 @@ export const CreateOrder = () => {
           onPriceChange({ target: { value: '' }, preventDefault: () => {} });
         }}
       />
+
+      {/* Edit Note / Alternate Name Dialog */}
+      <Dialog
+        open={editNoteDialog.open}
+        onClose={() => setEditNoteDialog({ open: false, index: -1, value: '' })}
+        maxWidth="xs"
+        fullWidth
+        TransitionProps={{ onEntered: () => document.getElementById('edit-display-name-input')?.focus() }}
+      >
+        <DialogTitle>Edit Display Name</DialogTitle>
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          const idx = editNoteDialog.index;
+          const newNote = editNoteDialog.value;
+          setOrderProps((prev) => {
+            const updated = [...prev.orderItems];
+            updated[idx] = { ...updated[idx], altName: String(newNote).trim() };
+            const nextProps = { ...prev, orderItems: updated };
+            try { generatePdf(nextProps); } catch {}
+            return nextProps;
+          });
+          setEditNoteDialog({ open: false, index: -1, value: '' });
+        }}>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Enter an alternate name to print on the invoice instead of the product name. Leave blank to use the default product name.
+          </DialogContentText>
+          <TextField
+            autoFocus
+            id="edit-display-name-input"
+            fullWidth
+            size="small"
+            label="Display name / note"
+            value={editNoteDialog.value}
+            onChange={(e) => setEditNoteDialog(prev => ({ ...prev, value: e.target.value }))}
+            placeholder="e.g. 'Thali - Special' or leave blank"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button type="button" onClick={() => setEditNoteDialog({ open: false, index: -1, value: '' })}>Cancel</Button>
+          <Button type="submit" variant="contained">Save</Button>
+        </DialogActions>
+        </form>
+      </Dialog>
 
       {/* Post-Submit WhatsApp Dialog */}
       <Dialog 
