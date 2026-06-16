@@ -48,6 +48,14 @@ app.listen(PORT, async () => {
       await db.sequelize.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT NULL`);
     } catch (e) { /* column may already exist */ }
 
+    // Add billType and notes to purchaseBills (white = GST invoice, grey = no GST)
+    try {
+      await db.sequelize.query(`DO $$ BEGIN CREATE TYPE "enum_purchaseBills_billType" AS ENUM ('white','grey'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);
+      await db.sequelize.query(`ALTER TABLE "purchaseBills" ADD COLUMN IF NOT EXISTS "billType" "enum_purchaseBills_billType" NOT NULL DEFAULT 'white'`);
+      await db.sequelize.query(`ALTER TABLE "purchaseBills" ADD COLUMN IF NOT EXISTS "notes" TEXT`);
+      console.log('[STARTUP] purchaseBills.billType + notes columns ready.');
+    } catch (e) { console.warn('[STARTUP] purchaseBills billType/notes:', e.message); }
+
     // Add paymentMode column to orders (CASH/CREDIT) — prevents double-counting in Day Start
     try {
       await db.sequelize.query(`DO $$ BEGIN CREATE TYPE "enum_orders_paymentMode" AS ENUM ('CASH', 'CREDIT'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);

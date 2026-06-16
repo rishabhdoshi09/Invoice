@@ -79,7 +79,7 @@ module.exports = {
             // Sort by createdAt ASC (oldest first for FIFO allocation)
             const purchases = await db.purchaseBill.findAll({
                 where: { supplierId, isDeleted: false },
-                attributes: ['id', 'billNumber', 'billDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus', 'createdAt'],
+                attributes: ['id', 'billNumber', 'billDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus', 'billType', 'notes', 'createdAt'],
                 include: [{
                     model: db.purchaseItem,
                     as: 'purchaseItems',
@@ -169,23 +169,39 @@ module.exports = {
                           AND "referenceType" != 'purchase'
                     ), 0) as "totalCredit",
                     COALESCE(s."openingBalance", 0) + COALESCE((
-                        SELECT SUM(total) 
-                        FROM "purchaseBills" 
+                        SELECT SUM(total)
+                        FROM "purchaseBills"
                         WHERE "supplierId" = s.id
                           AND (COALESCE("isDeleted", false) = false)
                     ), 0) - COALESCE((
-                        SELECT SUM("paidAmount") 
-                        FROM "purchaseBills" 
+                        SELECT SUM("paidAmount")
+                        FROM "purchaseBills"
                         WHERE "supplierId" = s.id
                           AND (COALESCE("isDeleted", false) = false)
                     ), 0) - COALESCE((
-                        SELECT SUM(amount) 
-                        FROM payments 
-                        WHERE "partyId" = s.id 
+                        SELECT SUM(amount)
+                        FROM payments
+                        WHERE "partyId" = s.id
                           AND "partyType" = 'supplier'
                           AND (COALESCE("isDeleted", false) = false)
                           AND "referenceType" != 'purchase'
-                    ), 0) as balance
+                    ), 0) as balance,
+                    COALESCE((
+                        SELECT SUM("dueAmount")
+                        FROM "purchaseBills"
+                        WHERE "supplierId" = s.id
+                          AND (COALESCE("isDeleted", false) = false)
+                          AND COALESCE("billType", 'white') = 'white'
+                          AND "dueAmount" > 0
+                    ), 0) as "whiteDue",
+                    COALESCE((
+                        SELECT SUM("dueAmount")
+                        FROM "purchaseBills"
+                        WHERE "supplierId" = s.id
+                          AND (COALESCE("isDeleted", false) = false)
+                          AND "billType" = 'grey'
+                          AND "dueAmount" > 0
+                    ), 0) as "greyDue"
                 FROM suppliers s
                 ORDER BY s.name ASC
             `, { type: db.Sequelize.QueryTypes.SELECT });

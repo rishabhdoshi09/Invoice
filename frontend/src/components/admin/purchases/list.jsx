@@ -29,6 +29,8 @@ export const ListPurchases = () => {
     const [billNumber, setBillNumber] = useState('');
     const [billDate, setBillDate] = useState(moment().format('YYYY-MM-DD'));
     const [isPaid, setIsPaid] = useState(false);
+    const [billType, setBillType] = useState('white');
+    const [notes, setNotes] = useState('');
     const [items, setItems] = useState([{ name: '', quantity: '', price: '', totalPrice: 0 }]);
     const [saving, setSaving] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
@@ -143,6 +145,8 @@ export const ListPurchases = () => {
         setBillNumber('');
         setBillDate(moment().format('YYYY-MM-DD'));
         setIsPaid(false);
+        setBillType('white');
+        setNotes('');
         setItems([{ name: '', quantity: '', price: '', totalPrice: 0 }]);
     };
 
@@ -171,6 +175,8 @@ export const ListPurchases = () => {
                 tax: 0,
                 taxPercent: 0,
                 total: grandTotal,
+                billType: billType,
+                notes: notes || undefined,
                 purchaseItems: validItems.map(item => ({
                     name: item.name,
                     quantity: parseFloat(item.quantity),
@@ -289,15 +295,31 @@ export const ListPurchases = () => {
 
             {/* Quick Entry Form - Always Visible */}
             <Paper sx={{ p: 2, mb: 2, borderLeft: '4px solid #1976d2' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
                     <Typography variant="subtitle1" sx={{ color: '#1976d2', fontWeight: 600 }}>
                         ⚡ Quick Entry
                     </Typography>
-                    <FormControlLabel
-                        control={<Switch checked={isPaid} onChange={(e) => setIsPaid(e.target.checked)} size="small" />}
-                        label={isPaid ? "Paid" : "Credit (Unpaid)"}
-                        sx={{ mr: 0 }}
-                    />
+                    <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+                        {/* White / Grey toggle */}
+                        <Box sx={{ display: 'flex', border: '1px solid #e0e0e0', borderRadius: 1, overflow: 'hidden', height: 34 }}>
+                            <Button size="small" onClick={() => setBillType('white')}
+                                sx={{ borderRadius: 0, px: 1.5, minWidth: 0, textTransform: 'none', fontSize: '0.8rem', fontWeight: billType === 'white' ? 700 : 400,
+                                    bgcolor: billType === 'white' ? '#e3f2fd' : 'transparent', color: billType === 'white' ? '#1565c0' : '#999', borderRight: '1px solid #e0e0e0' }}>
+                                ⚪ White (GST)
+                            </Button>
+                            <Button size="small" onClick={() => setBillType('grey')}
+                                sx={{ borderRadius: 0, px: 1.5, minWidth: 0, textTransform: 'none', fontSize: '0.8rem', fontWeight: billType === 'grey' ? 700 : 400,
+                                    bgcolor: billType === 'grey' ? '#f3e5f5' : 'transparent', color: billType === 'grey' ? '#6a1b9a' : '#999' }}>
+                                ⚫ Grey (No GST)
+                            </Button>
+                        </Box>
+                        <TextField size="small" label="Notes" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" sx={{ width: 160 }} />
+                        <FormControlLabel
+                            control={<Switch checked={isPaid} onChange={(e) => setIsPaid(e.target.checked)} size="small" />}
+                            label={isPaid ? "Paid" : "Credit (Unpaid)"}
+                            sx={{ mr: 0 }}
+                        />
+                    </Box>
                 </Box>
                 
                 {/* Header Fields */}
@@ -519,12 +541,21 @@ export const ListPurchases = () => {
                                                 ₹{(purchase.total || 0).toLocaleString('en-IN')}
                                             </TableCell>
                                             <TableCell>
-                                                <Chip 
-                                                    label={purchase.paymentStatus} 
-                                                    size="small" 
-                                                    color={purchase.paymentStatus === 'paid' ? 'success' : 'warning'}
-                                                    sx={{ height: 20, fontSize: '0.7rem' }}
-                                                />
+                                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4 }}>
+                                                    <Chip
+                                                        label={purchase.paymentStatus}
+                                                        size="small"
+                                                        color={purchase.paymentStatus === 'paid' ? 'success' : 'warning'}
+                                                        sx={{ height: 20, fontSize: '0.7rem' }}
+                                                    />
+                                                    <Chip
+                                                        label={purchase.billType === 'grey' ? '⚫ Grey' : '⚪ White'}
+                                                        size="small"
+                                                        sx={{ height: 16, fontSize: '0.65rem', fontWeight: 600,
+                                                            bgcolor: purchase.billType === 'grey' ? '#f3e5f5' : '#e3f2fd',
+                                                            color: purchase.billType === 'grey' ? '#6a1b9a' : '#1565c0' }}
+                                                    />
+                                                </Box>
                                             </TableCell>
                                             <TableCell align="center" onClick={(e) => e.stopPropagation()}>
                                                 <IconButton size="small" color="error" onClick={() => handleDelete(purchase.id)}>

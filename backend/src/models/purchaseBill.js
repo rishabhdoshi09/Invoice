@@ -65,6 +65,16 @@ module.exports = (sequelize, Sequelize) => {
             deletedByName: {
                 type: Sequelize.STRING,
                 allowNull: true
+            },
+            // WHITE = formal purchase with GST invoice; GREY = informal/cash purchase without GST
+            billType: {
+                type: Sequelize.ENUM('white', 'grey'),
+                defaultValue: 'white',
+                allowNull: false
+            },
+            notes: {
+                type: Sequelize.TEXT,
+                allowNull: true
             }
         }
     );
