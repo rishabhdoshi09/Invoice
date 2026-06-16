@@ -829,8 +829,6 @@ export const CreateOrder = () => {
       setLocalPriceValue(priceStr);
       formik.setFieldValue('totalPrice', Number((((price||0) * (Number(formik.values.quantity)||0))).toFixed(2)));
 
-      const selectedType = rows[productId]?.type;
-
       // No digit-count lock for non-weighted products — prices above lakh must be allowed
       maxPriceDigitsRef.current = null;
 
