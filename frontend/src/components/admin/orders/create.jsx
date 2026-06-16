@@ -831,14 +831,6 @@ export const CreateOrder = () => {
 
       const selectedType = rows[productId]?.type;
 
-      // 'add' must NOT behave as weighted, even if DB type says weighted
-      const looksWeighted = !isAddSpecial && (
-        selectedType === ProductType.WEIGHTED ||
-        String(selectedType || '').toLowerCase() === 'weighted' ||
-        rows[productId]?.weighted === true ||
-        String(rows[productId]?.unitType || '').toLowerCase() === 'weighted'
-      );
-
       // No digit-count lock for non-weighted products — prices above lakh must be allowed
       maxPriceDigitsRef.current = null;
 
