@@ -21,8 +21,9 @@ module.exports = {
         try {
             // Validate first WITHOUT invoice number
             const { error, value } = Validations.order.validateCreateOrderObj(req.body);
-            
+
             if (error) {
+                console.error('[ORDER VALIDATION ERROR]', error.details[0].message, '| Body keys:', Object.keys(req.body), '| Item keys:', req.body.orderItems?.[0] ? Object.keys(req.body.orderItems[0]) : 'no items');
                 return res.status(400).send({
                     status: 400,
                     message: error.details[0].message

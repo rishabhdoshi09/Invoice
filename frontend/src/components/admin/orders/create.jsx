@@ -839,13 +839,8 @@ export const CreateOrder = () => {
         String(rows[productId]?.unitType || '').toLowerCase() === 'weighted'
       );
 
-      // Digit-count lock: for non-weighted products, lock price to original digit count
-      // Exception: product named 'add' has no locking whatsoever
-      if (!isAddSpecial && !looksWeighted && price > 0) {
-        maxPriceDigitsRef.current = String(Math.floor(price)).length;
-      } else {
-        maxPriceDigitsRef.current = null;
-      }
+      // No digit-count lock for non-weighted products — prices above lakh must be allowed
+      maxPriceDigitsRef.current = null;
 
       try {
         const lab = (rows[productId]?.name || '').toLowerCase();
