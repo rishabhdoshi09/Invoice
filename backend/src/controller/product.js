@@ -9,7 +9,21 @@ const fs = require('fs');
 const { SerialPort } = require('serialport');
 const { ReadlineParser } = require('@serialport/parser-readline');
 
-const devPath = '/dev/cu.usbserial-1420';
+// Auto-detect the serial device path instead of hardcoding it — USB-serial
+// adapters get reassigned different /dev names (usbserial vs wchusbserial,
+// or a different number) depending on the cable/port/driver used.
+const findSerialDevicePath = () => {
+    const fallback = '/dev/cu.usbserial-1420';
+    try {
+        const devices = fs.readdirSync('/dev').filter(
+            (name) => name.startsWith('cu.usbserial') || name.startsWith('cu.wchusbserial')
+        );
+        if (devices.length > 0) return `/dev/${devices[0]}`;
+    } catch (e) { /* /dev not readable — fall back below */ }
+    return fallback;
+};
+
+const devPath = findSerialDevicePath();
 let port = null;
 let parser = null;
 
