@@ -470,6 +470,12 @@ module.exports = {
         // Paid CASH orders only — unpaid/partial CASH orders move to credit
         const paidCashOrders = cashOrders.filter(o => o.paymentStatus === 'paid');
 
+        // Every order still owing money today — this is what creditOutstanding actually
+        // sums up. Includes ALL credit-mode orders (any status) AND cash-mode orders that
+        // came back unpaid/partial. Must match creditOutstanding so the "Credit Sales"
+        // detail list always adds up to the total shown on the card.
+        const ordersWithOutstandingDue = orders.filter(o => (Number(o.dueAmount) || 0) > 0);
+
         // ── Loan cash flow for this date ──────────────────────────────────────
         // Initial loans: loanDate matches today
         // Repayments:    loan_transactions.transactionDate matches today
@@ -565,7 +571,7 @@ module.exports = {
             // Orders breakdown
             totalOrders: orders.length,
             cashOrdersCount: paidCashOrders.length,
-            creditOrdersCount: creditOrders.length,
+            creditOrdersCount: ordersWithOutstandingDue.length,
             paidOrdersCount: paidOrders.length,
             unpaidOrdersCount: unpaidOrders.length,
             partialOrdersCount: partialOrders.length,
@@ -596,7 +602,7 @@ module.exports = {
                 total: Number(o.total), paidAmount: Number(o.paidAmount), paymentStatus: o.paymentStatus,
                 paymentMode: o.paymentMode, createdAt: o.createdAt
             })),
-            creditOrderRecords: creditOrders.map(o => ({
+            creditOrderRecords: ordersWithOutstandingDue.map(o => ({
                 id: o.id, orderNumber: o.orderNumber, customerName: o.customerName,
                 total: Number(o.total), dueAmount: Number(o.dueAmount), paymentStatus: o.paymentStatus,
                 paymentMode: o.paymentMode, createdAt: o.createdAt

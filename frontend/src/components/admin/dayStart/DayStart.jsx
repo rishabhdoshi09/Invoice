@@ -850,6 +850,7 @@ export const DayStart = () => {
                                         <TableCell sx={{ fontWeight: 'bold' }}>Invoice #</TableCell>
                                         <TableCell sx={{ fontWeight: 'bold' }}>Time</TableCell>
                                         <TableCell sx={{ fontWeight: 'bold' }}>Customer</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Mode</TableCell>
                                         <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
                                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>Total</TableCell>
                                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>Due</TableCell>
@@ -862,13 +863,14 @@ export const DayStart = () => {
                                             <TableCell><Typography variant="body2" fontWeight="bold" sx={{ fontFamily: 'monospace' }}>{order.orderNumber}</Typography></TableCell>
                                             <TableCell>{moment(order.createdAt).format('hh:mm A')}</TableCell>
                                             <TableCell><Typography fontWeight="bold">{order.customerName || 'Walk-in'}</Typography></TableCell>
+                                            <TableCell><Chip label={order.paymentMode === 'CASH' ? 'CASH (unpaid)' : 'CREDIT'} size="small" color={order.paymentMode === 'CASH' ? 'primary' : 'default'} /></TableCell>
                                             <TableCell><Chip label={order.paymentStatus} size="small" color={order.paymentStatus === 'paid' ? 'success' : order.paymentStatus === 'partial' ? 'warning' : 'error'} /></TableCell>
                                             <TableCell align="right">₹{Number(order.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
                                             <TableCell align="right"><Typography fontWeight="bold" color="error.main">₹{Number(order.dueAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
                                         </TableRow>
                                     ))}
                                     <TableRow sx={{ bgcolor: '#ffcdd2' }}>
-                                        <TableCell colSpan={6}><Typography fontWeight="bold">Total Credit ({(realTimeSummary?.creditOrderRecords || []).length} orders)</Typography></TableCell>
+                                        <TableCell colSpan={7}><Typography fontWeight="bold">Total Credit ({(realTimeSummary?.creditOrderRecords || []).length} orders)</Typography></TableCell>
                                         <TableCell align="right"><Typography fontWeight="bold" variant="h6" color="error.main">₹{creditSales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
                                     </TableRow>
                                 </TableBody>
