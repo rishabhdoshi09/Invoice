@@ -22,28 +22,37 @@ module.exports = (sequelize, Sequelize) => {
                 allowNull: false
             },
             subTotal: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             tax: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             taxPercent: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             total: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             paidAmount: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             dueAmount: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
+            },
+            // HIGH-02: Advance system — when paidAmount > total the excess is stored here.
+            // Invariant: dueAmount >= 0 AND advanceAmount >= 0 AND at most one > 0.
+            //   advanceAmount = MAX(0, paidAmount - total)
+            //   dueAmount     = MAX(0, total - paidAmount)
+            advanceAmount: {
+                type: Sequelize.DECIMAL(15, 2),
+                defaultValue: 0,
+                allowNull: false
             },
             paymentStatus: {
                 type: Sequelize.ENUM('paid', 'partial', 'unpaid'),

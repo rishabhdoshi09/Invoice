@@ -1,5 +1,5 @@
 const Controller = require('../controller');
-const { authenticate, canModify } = require('../middleware/auth');
+const { authenticate, canModify, authorize } = require('../middleware/auth');
 const { auditMiddleware, captureOriginal } = require('../middleware/auditLogger');
 const db = require('../models');
 
@@ -22,6 +22,14 @@ module.exports = (router) => {
         .get(
             authenticate,
             Controller.customer.listCustomersWithBalance
+        );
+
+    // Get customers with dues older than N days (default 20)
+    router
+        .route('/customers/overdue')
+        .get(
+            authenticate,
+            Controller.customer.getOverdueCustomers
         );
 
     // Find duplicate customers
@@ -72,4 +80,35 @@ module.exports = (router) => {
             authenticate,
             Controller.customer.getCustomerWithTransactions
         );
+
+    // Get all customer name change logs
+    router.get('/customers/logs/name-changes', authenticate, authorize('admin'), async (req, res) => {
+        try {
+            const db = require('../models');
+            const logs = await db.sequelize.query(`
+                SELECT
+                    al."entityId" as "customerId",
+                    al."entityName" as "newName",
+                    al."oldValues"->>'name' as "oldName",
+                    COALESCE(al."newValues"->>'name', al."entityName") as "currentName",
+                    al."userName",
+                    al."userRole",
+                    al."createdAt"
+                FROM audit_logs al
+                WHERE al."entityType" = 'CUSTOMER_NAME_CHANGE'
+                  OR (
+                    al."entityType" = 'CUSTOMER'
+                    AND al."action" = 'UPDATE'
+                    AND al."oldValues"->>'name' IS NOT NULL
+                    AND al."newValues"->>'name' IS NOT NULL
+                    AND al."oldValues"->>'name' != al."newValues"->>'name'
+                  )
+                ORDER BY al."createdAt" DESC
+                LIMIT 500
+            `, { type: db.Sequelize.QueryTypes.SELECT });
+            res.json({ status: 200, data: logs });
+        } catch (err) {
+            res.status(500).json({ status: 500, message: err.message });
+        }
+    });
 };

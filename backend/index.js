@@ -1,27 +1,139 @@
-const express = require('express');
-const router = express.Router();
-const logger = require('morgan');
-const cors = require('cors');
-const db = require('./src/models');
-const compression = require('compression');
+// ─── LOAD .env FIRST — must be before ANY other require ──────────────────────
+require('dotenv').config();
+
+// ─── STARTUP ENV VALIDATION ──────────────────────────────────────────────────
+// Fail fast if required environment variables are missing or obviously insecure.
+// This runs before any module that imports from src/ so auth.js also gets the
+// populated process.env before its module-level code executes.
+// PASSWORD is intentionally excluded — empty string is valid for local PostgreSQL installs
+const REQUIRED_ENV = ['DATABASE_NAME', 'DB_USER', 'DB_HOST', 'JWT_SECRET'];
+const missingEnv = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missingEnv.length > 0) {
+    console.error(`[STARTUP] FATAL: Missing required environment variables: ${missingEnv.join(', ')}`);
+    console.error('[STARTUP] Add the missing variables to your .env file and restart.');
+    process.exit(1);
+}
+if (process.env.JWT_SECRET === 'CHANGE_ME_generate_with_node_crypto_randomBytes_64_hex') {
+    console.error(
+        '[STARTUP] FATAL: JWT_SECRET is still the placeholder value. ' +
+        'Generate a real secret: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"'
+    );
+    process.exit(1);
+}
+if (process.env.JWT_SECRET.length < 32) {
+    console.error('[STARTUP] FATAL: JWT_SECRET is too short (minimum 32 characters). Use a cryptographically random value.');
+    process.exit(1);
+}
+
+const express    = require('express');
+const router     = express.Router();
+const logger     = require('morgan');
+const cors       = require('cors');
+const helmet     = require('helmet');
+const rateLimit  = require('express-rate-limit');
+const db         = require('./src/models');
+const compression  = require('compression');
 const cookieParser = require('cookie-parser');
-const bodyParser = require('body-parser');
-const path = require('path');
+const bodyParser   = require('body-parser');
+const path         = require('path');
 
 const app = express();
 
-app.use(cors());
-app.use(logger('dev'));
+// ─── Security headers ─────────────────────────────────────────────────────────
+// helmet sets X-Content-Type-Options, X-Frame-Options, HSTS, etc.
+app.use(helmet({
+    // CSP: allow same-origin scripts (React bundle), block everything else.
+    // Extend script-src if CDN assets are added in the future.
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc:     ["'self'"],
+            scriptSrc:      ["'self'"],
+            styleSrc:       ["'self'", "'unsafe-inline'"], // MUI requires inline styles
+            imgSrc:         ["'self'", 'data:'],
+            fontSrc:        ["'self'"],
+            objectSrc:      ["'self'", 'blob:'], // pdfMake uses <object blob:> for invoice preview
+            frameSrc:       ["'self'", 'blob:'], // pdfMake uses <iframe blob:> for invoice preview
+            workerSrc:      ["'self'", 'blob:'], // PDF.js worker
+            baseUri:        ["'self'"],
+            frameAncestors: ["'none'"],
+            formAction:     ["'self'"],
+        },
+    },
+    // HSTS: enforce HTTPS for 1 year once TLS is enabled on the reverse proxy.
+    strictTransportSecurity: {
+        maxAge: 31536000,
+        includeSubDomains: true,
+    },
+}));
 
-app.use(bodyParser.json({ limit: '100mb'}));
-app.use(bodyParser.urlencoded({ limit: '100mb', extended: false }));
+// ─── CORS — restrict to approved origins ─────────────────────────────────────
+// Set CORS_ORIGINS in .env as a comma-separated list of allowed origins.
+// Example: CORS_ORIGINS=http://localhost:3000,https://invoice.example.com
+// Falls back to localhost:3000 in development when env var is absent.
+const allowedOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
+    : ['http://localhost:3000', `http://localhost:${process.env.PORT || 8001}`];
 
-require('./src/routes')(router);
-app.use('/api', router);
-app.use(express.json({limit: '100mb'}));
-app.use(express.urlencoded({ limit: '100mb', extended: false, parameterLimit: 5000 }));
+app.use(cors({
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, server-to-server)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin)) return callback(null, true);
+        callback(new Error(`CORS: Origin '${origin}' is not allowed`));
+    },
+    credentials: true
+}));
+
+// Trust the configured number of proxy hops so rate-limit reads the real
+// client IP from X-Forwarded-For correctly.  Default=1 (one nginx hop).
+// Set TRUST_PROXY_HOPS=0 if not behind a reverse proxy — otherwise an
+// attacker can spoof X-Forwarded-For to bypass IP-based rate limiting.
+const trustProxyHops = parseInt(process.env.TRUST_PROXY_HOPS || '1', 10);
+app.set('trust proxy', trustProxyHops);
+
+// ─── Rate limiting ────────────────────────────────────────────────────────────
+// Strict limit on authentication endpoints to block brute-force and credential
+// stuffing attacks. 10 attempts per 15 minutes per IP.
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,  // 15 minutes
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { status: 429, message: 'Too many login attempts. Please try again after 15 minutes.' }
+});
+
+// Broad API rate limit — 300 requests per minute per IP to prevent DoS.
+const apiLimiter = rateLimit({
+    windowMs: 60 * 1000,        // 1 minute
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { status: 429, message: 'Too many requests. Please slow down.' }
+});
+
+// ─── Request logging ───────────────────────────────────────────────────────────
+// Use 'combined' format in production for Apache-compatible access logs.
+// 'dev' is verbose coloured output suitable only for local development.
+app.use(logger(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+
+// ─── Body parsing ──────────────────────────────────────────────────────────────
+// SECURITY: 1 MB limit. The largest legitimate API payload (50-line invoice) is
+// under 50 KB. A 100 MB limit is a trivial denial-of-service vector — one request
+// can exhaust Node.js heap and crash the server for all users.
+app.use(bodyParser.json({ limit: '1mb' }));
+app.use(bodyParser.urlencoded({ limit: '1mb', extended: false }));
 app.use(cookieParser());
 app.use(compression());
+
+// ─── Rate limiting ────────────────────────────────────────────────────────────
+// Apply BEFORE routes so every request, including un-authenticated ones, is limited.
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/setup', authLimiter);
+app.use('/api', apiLimiter);
+
+// ─── API routes ───────────────────────────────────────────────────────────────
+require('./src/routes')(router);
+app.use('/api', router);
 
 // Serve static files from the React app
 app.use(express.static(path.resolve(__dirname, '..', 'frontend', 'build')));
@@ -33,17 +145,18 @@ app.get('*', (req, res) => {
   }
 });
 
-const PORT = 8001;
+const PORT = process.env.PORT || 8001;
 
-app.listen(PORT, async () => {
+const server = app.listen(PORT, async () => {
   try {
     await db.sequelize.authenticate();
     console.log('Connection has been established successfully.');
 
-    await db.sequelize.sync({ force: false });
-    console.log('Database Synced Successfully');
+    // Schema changes are managed exclusively through versioned migrations.
+    // Run: npx sequelize-cli db:migrate
+    // Do NOT call sequelize.sync() here — it bypasses migration history and
+    // causes non-deterministic schema drift across environments.
 
-    // Safe column migrations — adds missing columns without breaking existing ones
     try {
       await db.sequelize.query(`ALTER TABLE customers ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT NULL`);
     } catch (e) { /* column may already exist */ }
@@ -104,11 +217,146 @@ app.listen(PORT, async () => {
       await db.sequelize.query("ALTER TYPE enum_audit_logs_action ADD VALUE IF NOT EXISTS 'CONFIRM_LINK'");
     } catch (e) { /* values may already exist */ }
 
+    // Loans/loan_transactions tables (also covered by migration 20260526000001, kept here as a defensive no-op)
+    try {
+      await db.sequelize.query(`
+        CREATE TABLE IF NOT EXISTS "loans" (
+          "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          "loanNumber" VARCHAR(255) UNIQUE NOT NULL,
+          "type" VARCHAR(10) NOT NULL CHECK ("type" IN ('given','received')),
+          "partyName" VARCHAR(255) NOT NULL,
+          "partyMobile" VARCHAR(255),
+          "principalAmount" DECIMAL(15,2) NOT NULL,
+          "balanceAmount" DECIMAL(15,2) NOT NULL,
+          "loanDate" VARCHAR(255) NOT NULL,
+          "notes" TEXT,
+          "status" VARCHAR(10) DEFAULT 'active' CHECK ("status" IN ('active','settled')),
+          "isDeleted" BOOLEAN DEFAULT false,
+          "deletedAt" TIMESTAMPTZ,
+          "deletedBy" UUID,
+          "deletedByName" VARCHAR(255),
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await db.sequelize.query(`
+        CREATE TABLE IF NOT EXISTS "loan_transactions" (
+          "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          "loanId" UUID NOT NULL REFERENCES "loans"("id") ON DELETE CASCADE,
+          "amount" DECIMAL(15,2) NOT NULL,
+          "transactionDate" VARCHAR(255) NOT NULL,
+          "notes" TEXT,
+          "recordedBy" VARCHAR(255),
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      console.log('[STARTUP] loans tables ready.');
+    } catch (e) {
+      console.warn('[STARTUP] loans table bootstrap:', e.message);
+    }
+
+    // Add notes column to purchaseBills if it doesn't exist yet
+    try {
+      await db.sequelize.query(`ALTER TABLE "purchaseBills" ADD COLUMN IF NOT EXISTS notes TEXT`);
+      console.log('[STARTUP] purchaseBills.notes column ready.');
+    } catch (e) {
+      console.warn('[STARTUP] purchaseBills notes column bootstrap:', e.message);
+    }
+
+    // Add openingBalanceDate to suppliers if it doesn't exist yet
+    try {
+      await db.sequelize.query(`ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "openingBalanceDate" DATE`);
+      console.log('[STARTUP] suppliers.openingBalanceDate column ready.');
+    } catch (e) {
+      console.warn('[STARTUP] suppliers openingBalanceDate column bootstrap:', e.message);
+    }
+
+    // Note: paymentMode rounding fix migrations removed — handled by targeted script.
+
+    // Auto-initialize chart of accounts if accounts table is empty
+    try {
+      const [countRows] = await db.sequelize.query(
+        `SELECT COUNT(*) as cnt FROM accounts`,
+        { type: db.sequelize.QueryTypes.SELECT }
+      );
+      const { ensureGSTAccounts } = require('./src/services/accountingEngine');
+      if (Number(countRows.cnt) === 0) {
+        const LedgerService = require('./src/services/ledgerService');
+        const ledgerSvc = new LedgerService(db);
+        await ledgerSvc.initializeChartOfAccounts();
+        await ensureGSTAccounts().catch(() => {});
+        console.log('[STARTUP] Chart of accounts initialized automatically.');
+      } else {
+        // Ensure GST sub-accounts exist (idempotent)
+        await ensureGSTAccounts().catch(() => {});
+        console.log('[STARTUP] Chart of accounts ready.');
+      }
+    } catch (e) {
+      console.warn('[STARTUP] Chart of accounts bootstrap:', e.message);
+    }
+
     // Start scheduled jobs (async, non-blocking)
     try {
       require('./src/scheduler').init(db);
     } catch (e) {
       console.warn('[SCHEDULER] Skipped — ' + e.message);
+    }
+
+    // Run a self-audit shortly after startup so the financialGuard has a fresh
+    // reconciliation_runs row within the first 10 seconds, rather than waiting
+    // up to 1 hour for the next cron tick.
+    setTimeout(async () => {
+      try {
+        const SelfAuditService = require('./src/services/selfAuditService');
+        const { clearHaltCache } = require('./src/middleware/financialGuard');
+        const report = await new SelfAuditService(db).run({ writeHistory: true, triggeredBy: 'startup' });
+        console.log(`[STARTUP AUDIT] Status: ${report.summary.overallStatus} — ` +
+          `PASS=${report.summary.counts.PASS} FAIL=${report.summary.counts.FAIL} ` +
+          `SKIP=${report.summary.counts.SKIP} (${report.durationMs}ms)`);
+
+        // If current audit is not HALT, clear any stale HALT from a previous run
+        if (report.summary.overallStatus !== 'HALT') {
+          clearHaltCache();
+          console.log('[STARTUP AUDIT] No HALT detected — stale guard cache cleared.');
+        }
+      } catch (e) {
+        console.warn('[STARTUP AUDIT] Failed (non-fatal):', e.message);
+      }
+    }, 5000);
+
+    // ── Today's payment summary on startup ──────────────────────────────────
+    try {
+      const moment = require('moment-timezone');
+      const today    = moment().tz('Asia/Kolkata').format('DD-MM-YYYY');
+      const yyyymmdd = moment().tz('Asia/Kolkata').format('YYYY-MM-DD');
+      const [payments] = await db.sequelize.query(`
+        SELECT "paymentNumber", "partyType", "partyName", "amount", "paymentDate", "referenceNumber"
+        FROM "payments"
+        WHERE "isDeleted" = false
+          AND ("paymentDate" = :dd OR "paymentDate" = :yy)
+        ORDER BY "createdAt" DESC
+        LIMIT 20
+      `, { replacements: { dd: today, yy: yyyymmdd } });
+
+      if (payments.length === 0) {
+        console.log('[PAYMENT SUMMARY] No payments recorded today.');
+      } else {
+        const inPayments  = payments.filter(p => p.partyType === 'customer');
+        const outPayments = payments.filter(p => p.partyType === 'supplier');
+        const totalIn  = inPayments.reduce((s, p)  => s + Number(p.amount), 0);
+        const totalOut = outPayments.reduce((s, p) => s + Number(p.amount), 0);
+        console.log(`[PAYMENT SUMMARY] Today (${today}): ${payments.length} payments | IN ₹${totalIn.toFixed(2)} (${inPayments.length}) | OUT ₹${totalOut.toFixed(2)} (${outPayments.length})`);
+        for (const p of payments) {
+          const arrow = p.partyType === 'customer' ? '→ IN ' : '← OUT';
+          const party = p.partyType === 'customer' ? 'Customer' : 'Supplier';
+          const ref   = p.referenceNumber ? ` | ${p.referenceNumber}` : '';
+          const amt   = `₹${Number(p.amount).toFixed(2)}`;
+          console.log(`  [PAYMENT] ${arrow} ${p.paymentNumber} ${amt} | ${party}: ${p.partyName}${ref}`);
+        }
+      }
+    } catch (e) {
+      console.warn('[PAYMENT SUMMARY] Could not load today\'s payments:', e.message);
     }
 
     console.log(`Server started on port: ${PORT}`);
@@ -117,3 +365,34 @@ app.listen(PORT, async () => {
     process.exit(1);
   }
 });
+
+// ─── Graceful shutdown ────────────────────────────────────────────────────────
+// On SIGTERM (docker stop / docker-compose down) we stop accepting new requests
+// and let in-flight requests finish, then close the DB pool cleanly.
+// Without this, Node is killed mid-request by SIGKILL after the Docker 10 s
+// timeout, leaving users with confusing disconnection errors.
+const SHUTDOWN_TIMEOUT_MS = 12000; // stay under Docker's 10s SIGKILL + 2s buffer
+
+function gracefulShutdown(signal) {
+  console.log(`[SHUTDOWN] ${signal} received — draining in-flight requests...`);
+
+  server.close(async () => {
+    console.log('[SHUTDOWN] HTTP server closed. Closing DB pool...');
+    try {
+      await db.sequelize.close();
+      console.log('[SHUTDOWN] DB pool closed. Clean exit.');
+    } catch (e) {
+      console.error('[SHUTDOWN] DB pool close error:', e.message);
+    }
+    process.exit(0);
+  });
+
+  // Force exit if draining takes too long (prevents hanging on stuck requests)
+  setTimeout(() => {
+    console.error('[SHUTDOWN] Forced exit after timeout.');
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));

@@ -176,7 +176,7 @@ export const ListPurchases = () => {
                 taxPercent: 0,
                 total: grandTotal,
                 billType: billType,
-                notes: notes || undefined,
+                notes: notes.trim() || null,
                 purchaseItems: validItems.map(item => ({
                     name: item.name,
                     quantity: parseFloat(item.quantity),
@@ -365,6 +365,16 @@ export const ListPurchases = () => {
                             value={billDate}
                             onChange={(e) => setBillDate(e.target.value)}
                             InputLabelProps={{ shrink: true }}
+                        />
+                    </Grid>
+                    <Grid item xs={12} sm={5}>
+                        <TextField
+                            fullWidth
+                            size="small"
+                            label="Notes"
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            placeholder="Optional — e.g. transport charges, reference"
                         />
                     </Grid>
                     <Grid item xs={6} sm={1.5}>
@@ -567,6 +577,11 @@ export const ListPurchases = () => {
                                             <TableCell colSpan={7} sx={{ py: 0, bgcolor: '#fafafa' }}>
                                                 <Collapse in={expandedRows[purchase.id]} timeout="auto" unmountOnExit>
                                                     <Box sx={{ py: 1.5, px: 2 }}>
+                                                        {purchase.notes && (
+                                                            <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontStyle: 'italic' }}>
+                                                                📝 {purchase.notes}
+                                                            </Typography>
+                                                        )}
                                                         <Typography variant="caption" sx={{ fontWeight: 600, color: '#1976d2' }}>
                                                             Items ({purchase.purchaseItems?.length || 0})
                                                         </Typography>

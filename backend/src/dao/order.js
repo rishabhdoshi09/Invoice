@@ -1,4 +1,4 @@
-const uuidv4 = require('uuid/v4');
+const { v4: uuidv4 } = require('uuid');
 const db = require('../models');
 
 module.exports = {
@@ -15,8 +15,8 @@ module.exports = {
     getOrder: async (filterObj, transaction = null) => {
         try {
             const options = {
-                where: { id: filterObj.id },
-                include: [ { 
+                where: { id: filterObj.id, isDeleted: false },
+                include: [ {
                     model: db.orderItems,
                     separate: true,
                     order: [['sortOrder', 'ASC']]
@@ -32,9 +32,15 @@ module.exports = {
             throw new Error(error);
         }
     },
-    deleteOrder: async (filterObj) => {
+    deleteOrder: async (filterObj, transaction = null) => {
         try {
-            const res = await db.order.destroy({ where: { id: filterObj.id }});
+            const options = { where: { id: filterObj.id } };
+            if (transaction) options.transaction = transaction;
+            // Soft delete — preserves the record for audit/ledger reversal
+            const res = await db.order.update(
+                { isDeleted: true, deletedAt: new Date() },
+                options
+            );
             return res;
         } catch (error) {
             console.log(error);
@@ -90,7 +96,7 @@ module.exports = {
             
             const res = await db.order.findAndCountAll({ 
                 where: whereClause,
-                order: [['createdAt', 'DESC']], 
+                order: [['createdAt', 'DESC']],
                 include: [ { 
                     model: db.orderItems,
                     separate: true,
@@ -106,9 +112,11 @@ module.exports = {
             throw new Error(error);
         }
     },
-    updateOrder: async (filterObj, updateObj) => {
+    updateOrder: async (filterObj, updateObj, transaction = null) => {
         try {
-            const res = await db.order.update(updateObj, { where: filterObj });
+            const options = { where: filterObj };
+            if (transaction) options.transaction = transaction;
+            const res = await db.order.update(updateObj, options);
             return res;
         } catch (error) {
             console.log(error);

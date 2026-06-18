@@ -250,6 +250,35 @@ module.exports = {
         }
     },
 
+    // Force-logout a user (admin only) — invalidates ALL active sessions immediately
+    // by incrementing tokenVersion. The target user must re-authenticate.
+    forceLogoutUser: async (req, res) => {
+        try {
+            const { userId } = req.params;
+
+            // Prevent admin from accidentally locking themselves out
+            if (userId === req.user.id) {
+                return res.status(400).json({
+                    status: 400,
+                    message: 'Cannot force-logout your own account. Use logout instead.'
+                });
+            }
+
+            await Services.auth.forceLogoutUser(userId, req);
+
+            return res.status(200).json({
+                status: 200,
+                message: 'User sessions invalidated. The user must log in again.'
+            });
+        } catch (error) {
+            console.error('Force logout error:', error);
+            return res.status(400).json({
+                status: 400,
+                message: error.message
+            });
+        }
+    },
+
     // Change own password
     changePassword: async (req, res) => {
         try {

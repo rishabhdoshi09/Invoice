@@ -1,13 +1,16 @@
 const Controller = require('../controller');
 const { authenticate, canModify } = require('../middleware/auth');
-const { auditMiddleware, captureOriginal } = require('../middleware/auditLogger');
-const db = require('../models');
+const { auditMiddleware } = require('../middleware/auditLogger');
+const { makeFinancialWriteGuard } = require('../middleware/financialGuard');
+
+const financialWriteGuard = makeFinancialWriteGuard(require('../models'));
 
 module.exports = (router) => {
     router
         .route('/purchases')
         .post(
             authenticate,
+            financialWriteGuard,    // Block writes when audit declares HALT
             auditMiddleware('PURCHASE'),
             Controller.purchaseBill.createPurchaseBill
         )
@@ -25,8 +28,7 @@ module.exports = (router) => {
         .delete(
             authenticate,
             canModify,
-            captureOriginal(db.purchaseBill, 'purchaseId'),
-            auditMiddleware('PURCHASE'),
+            financialWriteGuard,    // Deletion reverses ledger entries — block during HALT
             Controller.purchaseBill.deletePurchaseBill
         );
 };

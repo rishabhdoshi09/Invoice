@@ -2,41 +2,52 @@ const Services = require('../services');
 const Validations = require('../validations');
 
 let weight = 0;
-let connectionStatus = 'disconnected'; // 'connected', 'disconnected', 'error'
-let lastDataReceived = null; // Timestamp of last data received
+let connectionStatus = 'disconnected';
+let lastDataReceived = null;
 
 const fs = require('fs');
 const { SerialPort } = require('serialport');
 const { ReadlineParser } = require('@serialport/parser-readline');
 
-// Auto-detect the serial device path instead of hardcoding it — USB-serial
-// adapters get reassigned different /dev names (usbserial vs wchusbserial,
-// or a different number) depending on the cable/port/driver used.
-const findSerialDevicePath = () => {
-    const fallback = '/dev/cu.usbserial-1420';
-    try {
-        const devices = fs.readdirSync('/dev').filter(
-            (name) => name.startsWith('cu.usbserial') || name.startsWith('cu.wchusbserial')
-        );
-        if (devices.length > 0) return `/dev/${devices[0]}`;
-    } catch (e) { /* /dev not readable — fall back below */ }
-    return fallback;
-};
-
-const devPath = findSerialDevicePath();
 let port = null;
 let parser = null;
+let reconnectTimer = null;
 
-// SAFE SERIAL INITIALIZATION
-if (fs.existsSync(devPath)) {
-    console.log("Serial device found → opening:", devPath);
-
+// Auto-detect serial device: prefer env var, then scan /dev for usbserial/wchusbserial
+function detectSerialPort() {
+    if (process.env.SERIAL_PORT) return process.env.SERIAL_PORT;
     try {
-        port = new SerialPort({
-            path: devPath,
-            baudRate: 9600
-        });
+        const devDir = fs.readdirSync('/dev');
+        const match = devDir.find(f =>
+            f.startsWith('cu.usbserial') ||
+            f.startsWith('cu.wchusbserial') ||
+            f.startsWith('cu.SLAB_USBtoUART') ||
+            f.startsWith('ttyUSB') ||
+            f.startsWith('ttyS')
+        );
+        return match ? `/dev/${match}` : null;
+    } catch { return null; }
+}
 
+function scheduleReconnect(delaySec = 5) {
+    if (reconnectTimer) return;
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        initSerial();
+    }, delaySec * 1000);
+}
+
+function initSerial() {
+    const devPath = detectSerialPort();
+    if (!devPath || !fs.existsSync(devPath)) {
+        connectionStatus = 'disconnected';
+        scheduleReconnect(10); // device not plugged in — check again in 10s
+        return;
+    }
+
+    console.log("Serial device found → opening:", devPath);
+    try {
+        port = new SerialPort({ path: devPath, baudRate: 9600 });
         parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
 
         port.on('open', () => {
@@ -56,22 +67,25 @@ if (fs.existsSync(devPath)) {
         port.on('error', (e) => {
             console.log("SerialPort Error:", e.message);
             connectionStatus = 'error';
+            // 'close' event fires after error, triggering reconnect there
         });
 
         port.on('close', () => {
-            console.log("Serial port closed");
+            console.log("Serial port closed — reconnecting in 5s...");
             connectionStatus = 'disconnected';
+            port = null; parser = null;
+            scheduleReconnect(5);
         });
 
     } catch (err) {
         console.log("Failed to open serial port:", err.message);
         connectionStatus = 'error';
+        port = null; parser = null;
+        scheduleReconnect(5);
     }
-
-} else {
-    console.log("Serial device NOT found → skipping serial initialization");
-    connectionStatus = 'disconnected';
 }
+
+initSerial();
 
 
 module.exports = {

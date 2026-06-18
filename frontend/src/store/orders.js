@@ -36,14 +36,11 @@ export default orderSlice;
 export const listOrdersAction = (payload) => {
     return async(dispatch) => {
         try{
-            dispatch(startLoading());
             const orders = await listOrders(payload);
             dispatch(setOrders(orders));
-            dispatch(stopLoading());
         }
         catch(error){
             console.log(error);
-            dispatch(stopLoading());
             dispatch(setNotification({ open: true, severity: 'error', message: 'Something went wrong, please try again!'}));
         }
     }
@@ -57,15 +54,11 @@ export const createOrderAction = (payload) => {
             dispatch(setNotification({ open: true, severity: 'success', message: 'Order created successfully'}));
             dispatch(stopLoading());
             
-            // Invalidate RTK Query cache to refresh orders list (NEW WAY)
             dispatch(api.util.invalidateTags([
                 { type: 'Orders', id: 'LIST' },
                 { type: 'Receivables', id: 'LIST' },
                 { type: 'Dashboard', id: 'TODAY' }
             ]));
-            
-            // Also refresh old Redux store (LEGACY - for any components still using it)
-            dispatch(listOrdersAction({ limit: 25, offset: 0 }));
             
             return data;
         }
@@ -86,15 +79,11 @@ export const deleteOrderAction = (orderId, filters) => {
             dispatch(setNotification({ open: true, severity: 'success', message: 'Order deleted successfully'}));
             dispatch(stopLoading());
             
-            // Invalidate RTK Query cache (NEW WAY)
             dispatch(api.util.invalidateTags([
                 { type: 'Orders', id: 'LIST' },
                 { type: 'Receivables', id: 'LIST' },
                 { type: 'Dashboard', id: 'TODAY' }
             ]));
-            
-            // Also refresh old Redux store (LEGACY)
-            dispatch(listOrdersAction(filters || { limit: 25, offset: 0 }));
         }
         catch(error){
             console.log(error);

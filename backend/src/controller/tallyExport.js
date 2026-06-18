@@ -541,6 +541,134 @@ module.exports = {
         }
     },
 
+    // Export sales as TallyPrime-compatible XML (Voucher import format)
+    exportSalesXML: async (req, res) => {
+        try {
+            const { ids } = req.body;
+            const { startDate, endDate } = req.query;
+
+            let whereClause = { isDeleted: false };
+            if (ids && Array.isArray(ids) && ids.length > 0) {
+                whereClause.id = { [db.Sequelize.Op.in]: ids };
+            } else if (startDate && endDate) {
+                whereClause.orderDate = { [db.Sequelize.Op.between]: [startDate, endDate] };
+            }
+
+            const orders = await db.order.findAll({
+                where: whereClause,
+                include: [{ model: db.orderItems }],
+                order: [['orderDate', 'ASC']]
+            });
+
+            // Helper: convert DD-MM-YYYY or YYYY-MM-DD to YYYYMMDD for Tally
+            const toTallyDate = (d) => {
+                if (!d) return '';
+                const str = String(d);
+                if (/^\d{2}-\d{2}-\d{4}$/.test(str)) {
+                    const [dd, mm, yyyy] = str.split('-');
+                    return `${yyyy}${mm}${dd}`;
+                }
+                if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+                    return str.replace(/-/g, '');
+                }
+                return str.replace(/[-\/]/g, '');
+            };
+
+            const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const amt = (n) => Number(n || 0).toFixed(2);
+
+            const vouchers = orders.map(order => {
+                const gstBreakup = calculateGSTBreakup(
+                    order.tax || 0,
+                    order.taxPercent || 18,
+                    order.placeOfSupply || '27-Maharashtra'
+                );
+                const partyName = esc(order.customerName || 'Cash');
+                const subTotal = Number(order.subTotal || 0);
+                const narration = `Invoice ${esc(order.orderNumber)} dated ${order.orderDate}`;
+
+                let ledgerEntries = '';
+                // Sales ledger (credit — negative in Tally)
+                ledgerEntries += `
+          <ALLLEDGERENTRIES.LIST>
+            <LEDGERNAME>Sales Account</LEDGERNAME>
+            <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+            <AMOUNT>-${amt(subTotal)}</AMOUNT>
+          </ALLLEDGERENTRIES.LIST>`;
+
+                if (gstBreakup.cgst > 0) {
+                    ledgerEntries += `
+          <ALLLEDGERENTRIES.LIST>
+            <LEDGERNAME>Output CGST ${gstBreakup.cgstRate}%</LEDGERNAME>
+            <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+            <AMOUNT>-${amt(gstBreakup.cgst)}</AMOUNT>
+          </ALLLEDGERENTRIES.LIST>`;
+                }
+                if (gstBreakup.sgst > 0) {
+                    ledgerEntries += `
+          <ALLLEDGERENTRIES.LIST>
+            <LEDGERNAME>Output SGST ${gstBreakup.sgstRate}%</LEDGERNAME>
+            <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+            <AMOUNT>-${amt(gstBreakup.sgst)}</AMOUNT>
+          </ALLLEDGERENTRIES.LIST>`;
+                }
+                if (gstBreakup.igst > 0) {
+                    ledgerEntries += `
+          <ALLLEDGERENTRIES.LIST>
+            <LEDGERNAME>Output IGST ${gstBreakup.igstRate}%</LEDGERNAME>
+            <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+            <AMOUNT>-${amt(gstBreakup.igst)}</AMOUNT>
+          </ALLLEDGERENTRIES.LIST>`;
+                }
+                // Party ledger (debit — positive in Tally)
+                ledgerEntries += `
+          <ALLLEDGERENTRIES.LIST>
+            <LEDGERNAME>${partyName}</LEDGERNAME>
+            <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+            <AMOUNT>${amt(order.total || 0)}</AMOUNT>
+          </ALLLEDGERENTRIES.LIST>`;
+
+                return `
+        <TALLYMESSAGE xmlns:UDF="TallyUDF">
+          <VOUCHER VCHTYPE="Sales" ACTION="Create">
+            <DATE>${toTallyDate(order.orderDate)}</DATE>
+            <VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>
+            <VOUCHERNUMBER>${esc(order.orderNumber)}</VOUCHERNUMBER>
+            <PARTYLEDGERNAME>${partyName}</PARTYLEDGERNAME>
+            <NARRATION>${narration}</NARRATION>${ledgerEntries}
+          </VOUCHER>
+        </TALLYMESSAGE>`;
+            });
+
+            const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ENVELOPE>
+  <HEADER>
+    <TALLYREQUEST>Import Data</TALLYREQUEST>
+  </HEADER>
+  <BODY>
+    <IMPORTDATA>
+      <REQUESTDESC>
+        <REPORTNAME>Vouchers</REPORTNAME>
+        <STATICVARIABLES>
+          <SVCURRENTCOMPANY></SVCURRENTCOMPANY>
+        </STATICVARIABLES>
+      </REQUESTDESC>
+      <REQUESTDATA>${vouchers.join('')}
+      </REQUESTDATA>
+    </IMPORTDATA>
+  </BODY>
+</ENVELOPE>`;
+
+            res.setHeader('Content-Type', 'application/xml');
+            res.setHeader('Content-Disposition', 'attachment; filename=tally_sales_import.xml');
+            return res.status(200).send(xml);
+
+        } catch (error) {
+            console.log(error);
+            return res.status(500).send({ status: 500, message: error.message });
+        }
+    },
+
     exportOutstanding: async (req, res) => {
         try {
             // Export receivables

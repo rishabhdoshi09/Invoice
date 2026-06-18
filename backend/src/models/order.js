@@ -33,28 +33,59 @@ module.exports = (sequelize, Sequelize) => {
                 defaultValue: '27-Maharashtra'
             },
             subTotal: {
-                type: Sequelize.DOUBLE
+                type: Sequelize.DECIMAL(15, 2)
             },
             total: {
-                type: Sequelize.DOUBLE
+                type: Sequelize.DECIMAL(15, 2)
             },
             tax: {
-                type: Sequelize.DOUBLE
+                type: Sequelize.DECIMAL(15, 2)
             },
             taxPercent: {
-                type: Sequelize.DOUBLE
+                type: Sequelize.DECIMAL(15, 2)
+            },
+            // ── IMMUTABLE field: set ONCE at invoice creation, never written again ──
+            // This is the cash collected at the POS counter at the moment of sale.
+            // It is the ground-truth anchor for all paidAmount calculations.
+            // paidAmount (the display field) is ALWAYS derived:
+            //   paidAmount = originalPaidAmount + SUM(active receipt_allocations)
+            // Nothing in the application should ever write to originalPaidAmount after
+            // the row is first inserted.
+            originalPaidAmount: {
+                type: Sequelize.DECIMAL(15, 2),
+                defaultValue: 0,
+                allowNull: false,
+                comment: 'Immutable POS cash captured at invoice creation. Never modified after insert.'
             },
             paidAmount: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
             },
             dueAmount: {
-                type: Sequelize.DOUBLE,
+                type: Sequelize.DECIMAL(15, 2),
                 defaultValue: 0
+            },
+            // Overpayment / advance credit for future invoices.
+            // Exactly one of dueAmount or advanceAmount will be > 0 at any time.
+            //   dueAmount    = MAX(0, total - paidAmount)
+            //   advanceAmount = MAX(0, paidAmount - total)
+            advanceAmount: {
+                type: Sequelize.DECIMAL(15, 2),
+                defaultValue: 0,
+                allowNull: false
             },
             paymentStatus: {
                 type: Sequelize.ENUM('paid', 'partial', 'unpaid'),
                 defaultValue: 'paid'
+            },
+            // Incremented atomically on every payment status toggle.
+            // Used to build a unique ledger batch referenceId per toggle event,
+            // preventing the idempotency-key collision that caused ledger corruption
+            // on the 3rd+ toggle of the same direction.
+            paymentToggleSequence: {
+                type: Sequelize.INTEGER,
+                allowNull: false,
+                defaultValue: 0
             },
             // CASH = paid at POS, CREDIT = unpaid/due at creation. NEVER changes after creation.
             paymentMode: {
@@ -98,6 +129,12 @@ module.exports = (sequelize, Sequelize) => {
             deletedByName: {
                 type: Sequelize.STRING,
                 allowNull: true
+            },
+            // Idempotency key — prevents duplicate invoice creation on retry (L7)
+            idempotencyKey: {
+                type: Sequelize.STRING(128),
+                allowNull: true,
+                unique: true
             },
             // Staff notes (for billing staff to communicate issues)
             staffNotes: {

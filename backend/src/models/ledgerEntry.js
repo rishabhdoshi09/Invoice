@@ -9,7 +9,7 @@ module.exports = (sequelize, Sequelize) => {
             },
             batchId: {
                 type: Sequelize.UUID,
-                allowNull: true,
+                allowNull: false,
                 references: {
                     model: 'journal_batches',
                     key: 'id'
@@ -17,7 +17,7 @@ module.exports = (sequelize, Sequelize) => {
             },
             accountId: {
                 type: Sequelize.UUID,
-                allowNull: true,
+                allowNull: false,
                 references: {
                     model: 'accounts',
                     key: 'id'
@@ -40,8 +40,13 @@ module.exports = (sequelize, Sequelize) => {
                 }
             },
             narration: {
-                type: Sequelize.STRING(255),
+                type: Sequelize.STRING(500),
                 allowNull: true
+            },
+            transactionDate: {
+                type: Sequelize.DATEONLY,
+                allowNull: true,
+                comment: 'Denormalized from journal_batch.transactionDate for fast date-range queries'
             }
         },
         {
@@ -50,7 +55,8 @@ module.exports = (sequelize, Sequelize) => {
             indexes: [
                 { fields: ['batchId'] },
                 { fields: ['accountId'] },
-                { fields: ['createdAt'] }
+                { fields: ['transactionDate'] },
+                { name: 'idx_le_account_date', fields: ['accountId', 'transactionDate'] }
             ],
             validate: {
                 eitherDebitOrCredit() {

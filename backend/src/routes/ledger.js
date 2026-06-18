@@ -25,6 +25,11 @@ module.exports = (router) => {
     router.get('/ledger/customers/:customerId/balance', authenticate, ledgerController.getCustomerLedgerBalance);
     router.get('/ledger/suppliers/:supplierId/balance', authenticate, ledgerController.getSupplierLedgerBalance);
 
+    // ==================== CUSTOMER LEDGER STATEMENT ====================
+    // Returns all orders + payments for a customer in a date range
+    // Used for generating PDF statements
+    router.get('/customers/:customerId/statement', authenticate, ledgerController.getCustomerStatement);
+
     // ==================== HEALTH CHECK ====================
     router.get('/ledger/health-check', authenticate, ledgerController.healthCheck);
 

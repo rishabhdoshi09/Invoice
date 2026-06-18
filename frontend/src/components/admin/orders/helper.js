@@ -1,9 +1,23 @@
 
+// Format DD-MM-YYYY → "DD MMM YYYY" for display in PDFs
+const PDF_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const formatPdfDate = (dateStr) => {
+    if (!dateStr) return '';
+    if (typeof dateStr === 'string' && dateStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+        const [d, m, y] = dateStr.split('-');
+        return `${d} ${PDF_MONTHS[parseInt(m) - 1]} ${y}`;
+    }
+    return dateStr;
+};
+
 export const generatePdfDefinition = (data) => {
-    // GST Rate: 5% total (2.5% SGST + 2.5% CGST)
-    const GST_RATE = 0.05;
-    const SGST_RATE = 0.025;
-    const CGST_RATE = 0.025;
+    // Use the order's actual tax percent; fall back to 5% for this business
+    const taxPercent = Number(data.taxPercent) > 0 ? Number(data.taxPercent) : 5;
+    const GST_RATE  = taxPercent / 100;
+    const SGST_RATE = GST_RATE / 2;  // intra-state: equal SGST/CGST split
+    const CGST_RATE = GST_RATE / 2;
+    const SGST_DISPLAY = (taxPercent / 2).toFixed(1).replace(/\.0$/, '') + '%';
+    const CGST_DISPLAY = (taxPercent / 2).toFixed(1).replace(/\.0$/, '') + '%';
 
     // Sort items by sortOrder to maintain the order they were added
     const sortedItems = [...(data.orderItems || [])].sort((a, b) => {
@@ -40,10 +54,10 @@ export const generatePdfDefinition = (data) => {
     });
 
     // Calculate totals
-    const totalBaseAmount = itemsWithTax.reduce((sum, item) => sum + parseFloat(item.baseTotal), 0);
-    const totalSgst = itemsWithTax.reduce((sum, item) => sum + parseFloat(item.sgstAmount), 0);
-    const totalCgst = itemsWithTax.reduce((sum, item) => sum + parseFloat(item.cgstAmount), 0);
-    const grandTotal = totalBaseAmount + totalSgst + totalCgst;
+    const totalBaseAmount = Math.round(itemsWithTax.reduce((sum, item) => sum + parseFloat(item.baseTotal),   0) * 100) / 100;
+    const totalSgst       = Math.round(itemsWithTax.reduce((sum, item) => sum + parseFloat(item.sgstAmount), 0) * 100) / 100;
+    const totalCgst       = Math.round(itemsWithTax.reduce((sum, item) => sum + parseFloat(item.cgstAmount), 0) * 100) / 100;
+    const grandTotal      = Math.round((totalBaseAmount + totalSgst + totalCgst) * 100) / 100;
 
     return {
         content: [
@@ -94,7 +108,7 @@ export const generatePdfDefinition = (data) => {
                         width: '50%',
                         stack: [
                             { text: `Invoice No: ${data.orderNumber}`, style: 'invoiceInfo', alignment: 'right' },
-                            { text: `Date: ${data.orderDate}`, style: 'invoiceInfo', alignment: 'right' },
+                            { text: `Date: ${formatPdfDate(data.orderDate)}`, style: 'invoiceInfo', alignment: 'right' },
                         ]
                     }
                 ]
@@ -116,8 +130,8 @@ export const generatePdfDefinition = (data) => {
                             { text: 'Rate', style: 'tableHeader' },
                             { text: 'Qty', style: 'tableHeader' },
                             { text: 'Taxable Amt', style: 'tableHeader' },
-                            { text: 'SGST\n2.5%', style: 'tableHeader' },
-                            { text: 'CGST\n2.5%', style: 'tableHeader' },
+                            { text: `SGST\n${SGST_DISPLAY}`, style: 'tableHeader' },
+                            { text: `CGST\n${CGST_DISPLAY}`, style: 'tableHeader' },
                             { text: 'Total', style: 'tableHeader' }
                         ],
                         ...itemsWithTax.map((item, index) => [
@@ -169,11 +183,11 @@ export const generatePdfDefinition = (data) => {
                             { text: `₹ ${totalBaseAmount.toFixed(2)}`, alignment: 'right' }
                         ],
                         [
-                            { text: 'SGST @ 2.5%:', alignment: 'right' },
+                            { text: `SGST @ ${SGST_DISPLAY}:`, alignment: 'right' },
                             { text: `₹ ${totalSgst.toFixed(2)}`, alignment: 'right' }
                         ],
                         [
-                            { text: 'CGST @ 2.5%:', alignment: 'right' },
+                            { text: `CGST @ ${CGST_DISPLAY}:`, alignment: 'right' },
                             { text: `₹ ${totalCgst.toFixed(2)}`, alignment: 'right' }
                         ],
                         [
@@ -331,8 +345,8 @@ export const generatePdfDefinition2 = (data) => {
             },
             { text: `Customer Name: ${data.customerName}`, style: 'customerName' },
             { text: `Mobile: ${data.customerMobile}`, style: 'customerMobile' },
-            { text: `Order Number: ${data.orderNumber}`, style: 'orderNumber' },
-            { text: `Date: ${data.orderDate}`, style: 'orderDate' },
+            { text: `Invoice No: ${data.orderNumber}`, style: 'orderNumber' },
+            { text: `Date: ${formatPdfDate(data.orderDate)}`, style: 'orderDate' },
             {
                 style: 'tableExample',
                 table: {
@@ -350,7 +364,9 @@ export const generatePdfDefinition2 = (data) => {
                             `${index + 1}.`,
                             (item.altName && item.altName.trim()) ? item.altName.trim() : item.name,
                             `₹ ${item.productPrice}`,
-                            item.quantity,
+                            item.type === 'weighted'
+                                ? { text: `${item.quantity} kg\n(₹${item.productPrice}/kg)`, fontSize: 8 }
+                                : item.quantity,
                             `₹ ${item.totalPrice}`
                         ]),
                         [

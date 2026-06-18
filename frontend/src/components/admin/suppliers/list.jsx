@@ -4,13 +4,12 @@ import {
     TableHead, TableRow, TextField, Dialog, DialogContent, DialogActions, 
     Typography, IconButton, Chip, Tooltip, Grid, Paper, Alert,
     FormControl, InputLabel, Select, MenuItem, CircularProgress, Autocomplete,
-    InputAdornment, TablePagination, Collapse, Switch, FormControlLabel,
-    List, ListItem, ListItemText, ListItemSecondaryAction
+    InputAdornment, TablePagination, Collapse, Switch, FormControlLabel
 } from '@mui/material';
-import { 
+import {
     Delete, Visibility, Refresh, Add, Payment, Close,
-    Search, Download, AccountBalance, ShoppingBag, CheckCircle,
-    KeyboardArrowDown, Save
+    Search, Download, Print, AccountBalance, ShoppingBag, CheckCircle,
+    KeyboardArrowDown, Save, Edit
 } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
@@ -131,7 +130,7 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
                 paidAmount: purPaid ? purTotal : 0,
                 subTotal: purTotal, tax: 0, taxPercent: 0, total: purTotal,
                 billType: purBillType,
-                notes: purNotes || undefined,
+                notes: purNotes.trim() || null,
                 purchaseItems: valid.map(i => ({
                     name: i.name, quantity: parseFloat(i.qty),
                     price: parseFloat(i.price), totalPrice: i.total
@@ -354,7 +353,7 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
 };
 
 // ─── Supplier Ledger Dialog (Tally-style) ──────────────────────────
-const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDeletePayment, onPayment, onPurchase }) => {
+const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDeletePayment, onPayment, onPurchase, onDownload, onPrint }) => {
     const [expandedId, setExpandedId] = useState(null);
     
     if (!supplier) return null;
@@ -365,8 +364,11 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
 
     // Opening balance
     if (s.openingBalance && Number(s.openingBalance) !== 0) {
+        const obDate = s.openingBalanceDate ? moment(s.openingBalanceDate) : null;
+        const obDateStr = obDate?.isValid() ? obDate.format('DD/MM/YYYY') : null;
+        const obSortKey = obDate?.isValid() ? obDate.toISOString() : '0000-00-00T00:00:00';
         ledgerEntries.push({
-            id: 'opening', date: null, sortKey: '0000-00-00T00:00:00',
+            id: 'opening', date: obDateStr, sortKey: obSortKey,
             particulars: 'Opening Balance', refNo: '-',
             debit: Number(s.openingBalance) > 0 ? Number(s.openingBalance) : 0,
             credit: Number(s.openingBalance) < 0 ? Math.abs(Number(s.openingBalance)) : 0,
@@ -382,7 +384,7 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
         ledgerEntries.push({
             id: p.id,
             date: dateStr, sortKey: sortStr,
-            particulars: 'Purchase',
+            particulars: 'Purchase' + (p.notes ? ` — ${p.notes}` : ''),
             refNo: p.billNumber || '-',
             debit: Number(p.total) || 0, credit: 0,
             type: 'purchase', raw: p
@@ -571,6 +573,12 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
             </DialogContent>
 
             <DialogActions sx={{ bgcolor: '#f5f5f5', borderTop: '1px solid #ddd', px: 2, py: 0.8, gap: 1 }}>
+                <Button data-testid="ledger-download" onClick={() => onDownload(s, ledgerEntries, totalDebit, totalCredit, closingBal)} startIcon={<Download />} variant="outlined" size="small" sx={{ textTransform: 'none' }}>
+                    Download
+                </Button>
+                <Button data-testid="ledger-print" onClick={() => onPrint(s, ledgerEntries, totalDebit, totalCredit, closingBal)} startIcon={<Print />} variant="outlined" size="small" sx={{ textTransform: 'none', mr: 'auto' }}>
+                    Print
+                </Button>
                 <Button data-testid="ledger-make-payment" onClick={() => onPayment(s)} startIcon={<Payment />} variant="contained" color="success" size="small" sx={{ textTransform: 'none' }}>
                     Make Payment
                 </Button>
@@ -594,6 +602,9 @@ export const ListSuppliers = () => {
     const [entryMode, setEntryMode] = useState(null);
     const [successMsg, setSuccessMsg] = useState('');
     const [prefilledSupplier, setPrefilledSupplier] = useState(null);
+    const [editingName, setEditingName] = useState(null); // { id, value }
+    const [editDialog, setEditDialog] = useState({ open: false, supplier: null, saving: false });
+    const [editForm, setEditForm] = useState({ name: '', mobile: '', gstin: '', openingBalance: '', openingBalanceDate: '' });
     useEffect(() => { fetchSuppliers(); }, []);
 
     const fetchSuppliers = async () => {
@@ -618,6 +629,56 @@ export const ListSuppliers = () => {
         setSuccessMsg(msg);
         setTimeout(() => setSuccessMsg(''), 3500);
         fetchSuppliers();
+    };
+
+    const handleInlineNameSave = async (id, newName) => {
+        const trimmed = newName.trim();
+        setEditingName(null);
+        const original = suppliers.find(s => s.id === id);
+        if (!trimmed || trimmed === original?.name) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`/api/suppliers/${id}`, { name: trimmed }, { headers: { Authorization: `Bearer ${token}` } });
+            setSuppliers(prev => prev.map(s => s.id === id ? { ...s, name: trimmed } : s));
+        } catch (e) {
+            alert('Failed to rename: ' + (e.response?.data?.message || e.message));
+        }
+    };
+
+    const openEditDialog = (sup) => {
+        setEditForm({
+            name: sup.name || '',
+            mobile: sup.mobile || '',
+            gstin: sup.gstin || '',
+            openingBalance: sup.openingBalance != null ? String(sup.openingBalance) : '',
+            openingBalanceDate: sup.openingBalanceDate ? moment(sup.openingBalanceDate).format('YYYY-MM-DD') : ''
+        });
+        setEditDialog({ open: true, supplier: sup, saving: false });
+    };
+
+    const handleEditSave = async () => {
+        const { supplier } = editDialog;
+        if (!editForm.name.trim()) return;
+        setEditDialog(prev => ({ ...prev, saving: true }));
+        try {
+            const token = localStorage.getItem('token');
+            const payload = {
+                name: editForm.name.trim(),
+                mobile: editForm.mobile.trim(),
+                gstin: editForm.gstin.trim().toUpperCase(),
+                openingBalance: editForm.openingBalance !== '' ? parseFloat(editForm.openingBalance) : undefined,
+                openingBalanceDate: editForm.openingBalanceDate || null
+            };
+            await axios.put(`/api/suppliers/${supplier.id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
+            setEditDialog({ open: false, supplier: null, saving: false });
+            fetchSuppliers();
+            if (detailsDialog.open && detailsDialog.supplier?.id === supplier.id) {
+                fetchSupplierDetails(supplier.id);
+            }
+        } catch (e) {
+            alert('Failed to save: ' + (e.response?.data?.message || e.message));
+            setEditDialog(prev => ({ ...prev, saving: false }));
+        }
     };
 
     // ── Delete handlers ──
@@ -659,6 +720,87 @@ export const ListSuppliers = () => {
     const handlePurchaseFromTable = (supplier) => {
         setPrefilledSupplier(supplier);
         setEntryMode('purchase');
+    };
+
+    // Download individual supplier ledger as CSV
+    const handleLedgerDownload = (s, ledgerEntries, totalDebit, totalCredit, closingBal) => {
+        const fmt = v => v != null && v !== 0 ? Math.abs(v).toFixed(2) : '0.00';
+        const header = [`Supplier Ledger: ${s.name}`, s.mobile || '', s.gstin ? `GSTIN: ${s.gstin}` : '', `Generated: ${moment().format('DD/MM/YYYY')}`].filter(Boolean).join(' | ');
+        const cols = ['Date', 'Particulars', 'Vch No.', 'Debit', 'Credit', 'Balance'];
+        const rows = ledgerEntries.map(e => [
+            e.date || '',
+            e.particulars,
+            e.refNo,
+            fmt(e.debit),
+            fmt(e.credit),
+            `${fmt(e.balance)} ${e.balance >= 0 ? 'Dr' : 'Cr'}`
+        ]);
+        const totalsRow = ['TOTAL', '', '', fmt(totalDebit), fmt(totalCredit), `${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}`];
+        const csvContent = [
+            [header],
+            cols,
+            ...rows,
+            totalsRow
+        ].map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${s.name.replace(/\s+/g, '_')}_ledger_${moment().format('YYYY-MM-DD')}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    // Print individual supplier ledger
+    const handleLedgerPrint = (s, ledgerEntries, totalDebit, totalCredit, closingBal) => {
+        const fmt = v => v != null && v !== 0 ? `₹${Math.abs(v).toLocaleString('en-IN')}` : '₹0';
+        const rows = ledgerEntries.map(e => `
+            <tr class="${e.type === 'opening' ? 'row-opening' : e.type === 'payment' ? 'row-payment' : 'row-purchase'}">
+                <td>${e.date || ''}</td>
+                <td>${e.particulars}</td>
+                <td>${e.refNo}</td>
+                <td class="debit">${e.debit > 0 ? fmt(e.debit) : ''}</td>
+                <td class="credit">${e.credit > 0 ? fmt(e.credit) : ''}</td>
+                <td class="balance">${fmt(e.balance)} ${e.balance >= 0 ? 'Dr' : 'Cr'}</td>
+            </tr>`).join('');
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${s.name} — Ledger</title>
+            <style>
+                body { font-family: 'Roboto Mono', monospace; font-size: 12px; margin: 20px; color: #222; }
+                h2 { color: #0d1b4a; margin-bottom: 2px; }
+                .meta { color: #666; font-size: 11px; margin-bottom: 16px; }
+                table { width: 100%; border-collapse: collapse; }
+                th { background: #e8eaf6; color: #1a237e; border-bottom: 2px solid #1a237e; padding: 6px 8px; text-align: left; font-size: 11px; }
+                td { padding: 4px 8px; border-bottom: 1px solid #e0e0e0; }
+                .debit { text-align: right; color: #c62828; font-weight: 700; }
+                .credit { text-align: right; color: #2e7d32; font-style: italic; }
+                .balance { text-align: right; font-weight: 700; }
+                .row-opening { background: #fffde7; }
+                .row-payment { background: #f1f8e9; }
+                .total-row td { border-top: 2px solid #1a237e; background: #e8eaf6; font-weight: 700; color: #1a237e; }
+                .closing { margin-top: 12px; text-align: right; font-size: 13px; font-weight: 700; color: #0d1b4a; }
+                @media print {
+                    * { color: #000 !important; background: #fff !important; }
+                    .debit { font-weight: 700; }
+                    .credit { font-style: italic; text-decoration: underline; }
+                    .balance { font-weight: 700; }
+                    th { border-bottom: 2px solid #000 !important; }
+                    .total-row td { border-top: 2px solid #000 !important; border-bottom: 2px solid #000 !important; }
+                    td { border-bottom: 1px solid #ccc !important; }
+                }
+            </style></head><body>
+            <h2>${s.name}</h2>
+            <div class="meta">${[s.mobile, s.gstin && `GSTIN: ${s.gstin}`, `Printed: ${moment().format('DD/MM/YYYY hh:mm A')}`].filter(Boolean).join(' | ')}</div>
+            <table>
+                <thead><tr><th>Date</th><th>Particulars</th><th>Vch No.</th><th style="text-align:right">Debit</th><th style="text-align:right">Credit (italic)</th><th style="text-align:right">Balance</th></tr></thead>
+                <tbody>${rows}</tbody>
+                <tfoot><tr class="total-row"><td colspan="3">TOTAL</td><td class="debit">${fmt(totalDebit)}</td><td class="credit">${fmt(totalCredit)}</td><td class="balance">${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</td></tr></tfoot>
+            </table>
+            <div class="closing">Closing Balance: ${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</div>
+            <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }</script>
+            </body></html>`;
+        const w = window.open('', '_blank');
+        w.document.write(html);
+        w.document.close();
     };
 
     // Export
@@ -792,7 +934,26 @@ export const ListSuppliers = () => {
                             ) : paginatedSuppliers.map(sup => (
                                 <TableRow key={sup.id} hover data-testid={`supplier-row-${sup.id}`} sx={{ '& td': { py: 0.6 } }}>
                                     <TableCell>
-                                        <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.85rem' }}>{sup.name}</Typography>
+                                        {editingName?.id === sup.id ? (
+                                            <TextField
+                                                size="small" autoFocus
+                                                value={editingName.value}
+                                                onChange={e => setEditingName({ id: sup.id, value: e.target.value })}
+                                                onBlur={() => handleInlineNameSave(sup.id, editingName.value)}
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter') handleInlineNameSave(sup.id, editingName.value);
+                                                    if (e.key === 'Escape') setEditingName(null);
+                                                }}
+                                                sx={{ width: 180 }}
+                                                inputProps={{ style: { fontWeight: 600, fontSize: '0.85rem' } }}
+                                            />
+                                        ) : (
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer' }}
+                                                onClick={() => setEditingName({ id: sup.id, value: sup.name })}>
+                                                <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.85rem' }}>{sup.name}</Typography>
+                                                <Edit sx={{ fontSize: 13, color: 'text.disabled', opacity: 0, '.MuiTableRow-root:hover &': { opacity: 1 } }} />
+                                            </Box>
+                                        )}
                                         {sup.gstin && <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>{sup.gstin}</Typography>}
                                     </TableCell>
                                     <TableCell><Typography variant="body2" sx={{ fontSize: '0.83rem' }}>{sup.mobile || '-'}</Typography></TableCell>
@@ -833,6 +994,11 @@ export const ListSuppliers = () => {
                                             <Tooltip title="View Ledger">
                                                 <IconButton data-testid={`view-supplier-${sup.id}`} size="small" onClick={() => fetchSupplierDetails(sup.id)} sx={{ color: '#1a237e' }}>
                                                     <Visibility fontSize="small" />
+                                                </IconButton>
+                                            </Tooltip>
+                                            <Tooltip title="Edit Supplier">
+                                                <IconButton data-testid={`edit-supplier-${sup.id}`} size="small" onClick={() => openEditDialog(sup)} sx={{ color: '#f57c00' }}>
+                                                    <Edit fontSize="small" />
                                                 </IconButton>
                                             </Tooltip>
                                             <Tooltip title="Quick Pay">
@@ -876,7 +1042,32 @@ export const ListSuppliers = () => {
                 onDeletePayment={handleDeletePayment}
                 onPayment={(s) => { setDetailsDialog({ open: false, supplier: null }); setPrefilledSupplier(s); setEntryMode('payment'); }}
                 onPurchase={(s) => { setDetailsDialog({ open: false, supplier: null }); setPrefilledSupplier(s); setEntryMode('purchase'); }}
+                onDownload={handleLedgerDownload}
+                onPrint={handleLedgerPrint}
             />
+
+            {/* Supplier Edit Dialog */}
+            <Dialog open={editDialog.open} onClose={() => setEditDialog({ open: false, supplier: null, saving: false })} maxWidth="xs" fullWidth>
+                <Box sx={{ bgcolor: '#f57c00', color: '#fff', px: 2.5, py: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700 }}>Edit Supplier</Typography>
+                    <IconButton onClick={() => setEditDialog({ open: false, supplier: null, saving: false })} sx={{ color: '#fff' }} size="small">
+                        <Close />
+                    </IconButton>
+                </Box>
+                <DialogContent sx={{ pt: 2 }}>
+                    <TextField fullWidth label="Name *" value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} size="small" sx={{ mb: 2 }} />
+                    <TextField fullWidth label="Mobile" value={editForm.mobile} onChange={e => setEditForm(p => ({ ...p, mobile: e.target.value }))} size="small" sx={{ mb: 2 }} />
+                    <TextField fullWidth label="GSTIN" value={editForm.gstin} onChange={e => setEditForm(p => ({ ...p, gstin: e.target.value.toUpperCase() }))} size="small" sx={{ mb: 2 }} />
+                    <TextField fullWidth label="Opening Balance (₹)" type="number" value={editForm.openingBalance} onChange={e => setEditForm(p => ({ ...p, openingBalance: e.target.value }))} size="small" sx={{ mb: 2 }} />
+                    <TextField fullWidth label="Opening Balance Date" type="date" value={editForm.openingBalanceDate} onChange={e => setEditForm(p => ({ ...p, openingBalanceDate: e.target.value }))} size="small" InputLabelProps={{ shrink: true }} helperText="Date from which opening balance is effective" />
+                </DialogContent>
+                <DialogActions sx={{ px: 2, pb: 2 }}>
+                    <Button onClick={() => setEditDialog({ open: false, supplier: null, saving: false })}>Cancel</Button>
+                    <Button variant="contained" onClick={handleEditSave} disabled={editDialog.saving || !editForm.name.trim()} sx={{ bgcolor: '#f57c00' }}>
+                        {editDialog.saving ? <CircularProgress size={20} /> : 'Save'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 };

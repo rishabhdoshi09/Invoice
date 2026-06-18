@@ -42,8 +42,10 @@ export const Login = () => {
 
         try {
             await login(formData.username, formData.password);
-            // Navigate to orders page after successful login
-            navigate('/orders', { replace: true });
+            // Redirect back to where the user was (e.g. mid-invoice) if saved
+            const returnTo = sessionStorage.getItem('auth_return_to');
+            sessionStorage.removeItem('auth_return_to');
+            navigate(returnTo || '/orders', { replace: true });
         } catch (err) {
             setError(err.toString());
         } finally {
@@ -99,7 +101,7 @@ export const Login = () => {
                 <Card sx={{ maxWidth: 450, width: '100%', mx: 2 }}>
                     <CardContent sx={{ p: 4 }}>
                         <Typography variant="h4" gutterBottom align="center" sx={{ mb: 1 }}>
-                            🔐 Initial Setup
+                            Initial Setup
                         </Typography>
                         <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
                             Create your administrator account
@@ -198,8 +200,8 @@ export const Login = () => {
         >
             <Card sx={{ maxWidth: 400, width: '100%', mx: 2 }}>
                 <CardContent sx={{ p: 4 }}>
-                    <Typography variant="h4" gutterBottom align="center" sx={{ mb: 1 }}>
-                        📋 Invoice System
+                    <Typography variant="h4" gutterBottom align="center" sx={{ mb: 1, fontWeight: 700 }}>
+                        RS Invoice
                     </Typography>
                     <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
                         Sign in to continue
