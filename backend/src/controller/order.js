@@ -115,6 +115,24 @@ module.exports = {
                 orderObj.paymentMode = 'CREDIT'; // Partial at POS is still a credit sale
             }
 
+            // Grey/White split of `total` — only meaningful for CREDIT orders.
+            // Must add up exactly to total; CASH orders always get 0/0 (no split concept).
+            if (orderObj.paymentMode === 'CREDIT') {
+                const grey = round2(Number(orderObj.greyAmount) || 0);
+                const white = round2(Number(orderObj.whiteAmount) || 0);
+                if (Math.abs(grey + white - orderObj.total) > 0.02) {
+                    return res.status(400).send({
+                        status: 400,
+                        message: `Grey (₹${grey}) + White (₹${white}) must equal the order total (₹${orderObj.total}).`
+                    });
+                }
+                orderObj.greyAmount = grey;
+                orderObj.whiteAmount = white;
+            } else {
+                orderObj.greyAmount = 0;
+                orderObj.whiteAmount = 0;
+            }
+
             // Add created by user info
             if (req.user) {
                 orderObj.createdBy = req.user.id;
@@ -490,6 +508,16 @@ module.exports = {
                     const currentPaid = Number(originalOrder.paidAmount) || 0;
                     updateFields.dueAmount     = round2(Math.max(0, computedTotal - currentPaid));
                     updateFields.advanceAmount = round2(Math.max(0, currentPaid - computedTotal));
+
+                    // Rescale the grey/white split proportionally so it still sums to the new
+                    // total (editing line items shouldn't silently break the split invariant).
+                    if (originalOrder.paymentMode === 'CREDIT') {
+                        const oldTotal = Number(originalOrder.total) || 0;
+                        const oldGrey = Number(originalOrder.greyAmount) || 0;
+                        const greyRatio = oldTotal > 0 ? oldGrey / oldTotal : 0;
+                        updateFields.greyAmount = round2(computedTotal * greyRatio);
+                        updateFields.whiteAmount = round2(computedTotal - updateFields.greyAmount);
+                    }
 
                     financialFieldsChanged = Math.abs(computedTotal - Number(originalOrder.total)) > 0.001;
 

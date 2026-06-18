@@ -50,6 +50,10 @@ module.exports = {
             paymentStatus:   Joi.string().trim().valid('paid', 'partial', 'unpaid').optional(),
             notes:           Joi.string().trim().allow('').optional(),
             paymentMode:     Joi.string().trim().valid('CASH', 'CREDIT').optional(),
+            // Grey/White split of `total` — only meaningful for CREDIT orders.
+            // Sum is cross-checked against `total` in the controller (Joi can't see sibling-of-sibling sums cleanly here).
+            greyAmount:      Joi.number().min(0).max(MAX_UNIT_PRICE * MAX_QUANTITY).optional().default(0),
+            whiteAmount:     Joi.number().min(0).max(MAX_UNIT_PRICE * MAX_QUANTITY).optional().default(0),
             idempotencyKey:  Joi.string().trim().max(128).allow('', null).optional(),
             orderItems:      Joi.array().items(orderItems).min(1).required()
         });

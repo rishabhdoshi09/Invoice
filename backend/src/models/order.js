@@ -92,6 +92,18 @@ module.exports = (sequelize, Sequelize) => {
                 type: Sequelize.ENUM('CASH', 'CREDIT'),
                 defaultValue: 'CREDIT'
             },
+            // Grey/White split of `total` — only meaningful for CREDIT orders.
+            // greyAmount + whiteAmount must equal total. Set once at creation.
+            greyAmount: {
+                type: Sequelize.DECIMAL(15, 2),
+                defaultValue: 0,
+                allowNull: false
+            },
+            whiteAmount: {
+                type: Sequelize.DECIMAL(15, 2),
+                defaultValue: 0,
+                allowNull: false
+            },
             customerId: {
                 type: Sequelize.UUID,
                 allowNull: true

@@ -124,7 +124,7 @@ const toNum = (v) => {
  * orderDate, customerName, customerMobile, subTotal, tax, taxPercent, total, orderItems[]
  * So we must strip extra UI-only properties like `customer`, `notes`, `orderNumber`, etc.
  */
-const sanitizeOrderForServer = (props = {}, isCreditSale = false) => {
+const sanitizeOrderForServer = (props = {}, isCreditSale = false, greyAmount = 0, whiteAmount = 0) => {
   const { orderItems = [] } = props;
 
   const clean = orderItems.map((it, index) => {
@@ -152,6 +152,9 @@ const sanitizeOrderForServer = (props = {}, isCreditSale = false) => {
     total: total,
     // Credit sale: paidAmount = 0, otherwise fully paid
     paidAmount: isCreditSale ? 0 : total,
+    // Grey/White split — only meaningful for credit sales
+    greyAmount: isCreditSale ? toNum(greyAmount) : 0,
+    whiteAmount: isCreditSale ? toNum(whiteAmount) : 0,
     orderItems: clean,
   };
 };
@@ -317,6 +320,11 @@ export const CreateOrder = () => {
 
   // Credit Sale toggle - when ON, customer name is mandatory and order is marked unpaid
   const [isCreditSale, setIsCreditSale] = useState(false);
+
+  // Grey/White split of the grand total — only used for Credit Sales.
+  // Both typed explicitly by the user; their sum must equal the grand total.
+  const [greyAmountInput, setGreyAmountInput] = useState('');
+  const [whiteAmountInput, setWhiteAmountInput] = useState('');
 
   // Admin guide visibility - hidden by default
   const [showAdminGuide, setShowAdminGuide] = useState(false);
@@ -1432,7 +1440,18 @@ export const CreateOrder = () => {
       alert("Credit Sale requires a Customer Name to track the due amount.");
       return;
     }
-    
+
+    // Credit sale validation: Grey + White must add up exactly to the grand total
+    if (isCreditSale) {
+      const greyVal = toNum(greyAmountInput);
+      const whiteVal = toNum(whiteAmountInput);
+      const totalVal = toNum(orderProps.total);
+      if (Math.abs(greyVal + whiteVal - totalVal) > 0.02) {
+        alert(`Grey (₹${greyVal}) + White (₹${whiteVal}) must equal the Grand Total (₹${totalVal}).`);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       setLastSubmitError(null);
@@ -1461,8 +1480,8 @@ export const CreateOrder = () => {
         return;
       }
 
-      // SANITIZE before save (pass isCreditSale for payment status)
-      const sanitized = sanitizeOrderForServer(orderProps, isCreditSale);
+      // SANITIZE before save (pass isCreditSale for payment status, grey/white split)
+      const sanitized = sanitizeOrderForServer(orderProps, isCreditSale, greyAmountInput, whiteAmountInput);
 
       // ONLINE SAVE (Server)
       const savedOrder = await dispatch(createOrderAction(sanitized));
@@ -1529,6 +1548,8 @@ export const CreateOrder = () => {
       // It will be cleared when the first item is added to the next invoice
       setSelectedHistoryDate('');
       setIsCreditSale(false); // Reset credit sale toggle
+      setGreyAmountInput(''); // Reset grey/white split
+      setWhiteAmountInput('');
       setSelectedProduct(null); // Reset selected product
       setInputValue(''); // Reset input value
       setCustomerInputValue(''); // Reset customer autocomplete input
@@ -1853,6 +1874,8 @@ export const CreateOrder = () => {
                             }
                           } else {
                             setIsCreditSale(false);
+                            setGreyAmountInput(''); // Clear stale split when switching back to cash
+                            setWhiteAmountInput('');
                           }
                         }}
                         color="warning"
@@ -1871,6 +1894,46 @@ export const CreateOrder = () => {
                   )}
                 </Box>
               </Grid>
+
+              {/* Grey/White split — only for Credit Sales. Both typed explicitly; must sum to Grand Total. */}
+              {isCreditSale && (
+                <Grid item xs={12}>
+                  {(() => {
+                    const greyVal = toNum(greyAmountInput);
+                    const whiteVal = toNum(whiteAmountInput);
+                    const totalVal = toNum(orderProps.total);
+                    const diff = round2(totalVal - greyVal - whiteVal);
+                    const matches = Math.abs(diff) <= 0.02;
+                    return (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', p: 1.5, borderRadius: 1, bgcolor: '#f3e5f5', border: '1px solid #9c27b0' }}>
+                        <TextField
+                          size="small"
+                          label="⚫ Grey Amount (₹)"
+                          type="number"
+                          value={greyAmountInput}
+                          onChange={(e) => setGreyAmountInput(e.target.value)}
+                          sx={{ width: 160 }}
+                        />
+                        <TextField
+                          size="small"
+                          label="⚪ White Amount (₹)"
+                          type="number"
+                          value={whiteAmountInput}
+                          onChange={(e) => setWhiteAmountInput(e.target.value)}
+                          sx={{ width: 160 }}
+                        />
+                        <Typography variant="caption" sx={{ fontWeight: 'bold', color: matches ? 'success.main' : 'error.main' }}>
+                          {matches
+                            ? `✓ Matches Grand Total (₹${totalVal.toLocaleString('en-IN')})`
+                            : diff > 0
+                              ? `₹${diff.toLocaleString('en-IN')} still left to allocate (Total ₹${totalVal.toLocaleString('en-IN')})`
+                              : `₹${Math.abs(diff).toLocaleString('en-IN')} over the Grand Total (₹${totalVal.toLocaleString('en-IN')})`}
+                        </Typography>
+                      </Box>
+                    );
+                  })()}
+                </Grid>
+              )}
 
               <Grid item xs={12} md={4}>
                 <TextField

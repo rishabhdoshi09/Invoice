@@ -160,6 +160,9 @@ export const DayStart = () => {
     const totalOrdersCount = Number(realTimeSummary?.totalOrders) || 0;
     const cashOrdersCount = Number(realTimeSummary?.cashOrdersCount) || 0;
     const creditOrdersCount = Number(realTimeSummary?.creditOrdersCount) || 0;
+    // Grey/White split — only meaningful for CREDIT-mode orders
+    const creditGreySales = Number(realTimeSummary?.creditGreySales) || 0;
+    const creditWhiteSales = Number(realTimeSummary?.creditWhiteSales) || 0;
     
     // Total sales = Cash Sales + Credit Sales (all orders)
     const totalSales = totalBusinessDone;
@@ -519,6 +522,12 @@ export const DayStart = () => {
                                 <Typography variant="caption" sx={{ display: 'block', color: '#ff5722', fontWeight: 'bold' }}>
                                     (not in drawer)
                                 </Typography>
+                                {(creditGreySales > 0 || creditWhiteSales > 0) && (
+                                    <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center', mt: 0.5 }}>
+                                        <Chip label={`⚫ ₹${creditGreySales.toLocaleString('en-IN')}`} size="small" sx={{ bgcolor: '#424242', color: '#fff', fontSize: '0.65rem', height: 20 }} />
+                                        <Chip label={`⚪ ₹${creditWhiteSales.toLocaleString('en-IN')}`} size="small" sx={{ bgcolor: '#fff', color: '#424242', border: '1px solid #bbb', fontSize: '0.65rem', height: 20 }} />
+                                    </Box>
+                                )}
                                 <Visibility sx={{ fontSize: 14, color: '#999', mt: 0.5 }} />
                             </Box>
                         </Grid>
@@ -853,6 +862,8 @@ export const DayStart = () => {
                                         <TableCell sx={{ fontWeight: 'bold' }}>Mode</TableCell>
                                         <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
                                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>Total</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>⚫ Grey</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>⚪ White</TableCell>
                                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>Due</TableCell>
                                     </TableRow>
                                 </TableHead>
@@ -866,12 +877,17 @@ export const DayStart = () => {
                                             <TableCell><Chip label={order.paymentMode === 'CASH' ? 'CASH (unpaid)' : 'CREDIT'} size="small" color={order.paymentMode === 'CASH' ? 'primary' : 'default'} /></TableCell>
                                             <TableCell><Chip label={order.paymentStatus} size="small" color={order.paymentStatus === 'paid' ? 'success' : order.paymentStatus === 'partial' ? 'warning' : 'error'} /></TableCell>
                                             <TableCell align="right">₹{Number(order.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
+                                            <TableCell align="right">{order.paymentMode === 'CREDIT' ? `₹${Number(order.greyAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</TableCell>
+                                            <TableCell align="right">{order.paymentMode === 'CREDIT' ? `₹${Number(order.whiteAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}</TableCell>
                                             <TableCell align="right"><Typography fontWeight="bold" color="error.main">₹{Number(order.dueAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
                                         </TableRow>
                                     ))}
                                     <TableRow sx={{ bgcolor: '#ffcdd2' }}>
-                                        <TableCell colSpan={7}><Typography fontWeight="bold">Total Credit ({(realTimeSummary?.creditOrderRecords || []).length} orders)</Typography></TableCell>
+                                        <TableCell colSpan={6}><Typography fontWeight="bold">Total Credit ({(realTimeSummary?.creditOrderRecords || []).length} orders)</Typography></TableCell>
                                         <TableCell align="right"><Typography fontWeight="bold" variant="h6" color="error.main">₹{creditSales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                        <TableCell align="right"><Typography fontWeight="bold" sx={{ color: '#424242' }}>₹{creditGreySales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                        <TableCell align="right"><Typography fontWeight="bold" sx={{ color: '#757575' }}>₹{creditWhiteSales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                        <TableCell></TableCell>
                                     </TableRow>
                                 </TableBody>
                             </Table>

@@ -402,6 +402,10 @@ module.exports = {
         
         // Credit outstanding (what customers still owe from today)
         const creditOutstanding = orders.reduce((sum, o) => sum + (Number(o.dueAmount) || 0), 0);
+
+        // Grey/White split — only set on CREDIT-mode orders (CASH orders are always 0/0)
+        const creditGreyTotal = creditOrders.reduce((sum, o) => sum + (Number(o.greyAmount) || 0), 0);
+        const creditWhiteTotal = creditOrders.reduce((sum, o) => sum + (Number(o.whiteAmount) || 0), 0);
         
         // Total business done (all orders regardless of payment mode)
         const totalBusinessDone = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
@@ -579,6 +583,9 @@ module.exports = {
             cashSales: cashFromTodaysOrders,
             // Credit outstanding (dueAmount from all orders - NOT in drawer)
             creditSales: creditOutstanding,
+            // Grey/White split of CREDIT-mode orders' totals (set at order creation)
+            creditGreySales: creditGreyTotal,
+            creditWhiteSales: creditWhiteTotal,
             // Total business done today
             totalBusinessDone: totalBusinessDone,
             // Customer receipts (real payments, excluding PAY-TOGGLE markers)
@@ -605,7 +612,8 @@ module.exports = {
             creditOrderRecords: ordersWithOutstandingDue.map(o => ({
                 id: o.id, orderNumber: o.orderNumber, customerName: o.customerName,
                 total: Number(o.total), dueAmount: Number(o.dueAmount), paymentStatus: o.paymentStatus,
-                paymentMode: o.paymentMode, createdAt: o.createdAt
+                paymentMode: o.paymentMode, createdAt: o.createdAt,
+                greyAmount: Number(o.greyAmount) || 0, whiteAmount: Number(o.whiteAmount) || 0
             })),
             customerReceiptRecords: customerReceipts.map(p => ({
                 id: p.id, paymentNumber: p.paymentNumber, partyName: p.partyName,
