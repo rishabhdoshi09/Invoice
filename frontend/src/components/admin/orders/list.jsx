@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { useState, useRef, useLayoutEffect, useEffect, useCallback, memo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { listOrdersAction, deleteOrderAction, getOrderAction } from '../../../store/orders';
+import { api } from '../../../store/api';
 import { Pagination } from '../../common/pagination';
 import { useAuth } from '../../../context/AuthContext';
 import { Note, Warning, Clear, Refresh, SwapHoriz, PersonAdd, Person, Print, Visibility, WhatsApp } from '@mui/icons-material';
@@ -382,6 +383,14 @@ export const ListOrders = () => {
                 payload,
                 { headers: { Authorization: `Bearer ${token}` } }
             );
+            // This call bypasses RTK Query (plain axios), so the Dashboard/Receivables
+            // caches won't auto-invalidate on their own — do it explicitly or the
+            // dashboard keeps showing the order under its old paid/unpaid bucket.
+            dispatch(api.util.invalidateTags([
+                { type: 'Dashboard', id: 'TODAY' },
+                { type: 'Orders', id: 'LIST' },
+                { type: 'Receivables', id: 'LIST' }
+            ]));
             // Refresh the list
             fetchOrders();
         } catch (error) {

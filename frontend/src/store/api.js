@@ -214,7 +214,12 @@ export const api = createApi({
         getRealTimeSummary: builder.query({
             query: (date) => `/dashboard/summary/realtime/${date}`,
             transformResponse: (response) => response.data,
-            providesTags: (result, error, date) => [{ type: 'Dashboard', id: `realtime-${date}` }],
+            // Also tagged 'TODAY' so order mutations (create/update/delete/payment-status)
+            // invalidate this query too — they only invalidate the 'TODAY' id.
+            providesTags: (result, error, date) => [
+                { type: 'Dashboard', id: `realtime-${date}` },
+                { type: 'Dashboard', id: 'TODAY' }
+            ],
         }),
         
         setOpeningBalance: builder.mutation({
