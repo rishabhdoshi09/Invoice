@@ -483,21 +483,52 @@ export const DayStart = () => {
                             <Typography variant="caption" color="text.secondary">
                                 {cashOrdersCount} cash orders
                             </Typography>
-                            {creditSales > 0 && (
-                                <Typography variant="caption" sx={{ display: 'block', color: '#ff5722', fontWeight: 'bold', cursor: 'pointer' }}
-                                    onClick={(e) => { e.stopPropagation(); setExpandedCard(prev => prev === 'creditSales' ? null : 'creditSales'); }}>
-                                    Credit: ₹{creditSales.toLocaleString('en-IN')} (not in drawer)
-                                </Typography>
-                            )}
                             <Visibility sx={{ fontSize: 14, color: '#999', mt: 0.5 }} />
                         </Box>
                     </Grid>
-                    
+
+                    {/* Divider - Credit Sales is shown separately below, it is NOT counted in Expected Cash */}
+                    {creditSales > 0 && (
+                        <Grid item xs={12} md={0.5} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Typography variant="h5" color="text.disabled">|</Typography>
+                        </Grid>
+                    )}
+
+                    {/* Credit Sales - kept fully separate from Cash Sales. This money is NOT in the drawer. */}
+                    {creditSales > 0 && (
+                        <Grid item xs={12} md={2}>
+                            <Box
+                                data-testid="credit-sales-card"
+                                onClick={() => setExpandedCard(prev => prev === 'creditSales' ? null : 'creditSales')}
+                                sx={{
+                                    textAlign: 'center', p: 2, bgcolor: expandedCard === 'creditSales' ? '#ffccbc' : '#fbe9e7',
+                                    borderRadius: 2, cursor: 'pointer',
+                                    border: expandedCard === 'creditSales' ? '2px solid #ff5722' : '2px dashed #ff5722',
+                                    '&:hover': { bgcolor: '#ffccbc', transform: 'translateY(-2px)' },
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                <ShoppingCart sx={{ fontSize: 40, color: '#ff5722' }} />
+                                <Typography variant="body2" color="text.secondary">Credit Sales</Typography>
+                                <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#ff5722' }}>
+                                    ₹{creditSales.toLocaleString('en-IN')}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    {creditOrdersCount} credit orders
+                                </Typography>
+                                <Typography variant="caption" sx={{ display: 'block', color: '#ff5722', fontWeight: 'bold' }}>
+                                    (not in drawer)
+                                </Typography>
+                                <Visibility sx={{ fontSize: 14, color: '#999', mt: 0.5 }} />
+                            </Box>
+                        </Grid>
+                    )}
+
                     {/* Plus Sign */}
                     <Grid item xs={12} md={0.5} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Typography variant="h4" color="text.secondary">+</Typography>
                     </Grid>
-                    
+
                     {/* Customer Receipts */}
                     <Grid item xs={12} md={2}>
                         <Box 
