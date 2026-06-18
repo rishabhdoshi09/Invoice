@@ -16,6 +16,7 @@ import { ListCustomers } from "./components/admin/customers/list";
 import { ListPurchases } from "./components/admin/purchases/list";
 import { ListPayments } from "./components/admin/payments/list";
 import { DailyPayments } from "./components/admin/dailyPayments/DailyPayments";
+import { Loans } from "./components/admin/loans/Loans";
 import { OutstandingReports } from "./components/admin/reports/outstanding";
 import { TallyExport } from "./components/admin/tally/export";
 import { AdminDashboard } from "./components/admin/dashboard/AdminDashboard";
@@ -87,6 +88,7 @@ const AppContent = () => {
           <Route path="purchases" element={<ListPurchases />} />
           <Route path="payments" element={<ListPayments />} />
           <Route path="daily-payments" element={<DailyPayments />} />
+          <Route path="loans" element={<Loans />} />
           <Route path="stock" element={<StockManagement />} />
           <Route path="reports">
             <Route index element={<OutstandingReports />} />
