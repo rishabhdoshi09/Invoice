@@ -20,7 +20,15 @@ import {
   Switch,
   FormControlLabel,
   Alert,
-  Chip
+  Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Divider
 } from '@mui/material';
 import { CreateProduct } from '../products/create';
 import pdfMake from 'pdfmake/build/pdfmake';
@@ -2159,38 +2167,91 @@ export const CreateOrder = () => {
           </Box>
           <br />
 
-          {orderProps.orderItems?.map((item, index) => (
-            <Card key={index} sx={{ padding: '5px 15px ', margin: '5px 2px' }}>
-              <Grid container>
-                <Grid item xs={10}>
-                  <Typography variant='body2'>
-                    Name: {(item.altName && item.altName.trim())
-                      ? `${item.altName.trim()} (Original: ${safeGetProductName(rows, item)})`
-                      : safeGetProductName(rows, item)
-                    } | Qty: {item.quantity} | Price: {item.totalPrice}
+          {orderProps.orderItems && orderProps.orderItems.length > 0 && (
+            <TableContainer component={Paper} variant="outlined" sx={{ mt: 1 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ width: 36, fontWeight: 700 }}>#</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Product</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700 }}>Qty</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>Amount (₹)</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700 }}>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {orderProps.orderItems.map((item, index) => (
+                    <TableRow key={index} hover>
+                      <TableCell sx={{ color: 'text.secondary', fontWeight: 500 }}>{index + 1}</TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {(item.altName && item.altName.trim())
+                            ? `${item.altName.trim()} (Original: ${safeGetProductName(rows, item)})`
+                            : safeGetProductName(rows, item)
+                          }
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="center">{item.quantity}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>
+                        ₹{Number(item.totalPrice).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell align="center">
+                        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+                          <Button size="small" onClick={() => {
+                            const currentItem = orderProps.orderItems[index]; if (!currentItem) return;
+                            const currentNote = (currentItem.altName || "").trim();
+                            const suggested = currentNote || safeGetProductName(rows, currentItem);
+                            const newNote = window.prompt("Enter a note / alternate name for this product:", suggested);
+                            if (newNote !== null) {
+                              setOrderProps((prev) => {
+                                const updated = [...prev.orderItems];
+                                updated[index] = { ...updated[index], altName: String(newNote).trim() };
+                                const nextProps = { ...prev, orderItems: updated };
+                                try { generatePdf(nextProps); } catch {}
+                                return nextProps;
+                              });
+                            }
+                          }}>Edit Note</Button>
+                          <Button size="small" onClick={() => removeItem(index)}><Delete /></Button>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+
+          {/* Live Totals Summary */}
+          {orderProps.orderItems && orderProps.orderItems.length > 0 && (
+            <Box sx={{ mt: 2, p: 2, border: '2px solid #1565C0', borderRadius: 1, bgcolor: '#F0F7FF', maxWidth: 320, ml: 'auto' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="body2" color="text.secondary">Subtotal</Typography>
+                <Typography variant="body2" fontWeight={600}>₹{Number(orderProps.subTotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography>
+              </Box>
+              {Number(orderProps.taxPercent) > 0 && (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2" color="text.secondary">Tax ({orderProps.taxPercent}%)</Typography>
+                  <Typography variant="body2" fontWeight={600}>₹{Number(orderProps.tax).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography>
+                </Box>
+              )}
+              <Divider sx={{ my: 1 }} />
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="subtitle1" fontWeight={700} color="primary.dark">TOTAL</Typography>
+                <Typography variant="subtitle1" fontWeight={700} color="primary.dark">
+                  ₹{Number(orderProps.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </Typography>
+              </Box>
+              {isCreditSale && (
+                <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid #FF9800', display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="warning.main" fontWeight={600}>Due (Credit)</Typography>
+                  <Typography variant="body2" color="warning.main" fontWeight={600}>
+                    ₹{Number(orderProps.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </Typography>
-                </Grid>
-                <Grid item xs={2} sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                  <Button size="small" onClick={() => {
-                    const currentItem = orderProps.orderItems[index]; if (!currentItem) return;
-                    const currentNote = (currentItem.altName || "").trim();
-                    const suggested = currentNote || safeGetProductName(rows, currentItem);
-                    const newNote = window.prompt("Enter a note / alternate name for this product:", suggested);
-                    if (newNote !== null) {
-                      setOrderProps((prev) => {
-                        const updated = [...prev.orderItems];
-                        updated[index] = { ...updated[index], altName: String(newNote).trim() };
-                        const nextProps = { ...prev, orderItems: updated };
-                        try { generatePdf(nextProps); } catch {}
-                        return nextProps;
-                      });
-                    }
-                  }}>Edit Note</Button>
-                  <Button size="small" onClick={() => removeItem(index)}><Delete /></Button>
-                </Grid>
-              </Grid>
-            </Card>
-          ))}
+                </Box>
+              )}
+            </Box>
+          )}
 
           {/* Recently deleted items list - visible before and after submit */}
           {recentlyDeleted.length > 0 && (
