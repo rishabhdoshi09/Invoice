@@ -755,11 +755,13 @@ module.exports = {
                     throw new Error(`Payment status was already changed to "${lockedOrder.paymentStatus}" by another user. Please refresh and try again.`);
                 }
 
-                // Update order payment status — toggle is ONLY a status marker
-                // paidAmount stays as-is (reflects actual cash at POS, set at creation)
+                // Update order payment status.
+                // paidAmount is kept consistent with the status so the DB's
+                // chk_orders_paid_due_balance constraint (paid - total + due - advance ≈ 0) holds.
                 // paymentMode NEVER changes (CASH/CREDIT is determined at creation)
                 const updateData = {
                     paymentStatus: newStatus,
+                    paidAmount: newStatus === 'paid' ? order.total : 0,
                     dueAmount: newStatus === 'paid' ? 0 : order.total,
                     modifiedBy: req.user?.id,
                     modifiedByName: changedByTrimmed // Use the provided name for audit
