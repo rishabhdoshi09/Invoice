@@ -384,8 +384,11 @@ module.exports = {
         const unpaidOrders = orders.filter(o => o.paymentStatus === 'unpaid');
         const partialOrders = orders.filter(o => o.paymentStatus === 'partial');
         
-        // Cash Sales = total from CASH orders ONLY (paid at POS, not from paidAmount)
-        const cashFromTodaysOrders = cashOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+        // Cash Sales = paidAmount from CASH orders ONLY.
+        // Uses paidAmount (not total) so that a CASH order toggled to "unpaid"
+        // stops counting as cash actually collected — it shows up under
+        // Credit Outstanding (via dueAmount) instead, avoiding double counting.
+        const cashFromTodaysOrders = cashOrders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
         
         // Credit outstanding (what customers still owe from today)
         const creditOutstanding = orders.reduce((sum, o) => sum + (Number(o.dueAmount) || 0), 0);
