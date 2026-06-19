@@ -19,12 +19,24 @@ dns.setDefaultResultOrder('ipv4first');
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
+// When the internet is down, every failed send retries 3x with backoff and
+// logs at each step — across many fire-and-forget alerts that floods the
+// console. Once we detect "no network", pause all sends for a cooldown
+// window instead of retrying/logging per call.
+const NETWORK_ERROR_CODES = new Set(['ENOTFOUND', 'ENETUNREACH', 'ECONNREFUSED', 'EAI_AGAIN', 'ENETDOWN', 'EHOSTUNREACH']);
+const OFFLINE_COOLDOWN_MS = 60000;
+let offlineUntil = 0;
+
 // ─── Send message via Telegram Bot API (with exponential backoff retry) ───
 function sendTelegram(text, parseMode = 'HTML', retries = 3) {
     return new Promise((resolve, reject) => {
         if (!BOT_TOKEN || !CHAT_ID) {
             console.warn('[TELEGRAM] Bot token or chat ID not configured — skipping alert');
             return resolve({ skipped: true });
+        }
+
+        if (Date.now() < offlineUntil) {
+            return resolve({ skipped: true, reason: 'offline-cooldown' });
         }
 
         const attempt = (attemptNum) => {
@@ -66,6 +78,14 @@ function sendTelegram(text, parseMode = 'HTML', retries = 3) {
             });
 
             req.on('error', (err) => {
+                if (NETWORK_ERROR_CODES.has(err.code)) {
+                    // No internet — retrying immediately won't help. Log once, go quiet for a while.
+                    if (Date.now() >= offlineUntil) {
+                        console.warn(`[TELEGRAM] No internet connection (${err.code}) — pausing alerts for ${OFFLINE_COOLDOWN_MS / 1000}s`);
+                    }
+                    offlineUntil = Date.now() + OFFLINE_COOLDOWN_MS;
+                    return reject(new Error(`Telegram unreachable: ${err.message}`));
+                }
                 if (attemptNum < retries) {
                     const delay = Math.pow(2, attemptNum) * 1000;
                     console.warn(`[TELEGRAM] Network error (attempt ${attemptNum + 1}/${retries}): ${err.message}, retrying in ${delay}ms`);
@@ -81,6 +101,8 @@ function sendTelegram(text, parseMode = 'HTML', retries = 3) {
                     console.warn(`[TELEGRAM] Timeout (attempt ${attemptNum + 1}/${retries}), retrying in ${delay}ms`);
                     setTimeout(() => attempt(attemptNum + 1), delay);
                 } else {
+                    // Repeated timeouts usually also mean no usable network — cool down too.
+                    offlineUntil = Date.now() + OFFLINE_COOLDOWN_MS;
                     reject(new Error(`Telegram timeout after ${retries} attempts`));
                 }
             });
