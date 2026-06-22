@@ -17,6 +17,7 @@ import { ListPurchases } from "./components/admin/purchases/list";
 import { ListPayments } from "./components/admin/payments/list";
 import { DailyPayments } from "./components/admin/dailyPayments/DailyPayments";
 import { Loans } from "./components/admin/loans/Loans";
+import { Employees } from "./components/admin/employees/Employees";
 import { OutstandingReports } from "./components/admin/reports/outstanding";
 import { TallyExport } from "./components/admin/tally/export";
 import { AdminDashboard } from "./components/admin/dashboard/AdminDashboard";
@@ -189,6 +190,7 @@ const AppContent = () => {
           <Route path="day-start" element={<DayStart />} />
           <Route path="ledger" element={<ProtectedRoute adminOnly><LedgerModule /></ProtectedRoute>} />
           <Route path="bill-audit" element={<ProtectedRoute adminOnly><BillAuditLogs /></ProtectedRoute>} />
+          <Route path="employees" element={<ProtectedRoute adminOnly><Employees /></ProtectedRoute>} />
           <Route path="activity" element={<TodayActivity />} />
           <Route path="backup" element={<ProtectedRoute adminOnly><DatabaseBackup /></ProtectedRoute>} />
           <Route 

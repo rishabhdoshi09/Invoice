@@ -38,7 +38,8 @@ import {
     Visibility,
     PictureAsPdf,
     Warning,
-    EventBusy
+    EventBusy,
+    Badge
 } from '@mui/icons-material';
 import {
     ResponsiveContainer,
@@ -176,12 +177,14 @@ export const DayStart = () => {
     const supplierPayments = Number(realTimeSummary?.supplierPayments) || 0;
     const supplierPaymentsCount = Number(realTimeSummary?.supplierPaymentsCount) || 0;
     const expenses = Number(realTimeSummary?.expenses) || 0;
+    const salaryPayments = Number(realTimeSummary?.salaryPayments) || 0;
+    const salaryPaymentsCount = Number(realTimeSummary?.salaryPaymentsCount) || 0;
     const loansCashIn = Number(realTimeSummary?.loansCashIn) || 0;
     const loansCashOut = Number(realTimeSummary?.loansCashOut) || 0;
 
-    // Expected cash = Opening + Cash Sales + Customer Receipts + Loans In - Supplier Payments - Expenses - Loans Out
-    const expectedCash = openingBalance + cashSales + customerPayments + loansCashIn - supplierPayments - expenses - loansCashOut;
-    const netCashFlow = cashSales + customerPayments + loansCashIn - supplierPayments - expenses - loansCashOut;
+    // Expected cash = Opening + Cash Sales + Customer Receipts + Loans In - Supplier Payments - Expenses - Salary Payouts - Loans Out
+    const expectedCash = openingBalance + cashSales + customerPayments + loansCashIn - supplierPayments - expenses - salaryPayments - loansCashOut;
+    const netCashFlow = cashSales + customerPayments + loansCashIn - supplierPayments - expenses - salaryPayments - loansCashOut;
 
     // Prepare chart data
     const cashInflowData = [
@@ -200,6 +203,7 @@ export const DayStart = () => {
         { name: 'Loans Out', amount: -loansCashOut, fill: '#0077b6' },
         { name: 'Paid Out', amount: -supplierPayments, fill: '#ff9800' },
         { name: 'Expenses', amount: -expenses, fill: '#f44336' },
+        { name: 'Salary', amount: -salaryPayments, fill: '#8e24aa' },
         { name: 'Expected', amount: expectedCash, fill: '#00bcd4' },
     ];
 
@@ -230,6 +234,7 @@ export const DayStart = () => {
                     [{ text: '+ Customer Receipts (dues collected)', color: '#2E7D32' }, { text: fmt(customerPayments), alignment: 'right', color: '#2E7D32', bold: true }],
                     [{ text: '− Supplier Payments', color: '#E65100' }, { text: `(${fmt(supplierPayments)})`, alignment: 'right', color: '#E65100' }],
                     [{ text: '− Expenses', color: '#C62828' }, { text: `(${fmt(expenses)})`, alignment: 'right', color: '#C62828' }],
+                    [{ text: '− Salary Payments', color: '#6A1B9A' }, { text: `(${fmt(salaryPayments)})`, alignment: 'right', color: '#6A1B9A' }],
                     [{ text: 'Expected Cash in Drawer', bold: true, fontSize: 11 }, { text: fmt(expectedCash), alignment: 'right', bold: true, fontSize: 12, color: expectedCash >= 0 ? '#2E7D32' : '#C62828' }],
                 ]
             },
@@ -623,6 +628,36 @@ export const DayStart = () => {
                         </Box>
                     </Grid>
 
+                    {/* Minus Sign */}
+                    <Grid item xs={12} md={0.5} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Typography variant="h4" color="text.secondary">−</Typography>
+                    </Grid>
+
+                    {/* Salary Payments */}
+                    <Grid item xs={12} md={2}>
+                        <Box
+                            data-testid="salary-payments-card"
+                            onClick={() => setExpandedCard(prev => prev === 'salaryPayments' ? null : 'salaryPayments')}
+                            sx={{
+                                textAlign: 'center', p: 2, bgcolor: expandedCard === 'salaryPayments' ? '#e1bee7' : '#f3e5f5',
+                                borderRadius: 2, cursor: 'pointer',
+                                border: expandedCard === 'salaryPayments' ? '2px solid #8e24aa' : '2px solid transparent',
+                                '&:hover': { bgcolor: '#e1bee7', transform: 'translateY(-2px)' },
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <Badge sx={{ fontSize: 40, color: '#6a1b9a' }} />
+                            <Typography variant="body2" color="text.secondary">Salary Payments</Typography>
+                            <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#6a1b9a' }}>
+                                −₹{salaryPayments.toLocaleString('en-IN')}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                                {salaryPaymentsCount} payouts
+                            </Typography>
+                            <br/><Visibility sx={{ fontSize: 14, color: '#999', mt: 0.5 }} />
+                        </Box>
+                    </Grid>
+
                     {/* Loan query error indicator */}
                     {realTimeSummary?.loanQueryError && (
                         <Grid item xs={12}>
@@ -784,30 +819,34 @@ export const DayStart = () => {
                     data-testid="day-start-expanded-details"
                     sx={{ 
                         mb: 3, 
-                        border: expandedCard === 'cashSales' || expandedCard === 'creditSales' ? '2px solid #1976d2' : 
-                               expandedCard === 'customerReceipts' ? '2px solid #4caf50' : 
-                               expandedCard === 'supplierPayments' ? '2px solid #ff9800' : '2px solid #f44336',
+                        border: expandedCard === 'cashSales' || expandedCard === 'creditSales' ? '2px solid #1976d2' :
+                               expandedCard === 'customerReceipts' ? '2px solid #4caf50' :
+                               expandedCard === 'supplierPayments' ? '2px solid #ff9800' :
+                               expandedCard === 'salaryPayments' ? '2px solid #8e24aa' : '2px solid #f44336',
                         borderRadius: 2, overflow: 'hidden'
                     }}
                 >
-                    <Box sx={{ 
-                        p: 2, 
-                        bgcolor: expandedCard === 'cashSales' || expandedCard === 'creditSales' ? '#e3f2fd' : 
-                                 expandedCard === 'customerReceipts' ? '#e8f5e9' : 
-                                 expandedCard === 'supplierPayments' ? '#fff3e0' : '#ffebee',
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center' 
+                    <Box sx={{
+                        p: 2,
+                        bgcolor: expandedCard === 'cashSales' || expandedCard === 'creditSales' ? '#e3f2fd' :
+                                 expandedCard === 'customerReceipts' ? '#e8f5e9' :
+                                 expandedCard === 'supplierPayments' ? '#fff3e0' :
+                                 expandedCard === 'salaryPayments' ? '#f3e5f5' : '#ffebee',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                     }}>
                         <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             {(expandedCard === 'cashSales' || expandedCard === 'creditSales') && <ShoppingCart color="primary" />}
                             {expandedCard === 'customerReceipts' && <People color="success" />}
                             {expandedCard === 'supplierPayments' && <LocalShipping color="warning" />}
                             {expandedCard === 'expenses' && <Receipt sx={{ color: '#d32f2f' }} />}
+                            {expandedCard === 'salaryPayments' && <Badge sx={{ color: '#6a1b9a' }} />}
                             {expandedCard === 'loansIn' && <AccountBalance sx={{ color: '#00838f' }} />}
                             {expandedCard === 'loansOut' && <AccountBalance sx={{ color: '#01579b' }} />}
                             {expandedCard === 'cashSales' ? `Cash Sales — ${cashOrdersCount} Orders` :
                              expandedCard === 'creditSales' ? `Credit Sales — ${creditOrdersCount} Orders` :
                              expandedCard === 'customerReceipts' ? `Customer Receipts — ${customerReceiptsCount} Receipts` :
                              expandedCard === 'supplierPayments' ? `Supplier Payments — ${supplierPaymentsCount} Payments` :
+                             expandedCard === 'salaryPayments' ? `Salary Payments — ${salaryPaymentsCount} Payouts` :
                              expandedCard === 'loansIn' ? `Loan Repayments In — ${(realTimeSummary?.loanCashInRecords || []).length} Entries` :
                              expandedCard === 'loansOut' ? `Loans Given Out — ${(realTimeSummary?.loanCashOutRecords || []).length} Entries` :
                              `Expenses — ${Number(realTimeSummary?.expensesCount) || 0} Records`}
@@ -1005,6 +1044,45 @@ export const DayStart = () => {
                                         <TableRow sx={{ bgcolor: '#ffcdd2' }}>
                                             <TableCell colSpan={4}><Typography fontWeight="bold">Total ({(realTimeSummary?.expenseRecords || []).length} expenses)</Typography></TableCell>
                                             <TableCell align="right"><Typography fontWeight="bold" variant="h6" color="error.main">₹{expenses.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                            <TableCell></TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    )}
+                    {/* SALARY PAYMENTS */}
+                    {expandedCard === 'salaryPayments' && (
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>#</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Payment #</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Time</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Employee</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Notes</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {(realTimeSummary?.salaryPaymentRecords || []).map((p, idx) => (
+                                        <TableRow key={p.id} hover sx={{ '&:nth-of-type(odd)': { bgcolor: 'rgba(0,0,0,0.02)' } }}>
+                                            <TableCell>{idx + 1}</TableCell>
+                                            <TableCell><Typography variant="body2" fontWeight="bold" sx={{ fontFamily: 'monospace' }}>{p.paymentNumber}</Typography></TableCell>
+                                            <TableCell>{moment(p.createdAt).format('hh:mm A')}</TableCell>
+                                            <TableCell><Typography fontWeight="bold">{p.partyName}</Typography></TableCell>
+                                            <TableCell align="right"><Typography fontWeight="bold" sx={{ color: '#6a1b9a' }}>-₹{Number(p.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
+                                            <TableCell><Typography variant="body2" color="text.secondary">{p.notes || '-'}</Typography></TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {(realTimeSummary?.salaryPaymentRecords || []).length === 0 && (
+                                        <TableRow><TableCell colSpan={6}><Alert severity="info">No salary payments for this date</Alert></TableCell></TableRow>
+                                    )}
+                                    {(realTimeSummary?.salaryPaymentRecords || []).length > 0 && (
+                                        <TableRow sx={{ bgcolor: '#e1bee7' }}>
+                                            <TableCell colSpan={4}><Typography fontWeight="bold">Total ({(realTimeSummary?.salaryPaymentRecords || []).length} payouts)</Typography></TableCell>
+                                            <TableCell align="right"><Typography fontWeight="bold" variant="h6" sx={{ color: '#6a1b9a' }}>₹{salaryPayments.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Typography></TableCell>
                                             <TableCell></TableCell>
                                         </TableRow>
                                     )}
@@ -1214,7 +1292,7 @@ export const DayStart = () => {
                                 </Grid>
                                 <Grid item xs={6}>
                                     <Typography variant="body2" color="text.secondary">Payments Made</Typography>
-                                    <Typography variant="h5" color="error.main">₹{(supplierPayments + expenses).toLocaleString('en-IN')}</Typography>
+                                    <Typography variant="h5" color="error.main">₹{(supplierPayments + expenses + salaryPayments).toLocaleString('en-IN')}</Typography>
                                 </Grid>
                             </Grid>
                         </CardContent>

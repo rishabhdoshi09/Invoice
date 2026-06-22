@@ -12,7 +12,7 @@ import {
     Folder as FolderIcon, Menu as MenuIcon, Shop, People, ShoppingCart,
     Payment, Assessment, CloudDownload, Dashboard, Logout, AccountCircle,
     Group, Today, AccountBalance, Calculate, Inventory, Search, Book,
-    Security, BackupOutlined, MoreHoriz, Handshake, Timeline,
+    Security, BackupOutlined, MoreHoriz, Handshake, Timeline, Badge,
 } from '@mui/icons-material';
 import { GlobalSearch } from '../common/GlobalSearch';
 import { NotificationBell } from '../common/SmartNotifications';
@@ -168,6 +168,7 @@ export const Layout = () =>  {
         { key: 'admin-dashboard', label: 'Dashboard',  icon: <Dashboard />,       path: 'admin-dashboard' },
         { key: 'ledger',          label: 'Ledger',     icon: <Book />,            path: 'ledger' },
         { key: 'bill-audit',      label: 'Bill Audit', icon: <Security />,        path: 'bill-audit' },
+        { key: 'employees',       label: 'Employees & Salary', icon: <Badge />,    path: 'employees' },
         { key: 'users',           label: 'Users',      icon: <Group />,           path: 'users' },
         { key: 'backup',          label: 'Backup',     icon: <BackupOutlined />,  path: 'backup' },
     ] : [];

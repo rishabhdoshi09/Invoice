@@ -466,11 +466,16 @@ module.exports = {
             .filter(p => p.partyType === 'supplier')
             .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         
-        // Expense payments (cash going out)  
+        // Expense payments (cash going out)
         const expensePayments = payments
             .filter(p => p.partyType === 'expense')
             .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-        
+
+        // Salary payouts to employees (cash going out)
+        const salaryPaymentsAmount = payments
+            .filter(p => p.partyType === 'employee')
+            .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
         // Paid CASH orders only — unpaid/partial CASH orders move to credit
         const paidCashOrders = cashOrders.filter(o => o.paymentStatus === 'paid');
 
@@ -597,6 +602,9 @@ module.exports = {
             // Expenses (cash going out)
             expensesCount: payments.filter(p => p.partyType === 'expense').length,
             expenses: expensePayments,
+            // Salary payouts (cash going out)
+            salaryPaymentsCount: payments.filter(p => p.partyType === 'employee').length,
+            salaryPayments: salaryPaymentsAmount,
             // Loan cash flow
             loansCashIn,
             loansCashOut,
@@ -628,6 +636,12 @@ module.exports = {
                 paymentDate: p.paymentDate, createdAt: p.createdAt
             })),
             expenseRecords: payments.filter(p => p.partyType === 'expense').map(p => ({
+                id: p.id, paymentNumber: p.paymentNumber, partyName: p.partyName,
+                amount: Number(p.amount), referenceType: p.referenceType,
+                referenceNumber: p.referenceNumber, notes: p.notes,
+                paymentDate: p.paymentDate, createdAt: p.createdAt
+            })),
+            salaryPaymentRecords: payments.filter(p => p.partyType === 'employee').map(p => ({
                 id: p.id, paymentNumber: p.paymentNumber, partyName: p.partyName,
                 amount: Number(p.amount), referenceType: p.referenceType,
                 referenceNumber: p.referenceNumber, notes: p.notes,

@@ -26,7 +26,7 @@ module.exports = (sequelize, Sequelize) => {
                 allowNull: false
             },
             partyType: {
-                type: Sequelize.ENUM('customer', 'supplier', 'expense'),
+                type: Sequelize.ENUM('customer', 'supplier', 'expense', 'employee'),
                 allowNull: false
             },
             amount: {
@@ -34,7 +34,7 @@ module.exports = (sequelize, Sequelize) => {
                 allowNull: false
             },
             referenceType: {
-                type: Sequelize.ENUM('order', 'purchase', 'advance'),
+                type: Sequelize.ENUM('order', 'purchase', 'advance', 'salary'),
                 allowNull: false
             },
             referenceId: {
