@@ -294,6 +294,32 @@ module.exports = {
         }
     },
 
+    /**
+     * Sum of unallocated ("on account") payment amounts for a customer —
+     * i.e. advance credit available to deduct from a new invoice.
+     * Same definition the customer page's "Allocate" tab uses per-payment.
+     */
+    getAvailableAdvance: async (customerId) => {
+        try {
+            const rows = await db.sequelize.query(`
+                SELECT COALESCE(SUM(p.amount - alloc.allocated), 0) AS "availableAdvance"
+                FROM payments p
+                LEFT JOIN LATERAL (
+                    SELECT COALESCE(SUM(amount), 0) AS allocated
+                    FROM receipt_allocations ra
+                    WHERE ra."paymentId" = p.id AND ra."isDeleted" = false
+                ) alloc ON true
+                WHERE p."partyId" = :customerId AND p."partyType" = 'customer'
+                  AND (p."isDeleted" = false OR p."isDeleted" IS NULL)
+                  AND (p.amount - alloc.allocated) > 0.01
+            `, { replacements: { customerId }, type: db.Sequelize.QueryTypes.SELECT });
+            return Number(rows?.[0]?.availableAdvance) || 0;
+        } catch (error) {
+            console.log(error);
+            throw new Error(error);
+        }
+    },
+
     getOverdueCustomers: async (days = 20) => {
         try {
             const parseDate = (s) => {

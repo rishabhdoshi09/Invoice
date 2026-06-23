@@ -495,5 +495,15 @@ module.exports = {
         } catch (error) {
             return res.status(500).json({ status: 500, message: error.message });
         }
+    },
+
+    // GET /customers/:customerId/available-advance — unallocated advance credit
+    getAvailableAdvance: async (req, res) => {
+        try {
+            const availableAdvance = await Services.customer.getAvailableAdvance(req.params.customerId);
+            return res.status(200).json({ status: 200, data: { availableAdvance } });
+        } catch (error) {
+            return res.status(500).json({ status: 500, message: error.message });
+        }
     }
 };

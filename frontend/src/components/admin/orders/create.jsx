@@ -124,7 +124,7 @@ const toNum = (v) => {
  * orderDate, customerName, customerMobile, subTotal, tax, taxPercent, total, orderItems[]
  * So we must strip extra UI-only properties like `customer`, `notes`, `orderNumber`, etc.
  */
-const sanitizeOrderForServer = (props = {}, isCreditSale = false, greyAmount = 0, whiteAmount = 0) => {
+const sanitizeOrderForServer = (props = {}, isCreditSale = false, greyAmount = 0, whiteAmount = 0, advanceToApply = 0, customerId = null) => {
   const { orderItems = [] } = props;
 
   const clean = orderItems.map((it, index) => {
@@ -156,6 +156,9 @@ const sanitizeOrderForServer = (props = {}, isCreditSale = false, greyAmount = 0
     greyAmount: isCreditSale ? toNum(greyAmount) : 0,
     whiteAmount: isCreditSale ? toNum(whiteAmount) : 0,
     orderItems: clean,
+    // Manual advance deduction — only sent when the owner chose to apply it
+    // against a customer explicitly selected from the database (has an id).
+    ...(toNum(advanceToApply) > 0 && customerId ? { customerId, advanceToApply: toNum(advanceToApply) } : {}),
   };
 };
 
@@ -326,6 +329,11 @@ export const CreateOrder = () => {
   const [greyAmountInput, setGreyAmountInput] = useState('');
   const [whiteAmountInput, setWhiteAmountInput] = useState('');
 
+  // Customer advance (on-account credit) — manual deduction control.
+  // availableAdvance is fetched whenever a customer is picked from the dropdown.
+  const [availableAdvance, setAvailableAdvance] = useState(0);
+  const [advanceToApply, setAdvanceToApply] = useState('');
+
   // Admin guide visibility - hidden by default
   const [showAdminGuide, setShowAdminGuide] = useState(false);
 
@@ -405,7 +413,27 @@ export const CreateOrder = () => {
   }), []);
   
   const [orderProps, setOrderProps] = useState(initialOrderProps);
-  
+
+  // Fetch the selected customer's available advance (unallocated on-account credit)
+  useEffect(() => {
+    const customerId = orderProps.customer?.id;
+    if (!customerId) { setAvailableAdvance(0); setAdvanceToApply(''); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const { data } = await axios.get(`/api/customers/${customerId}/available-advance`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!cancelled) setAvailableAdvance(Number(data?.data?.availableAdvance) || 0);
+      } catch (error) {
+        console.error('Error fetching available advance:', error);
+        if (!cancelled) setAvailableAdvance(0);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [orderProps.customer?.id]);
+
   // Update orderDate to today whenever the component becomes visible/focused
   useEffect(() => {
     const updateDateIfNeeded = () => {
@@ -1452,6 +1480,13 @@ export const CreateOrder = () => {
       }
     }
 
+    // Advance deduction validation: requires a customer selected from the database
+    const advanceVal = toNum(advanceToApply);
+    if (advanceVal > 0 && !orderProps.customer?.id) {
+      alert("Select the customer from the dropdown list to apply their advance balance.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       setLastSubmitError(null);
@@ -1480,8 +1515,8 @@ export const CreateOrder = () => {
         return;
       }
 
-      // SANITIZE before save (pass isCreditSale for payment status, grey/white split)
-      const sanitized = sanitizeOrderForServer(orderProps, isCreditSale, greyAmountInput, whiteAmountInput);
+      // SANITIZE before save (pass isCreditSale for payment status, grey/white split, advance deduction)
+      const sanitized = sanitizeOrderForServer(orderProps, isCreditSale, greyAmountInput, whiteAmountInput, advanceVal, orderProps.customer?.id);
 
       // ONLINE SAVE (Server)
       const savedOrder = await dispatch(createOrderAction(sanitized));
@@ -1550,6 +1585,8 @@ export const CreateOrder = () => {
       setIsCreditSale(false); // Reset credit sale toggle
       setGreyAmountInput(''); // Reset grey/white split
       setWhiteAmountInput('');
+      setAdvanceToApply(''); // Reset advance deduction
+      setAvailableAdvance(0);
       setSelectedProduct(null); // Reset selected product
       setInputValue(''); // Reset input value
       setCustomerInputValue(''); // Reset customer autocomplete input
@@ -2033,6 +2070,37 @@ export const CreateOrder = () => {
                     icon={<Info />}
                   >
                     <strong>{orderProps.customer.name}</strong> has outstanding due: <strong style={{ color: '#d32f2f' }}>₹{(orderProps.customer.balance || 0).toLocaleString('en-IN')}</strong>
+                  </Alert>
+                )}
+
+                {/* Advance/on-account credit — owner decides how much to deduct */}
+                {orderProps.customer && availableAdvance > 0 && (
+                  <Alert severity="success" sx={{ mt: 1 }} icon={<Info />}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                      <span>
+                        <strong>{orderProps.customer.name}</strong> has advance available: <strong style={{ color: '#2e7d32' }}>₹{availableAdvance.toLocaleString('en-IN')}</strong>
+                      </span>
+                      {isCreditSale ? (
+                        <TextField
+                          size="small"
+                          type="number"
+                          label="Apply Advance (₹)"
+                          value={advanceToApply}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            const cap = round2(Math.min(availableAdvance, toNum(orderProps.total)));
+                            const clamped = raw === '' ? '' : Math.max(0, Math.min(toNum(raw), cap));
+                            setAdvanceToApply(clamped);
+                          }}
+                          inputProps={{ min: 0, max: round2(Math.min(availableAdvance, toNum(orderProps.total))), step: '0.01' }}
+                          sx={{ width: 180, bgcolor: 'white' }}
+                        />
+                      ) : (
+                        <Typography variant="caption" color="text.secondary">
+                          Enable "Credit Sale" above to apply this advance towards the due amount.
+                        </Typography>
+                      )}
+                    </Box>
                   </Alert>
                 )}
               </Grid>

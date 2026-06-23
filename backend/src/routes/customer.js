@@ -52,6 +52,14 @@ module.exports = (router) => {
         .route('/customers/:targetId/link-orphans')
         .post(authenticate, canModify, Controller.customer.linkOrphans);
 
+    // Available advance (unallocated on-account credit) for a customer
+    router
+        .route('/customers/:customerId/available-advance')
+        .get(
+            authenticate,
+            Controller.customer.getAvailableAdvance
+        );
+
     router
         .route('/customers/:customerId')
         .get(

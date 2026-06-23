@@ -8,6 +8,7 @@ const { postInvoiceToLedger, reverseInvoiceLedger, postPaymentStatusToggleToLedg
 const { assertOrderInvariants } = require('../services/orderInvariants');
 const { updateStock } = require('../services/accountingEngine');
 const telegram = require('../services/telegramAlert');
+const { lockAdvanceCandidates, applyDerivedPaymentFields } = require('./receiptAllocation');
 
 // Helper to get client IP
 const getClientIP = (req) => {
@@ -160,7 +161,36 @@ module.exports = {
                 // Generate invoice number INSIDE transaction (only if everything else is valid)
                 const invoiceInfo = await Services.invoiceSequence.generateInvoiceNumber(transaction);
                 orderObj.orderNumber = invoiceInfo.invoiceNumber;
-                
+
+                // === ADVANCE DEDUCTION (manual, owner-controlled) ===
+                // The owner can choose to apply some of a customer's existing
+                // on-account/advance credit (unallocated payments) towards this
+                // new invoice's due amount. This reuses the same Tally-style
+                // receipt_allocations mechanism as the "Allocate" tab on the
+                // customer page — it does NOT touch customer.currentBalance
+                // directly and does NOT affect paymentMode/Grey-White, which are
+                // already fixed above from the POS cash tendered alone.
+                let advancePlan = [];
+                let effectiveAdvance = 0;
+                const requestedAdvance = round2(Number(orderObj.advanceToApply) || 0);
+                if (requestedAdvance > 0) {
+                    if (!orderObj.customerId) {
+                        throw new Error('A linked customer (selected from the database) is required to apply advance balance.');
+                    }
+                    const cap = round2(Math.min(requestedAdvance, orderObj.dueAmount));
+                    const { plan, covered } = await lockAdvanceCandidates(orderObj.customerId, cap, transaction);
+                    if (covered + 0.01 < cap) {
+                        throw new Error(`Insufficient advance balance: requested ₹${requestedAdvance.toFixed(2)}, only ₹${covered.toFixed(2)} available.`);
+                    }
+                    advancePlan = plan;
+                    effectiveAdvance = covered;
+                    // Reduce the due amount BEFORE the customer-linking step below uses
+                    // it to bump currentBalance — so the receivable never includes the
+                    // portion already covered by the customer's own advance.
+                    orderObj.dueAmount = round2(Math.max(0, orderObj.dueAmount - effectiveAdvance));
+                }
+                delete orderObj.advanceToApply; // UI-only input field, not a column on the order
+
                 // Customer linking — NOTHING happens silently.
                 // If explicit customerId passed from frontend → trust it (user already confirmed)
                 // If only customerName → search for match, DON'T auto-link, return suggestion
@@ -275,6 +305,25 @@ module.exports = {
                     }
                 } else {
                     console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — invoice ${orderObj.orderNumber} not posted to ledger`);
+                }
+
+                // Apply the advance plan locked above, now that the order exists.
+                // This creates receipt_allocation rows against the locked payments
+                // and re-derives paidAmount/dueAmount/paymentStatus canonically —
+                // exactly the same code path the customer page's "Allocate" action uses.
+                if (advancePlan.length > 0) {
+                    for (const item of advancePlan) {
+                        await db.receiptAllocation.create({
+                            paymentId: item.paymentId,
+                            orderId,
+                            amount: item.amount,
+                            allocatedBy: req.user?.id,
+                            allocatedByName: req.user?.name || req.user?.username || 'System',
+                            notes: 'Advance applied at invoice creation'
+                        }, { transaction });
+                    }
+                    const derived = await applyDerivedPaymentFields(orderId, transaction);
+                    console.log(`[ADVANCE] ${orderObj.orderNumber}: applied ₹${effectiveAdvance.toFixed(2)} of customer advance → paid=${derived.paidAmount.toFixed(2)} due=${derived.dueAmount.toFixed(2)} (${derived.paymentStatus})`);
                 }
 
                 // === PRE-COMMIT INVARIANT CHECK (Phase 4) ===

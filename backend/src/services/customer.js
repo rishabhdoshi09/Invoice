@@ -63,5 +63,12 @@ module.exports = {
         } catch (error) {
             throw error;
         }
+    },
+    getAvailableAdvance: async (customerId) => {
+        try {
+            return await Dao.customer.getAvailableAdvance(customerId);
+        } catch (error) {
+            throw error;
+        }
     }
 };

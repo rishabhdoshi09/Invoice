@@ -100,6 +100,66 @@ async function applyDerivedPaymentFields(orderId, transaction) {
     return fields;
 }
 
+/**
+ * Lock a customer's oldest unallocated ("on account") payments, in order, until
+ * `amount` of advance is covered. Used when applying advance credit to a NEW
+ * order at creation time (see controller/order.js createOrder).
+ *
+ * Caller MUST run this inside the same transaction that will create the
+ * receipt_allocation rows, so the locks held here prevent any concurrent
+ * allocation from double-spending the same advance.
+ *
+ * Does NOT create any allocation rows itself — only plans + locks. The caller
+ * creates the rows once the new order's id is known, then calls
+ * applyDerivedPaymentFields(orderId, transaction).
+ *
+ * @returns {{ plan: Array<{paymentId, amount}>, covered: number }}
+ */
+async function lockAdvanceCandidates(customerId, amount, transaction) {
+    const target = round2(Number(amount) || 0);
+    if (!customerId || target <= 0) return { plan: [], covered: 0 };
+
+    const candidates = await db.sequelize.query(
+        `SELECT p.id FROM payments p
+         WHERE p."partyId" = :customerId AND p."partyType" = 'customer'
+           AND (p."isDeleted" = false OR p."isDeleted" IS NULL)
+         ORDER BY p."paymentDate" ASC, p."createdAt" ASC`,
+        { replacements: { customerId }, transaction, type: db.Sequelize.QueryTypes.SELECT }
+    );
+
+    const plan = [];
+    let covered = 0;
+
+    for (const { id: paymentId } of candidates) {
+        if (covered >= target - 0.01) break;
+
+        // Lock this payment row before reading its allocation state — prevents
+        // a concurrent allocation from spending the same money twice.
+        const payment = await db.payment.findByPk(paymentId, {
+            transaction,
+            lock: transaction.LOCK.UPDATE
+        });
+        if (!payment || payment.isDeleted) continue;
+
+        const allocRows = await db.sequelize.query(
+            `SELECT COALESCE(SUM(amount), 0) AS total FROM receipt_allocations
+             WHERE "paymentId" = :paymentId AND "isDeleted" = false`,
+            { replacements: { paymentId }, transaction, type: db.Sequelize.QueryTypes.SELECT }
+        );
+        const alreadyAllocated = Number(allocRows[0].total) || 0;
+        const unallocated = round2(Number(payment.amount) - alreadyAllocated);
+        if (unallocated <= 0.01) continue;
+
+        const take = round2(Math.min(unallocated, target - covered));
+        if (take <= 0) continue;
+
+        plan.push({ paymentId, amount: take });
+        covered = round2(covered + take);
+    }
+
+    return { plan, covered };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  CONTROLLER METHODS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -108,6 +168,8 @@ module.exports = {
 
     // ── computeDerivedPaymentFields exposed for other modules ────────────────
     computeDerivedPaymentFields,
+    applyDerivedPaymentFields,
+    lockAdvanceCandidates,
 
     /**
      * Allocate a payment against one or more invoices.

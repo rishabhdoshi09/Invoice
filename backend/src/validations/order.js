@@ -54,6 +54,9 @@ module.exports = {
             // Sum is cross-checked against `total` in the controller (Joi can't see sibling-of-sibling sums cleanly here).
             greyAmount:      Joi.number().min(0).max(MAX_UNIT_PRICE * MAX_QUANTITY).optional().default(0),
             whiteAmount:     Joi.number().min(0).max(MAX_UNIT_PRICE * MAX_QUANTITY).optional().default(0),
+            // Manually-controlled deduction from the customer's existing advance/on-account
+            // credit balance. Requires customerId — validated & applied in the controller.
+            advanceToApply:  Joi.number().min(0).max(MAX_UNIT_PRICE * MAX_QUANTITY).optional().default(0),
             idempotencyKey:  Joi.string().trim().max(128).allow('', null).optional(),
             orderItems:      Joi.array().items(orderItems).min(1).required()
         });
