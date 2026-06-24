@@ -138,7 +138,7 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
             }, { headers });
             const name = purSup.name;
             setPurBill(''); setPurItems([{ name: '', qty: '', price: '', total: 0 }]); setPurPaid(false); setPurNotes('');
-            onDone(`${purBillType === 'grey' ? '⚪ White' : '⚫ Grey'} purchase ₹${purTotal.toLocaleString('en-IN')} from ${name}`);
+            onDone(`${purBillType === 'white' ? '⚪ White' : '⚫ Grey'} purchase ₹${purTotal.toLocaleString('en-IN')} from ${name}`);
         } catch (e) { alert(e.response?.data?.message || e.message); }
         finally { setSaving(false); }
     };
@@ -274,14 +274,14 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
                         <FormControlLabel control={<Switch checked={purPaid} onChange={e => setPurPaid(e.target.checked)} size="small" />} label={<Typography variant="body2">{purPaid ? 'Paid' : 'Credit'}</Typography>} />
                         {/* White / Grey toggle */}
                         <Box sx={{ display: 'flex', border: '1px solid #e0e0e0', borderRadius: 1, overflow: 'hidden', height: 36 }}>
-                            <Button size="small" onClick={() => setPurBillType('white')}
-                                sx={{ borderRadius: 0, px: 1.5, minWidth: 0, textTransform: 'none', fontSize: '0.78rem', fontWeight: purBillType === 'white' ? 700 : 400,
-                                    bgcolor: purBillType === 'white' ? '#f3e5f5' : 'transparent', color: purBillType === 'white' ? '#6a1b9a' : '#999', borderRight: '1px solid #e0e0e0' }}>
-                                ⚫ Grey
-                            </Button>
                             <Button size="small" onClick={() => setPurBillType('grey')}
                                 sx={{ borderRadius: 0, px: 1.5, minWidth: 0, textTransform: 'none', fontSize: '0.78rem', fontWeight: purBillType === 'grey' ? 700 : 400,
-                                    bgcolor: purBillType === 'grey' ? '#e3f2fd' : 'transparent', color: purBillType === 'grey' ? '#1565c0' : '#999' }}>
+                                    bgcolor: purBillType === 'grey' ? '#f3e5f5' : 'transparent', color: purBillType === 'grey' ? '#6a1b9a' : '#999', borderRight: '1px solid #e0e0e0' }}>
+                                ⚫ Grey
+                            </Button>
+                            <Button size="small" onClick={() => setPurBillType('white')}
+                                sx={{ borderRadius: 0, px: 1.5, minWidth: 0, textTransform: 'none', fontSize: '0.78rem', fontWeight: purBillType === 'white' ? 700 : 400,
+                                    bgcolor: purBillType === 'white' ? '#e3f2fd' : 'transparent', color: purBillType === 'white' ? '#1565c0' : '#999' }}>
                                 ⚪ White
                             </Button>
                         </Box>
@@ -499,10 +499,10 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
                                                         {e.particulars}
                                                     </Typography>
                                                     {e.type === 'purchase' && e.raw?.billType && (
-                                                        <Chip label={e.raw.billType === 'grey' ? '⚪ White' : '⚫ Grey'} size="small"
+                                                        <Chip label={e.raw.billType === 'white' ? '⚪ White' : '⚫ Grey'} size="small"
                                                             sx={{ height: 16, fontSize: '0.6rem', fontWeight: 700,
-                                                                bgcolor: e.raw.billType === 'grey' ? '#e3f2fd' : '#f3e5f5',
-                                                                color: e.raw.billType === 'grey' ? '#1565c0' : '#6a1b9a' }} />
+                                                                bgcolor: e.raw.billType === 'white' ? '#e3f2fd' : '#f3e5f5',
+                                                                color: e.raw.billType === 'white' ? '#1565c0' : '#6a1b9a' }} />
                                                     )}
                                                     {e.type === 'purchase' && e.raw?.notes && (
                                                         <Typography variant="caption" sx={{ color: '#888', fontStyle: 'italic', fontFamily: 'Roboto', fontSize: '0.72rem' }}>
@@ -869,11 +869,11 @@ export const ListSuppliers = () => {
                     <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase', fontSize: '0.7rem' }}>Unpaid by type</Typography>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
                         <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#6a1b9a', border: '2px solid #ce93d8' }} />
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#6a1b9a', fontFamily: 'monospace' }}>⚫ Grey — ₹{totalWhiteDue.toLocaleString('en-IN')}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#6a1b9a', fontFamily: 'monospace' }}>⚫ Grey — ₹{totalGreyDue.toLocaleString('en-IN')}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
                         <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#1565c0', border: '2px solid #90caf9' }} />
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#1565c0', fontFamily: 'monospace' }}>⚪ White — ₹{totalGreyDue.toLocaleString('en-IN')}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#1565c0', fontFamily: 'monospace' }}>⚪ White — ₹{totalWhiteDue.toLocaleString('en-IN')}</Typography>
                     </Box>
                     <Typography variant="body2" color="text.secondary" sx={{ ml: 'auto', fontFamily: 'monospace' }}>
                         Total: ₹{(totalWhiteDue + totalGreyDue).toLocaleString('en-IN')}
@@ -978,12 +978,12 @@ export const ListSuppliers = () => {
                                             {(Number(sup.whiteDue) > 0 || Number(sup.greyDue) > 0) && (
                                                 <Box sx={{ display: 'flex', gap: 0.4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                                     {Number(sup.whiteDue) > 0 && (
-                                                        <Chip label={`⚫ ₹${Number(sup.whiteDue).toLocaleString('en-IN')}`} size="small"
-                                                            sx={{ height: 16, fontSize: '0.65rem', bgcolor: '#f3e5f5', color: '#6a1b9a', fontFamily: 'monospace', fontWeight: 600 }} />
+                                                        <Chip label={`⚪ ₹${Number(sup.whiteDue).toLocaleString('en-IN')}`} size="small"
+                                                            sx={{ height: 16, fontSize: '0.65rem', bgcolor: '#e3f2fd', color: '#1565c0', fontFamily: 'monospace', fontWeight: 600 }} />
                                                     )}
                                                     {Number(sup.greyDue) > 0 && (
-                                                        <Chip label={`⚪ ₹${Number(sup.greyDue).toLocaleString('en-IN')}`} size="small"
-                                                            sx={{ height: 16, fontSize: '0.65rem', bgcolor: '#e3f2fd', color: '#1565c0', fontFamily: 'monospace', fontWeight: 600 }} />
+                                                        <Chip label={`⚫ ₹${Number(sup.greyDue).toLocaleString('en-IN')}`} size="small"
+                                                            sx={{ height: 16, fontSize: '0.65rem', bgcolor: '#f3e5f5', color: '#6a1b9a', fontFamily: 'monospace', fontWeight: 600 }} />
                                                     )}
                                                 </Box>
                                             )}

@@ -302,14 +302,14 @@ export const ListPurchases = () => {
                     <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
                         {/* White / Grey toggle */}
                         <Box sx={{ display: 'flex', border: '1px solid #e0e0e0', borderRadius: 1, overflow: 'hidden', height: 34 }}>
-                            <Button size="small" onClick={() => setBillType('white')}
-                                sx={{ borderRadius: 0, px: 1.5, minWidth: 0, textTransform: 'none', fontSize: '0.8rem', fontWeight: billType === 'white' ? 700 : 400,
-                                    bgcolor: billType === 'white' ? '#f3e5f5' : 'transparent', color: billType === 'white' ? '#6a1b9a' : '#999', borderRight: '1px solid #e0e0e0' }}>
-                                ⚫ Grey
-                            </Button>
                             <Button size="small" onClick={() => setBillType('grey')}
                                 sx={{ borderRadius: 0, px: 1.5, minWidth: 0, textTransform: 'none', fontSize: '0.8rem', fontWeight: billType === 'grey' ? 700 : 400,
-                                    bgcolor: billType === 'grey' ? '#e3f2fd' : 'transparent', color: billType === 'grey' ? '#1565c0' : '#999' }}>
+                                    bgcolor: billType === 'grey' ? '#f3e5f5' : 'transparent', color: billType === 'grey' ? '#6a1b9a' : '#999', borderRight: '1px solid #e0e0e0' }}>
+                                ⚫ Grey
+                            </Button>
+                            <Button size="small" onClick={() => setBillType('white')}
+                                sx={{ borderRadius: 0, px: 1.5, minWidth: 0, textTransform: 'none', fontSize: '0.8rem', fontWeight: billType === 'white' ? 700 : 400,
+                                    bgcolor: billType === 'white' ? '#e3f2fd' : 'transparent', color: billType === 'white' ? '#1565c0' : '#999' }}>
                                 ⚪ White
                             </Button>
                         </Box>
@@ -559,11 +559,11 @@ export const ListPurchases = () => {
                                                         sx={{ height: 20, fontSize: '0.7rem' }}
                                                     />
                                                     <Chip
-                                                        label={purchase.billType === 'grey' ? '⚪ White' : '⚫ Grey'}
+                                                        label={purchase.billType === 'white' ? '⚪ White' : '⚫ Grey'}
                                                         size="small"
                                                         sx={{ height: 16, fontSize: '0.65rem', fontWeight: 600,
-                                                            bgcolor: purchase.billType === 'grey' ? '#e3f2fd' : '#f3e5f5',
-                                                            color: purchase.billType === 'grey' ? '#1565c0' : '#6a1b9a' }}
+                                                            bgcolor: purchase.billType === 'white' ? '#e3f2fd' : '#f3e5f5',
+                                                            color: purchase.billType === 'white' ? '#1565c0' : '#6a1b9a' }}
                                                     />
                                                 </Box>
                                             </TableCell>
