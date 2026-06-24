@@ -367,11 +367,13 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
         const obDate = s.openingBalanceDate ? moment(s.openingBalanceDate) : null;
         const obDateStr = obDate?.isValid() ? obDate.format('DD/MM/YYYY') : null;
         const obSortKey = obDate?.isValid() ? obDate.toISOString() : '0000-00-00T00:00:00';
+        const obDebit = Number(s.openingBalance) > 0 ? Number(s.openingBalance) : 0;
         ledgerEntries.push({
             id: 'opening', date: obDateStr, sortKey: obSortKey,
             particulars: 'Opening Balance', refNo: '-',
-            debit: Number(s.openingBalance) > 0 ? Number(s.openingBalance) : 0,
+            debit: obDebit,
             credit: Number(s.openingBalance) < 0 ? Math.abs(Number(s.openingBalance)) : 0,
+            greyDebit: 0, whiteDebit: obDebit,
             type: 'opening'
         });
     }
@@ -381,12 +383,15 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
         const d = p.billDate ? moment(p.billDate, ['DD-MM-YYYY', 'YYYY-MM-DD']) : moment(p.createdAt);
         const dateStr = d.isValid() ? d.format('DD/MM/YYYY') : '-';
         const sortStr = d.isValid() ? d.toISOString() : '9999-12-31T23:59:59';
+        const pDebit = Number(p.total) || 0;
+        const isGrey = p.billType === 'grey';
         ledgerEntries.push({
             id: p.id,
             date: dateStr, sortKey: sortStr,
             particulars: 'Purchase' + (p.notes ? ` — ${p.notes}` : ''),
             refNo: p.billNumber || '-',
-            debit: Number(p.total) || 0, credit: 0,
+            debit: pDebit, credit: 0,
+            greyDebit: isGrey ? pDebit : 0, whiteDebit: isGrey ? 0 : pDebit,
             type: 'purchase', raw: p
         });
         // If purchase was paid at creation, show credit entry for the paid amount
@@ -397,6 +402,7 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
                 particulars: `Paid against ${p.billNumber || 'Purchase'}`,
                 refNo: p.billNumber || '-',
                 debit: 0, credit: Number(p.paidAmount),
+                greyDebit: 0, whiteDebit: 0,
                 type: 'bill-payment', raw: p
             });
         }
@@ -412,6 +418,7 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
             particulars: 'Payment' + (p.notes ? ` — ${p.notes}` : ''),
             refNo: p.paymentNumber || '-',
             debit: 0, credit: Number(p.amount) || 0,
+            greyDebit: 0, whiteDebit: 0,
             type: 'payment', raw: p
         });
     });
@@ -425,6 +432,8 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
 
     const totalDebit = ledgerEntries.reduce((sum, e) => sum + e.debit, 0);
     const totalCredit = ledgerEntries.reduce((sum, e) => sum + e.credit, 0);
+    const totalGreyDebit = ledgerEntries.reduce((sum, e) => sum + (e.greyDebit || 0), 0);
+    const totalWhiteDebit = ledgerEntries.reduce((sum, e) => sum + (e.whiteDebit || 0), 0);
     const closingBal = totalDebit - totalCredit;
     const fmt = v => v != null && v !== 0 ? `₹${Math.abs(v).toLocaleString('en-IN', { minimumFractionDigits: 0 })}` : '₹0';
 
@@ -467,7 +476,8 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
                                 <TableCell width={85}>Date</TableCell>
                                 <TableCell>Particulars</TableCell>
                                 <TableCell width={90}>Vch No.</TableCell>
-                                <TableCell align="right" width={100}>Debit</TableCell>
+                                <TableCell align="right" width={90} sx={{ color: '#6a1b9a !important' }}>⚫ Grey Dr</TableCell>
+                                <TableCell align="right" width={90} sx={{ color: '#1565c0 !important' }}>⚪ White Dr</TableCell>
                                 <TableCell align="right" width={100}>Credit</TableCell>
                                 <TableCell align="right" width={110}>Balance</TableCell>
                                 <TableCell align="center" width={40} sx={{ fontFamily: 'inherit' }}></TableCell>
@@ -475,7 +485,7 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
                         </TableHead>
                         <TableBody>
                             {ledgerEntries.length === 0 ? (
-                                <TableRow><TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary', fontFamily: 'Roboto' }}>No transactions yet</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={8} align="center" sx={{ py: 4, color: 'text.secondary', fontFamily: 'Roboto' }}>No transactions yet</TableCell></TableRow>
                             ) : (
                                 ledgerEntries.map(e => (
                                     <React.Fragment key={`${e.type}-${e.id}`}>
@@ -498,12 +508,6 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
                                                                     <Typography variant="body2" sx={{ fontWeight: e.type === 'opening' ? 700 : 500, fontSize: '0.82rem' }}>
                                                         {e.particulars}
                                                     </Typography>
-                                                    {e.type === 'purchase' && e.raw?.billType && (
-                                                        <Chip label={e.raw.billType === 'white' ? '⚪ White' : '⚫ Grey'} size="small"
-                                                            sx={{ height: 16, fontSize: '0.6rem', fontWeight: 700,
-                                                                bgcolor: e.raw.billType === 'white' ? '#e3f2fd' : '#f3e5f5',
-                                                                color: e.raw.billType === 'white' ? '#1565c0' : '#6a1b9a' }} />
-                                                    )}
                                                     {e.type === 'purchase' && e.raw?.notes && (
                                                         <Typography variant="caption" sx={{ color: '#888', fontStyle: 'italic', fontFamily: 'Roboto', fontSize: '0.72rem' }}>
                                                             {e.raw.notes}
@@ -512,8 +516,11 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
                                                 </Box>
                                             </TableCell>
                                             <TableCell sx={{ color: '#666', fontSize: '0.75rem' }}>{e.refNo}</TableCell>
-                                            <TableCell align="right" sx={{ color: e.debit > 0 ? '#c62828' : 'transparent', fontWeight: 600 }}>
-                                                {e.debit > 0 ? fmt(e.debit) : ''}
+                                            <TableCell align="right" sx={{ color: e.greyDebit > 0 ? '#6a1b9a' : 'transparent', fontWeight: 600 }}>
+                                                {e.greyDebit > 0 ? fmt(e.greyDebit) : ''}
+                                            </TableCell>
+                                            <TableCell align="right" sx={{ color: e.whiteDebit > 0 ? '#1565c0' : 'transparent', fontWeight: 600 }}>
+                                                {e.whiteDebit > 0 ? fmt(e.whiteDebit) : ''}
                                             </TableCell>
                                             <TableCell align="right" sx={{ color: e.credit > 0 ? '#2e7d32' : 'transparent', fontWeight: 600 }}>
                                                 {e.credit > 0 ? fmt(e.credit) : ''}
@@ -537,7 +544,7 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
                                         {/* Expanded purchase items */}
                                         {e.type === 'purchase' && expandedId === e.id && e.raw?.purchaseItems?.length > 0 && (
                                             <TableRow>
-                                                <TableCell colSpan={7} sx={{ bgcolor: '#f5f5f5', py: 0, borderBottom: '1px solid #ccc' }}>
+                                                <TableCell colSpan={8} sx={{ bgcolor: '#f5f5f5', py: 0, borderBottom: '1px solid #ccc' }}>
                                                     <Collapse in={true}>
                                                         <Box sx={{ pl: 4, py: 0.6 }}>
                                                             {e.raw.purchaseItems.map((item, idx) => (
@@ -559,7 +566,8 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
                             <TableBody>
                                 <TableRow sx={{ '& td': { borderTop: '2px solid #1a237e', bgcolor: '#e8eaf6', fontWeight: 700, py: 0.8 } }}>
                                     <TableCell colSpan={3} sx={{ color: '#1a237e', fontSize: '0.82rem' }}>TOTAL</TableCell>
-                                    <TableCell align="right" sx={{ color: '#c62828' }}>{fmt(totalDebit)}</TableCell>
+                                    <TableCell align="right" sx={{ color: '#6a1b9a' }}>{fmt(totalGreyDebit)}</TableCell>
+                                    <TableCell align="right" sx={{ color: '#1565c0' }}>{fmt(totalWhiteDebit)}</TableCell>
                                     <TableCell align="right" sx={{ color: '#2e7d32' }}>{fmt(totalCredit)}</TableCell>
                                     <TableCell align="right" sx={{ color: '#1a237e' }}>
                                         {fmt(closingBal)} {closingBal >= 0 ? 'Dr' : 'Cr'}
@@ -573,10 +581,10 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
             </DialogContent>
 
             <DialogActions sx={{ bgcolor: '#f5f5f5', borderTop: '1px solid #ddd', px: 2, py: 0.8, gap: 1 }}>
-                <Button data-testid="ledger-download" onClick={() => onDownload(s, ledgerEntries, totalDebit, totalCredit, closingBal)} startIcon={<Download />} variant="outlined" size="small" sx={{ textTransform: 'none' }}>
+                <Button data-testid="ledger-download" onClick={() => onDownload(s, ledgerEntries, totalDebit, totalCredit, closingBal, totalGreyDebit, totalWhiteDebit)} startIcon={<Download />} variant="outlined" size="small" sx={{ textTransform: 'none' }}>
                     Download
                 </Button>
-                <Button data-testid="ledger-print" onClick={() => onPrint(s, ledgerEntries, totalDebit, totalCredit, closingBal)} startIcon={<Print />} variant="outlined" size="small" sx={{ textTransform: 'none', mr: 'auto' }}>
+                <Button data-testid="ledger-print" onClick={() => onPrint(s, ledgerEntries, totalDebit, totalCredit, closingBal, totalGreyDebit, totalWhiteDebit)} startIcon={<Print />} variant="outlined" size="small" sx={{ textTransform: 'none', mr: 'auto' }}>
                     Print
                 </Button>
                 <Button data-testid="ledger-make-payment" onClick={() => onPayment(s)} startIcon={<Payment />} variant="contained" color="success" size="small" sx={{ textTransform: 'none' }}>
@@ -723,19 +731,20 @@ export const ListSuppliers = () => {
     };
 
     // Download individual supplier ledger as CSV
-    const handleLedgerDownload = (s, ledgerEntries, totalDebit, totalCredit, closingBal) => {
+    const handleLedgerDownload = (s, ledgerEntries, totalDebit, totalCredit, closingBal, totalGreyDebit = 0, totalWhiteDebit = 0) => {
         const fmt = v => v != null && v !== 0 ? Math.abs(v).toFixed(2) : '0.00';
         const header = [`Supplier Ledger: ${s.name}`, s.mobile || '', s.gstin ? `GSTIN: ${s.gstin}` : '', `Generated: ${moment().format('DD/MM/YYYY')}`].filter(Boolean).join(' | ');
-        const cols = ['Date', 'Particulars', 'Vch No.', 'Debit', 'Credit', 'Balance'];
+        const cols = ['Date', 'Particulars', 'Vch No.', 'Grey Dr', 'White Dr', 'Credit', 'Balance'];
         const rows = ledgerEntries.map(e => [
             e.date || '',
             e.particulars,
             e.refNo,
-            fmt(e.debit),
+            fmt(e.greyDebit),
+            fmt(e.whiteDebit),
             fmt(e.credit),
             `${fmt(e.balance)} ${e.balance >= 0 ? 'Dr' : 'Cr'}`
         ]);
-        const totalsRow = ['TOTAL', '', '', fmt(totalDebit), fmt(totalCredit), `${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}`];
+        const totalsRow = ['TOTAL', '', '', fmt(totalGreyDebit), fmt(totalWhiteDebit), fmt(totalCredit), `${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}`];
         const csvContent = [
             [header],
             cols,
@@ -752,14 +761,15 @@ export const ListSuppliers = () => {
     };
 
     // Print individual supplier ledger
-    const handleLedgerPrint = (s, ledgerEntries, totalDebit, totalCredit, closingBal) => {
+    const handleLedgerPrint = (s, ledgerEntries, totalDebit, totalCredit, closingBal, totalGreyDebit = 0, totalWhiteDebit = 0) => {
         const fmt = v => v != null && v !== 0 ? `₹${Math.abs(v).toLocaleString('en-IN')}` : '₹0';
         const rows = ledgerEntries.map(e => `
             <tr class="${e.type === 'opening' ? 'row-opening' : e.type === 'payment' ? 'row-payment' : 'row-purchase'}">
                 <td>${e.date || ''}</td>
                 <td>${e.particulars}</td>
                 <td>${e.refNo}</td>
-                <td class="debit">${e.debit > 0 ? fmt(e.debit) : ''}</td>
+                <td class="grey-debit">${e.greyDebit > 0 ? fmt(e.greyDebit) : ''}</td>
+                <td class="white-debit">${e.whiteDebit > 0 ? fmt(e.whiteDebit) : ''}</td>
                 <td class="credit">${e.credit > 0 ? fmt(e.credit) : ''}</td>
                 <td class="balance">${fmt(e.balance)} ${e.balance >= 0 ? 'Dr' : 'Cr'}</td>
             </tr>`).join('');
@@ -771,7 +781,8 @@ export const ListSuppliers = () => {
                 table { width: 100%; border-collapse: collapse; }
                 th { background: #e8eaf6; color: #1a237e; border-bottom: 2px solid #1a237e; padding: 6px 8px; text-align: left; font-size: 11px; }
                 td { padding: 4px 8px; border-bottom: 1px solid #e0e0e0; }
-                .debit { text-align: right; color: #c62828; font-weight: 700; }
+                .grey-debit { text-align: right; color: #6a1b9a; font-weight: 700; }
+                .white-debit { text-align: right; color: #1565c0; font-weight: 700; }
                 .credit { text-align: right; color: #2e7d32; font-style: italic; }
                 .balance { text-align: right; font-weight: 700; }
                 .row-opening { background: #fffde7; }
@@ -780,7 +791,8 @@ export const ListSuppliers = () => {
                 .closing { margin-top: 12px; text-align: right; font-size: 13px; font-weight: 700; color: #0d1b4a; }
                 @media print {
                     * { color: #000 !important; background: #fff !important; }
-                    .debit { font-weight: 700; }
+                    .grey-debit { font-weight: 700; }
+                    .white-debit { font-weight: 700; text-decoration: underline; }
                     .credit { font-style: italic; text-decoration: underline; }
                     .balance { font-weight: 700; }
                     th { border-bottom: 2px solid #000 !important; }
@@ -791,9 +803,9 @@ export const ListSuppliers = () => {
             <h2>${s.name}</h2>
             <div class="meta">${[s.mobile, s.gstin && `GSTIN: ${s.gstin}`, `Printed: ${moment().format('DD/MM/YYYY hh:mm A')}`].filter(Boolean).join(' | ')}</div>
             <table>
-                <thead><tr><th>Date</th><th>Particulars</th><th>Vch No.</th><th style="text-align:right">Debit</th><th style="text-align:right">Credit (italic)</th><th style="text-align:right">Balance</th></tr></thead>
+                <thead><tr><th>Date</th><th>Particulars</th><th>Vch No.</th><th style="text-align:right">Grey Dr</th><th style="text-align:right">White Dr (underlined)</th><th style="text-align:right">Credit (italic)</th><th style="text-align:right">Balance</th></tr></thead>
                 <tbody>${rows}</tbody>
-                <tfoot><tr class="total-row"><td colspan="3">TOTAL</td><td class="debit">${fmt(totalDebit)}</td><td class="credit">${fmt(totalCredit)}</td><td class="balance">${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</td></tr></tfoot>
+                <tfoot><tr class="total-row"><td colspan="3">TOTAL</td><td class="grey-debit">${fmt(totalGreyDebit)}</td><td class="white-debit">${fmt(totalWhiteDebit)}</td><td class="credit">${fmt(totalCredit)}</td><td class="balance">${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</td></tr></tfoot>
             </table>
             <div class="closing">Closing Balance: ${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}</div>
             <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }</script>
