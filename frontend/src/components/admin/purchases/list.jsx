@@ -34,6 +34,7 @@ export const ListPurchases = () => {
     const [items, setItems] = useState([{ name: '', quantity: '', price: '', totalPrice: 0 }]);
     const [saving, setSaving] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
+    const [billTypeTotals, setBillTypeTotals] = useState({ white: 0, grey: 0 });
     
     // Refs
     const supplierRef = useRef(null);
@@ -61,6 +62,15 @@ export const ListPurchases = () => {
             const { rows, count } = await listPurchases(params);
             setPurchases(rows || []);
             setTotalCount(count || 0);
+
+            // Grey/White totals across ALL matching purchases (not just the current page)
+            const { rows: allRows } = await listPurchases({ ...params, limit: 10000, offset: 0 });
+            const totals = (allRows || []).reduce((acc, p) => {
+                const key = p.billType === 'grey' ? 'grey' : 'white';
+                acc[key] += Number(p.total) || 0;
+                return acc;
+            }, { white: 0, grey: 0 });
+            setBillTypeTotals(totals);
         } catch (error) {
             console.error('Error fetching purchases:', error);
         } finally {
@@ -476,6 +486,24 @@ export const ListPurchases = () => {
                     </Typography>
                 </Box>
             </Paper>
+
+            {/* Grey / White totals */}
+            {(billTypeTotals.white > 0 || billTypeTotals.grey > 0) && (
+                <Paper variant="outlined" sx={{ mb: 2, px: 2, py: 1, display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap', bgcolor: '#fafafa' }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase', fontSize: '0.7rem' }}>Purchases by type</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                        <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#1565c0', border: '2px solid #90caf9' }} />
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#1565c0', fontFamily: 'monospace' }}>⚪ White — ₹{billTypeTotals.white.toLocaleString('en-IN')}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                        <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#6a1b9a', border: '2px solid #ce93d8' }} />
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#6a1b9a', fontFamily: 'monospace' }}>⚫ Grey — ₹{billTypeTotals.grey.toLocaleString('en-IN')}</Typography>
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ ml: 'auto', fontFamily: 'monospace' }}>
+                        Total: ₹{(billTypeTotals.white + billTypeTotals.grey).toLocaleString('en-IN')}
+                    </Typography>
+                </Paper>
+            )}
 
             {/* Date Filter */}
             <Paper sx={{ p: 1.5, mb: 2, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
