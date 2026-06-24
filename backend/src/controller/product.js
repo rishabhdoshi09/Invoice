@@ -57,7 +57,7 @@ function initSerial() {
 
         parser.on('data', (line) => {
             const data = Number(line.trim());
-            if (!isNaN(data) && data !== weight) {
+            if (!isNaN(data)) {
                 weight = data;
                 lastDataReceived = Date.now();
                 connectionStatus = 'connected';
@@ -232,6 +232,7 @@ module.exports = {
             const isStale = lastDataReceived && (Date.now() - lastDataReceived > 30000);
             const effectiveStatus = isStale ? 'stale' : connectionStatus;
 
+            res.set('Cache-Control', 'no-store');
             return res.status(200).send({
                 status: 200,
                 message: 'weights fetched successfully',
