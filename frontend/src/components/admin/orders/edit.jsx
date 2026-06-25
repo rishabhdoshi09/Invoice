@@ -584,7 +584,8 @@ export const EditOrder = () => {
                   orderData.orderItems.map((item) => {
                     const isEditing = editingItemId === item.id;
                     const editedItem = editedItems[item.id] || item;
-                    
+                    const priceChanged = Math.abs(Number(editedItem.productPrice) - Number(item.productPrice)) > 0.01;
+
                     return (
                       <TableRow key={item.id}>
                         <TableCell>{item.name}</TableCell>
@@ -609,14 +610,30 @@ export const EditOrder = () => {
                         </TableCell>
                         <TableCell align="right">
                           {isEditing ? (
-                            <TextField
-                              type="number"
-                              size="small"
-                              value={editedItem.productPrice}
-                              onChange={(e) => handleItemChange(item.id, 'productPrice', e.target.value)}
-                              inputProps={{ min: 0.01, step: 0.01 }}
-                              sx={{ width: 100 }}
-                            />
+                            <Box>
+                              <TextField
+                                type="number"
+                                size="small"
+                                value={editedItem.productPrice}
+                                onChange={(e) => handleItemChange(item.id, 'productPrice', e.target.value)}
+                                inputProps={{ min: 0.01, step: 0.01 }}
+                                sx={{ width: 100 }}
+                              />
+                              {priceChanged && (
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                  Originally ₹{item.productPrice}
+                                </Typography>
+                              )}
+                            </Box>
+                          ) : priceChanged ? (
+                            <Box>
+                              <Typography variant="caption" color="text.secondary" sx={{ textDecoration: 'line-through', display: 'block' }}>
+                                ₹{item.productPrice}
+                              </Typography>
+                              <Typography variant="body2" color="warning.main" fontWeight={600}>
+                                ₹{editedItem.productPrice}
+                              </Typography>
+                            </Box>
                           ) : (
                             `₹${editedItem.productPrice}`
                           )}

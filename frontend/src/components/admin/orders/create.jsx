@@ -2493,7 +2493,6 @@ export const CreateOrder = () => {
                               <Delete fontSize="small" />
                             </IconButton>
                           </Tooltip>
->>>>>>> origin/claude/production-ready-invoicing-2lSqe
                         </Box>
                       </TableCell>
                     </TableRow>
