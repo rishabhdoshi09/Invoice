@@ -312,7 +312,14 @@ export const CreateOrder = () => {
   const [whatsAppDialog, setWhatsAppDialog] = useState({ open: false, order: null });
 
   // Edit Note dialog (replaces window.prompt)
-  const [editNoteDialog, setEditNoteDialog] = useState({ open: false, index: -1, value: '' });
+  const [editNoteDialog, setEditNoteDialog] = useState({ open: false, index: -1, value: '', returnFocusToProduct: false });
+
+  const closeEditNoteDialog = (returnFocusToProduct) => {
+    setEditNoteDialog({ open: false, index: -1, value: '', returnFocusToProduct: false });
+    if (returnFocusToProduct) {
+      setTimeout(() => document.getElementById('name')?.focus(), 50);
+    }
+  };
 
   // Inline alt-name editing in the invoice table
   const [inlineEditIndex, setInlineEditIndex] = useState(-1);
@@ -580,6 +587,8 @@ export const CreateOrder = () => {
       const lineTotal = Number((price * qty).toFixed(2));
       const subTotal = Number((orderProps.subTotal + lineTotal).toFixed(2));
       const tax = Number((subTotal * (orderProps.taxPercent / 100)).toFixed(2));
+      const newItemIndex = orderProps.orderItems.length;
+      const typedAltName = (values.altName || '').trim();
       const newItem = {
         subTotal, tax, total: Math.round(subTotal + tax),
         orderItems: [...orderProps.orderItems, {
@@ -589,7 +598,7 @@ export const CreateOrder = () => {
           productPrice: priceNumLocal,
           totalPrice: Number((((Number(values.productPrice)||0)*(Number(values.quantity)||0)).toFixed(2))),
           type: values.type,
-          altName: (values.altName || '').trim(),
+          altName: typedAltName,
           sortOrder: orderProps.orderItems.length // Add sortOrder based on current position
         }]
       };
@@ -625,6 +634,12 @@ export const CreateOrder = () => {
         const added = Number((price * qty).toFixed(2));
         setLastInvoiceTotal(added);
       } catch {}
+
+      // Item was added without an alternate name — offer a quick, non-blocking
+      // popup to set one instead of making that a separate manual step.
+      if (!typedAltName) {
+        setEditNoteDialog({ open: true, index: newItemIndex, value: '', returnFocusToProduct: true });
+      }
 
       formik.resetForm();
       setLocalPriceValue('');
@@ -2873,15 +2888,17 @@ export const CreateOrder = () => {
         }}
       />
 
-      {/* Edit Note / Alternate Name Dialog */}
+      {/* Edit Note / Alternate Name Dialog — also auto-opens right after a product
+          is added (with no alt name typed inline) so setting one doesn't need a
+          separate manual step. */}
       <Dialog
         open={editNoteDialog.open}
-        onClose={() => setEditNoteDialog({ open: false, index: -1, value: '' })}
+        onClose={() => closeEditNoteDialog(editNoteDialog.returnFocusToProduct)}
         maxWidth="xs"
         fullWidth
         TransitionProps={{ onEntered: () => document.getElementById('edit-display-name-input')?.focus() }}
       >
-        <DialogTitle>Edit Display Name</DialogTitle>
+        <DialogTitle>{editNoteDialog.returnFocusToProduct ? 'Alternate Name? (optional)' : 'Edit Display Name'}</DialogTitle>
         <form onSubmit={(e) => {
           e.preventDefault();
           const idx = editNoteDialog.index;
@@ -2893,11 +2910,13 @@ export const CreateOrder = () => {
             try { generatePdf(nextProps); } catch {}
             return nextProps;
           });
-          setEditNoteDialog({ open: false, index: -1, value: '' });
+          closeEditNoteDialog(editNoteDialog.returnFocusToProduct);
         }}>
         <DialogContent>
           <DialogContentText sx={{ mb: 2 }}>
-            Enter an alternate name to print on the invoice instead of the product name. Leave blank to use the default product name.
+            {editNoteDialog.returnFocusToProduct
+              ? "Print a different name for this item instead of the product name? Press Enter to save and continue, or Esc to skip."
+              : "Enter an alternate name to print on the invoice instead of the product name. Leave blank to use the default product name."}
           </DialogContentText>
           <TextField
             autoFocus
@@ -2911,7 +2930,9 @@ export const CreateOrder = () => {
           />
         </DialogContent>
         <DialogActions>
-          <Button type="button" onClick={() => setEditNoteDialog({ open: false, index: -1, value: '' })}>Cancel</Button>
+          <Button type="button" onClick={() => closeEditNoteDialog(editNoteDialog.returnFocusToProduct)}>
+            {editNoteDialog.returnFocusToProduct ? 'Skip' : 'Cancel'}
+          </Button>
           <Button type="submit" variant="contained">Save</Button>
         </DialogActions>
         </form>
