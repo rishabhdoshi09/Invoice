@@ -150,9 +150,17 @@ module.exports = {
                 if (existing && existing.name !== value.name) {
                     const oldName = existing.name;
                     const newName = value.name;
+                    const { Op } = db.Sequelize;
+                    // Prefer the partyId FK (always reliable). Fall back to matching by
+                    // the old name string only for legacy/orphan rows never linked to
+                    // this supplier record — otherwise a rename can leave those rows
+                    // pointing at a name that no longer exists anywhere.
                     await db.payment.update(
                         { partyName: newName },
-                        { where: { partyName: oldName, partyType: 'supplier' } }
+                        { where: { partyType: 'supplier', [Op.or]: [
+                            { partyId: req.params.supplierId },
+                            { partyId: null, partyName: oldName }
+                        ] } }
                     );
                     await createAuditLog({
                         userId: req.user?.id,

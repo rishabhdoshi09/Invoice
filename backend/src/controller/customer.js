@@ -154,13 +154,24 @@ module.exports = {
                 if (existing && existing.name !== value.name) {
                     const oldName = existing.name;
                     const newName = value.name;
+                    const { Op } = db.Sequelize;
+                    // Prefer the customerId FK (always reliable). Fall back to matching
+                    // by the old name string only for legacy/orphan rows that were never
+                    // linked to this customer record — otherwise a rename can leave those
+                    // rows pointing at a name that no longer exists anywhere.
                     await db.order.update(
                         { customerName: newName },
-                        { where: { customerName: oldName } }
+                        { where: { [Op.or]: [
+                            { customerId: req.params.customerId },
+                            { customerId: null, customerName: oldName }
+                        ] } }
                     );
                     await db.payment.update(
                         { partyName: newName },
-                        { where: { partyName: oldName, partyType: 'customer' } }
+                        { where: { partyType: 'customer', [Op.or]: [
+                            { partyId: req.params.customerId },
+                            { partyId: null, partyName: oldName }
+                        ] } }
                     );
                     await createAuditLog({
                         userId: req.user?.id,

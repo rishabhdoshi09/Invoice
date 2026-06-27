@@ -104,13 +104,6 @@ module.exports = (router) => {
                     al."createdAt"
                 FROM audit_logs al
                 WHERE al."entityType" = 'CUSTOMER_NAME_CHANGE'
-                  OR (
-                    al."entityType" = 'CUSTOMER'
-                    AND al."action" = 'UPDATE'
-                    AND al."oldValues"->>'name' IS NOT NULL
-                    AND al."newValues"->>'name' IS NOT NULL
-                    AND al."oldValues"->>'name' != al."newValues"->>'name'
-                  )
                 ORDER BY al."createdAt" DESC
                 LIMIT 500
             `, { type: db.Sequelize.QueryTypes.SELECT });
