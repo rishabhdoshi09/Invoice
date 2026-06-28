@@ -229,9 +229,17 @@ export const EditOrder = () => {
         return;
       }
       
-      // Update order in backend
+      // Update order in backend.
+      // Exclude immutable financial fields (always present on the fetched order)
+      // — the backend rejects edits that include them, and it recalculates
+      // dueAmount/total/etc. itself from the submitted orderItems anyway.
+      const {
+        paidAmount, dueAmount, paymentStatus, originalPaidAmount,
+        paymentMode, paymentToggleSequence,
+        ...editableOrderData
+      } = orderData;
       const payload = {
-        ...orderData,
+        ...editableOrderData,
         orderItems: updatedOrderItems
       };
       
