@@ -1393,18 +1393,6 @@ export const CreateOrder = () => {
     }
   }, [dispatch, formik, rows, attemptProductChange, archivedOrderProps, archivedPdfUrl]);
 
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if (e.key !== '1' || e.ctrlKey || e.metaKey || e.altKey) return;
-      const t = e.target;
-      if (isEditableTarget(t) || isEditableTarget(document.activeElement)) return;
-      e.preventDefault();
-      const product = productOptions.find(p => p.label.toLowerCase().includes('dabba'));
-      if (product) { selectAndMaybeAdd(product); }
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [productOptions, selectAndMaybeAdd]);
 
   useEffect(() => { generatePdf(orderProps); }, [template, generatePdf, orderProps]);
 
