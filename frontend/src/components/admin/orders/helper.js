@@ -19,8 +19,11 @@ export const generatePdfDefinition = (data) => {
     const SGST_DISPLAY = (taxPercent / 2).toFixed(1).replace(/\.0$/, '') + '%';
     const CGST_DISPLAY = (taxPercent / 2).toFixed(1).replace(/\.0$/, '') + '%';
 
-    // Sort items by sortOrder to maintain the order they were added
-    const sortedItems = [...(data.orderItems || [])].sort((a, b) => {
+    // Sort items by sortOrder to maintain the order they were added.
+    // Filter out holes/partial items — an undefined cell crashes pdfmake.
+    const sortedItems = [...(data.orderItems || [])]
+        .filter(item => item && (item.name || item.altName))
+        .sort((a, b) => {
         const sortA = a.sortOrder !== undefined ? a.sortOrder : 999;
         const sortB = b.sortOrder !== undefined ? b.sortOrder : 999;
         return sortA - sortB;
@@ -30,7 +33,6 @@ export const generatePdfDefinition = (data) => {
     // Product price is inclusive of GST, so we need to extract base price
     const itemsWithTax = sortedItems.map(item => {
         const inclusivePrice = Number(item.productPrice) || 0;
-        const quantity = Number(item.quantity) || 0;
         const inclusiveTotal = Number(item.totalPrice) || 0;
         
         // Calculate base price (exclusive of GST)
@@ -304,8 +306,11 @@ export const generatePdfDefinition = (data) => {
 
 
 export const generatePdfDefinition2 = (data) => {
-    // Sort items by sortOrder to maintain the order they were added
-    const sortedItems = [...(data.orderItems || [])].sort((a, b) => {
+    // Sort items by sortOrder to maintain the order they were added.
+    // Filter out holes/partial items — an undefined cell crashes pdfmake.
+    const sortedItems = [...(data.orderItems || [])]
+        .filter(item => item && (item.name || item.altName))
+        .sort((a, b) => {
         const sortA = a.sortOrder !== undefined ? a.sortOrder : 999;
         const sortB = b.sortOrder !== undefined ? b.sortOrder : 999;
         return sortA - sortB;
@@ -362,12 +367,12 @@ export const generatePdfDefinition2 = (data) => {
                         ],
                         ...sortedItems.map((item, index) => [
                             `${index + 1}.`,
-                            (item.altName && item.altName.trim()) ? item.altName.trim() : item.name,
-                            `₹ ${item.productPrice}`,
+                            (item.altName && item.altName.trim()) ? item.altName.trim() : (item.name || ''),
+                            `₹ ${item.productPrice ?? 0}`,
                             item.type === 'weighted'
-                                ? { text: `${item.quantity} kg\n(₹${item.productPrice}/kg)`, fontSize: 8 }
-                                : item.quantity,
-                            `₹ ${item.totalPrice}`
+                                ? { text: `${item.quantity ?? 0} kg\n(₹${item.productPrice ?? 0}/kg)`, fontSize: 8 }
+                                : `${item.quantity ?? 0}`,
+                            `₹ ${item.totalPrice ?? 0}`
                         ]),
                         [
                             { text: 'Total', colSpan: 4 },

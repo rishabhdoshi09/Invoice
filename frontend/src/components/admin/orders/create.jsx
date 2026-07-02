@@ -1353,47 +1353,6 @@ export const CreateOrder = () => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  const isEditableTarget = (el) => {
-    if (!el) return false;
-    const tag = el.tagName;
-    if (tag==='INPUT' || tag==='TEXTAREA' || tag==='SELECT') return true;
-    if (el.isContentEditable) return true;
-    if (el.closest && el.closest('[role="combobox"], .MuiInputBase-root')) return true;
-    return false;
-  };
-
-  const selectAndMaybeAdd = useCallback(async (product) => {
-    setSelectedQuick('dabba');
-    setSelectedProduct(product);
-    setInputValue(product?.label || product?.value || '');
-    await attemptProductChange(product);
-
-    try {
-      const p = rows[product.productId];
-      if (p && Number(p.pricePerKg) === 300) {
-        // previously we set priceLock here; removed
-      }
-    } catch {}
-
-    const { weight } = await dispatch(fetchWeightsAction());
-    if (weight != null && Number(weight) > 0) {
-      const name = rows[product.productId]?.name || product.value || '';
-      if (archivedOrderProps || archivedPdfUrl) { setArchivedOrderProps(null); setArchivedPdfUrl(''); }
-      formik.setFieldValue('id', product.productId);
-      formik.setFieldValue('name', name);
-      formik.setFieldValue('quantity', weight);
-      setFetchedViaScale(true);
-      const price = Number(formik.values.productPrice) || 0;
-      formik.setFieldValue('totalPrice', Number((price * weight).toFixed(2)));
-      setTimeout(() => formik.handleSubmit(), 100);
-      clearQuickHighlight();
-    } else {
-      alert("Weight fetched is zero or invalid. Please ensure the scale is ready.");
-      clearQuickHighlight();
-    }
-  }, [dispatch, formik, rows, attemptProductChange, archivedOrderProps, archivedPdfUrl]);
-
-
   useEffect(() => { generatePdf(orderProps); }, [template, generatePdf, orderProps]);
 
   const restoreDeletedItem = useCallback((idx) => {
@@ -2892,6 +2851,8 @@ export const CreateOrder = () => {
           const idx = editNoteDialog.index;
           const newNote = editNoteDialog.value;
           setOrderProps((prev) => {
+            // Item may no longer exist (deleted / invoice cleared while dialog open)
+            if (!prev.orderItems[idx]) return prev;
             const updated = [...prev.orderItems];
             updated[idx] = { ...updated[idx], altName: String(newNote).trim() };
             const nextProps = { ...prev, orderItems: updated };
