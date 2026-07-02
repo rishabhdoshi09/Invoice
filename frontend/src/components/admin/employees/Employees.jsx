@@ -474,7 +474,16 @@ const SalaryTab = () => {
                                                     </Typography>
                                                 )}
                                             </TableCell>
-                                            <TableCell align="center">{row.daysInMonth}</TableCell>
+                                            <TableCell align="center">
+                                                {row.preJoinDays > 0 ? (
+                                                    <Tooltip title={`Joined ${row.joinDate} — payable for ${row.daysInMonth - row.preJoinDays} of ${row.daysInMonth} days`}>
+                                                        <Box>
+                                                            <Typography variant="body2" fontWeight={600}>{row.daysInMonth - row.preJoinDays}</Typography>
+                                                            <Typography variant="caption" color="text.secondary">of {row.daysInMonth}</Typography>
+                                                        </Box>
+                                                    </Tooltip>
+                                                ) : row.daysInMonth}
+                                            </TableCell>
                                             <TableCell align="center">
                                                 {row.leaveDays > 0 ? (
                                                     <Tooltip title={`-${fmt(row.leaveDeduction)} deducted`}>
@@ -548,6 +557,14 @@ const SalaryTab = () => {
                                                                     <Typography variant="body2" color="text.secondary">Daily Rate</Typography>
                                                                     <Typography variant="body2">₹{(row.dailyRate || 0).toFixed(2)}/day</Typography>
                                                                 </Box>
+                                                                {row.preJoinDays > 0 && (
+                                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 3 }}>
+                                                                        <Typography variant="body2" color="text.secondary">Before joining ({row.joinDate})</Typography>
+                                                                        <Typography variant="body2" color="warning.main">
+                                                                            {row.preJoinDays} day{row.preJoinDays !== 1 ? 's' : ''} (−{fmt(row.preJoinDeduction || 0)})
+                                                                        </Typography>
+                                                                    </Box>
+                                                                )}
                                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 3 }}>
                                                                     <Typography variant="body2" color="text.secondary">Day Offs (non-Sunday)</Typography>
                                                                     <Typography variant="body2" color={row.leaveDays > 0 ? 'warning.main' : 'text.secondary'}>
@@ -796,6 +813,12 @@ const PaySalaryDialog = ({ open, row, onClose, onSaved }) => {
                         <Typography variant="body2" color="text.secondary">Monthly Salary</Typography>
                         <Typography variant="body2">{fmt(row.monthlySalary)}</Typography>
                     </Box>
+                    {row.preJoinDays > 0 && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <Typography variant="body2" color="text.secondary">Before joining ({row.joinDate}) — {row.preJoinDays} days</Typography>
+                            <Typography variant="body2" color="warning.main">−{fmt(row.preJoinDeduction)}</Typography>
+                        </Box>
+                    )}
                     {row.leaveDays > 0 && (
                         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                             <Typography variant="body2" color="text.secondary">{row.leaveDays} day off deduction</Typography>

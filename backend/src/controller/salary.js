@@ -24,8 +24,8 @@ const syncSalaryRecord = async (employee, month, year, transaction) => {
             .map(m => m.format('DD-MM-YYYY'))
     );
 
-    const { daysInMonth, leaveDays, netSalary, dailyRate, deduction } =
-        calculateNetSalary(employee.monthlySalary, year, month, leaveDatesSet);
+    const { daysInMonth, leaveDays, netSalary, dailyRate, deduction, preJoinDays, preJoinDeduction } =
+        calculateNetSalary(employee.monthlySalary, year, month, leaveDatesSet, employee.joinDate);
 
     // Sum all non-deleted advances for this employee/month
     const advances = await db.employeeAdvance.findAll({
@@ -65,6 +65,8 @@ const syncSalaryRecord = async (employee, month, year, transaction) => {
     // Attach computed extras for the API response
     record._dailyRate = dailyRate;
     record._leaveDeduction = deduction;
+    record._preJoinDays = preJoinDays;
+    record._preJoinDeduction = preJoinDeduction;
     return record;
 };
 
@@ -95,6 +97,9 @@ module.exports = {
                         leaveDays: record.leaveDays,
                         dailyRate: round2(record._dailyRate || 0),
                         leaveDeduction: round2(record._leaveDeduction || 0),
+                        preJoinDays: record._preJoinDays || 0,
+                        preJoinDeduction: round2(record._preJoinDeduction || 0),
+                        joinDate: employee.joinDate || null,
                         netSalary: Number(record.netSalary),
                         advanceDeduction: Number(record.advanceDeduction),
                         paidAmount: Number(record.paidAmount),
