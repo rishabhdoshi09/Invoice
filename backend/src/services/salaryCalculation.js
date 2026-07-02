@@ -1,8 +1,13 @@
 const moment = require('moment');
 
+// Standard payroll convention: deductions are always computed on a fixed
+// 30-day basis (dailyRate = monthlySalary / 30), regardless of whether the
+// calendar month has 28, 29, 30 or 31 days.
+const RATE_BASIS_DAYS = 30;
+
 /**
  * Day-wise salary calculation.
- * dailyRate = monthlySalary / daysInMonth.
+ * dailyRate = monthlySalary / 30 (fixed basis, not calendar days).
  * Sundays are always paid (never deducted) even though no work happens.
  * Only leave days marked on a non-Sunday are deducted, pro-rata.
  * Days before the employee's join date are not payable at all (including
@@ -17,7 +22,7 @@ const moment = require('moment');
 const calculateNetSalary = (monthlySalary, year, month, leaveDatesSet, joinDate = null) => {
     const daysInMonth = moment(`${year}-${String(month).padStart(2, '0')}-01`, 'YYYY-MM-DD').daysInMonth();
     const salary = Number(monthlySalary) || 0;
-    const dailyRate = daysInMonth > 0 ? salary / daysInMonth : 0;
+    const dailyRate = salary / RATE_BASIS_DAYS;
 
     const joinMoment = joinDate ? moment(joinDate, ['DD-MM-YYYY', 'YYYY-MM-DD'], true) : null;
     const hasValidJoin = joinMoment && joinMoment.isValid();
