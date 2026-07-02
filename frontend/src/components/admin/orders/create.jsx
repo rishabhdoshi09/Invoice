@@ -441,9 +441,12 @@ export const CreateOrder = () => {
     return () => { cancelled = true; };
   }, [orderProps.customer?.id]);
 
-  // Update orderDate to today whenever the component becomes visible/focused
+  // Keep orderDate current — but NEVER override a date the user picked
+  // manually (backdated billing must survive tab switches and midnight).
+  const userPickedDateRef = useRef(false);
   useEffect(() => {
     const updateDateIfNeeded = () => {
+      if (userPickedDateRef.current) return;
       const today = moment().format("DD-MM-YYYY");
       setOrderProps(prev => {
         if (prev.orderDate !== today) {
@@ -452,17 +455,17 @@ export const CreateOrder = () => {
         return prev;
       });
     };
-    
+
     // Update on mount
     updateDateIfNeeded();
-    
+
     // Update when window gains focus (user comes back to tab)
     window.addEventListener('focus', updateDateIfNeeded);
-    
+
     // Update at midnight
     const msToMidnight = msToNextMidnight();
     const midnightTimer = setTimeout(updateDateIfNeeded, msToMidnight + 1000);
-    
+
     return () => {
       window.removeEventListener('focus', updateDateIfNeeded);
       clearTimeout(midnightTimer);
@@ -1538,6 +1541,7 @@ export const CreateOrder = () => {
       });
 
       setOrderProps({ ...initialOrderProps, orderDate: getTodayStr() });
+      userPickedDateRef.current = false; // next invoice tracks today again
       formik.resetForm();
       setLocalPriceValue('');
       setFetchedViaScale(false);
@@ -1817,6 +1821,9 @@ export const CreateOrder = () => {
                         value={toInputDate(orderProps.orderDate)}
                         onChange={(e) => {
                           const converted = fromInputDate(e.target.value);
+                          // Picking today re-enables auto date tracking; any other
+                          // date locks it until this invoice is submitted.
+                          userPickedDateRef.current = converted !== getTodayStr();
                           setOrderProps(prev => ({ ...prev, orderDate: converted }));
                         }}
                         InputLabelProps={{ shrink: true }}
