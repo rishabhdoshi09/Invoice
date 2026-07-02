@@ -344,17 +344,24 @@ const SalaryTab = () => {
     const [expandedId, setExpandedId] = useState(null);
     const [detailById, setDetailById] = useState({});
     const [successMsg, setSuccessMsg] = useState('');
+    const [fetchError, setFetchError] = useState('');
 
     const month = cursor.month() + 1;
     const year = cursor.year();
 
     const fetchSalary = useCallback(async () => {
         setLoading(true);
+        setFetchError('');
         try {
             const res = await axios.get(`/api/salary?month=${month}&year=${year}`, { headers: headers() });
             setRows(res.data?.data?.rows || []);
             setSummary(res.data?.data?.summary || {});
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            setFetchError(err?.response?.data?.message || err.message || 'Failed to load salary data.');
+            setRows([]);
+            setSummary({});
+        }
         finally { setLoading(false); }
     }, [month, year]);
 
@@ -431,6 +438,15 @@ const SalaryTab = () => {
 
             {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
+            ) : fetchError ? (
+                <Alert severity="error">
+                    Failed to load salary data: {fetchError}
+                    <br />
+                    <Typography variant="caption">
+                        If the backend was recently updated, run pending database migrations
+                        (npx sequelize-cli db:migrate) and restart the server.
+                    </Typography>
+                </Alert>
             ) : rows.length === 0 ? (
                 <Alert severity="info">No active employees.</Alert>
             ) : (
