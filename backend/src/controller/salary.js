@@ -5,21 +5,18 @@ const { calculateNetSalary } = require('../services/salaryCalculation');
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
-const statusFor = (paidAmount, dueAmount) => {
-    if (paidAmount > 0 && dueAmount <= 0) return 'paid';
-    if (paidAmount > 0) return 'partial';
+// settled = cash paid + advance given this month
+const statusFor = (paidAmount, advanceDeduction, netSalary) => {
+    const settled = round2(paidAmount + advanceDeduction);
+    if (settled >= netSalary - 0.01) return 'paid';
+    if (settled > 0) return 'partial';
     return 'unpaid';
 };
 
-// Recomputes (and persists) the salary "bill" for one employee/month based on
-// the employee's current monthly salary and whatever leaves are marked for
-// that month. Existing paidAmount carries over — only netSalary/dueAmount/
-// status are refreshed, mirroring how a purchase bill's dueAmount is derived.
+// Recomputes and persists the salary record for one employee/month.
+// Factors in both leave deductions and advance deductions.
 const syncSalaryRecord = async (employee, month, year, transaction) => {
-    const leaves = await db.employeeLeave.findAll({
-        where: { employeeId: employee.id },
-        transaction
-    });
+    const leaves = await db.employeeLeave.findAll({ where: { employeeId: employee.id }, transaction });
     const leaveDatesSet = new Set(
         leaves
             .map(l => moment(l.leaveDate, ['DD-MM-YYYY', 'YYYY-MM-DD']))
@@ -27,7 +24,15 @@ const syncSalaryRecord = async (employee, month, year, transaction) => {
             .map(m => m.format('DD-MM-YYYY'))
     );
 
-    const { daysInMonth, leaveDays, netSalary } = calculateNetSalary(employee.monthlySalary, year, month, leaveDatesSet);
+    const { daysInMonth, leaveDays, netSalary, dailyRate, deduction } =
+        calculateNetSalary(employee.monthlySalary, year, month, leaveDatesSet);
+
+    // Sum all non-deleted advances for this employee/month
+    const advances = await db.employeeAdvance.findAll({
+        where: { employeeId: employee.id, month: Number(month), year: Number(year), isDeleted: false },
+        transaction
+    });
+    const advanceDeduction = round2(advances.reduce((s, a) => s + Number(a.amount), 0));
 
     let record = await db.salaryPayment.findOne({
         where: { employeeId: employee.id, month: Number(month), year: Number(year) },
@@ -35,13 +40,13 @@ const syncSalaryRecord = async (employee, month, year, transaction) => {
     });
 
     const paidAmount = record ? Number(record.paidAmount) : 0;
-    const dueAmount = Math.max(0, round2(netSalary - paidAmount));
-    const status = statusFor(paidAmount, dueAmount);
+    const dueAmount = Math.max(0, round2(netSalary - advanceDeduction - paidAmount));
+    const status = statusFor(paidAmount, advanceDeduction, netSalary);
 
     if (record) {
         await record.update({
             monthlySalary: employee.monthlySalary,
-            daysInMonth, leaveDays, netSalary, dueAmount, status
+            daysInMonth, leaveDays, netSalary, advanceDeduction, dueAmount, status
         }, { transaction });
     } else {
         record = await db.salaryPayment.create({
@@ -50,22 +55,30 @@ const syncSalaryRecord = async (employee, month, year, transaction) => {
             year: Number(year),
             monthlySalary: employee.monthlySalary,
             daysInMonth, leaveDays, netSalary,
+            advanceDeduction,
             paidAmount: 0,
             dueAmount,
             status
         }, { transaction });
     }
+
+    // Attach computed extras for the API response
+    record._dailyRate = dailyRate;
+    record._leaveDeduction = deduction;
     return record;
 };
 
 module.exports = {
-    // GET /salary?month=&year= — one row per active employee, auto-synced to current leave data
+    // GET /salary?month=&year=
     listSalary: async (req, res) => {
         try {
             const month = Number(req.query.month) || (moment().month() + 1);
             const year = Number(req.query.year) || moment().year();
 
-            const employees = await db.employee.findAll({ where: { isDeleted: false, isActive: true }, order: [['name', 'ASC']] });
+            const employees = await db.employee.findAll({
+                where: { isDeleted: false, isActive: true },
+                order: [['name', 'ASC']]
+            });
 
             const records = await db.sequelize.transaction(async (transaction) => {
                 const out = [];
@@ -80,7 +93,10 @@ module.exports = {
                         monthlySalary: Number(record.monthlySalary),
                         daysInMonth: record.daysInMonth,
                         leaveDays: record.leaveDays,
+                        dailyRate: round2(record._dailyRate || 0),
+                        leaveDeduction: round2(record._leaveDeduction || 0),
                         netSalary: Number(record.netSalary),
+                        advanceDeduction: Number(record.advanceDeduction),
                         paidAmount: Number(record.paidAmount),
                         dueAmount: Number(record.dueAmount),
                         status: record.status
@@ -92,8 +108,9 @@ module.exports = {
             const summary = records.reduce((acc, r) => ({
                 totalNetSalary: acc.totalNetSalary + r.netSalary,
                 totalPaid: acc.totalPaid + r.paidAmount,
+                totalAdvance: acc.totalAdvance + r.advanceDeduction,
                 totalDue: acc.totalDue + r.dueAmount
-            }), { totalNetSalary: 0, totalPaid: 0, totalDue: 0 });
+            }), { totalNetSalary: 0, totalPaid: 0, totalAdvance: 0, totalDue: 0 });
 
             res.json({ status: 200, data: { rows: records, summary, month, year } });
         } catch (err) {
@@ -101,7 +118,7 @@ module.exports = {
         }
     },
 
-    // GET /salary/:id — single record + payment history
+    // GET /salary/:id
     getSalaryDetail: async (req, res) => {
         try {
             const record = await db.salaryPayment.findOne({
@@ -110,18 +127,29 @@ module.exports = {
             });
             if (!record) return res.status(404).json({ status: 404, message: 'Salary record not found.' });
 
-            const payments = await db.payment.findAll({
-                where: { referenceType: 'salary', referenceId: record.id, isDeleted: false },
-                order: [['createdAt', 'ASC']]
-            });
+            const [payments, advances] = await Promise.all([
+                db.payment.findAll({
+                    where: { referenceType: 'salary', referenceId: record.id, isDeleted: false },
+                    order: [['createdAt', 'ASC']]
+                }),
+                db.employeeAdvance.findAll({
+                    where: {
+                        employeeId: record.employeeId,
+                        month: record.month,
+                        year: record.year,
+                        isDeleted: false
+                    },
+                    order: [['createdAt', 'ASC']]
+                })
+            ]);
 
-            res.json({ status: 200, data: { record, payments } });
+            res.json({ status: 200, data: { record, payments, advances } });
         } catch (err) {
             res.status(500).json({ status: 500, message: err.message });
         }
     },
 
-    // POST /salary/:id/pay { amount, paymentDate, notes }
+    // POST /salary/:id/pay
     paySalary: async (req, res) => {
         try {
             const record = await db.salaryPayment.findOne({
@@ -152,22 +180,22 @@ module.exports = {
                 }, { transaction });
 
                 const newPaidAmount = round2(Number(record.paidAmount) + payAmt);
-                const newDueAmount = Math.max(0, round2(Number(record.netSalary) - newPaidAmount));
-                const status = statusFor(newPaidAmount, newDueAmount);
+                const advanceDeduction = Number(record.advanceDeduction);
+                const newDueAmount = Math.max(0, round2(Number(record.netSalary) - advanceDeduction - newPaidAmount));
+                const status = statusFor(newPaidAmount, advanceDeduction, Number(record.netSalary));
 
                 await record.update({ paidAmount: newPaidAmount, dueAmount: newDueAmount, status }, { transaction });
-
                 return { payment, record };
             });
 
-            console.log(`[SALARY] Paid ₹${payAmt} to ${record.employee.name} for ${record.month}/${record.year} (status: ${result.record.status})`);
+            console.log(`[SALARY] Paid ₹${payAmt} to ${record.employee.name} for ${record.month}/${record.year} (${result.record.status})`);
             res.json({ status: 200, data: result });
         } catch (err) {
             res.status(500).json({ status: 500, message: err.message });
         }
     },
 
-    // DELETE /salary/payments/:paymentId — reverse a salary payout
+    // DELETE /salary/payments/:paymentId
     reverseSalaryPayment: async (req, res) => {
         try {
             const payment = await db.payment.findOne({
@@ -180,8 +208,9 @@ module.exports = {
 
             await db.sequelize.transaction(async (transaction) => {
                 const newPaidAmount = Math.max(0, round2(Number(record.paidAmount) - Number(payment.amount)));
-                const newDueAmount = Math.max(0, round2(Number(record.netSalary) - newPaidAmount));
-                const status = statusFor(newPaidAmount, newDueAmount);
+                const advanceDeduction = Number(record.advanceDeduction);
+                const newDueAmount = Math.max(0, round2(Number(record.netSalary) - advanceDeduction - newPaidAmount));
+                const status = statusFor(newPaidAmount, advanceDeduction, Number(record.netSalary));
 
                 await record.update({ paidAmount: newPaidAmount, dueAmount: newDueAmount, status }, { transaction });
                 await payment.update({
@@ -193,6 +222,88 @@ module.exports = {
             });
 
             res.json({ status: 200, message: 'Salary payment reversed.' });
+        } catch (err) {
+            res.status(500).json({ status: 500, message: err.message });
+        }
+    },
+
+    // POST /employees/:employeeId/advances
+    recordAdvance: async (req, res) => {
+        try {
+            const { employeeId } = req.params;
+            const employee = await db.employee.findOne({ where: { id: employeeId, isDeleted: false } });
+            if (!employee) return res.status(404).json({ status: 404, message: 'Employee not found.' });
+
+            const { amount, advanceDate, month, year, notes } = req.body;
+            const amt = round2(amount);
+            if (!amt || amt <= 0) return res.status(400).json({ status: 400, message: 'amount must be positive.' });
+
+            const m = Number(month) || (moment().month() + 1);
+            const y = Number(year) || moment().year();
+
+            const advance = await db.employeeAdvance.create({
+                employeeId,
+                month: m,
+                year: y,
+                amount: amt,
+                advanceDate: advanceDate || moment().format('DD-MM-YYYY'),
+                notes: notes?.trim() || null,
+                recordedBy: req.user?.name || req.user?.username || null
+            });
+
+            // Re-sync the salary record so advanceDeduction & dueAmount update immediately
+            await db.sequelize.transaction(async (transaction) => {
+                await syncSalaryRecord(employee, m, y, transaction);
+            });
+
+            res.json({ status: 200, data: advance });
+        } catch (err) {
+            res.status(500).json({ status: 500, message: err.message });
+        }
+    },
+
+    // GET /employees/:employeeId/advances?month=&year=
+    listAdvances: async (req, res) => {
+        try {
+            const { employeeId } = req.params;
+            const month = Number(req.query.month) || (moment().month() + 1);
+            const year = Number(req.query.year) || moment().year();
+
+            const advances = await db.employeeAdvance.findAll({
+                where: { employeeId, month, year, isDeleted: false },
+                order: [['createdAt', 'ASC']]
+            });
+
+            res.json({ status: 200, data: advances });
+        } catch (err) {
+            res.status(500).json({ status: 500, message: err.message });
+        }
+    },
+
+    // DELETE /employees/:employeeId/advances/:advanceId
+    deleteAdvance: async (req, res) => {
+        try {
+            const { employeeId, advanceId } = req.params;
+            const advance = await db.employeeAdvance.findOne({
+                where: { id: advanceId, employeeId, isDeleted: false }
+            });
+            if (!advance) return res.status(404).json({ status: 404, message: 'Advance not found.' });
+
+            const employee = await db.employee.findOne({ where: { id: employeeId } });
+
+            await advance.update({
+                isDeleted: true,
+                updatedAt: new Date()
+            });
+
+            // Re-sync salary so dueAmount reflects the removed advance
+            if (employee) {
+                await db.sequelize.transaction(async (transaction) => {
+                    await syncSalaryRecord(employee, advance.month, advance.year, transaction);
+                });
+            }
+
+            res.json({ status: 200, message: 'Advance removed.' });
         } catch (err) {
             res.status(500).json({ status: 500, message: err.message });
         }

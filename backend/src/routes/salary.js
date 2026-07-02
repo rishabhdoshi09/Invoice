@@ -17,4 +17,14 @@ module.exports = (router) => {
     router
         .route('/salary/payments/:paymentId')
         .delete(authenticate, canModify, Controller.salary.reverseSalaryPayment);
+
+    // Advance tracking
+    router
+        .route('/employees/:employeeId/advances')
+        .get(authenticate, Controller.salary.listAdvances)
+        .post(authenticate, canModify, Controller.salary.recordAdvance);
+
+    router
+        .route('/employees/:employeeId/advances/:advanceId')
+        .delete(authenticate, canModify, Controller.salary.deleteAdvance);
 };

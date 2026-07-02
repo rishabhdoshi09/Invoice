@@ -40,6 +40,12 @@ module.exports = (sequelize, Sequelize) => {
                 type: Sequelize.DECIMAL(15, 2),
                 allowNull: false
             },
+            advanceDeduction: {
+                type: Sequelize.DECIMAL(15, 2),
+                allowNull: false,
+                defaultValue: 0,
+                comment: 'Total advance given to employee this month, deducted from net salary'
+            },
             paidAmount: {
                 type: Sequelize.DECIMAL(15, 2),
                 allowNull: false,
