@@ -50,17 +50,19 @@ export const createOrderAction = (payload) => {
     return async(dispatch) => {
         try{
             dispatch(startLoading());
-            const { data: { data }} = await createOrder(payload);
+            const { data: { data, linkSuggestion }} = await createOrder(payload);
             dispatch(setNotification({ open: true, severity: 'success', message: 'Order created successfully'}));
             dispatch(stopLoading());
-            
+
             dispatch(api.util.invalidateTags([
                 { type: 'Orders', id: 'LIST' },
                 { type: 'Receivables', id: 'LIST' },
                 { type: 'Dashboard', id: 'TODAY' }
             ]));
-            
-            return data;
+
+            // linkSuggestion: backend matched an existing customer by name but
+            // did NOT auto-link — caller must ask the user and confirm-link.
+            return linkSuggestion ? { ...data, linkSuggestion } : data;
         }
         catch(error){
             console.log(error);

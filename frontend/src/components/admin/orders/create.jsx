@@ -156,9 +156,11 @@ const sanitizeOrderForServer = (props = {}, isCreditSale = false, greyAmount = 0
     greyAmount: isCreditSale ? toNum(greyAmount) : 0,
     whiteAmount: isCreditSale ? toNum(whiteAmount) : 0,
     orderItems: clean,
-    // Manual advance deduction — only sent when the owner chose to apply it
-    // against a customer explicitly selected from the database (has an id).
-    ...(toNum(advanceToApply) > 0 && customerId ? { customerId, advanceToApply: toNum(advanceToApply) } : {}),
+    // Customer explicitly selected from the database dropdown — always link.
+    // Without this, credit-sale dues never reach the customer's balance.
+    ...(customerId ? { customerId } : {}),
+    // Manual advance deduction — only sent when the owner chose to apply it.
+    ...(toNum(advanceToApply) > 0 && customerId ? { advanceToApply: toNum(advanceToApply) } : {}),
   };
 };
 
@@ -1486,6 +1488,28 @@ export const CreateOrder = () => {
       // ONLINE SAVE (Server)
       const savedOrder = await dispatch(createOrderAction(sanitized));
 
+      // Backend matched an existing customer by typed name but did NOT link the
+      // order (needs explicit confirmation). Without linking, a credit sale's
+      // due never reaches the customer's balance — so ask right here.
+      if (savedOrder?.linkSuggestion && savedOrder?.id) {
+        const s = savedOrder.linkSuggestion;
+        const ok = window.confirm(
+          `Customer "${s.name}"${s.mobile ? ` (${s.mobile})` : ''} already exists ` +
+          `(current balance ₹${Number(s.currentBalance || 0).toLocaleString('en-IN')}).\n\n` +
+          `Link this bill to them so the due is added to their account?`
+        );
+        if (ok) {
+          try {
+            const token = localStorage.getItem('token');
+            await axios.post(`/api/orders/${savedOrder.id}/confirm-link`,
+              { customerId: s.customerId },
+              { headers: { Authorization: `Bearer ${token}` } });
+          } catch (e) {
+            alert('Failed to link bill to customer: ' + (e?.response?.data?.message || e.message));
+          }
+        }
+      }
+
       // Invalidate RTK Query cache to refresh orders list
       dispatch(api.util.invalidateTags([
         { type: 'Orders', id: 'LIST' },
@@ -1962,7 +1986,7 @@ export const CreateOrder = () => {
                 <TextField size="small" id="customerMobile" name="customerMobile" label="Customer Mobile" value={orderProps.customerMobile} onChange={(e)=>{ const { id, value } = e.target; setOrderProps((prevProps) => ({ ...prevProps, [id]: value })); }} fullWidth autoComplete="off" inputProps={{ autoComplete: 'off' }} />
               </Grid>
               <Grid item xs={12} md={4}>
-                <TextField size="small" type='number' id="taxPercent" name="taxPercent" label="Tax Percentage" value={orderProps.taxPercent} onChange={(e)=>{ const { id, value } = e.target; const obj = {}; if (id === 'taxPercent') { const taxPct = Number(value) || 0; obj['taxPercent'] = taxPct; const subTotal = orderProps.subTotal; obj['tax'] = round2(subTotal * (taxPct / 100)); obj['total'] = round2(subTotal + obj['tax']); } setOrderProps((prevProps) => ({ ...prevProps, [id]: value, ...obj })); }} required fullWidth />
+                <TextField size="small" type='number' id="taxPercent" name="taxPercent" label="Tax Percentage" value={orderProps.taxPercent} onChange={(e)=>{ const { id, value } = e.target; const obj = {}; if (id === 'taxPercent') { const taxPct = Number(value) || 0; obj['taxPercent'] = taxPct; const subTotal = orderProps.subTotal; obj['tax'] = round2(subTotal * (taxPct / 100)); obj['total'] = Math.round(subTotal + obj['tax']); } setOrderProps((prevProps) => ({ ...prevProps, [id]: value, ...obj })); }} required fullWidth />
               </Grid>
 
               <Grid item xs={12} md={6} mt={2}>
