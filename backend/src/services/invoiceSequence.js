@@ -66,13 +66,35 @@ module.exports = {
         // Check if we need to reset for new financial year
         const lastFY = sequence.lastFinancialYear || getFinancialYear(sequence.lastDate || today);
         let newGlobalNumber;
-        
+
         if (lastFY !== currentFY) {
             // New financial year - reset counter
             newGlobalNumber = 1;
         } else {
             // Same financial year - increment
             newGlobalNumber = sequence.currentNumber + 1;
+        }
+
+        // SELF-HEALING GUARD: the sequence row is a separate counter from the
+        // orders table — if it ever desyncs (row recreated after loss, manual
+        // edit, restore from an older backup, etc.) it will keep generating a
+        // number that already exists. Because generation runs inside the same
+        // transaction as the order insert, a collision rolls back the counter
+        // increment too, so a desynced counter repeats the SAME colliding
+        // number forever instead of failing once. Guard against that by
+        // checking the actual max invoice number for this prefix+FY and
+        // jumping ahead of it if the counter has fallen behind reality.
+        const prefix = sequence.prefix || 'INV';
+        const likeCandidate = `${prefix}/${currentFY}/%`;
+        const [rows] = await db.sequelize.query(
+            `SELECT MAX(CAST(SUBSTRING("orderNumber" FROM '(\\d+)$') AS INTEGER)) AS "maxSuffix"
+             FROM orders
+             WHERE "orderNumber" LIKE :likeCandidate`,
+            { replacements: { likeCandidate }, transaction: transaction || undefined }
+        );
+        const maxSuffix = rows && rows[0] ? rows[0].maxSuffix : null;
+        if (maxSuffix && Number(maxSuffix) >= newGlobalNumber) {
+            newGlobalNumber = Number(maxSuffix) + 1;
         }
         
         // Check if we need to reset daily number
