@@ -65,6 +65,8 @@ const AppBar = styled(MuiAppBar, {
     shouldForwardProp: (prop) => prop !== 'open',
 })(({ theme, open }) => ({
     zIndex: theme.zIndex.drawer + 1,
+    background: 'linear-gradient(180deg, #0F172A 0%, #1E293B 100%)',
+    boxShadow: '0 1px 0 rgba(255,255,255,0.06), 0 2px 12px rgba(15,23,42,0.35)',
     transition: theme.transitions.create(['width', 'margin'], {
         easing: theme.transitions.easing.sharp,
         duration: theme.transitions.duration.leavingScreen,
@@ -80,6 +82,14 @@ const AppBar = styled(MuiAppBar, {
         }),
     }),
 }));
+
+// Shared dark-slate styling for both drawer variants
+const drawerPaperSx = {
+    backgroundColor: '#0F172A',
+    color: 'rgba(255,255,255,0.85)',
+    borderRight: 'none',
+    backgroundImage: 'linear-gradient(180deg, #0F172A 0%, #111C33 100%)',
+};
 
 // Desktop-only persistent mini-drawer
 const DesktopDrawer = styled(MuiDrawer, { shouldForwardProp: (prop) => prop !== 'open' })(
@@ -191,64 +201,96 @@ export const Layout = () =>  {
         dispatch(listProductsAction());
     }, [dispatch]);
 
+    // One styled nav item — dark-sidebar treatment with an active-route state
+    // (accent bar + tint) so the current page is always obvious.
+    const renderNavItem = (pageObj) => {
+        const isActive = currentPath === pageObj.path ||
+            currentPath.startsWith(`${pageObj.path}/`);
+        const expanded = open || isMobile;
+        return (
+            <ListItem key={pageObj.key} disablePadding sx={{ display: 'block' }}
+                onClick={() => { navigate(`/${pageObj.path}`); if (isMobile) handleDrawerClose(); }}>
+                <ListItemButton
+                    sx={{
+                        minHeight: 42,
+                        justifyContent: expanded ? 'initial' : 'center',
+                        px: 2,
+                        mx: 1,
+                        my: '2px',
+                        borderRadius: 2,
+                        position: 'relative',
+                        color: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.65)',
+                        backgroundColor: isActive ? 'rgba(66,165,245,0.16)' : 'transparent',
+                        '&:hover': {
+                            backgroundColor: isActive ? 'rgba(66,165,245,0.22)' : 'rgba(255,255,255,0.06)',
+                            color: '#FFFFFF',
+                        },
+                        '&::before': isActive ? {
+                            content: '""',
+                            position: 'absolute',
+                            left: -8,
+                            top: 8,
+                            bottom: 8,
+                            width: 3,
+                            borderRadius: 3,
+                            backgroundColor: '#42A5F5',
+                        } : {},
+                        transition: 'background-color 120ms ease, color 120ms ease',
+                    }}
+                >
+                    <ListItemIcon sx={{
+                        minWidth: 0,
+                        mr: expanded ? 2 : 'auto',
+                        justifyContent: 'center',
+                        color: 'inherit',
+                        '& .MuiSvgIcon-root': { fontSize: 20 },
+                    }}>
+                        {pageObj.icon}
+                    </ListItemIcon>
+                    <ListItemText
+                        primary={pageObj.label}
+                        primaryTypographyProps={{ fontSize: '0.86rem', fontWeight: isActive ? 700 : 500 }}
+                        sx={{ opacity: expanded ? 1 : 0 }}
+                    />
+                </ListItemButton>
+            </ListItem>
+        );
+    };
+
+    const sectionLabelSx = {
+        px: 3, pt: 1.5, pb: 0.5, display: 'block',
+        color: 'rgba(255,255,255,0.35)',
+        textTransform: 'uppercase', fontSize: '0.64rem', letterSpacing: '0.12em', fontWeight: 700,
+    };
+
     // Shared nav list content used in both desktop and mobile drawers
     const NavContent = () => (
         <>
-            <List disablePadding>
-                {corePages.map((pageObj) => (
-                    <ListItem key={pageObj.key} disablePadding sx={{ display: 'block' }}
-                        onClick={() => { navigate(`/${pageObj.path}`); if (isMobile) handleDrawerClose(); }}>
-                        <ListItemButton sx={{ minHeight: 44, justifyContent: (open || isMobile) ? 'initial' : 'center', px: 2.5 }}>
-                            <ListItemIcon sx={{ minWidth: 0, mr: (open || isMobile) ? 3 : 'auto', justifyContent: 'center' }}>
-                                {pageObj.icon}
-                            </ListItemIcon>
-                            <ListItemText primary={pageObj.label} sx={{ opacity: (open || isMobile) ? 1 : 0 }} />
-                        </ListItemButton>
-                    </ListItem>
-                ))}
+            <List disablePadding sx={{ pt: 0.5 }}>
+                {corePages.map(renderNavItem)}
             </List>
 
-            <Divider sx={{ my: 0.5 }} />
+            <Divider sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.08)' }} />
 
             {(open || isMobile) && (
-                <Typography variant="caption" sx={{ px: 2.5, py: 0.5, color: 'text.secondary', display: 'block', textTransform: 'uppercase', fontSize: '0.68rem', letterSpacing: 1 }}>
+                <Typography variant="caption" sx={sectionLabelSx}>
                     Tools
                 </Typography>
             )}
             <List disablePadding>
-                {toolPages.map((pageObj) => (
-                    <ListItem key={pageObj.key} disablePadding sx={{ display: 'block' }}
-                        onClick={() => { navigate(`/${pageObj.path}`); if (isMobile) handleDrawerClose(); }}>
-                        <ListItemButton sx={{ minHeight: 44, justifyContent: (open || isMobile) ? 'initial' : 'center', px: 2.5 }}>
-                            <ListItemIcon sx={{ minWidth: 0, mr: (open || isMobile) ? 3 : 'auto', justifyContent: 'center' }}>
-                                {pageObj.icon}
-                            </ListItemIcon>
-                            <ListItemText primary={pageObj.label} sx={{ opacity: (open || isMobile) ? 1 : 0 }} />
-                        </ListItemButton>
-                    </ListItem>
-                ))}
+                {toolPages.map(renderNavItem)}
             </List>
 
             {adminPages.length > 0 && (
                 <>
-                    <Divider sx={{ my: 0.5 }} />
+                    <Divider sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.08)' }} />
                     {(open || isMobile) && (
-                        <Typography variant="caption" sx={{ px: 2.5, py: 0.5, color: 'text.secondary', display: 'block', textTransform: 'uppercase', fontSize: '0.68rem', letterSpacing: 1 }}>
+                        <Typography variant="caption" sx={sectionLabelSx}>
                             Admin
                         </Typography>
                     )}
-                    <List disablePadding>
-                        {adminPages.map((pageObj) => (
-                            <ListItem key={pageObj.key} disablePadding sx={{ display: 'block' }}
-                                onClick={() => { navigate(`/${pageObj.path}`); if (isMobile) handleDrawerClose(); }}>
-                                <ListItemButton sx={{ minHeight: 44, justifyContent: (open || isMobile) ? 'initial' : 'center', px: 2.5 }}>
-                                    <ListItemIcon sx={{ minWidth: 0, mr: (open || isMobile) ? 3 : 'auto', justifyContent: 'center' }}>
-                                        {pageObj.icon}
-                                    </ListItemIcon>
-                                    <ListItemText primary={pageObj.label} sx={{ opacity: (open || isMobile) ? 1 : 0 }} />
-                                </ListItemButton>
-                            </ListItem>
-                        ))}
+                    <List disablePadding sx={{ pb: 1 }}>
+                        {adminPages.map(renderNavItem)}
                     </List>
                 </>
             )}
@@ -279,9 +321,9 @@ export const Layout = () =>  {
                         variant="h6"
                         noWrap
                         component="div"
-                        sx={{ flexGrow: 0, mr: { xs: 1, sm: 2 }, fontWeight: 700, letterSpacing: 0.5, fontSize: { xs: '1rem', sm: '1.25rem' } }}
+                        sx={{ flexGrow: 0, mr: { xs: 1, sm: 2 }, fontWeight: 800, letterSpacing: '0.02em', fontSize: { xs: '1rem', sm: '1.2rem' } }}
                     >
-                        RS Invoice
+                        RS <Box component="span" sx={{ color: '#42A5F5' }}>Invoice</Box>
                     </Typography>
 
                     {/* Search — full button on desktop, icon-only on mobile */}
@@ -360,13 +402,19 @@ export const Layout = () =>  {
 
             {/* Desktop: persistent mini-drawer */}
             {!isMobile && (
-                <DesktopDrawer variant="permanent" open={open}>
+                <DesktopDrawer variant="permanent" open={open}
+                    sx={{ '& .MuiDrawer-paper': drawerPaperSx }}>
                     <DrawerHeader>
-                        <IconButton onClick={handleDrawerClose}>
+                        {open && (
+                            <Typography variant="subtitle1" sx={{ flexGrow: 1, pl: 1.5, fontWeight: 800, letterSpacing: '0.02em', color: '#FFFFFF' }}>
+                                RS <Box component="span" sx={{ color: '#42A5F5' }}>Invoice</Box>
+                            </Typography>
+                        )}
+                        <IconButton onClick={handleDrawerClose} sx={{ color: 'rgba(255,255,255,0.6)' }}>
                             {theme.direction === 'rtl' ? <ChevronRightIcon /> : <ChevronLeftIcon />}
                         </IconButton>
                     </DrawerHeader>
-                    <Divider />
+                    <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)' }} />
                     <NavContent />
                 </DesktopDrawer>
             )}
@@ -378,17 +426,17 @@ export const Layout = () =>  {
                     open={open}
                     onClose={handleDrawerClose}
                     ModalProps={{ keepMounted: true }}
-                    sx={{ '& .MuiDrawer-paper': { width: drawerWidth, boxSizing: 'border-box' } }}
+                    sx={{ '& .MuiDrawer-paper': { width: drawerWidth, boxSizing: 'border-box', ...drawerPaperSx } }}
                 >
                     <DrawerHeader>
-                        <Typography variant="subtitle1" sx={{ flexGrow: 1, pl: 2, fontWeight: 700 }}>
-                            RS Invoice
+                        <Typography variant="subtitle1" sx={{ flexGrow: 1, pl: 2, fontWeight: 800, letterSpacing: '0.02em', color: '#FFFFFF' }}>
+                            RS <Box component="span" sx={{ color: '#42A5F5' }}>Invoice</Box>
                         </Typography>
-                        <IconButton onClick={handleDrawerClose}>
+                        <IconButton onClick={handleDrawerClose} sx={{ color: 'rgba(255,255,255,0.6)' }}>
                             <ChevronLeftIcon />
                         </IconButton>
                     </DrawerHeader>
-                    <Divider />
+                    <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)' }} />
                     <NavContent />
                 </MuiDrawer>
             )}

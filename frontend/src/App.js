@@ -33,92 +33,186 @@ import { CircularProgress, Box } from "@mui/material";
 import { NotificationProvider } from "./components/common/SmartNotifications";
 import { KeyboardShortcutsHelp, useKeyboardShortcutsHelp } from "./components/common/KeyboardShortcuts";
 
+// ── RS Invoice design system ──────────────────────────────────────────────
+// One theme upgrades every page: financial-grade typography (tabular
+// numerals so money columns align), a slate + blue palette, soft-bordered
+// surfaces, and consistent focus/hover states across all MUI components.
 const theme = createTheme({
   palette: {
     primary: {
       main: '#1565C0',
-      light: '#1976D2',
+      light: '#42A5F5',
       dark: '#0D47A1',
       contrastText: '#FFFFFF',
     },
     secondary: {
-      main: '#37474F',
+      main: '#334155',
       contrastText: '#FFFFFF',
     },
-    success: {
-      main: '#2E7D32',
-      light: '#388E3C',
-    },
-    warning: {
-      main: '#E65100',
-    },
-    error: {
-      main: '#C62828',
-    },
+    success: { main: '#2E7D32', light: '#4CAF50' },
+    warning: { main: '#E65100', light: '#FF9800' },
+    error:   { main: '#C62828', light: '#EF5350' },
+    info:    { main: '#0277BD' },
     background: {
-      default: '#F5F7FA',
+      default: '#F4F6FA',
       paper: '#FFFFFF',
     },
     text: {
-      primary: '#1A237E',
-      secondary: '#546E7A',
+      primary: '#1E293B',
+      secondary: '#64748B',
     },
+    divider: '#E2E8F0',
   },
   typography: {
     fontFamily: '"Inter", "Roboto", "Helvetica Neue", Arial, sans-serif',
-    h4: { fontWeight: 700, letterSpacing: '-0.5px' },
-    h5: { fontWeight: 700 },
-    h6: { fontWeight: 600 },
+    h4: { fontWeight: 800, letterSpacing: '-0.02em' },
+    h5: { fontWeight: 700, letterSpacing: '-0.01em' },
+    h6: { fontWeight: 700 },
     subtitle1: { fontWeight: 600 },
     subtitle2: { fontWeight: 600 },
-    button: { textTransform: 'none', fontWeight: 600 },
+    body2: { lineHeight: 1.55 },
+    caption: { letterSpacing: '0.01em' },
+    button: { textTransform: 'none', fontWeight: 600, letterSpacing: '0.01em' },
   },
-  shape: { borderRadius: 8 },
+  shape: { borderRadius: 10 },
   components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        '::selection': { backgroundColor: '#BFDBFE' },
+        '*::-webkit-scrollbar': { width: 10, height: 10 },
+        '*::-webkit-scrollbar-thumb': {
+          backgroundColor: '#CBD5E1',
+          borderRadius: 8,
+          border: '2px solid transparent',
+          backgroundClip: 'content-box',
+        },
+        '*::-webkit-scrollbar-thumb:hover': { backgroundColor: '#94A3B8' },
+        '*::-webkit-scrollbar-track': { background: 'transparent' },
+      },
+    },
     MuiTableCell: {
       styleOverrides: {
         head: {
-          backgroundColor: '#EEF2F7',
+          backgroundColor: '#F8FAFC',
           fontWeight: 700,
-          color: '#263238',
-          borderBottom: '2px solid #B0BEC5',
+          fontSize: '0.72rem',
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+          color: '#475569',
+          borderBottom: '1px solid #E2E8F0',
           whiteSpace: 'nowrap',
         },
-        body: { fontSize: '0.875rem' },
+        body: {
+          fontSize: '0.875rem',
+          borderBottom: '1px solid #F1F5F9',
+          // Money columns align digit-for-digit
+          fontVariantNumeric: 'tabular-nums',
+        },
       },
     },
     MuiTableRow: {
       styleOverrides: {
         root: {
-          '&:hover': { backgroundColor: '#F0F7FF !important' },
+          transition: 'background-color 120ms ease',
+          '&:hover': { backgroundColor: '#F1F5F9 !important' },
           '&:last-child td': { border: 0 },
         },
       },
     },
     MuiChip: {
-      styleOverrides: { root: { fontWeight: 600, fontSize: '0.78rem' } },
+      styleOverrides: {
+        root: { fontWeight: 600, fontSize: '0.78rem', borderRadius: 8 },
+      },
     },
     MuiButton: {
       styleOverrides: {
-        root: { textTransform: 'none', fontWeight: 600 },
+        root: {
+          textTransform: 'none',
+          fontWeight: 600,
+          borderRadius: 8,
+          '&:focus-visible': { outline: '2px solid #93C5FD', outlineOffset: 2 },
+        },
         contained: {
           boxShadow: 'none',
-          '&:hover': { boxShadow: '0 2px 8px rgba(0,0,0,0.18)' },
+          '&:hover': { boxShadow: '0 4px 12px rgba(15, 23, 42, 0.16)' },
         },
+        outlined: { borderWidth: 1.5, '&:hover': { borderWidth: 1.5 } },
+      },
+    },
+    MuiIconButton: {
+      styleOverrides: {
+        root: { '&:focus-visible': { outline: '2px solid #93C5FD', outlineOffset: 2 } },
       },
     },
     MuiPaper: {
       styleOverrides: {
-        root: { boxShadow: '0 1px 4px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.05)' },
+        root: {
+          backgroundImage: 'none',
+          boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.08)',
+        },
+        outlined: { boxShadow: 'none', borderColor: '#E2E8F0' },
       },
     },
     MuiCard: {
       styleOverrides: {
-        root: { boxShadow: '0 1px 4px rgba(0,0,0,0.08)' },
+        root: {
+          boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.08)',
+          border: '1px solid #EEF2F7',
+        },
       },
     },
     MuiTextField: {
       defaultProps: { size: 'small' },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: {
+          borderRadius: 8,
+          backgroundColor: '#FFFFFF',
+          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#94A3B8' },
+        },
+        notchedOutline: { borderColor: '#CBD5E1' },
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: { borderRadius: 14, boxShadow: '0 24px 64px rgba(15, 23, 42, 0.24)' },
+      },
+    },
+    MuiDialogTitle: {
+      styleOverrides: { root: { fontWeight: 700 } },
+    },
+    MuiTabs: {
+      styleOverrides: {
+        indicator: { height: 3, borderRadius: 3 },
+      },
+    },
+    MuiTab: {
+      styleOverrides: {
+        root: { textTransform: 'none', fontWeight: 600, minHeight: 44 },
+      },
+    },
+    MuiTooltip: {
+      styleOverrides: {
+        tooltip: {
+          backgroundColor: '#0F172A',
+          fontSize: '0.75rem',
+          fontWeight: 500,
+          borderRadius: 6,
+          padding: '6px 10px',
+        },
+        arrow: { color: '#0F172A' },
+      },
+    },
+    MuiAlert: {
+      styleOverrides: {
+        root: { borderRadius: 10, fontWeight: 500 },
+      },
+    },
+    MuiTablePagination: {
+      styleOverrides: {
+        root: { fontVariantNumeric: 'tabular-nums' },
+      },
     },
   },
 });
