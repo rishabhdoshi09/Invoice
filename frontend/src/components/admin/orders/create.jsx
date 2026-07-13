@@ -38,6 +38,7 @@ import pdfMake from 'pdfmake/build/pdfmake';
 import { generatePdfDefinition, generatePdfDefinition2 } from './helper';
 import { Delete, Edit as EditIcon, Sync, Info, WhatsApp } from '@mui/icons-material';
 import { fetchWeightsAction, createOrderAction } from '../../../store/orders';
+import { setNotification } from '../../../store/application';
 import { ProductType } from '../../../enums/product';
 import { useAuth } from '../../../context/AuthContext';
 import { api } from '../../../store/api'; // RTK Query API for cache invalidation
@@ -223,6 +224,12 @@ export const CreateOrder = () => {
   const dispatch = useDispatch();
   const { isAdmin, isBillingStaff } = useAuth();
 
+  // Styled toast instead of the blocking browser notifyError() — same visibility
+  // (top-center), no UI freeze, consistent with the rest of the app.
+  const notifyError = useCallback((message) => {
+    dispatch(setNotification({ open: true, severity: 'error', message }));
+  }, [dispatch]);
+
   const rows = useSelector(state => state?.productState?.products?.rows || {});
   
   // Local state for customers fetched from API
@@ -377,7 +384,7 @@ export const CreateOrder = () => {
     try {
       // Only allow printing if an order has been submitted (archivedOrderProps exists)
       if (!archivedOrderProps) {
-        alert('Please create (submit) an order first before printing.');
+        notifyError('Please create (submit) an order first before printing.');
         return;
       }
       if (!pdfUrl && !archivedPdfUrl) return;
@@ -386,7 +393,7 @@ export const CreateOrder = () => {
       const w = window.open(archivedPdfUrl || pdfUrl);
       if (w) { const onLoad = () => { try { w.print(); } catch {} }; w.addEventListener('load', onLoad, { once: true }); }
     } catch {}
-  }, [pdfUrl, archivedPdfUrl, archivedOrderProps]);
+  }, [pdfUrl, archivedPdfUrl, archivedOrderProps, notifyError]);
 
   const generatePdf = useCallback((pdfProps) => {
     return new Promise((resolve) => {
@@ -523,7 +530,7 @@ export const CreateOrder = () => {
 
       // HARD BLOCK: do not allow product "add" if switch is OFF
       if (!allowAddProductName && isAddName(values?.name)) {
-        alert("Product 'add' is disabled. Turn ON the switch to use it.");
+        notifyError("Product 'add' is disabled. Turn ON the switch to use it.");
         return;
       }
 
@@ -531,7 +538,7 @@ export const CreateOrder = () => {
       if (isNoPriceProduct(values?.name) && originalPriceForSpecial !== null && !allowOriginalPrice) {
         const currentPrice = Number(values?.productPrice) || 0;
         if (currentPrice === originalPriceForSpecial) {
-          alert(`Cannot use original price (${originalPriceForSpecial}) for this product. Please edit the price or turn ON "Allow Original Price".`);
+          notifyError(`Cannot use original price (${originalPriceForSpecial}) for this product. Please edit the price or turn ON "Allow Original Price".`);
           return;
         }
       }
@@ -540,16 +547,16 @@ export const CreateOrder = () => {
         const currentIsBowl = Boolean(values && (String(values.name || '').toLowerCase().includes('bowl') || (bowlProductIdLocked && String(values.id) === String(bowlProductIdLocked))));
         if (currentIsBowl || bowlPriceLock) {
           const valStr = String(values.productPrice || '').replace(/\D/g,'');
-          if (valStr.length !== 3) { alert('Bowl price must be exactly 3 digits (100–399).'); return; }
+          if (valStr.length !== 3) { notifyError('Bowl price must be exactly 3 digits (100–399).'); return; }
           const numeric = Number(valStr);
-          if (numeric < 100 || numeric > 399) { alert('Bowl price must be between 100 and 399.'); return; }
+          if (numeric < 100 || numeric > 399) { notifyError('Bowl price must be between 100 and 399.'); return; }
           // Block restricted ranges (200-209, 301-309) for weighted/bowl
-          if (isRestrictedPrice(numeric)) { alert('Price cannot be in ranges 200-209 or 301-309 for weighted products.'); return; }
+          if (isRestrictedPrice(numeric)) { notifyError('Price cannot be in ranges 200-209 or 301-309 for weighted products.'); return; }
           values.productPrice = valStr;
         }
       } catch {}
 
-      if (Number(values.quantity) <= 0) { alert("Cannot add product with zero quantity. Please fetch a valid weight."); return; }
+      if (Number(values.quantity) <= 0) { notifyError("Cannot add product with zero quantity. Please fetch a valid weight."); return; }
 
       const priceNumLocal = Number(values?.productPrice) || 0;
       
@@ -562,15 +569,15 @@ export const CreateOrder = () => {
         const priceStr = String(priceNumLocal);
         // Block restricted ranges (200-209, 301-309)
         if (isRestrictedPrice(priceNumLocal)) {
-          alert('Price cannot be in ranges 200-209 or 301-309 for weighted products.');
+          notifyError('Price cannot be in ranges 200-209 or 301-309 for weighted products.');
           return;
         }
         if (priceStr.length !== 3 || priceNumLocal < 100 || priceNumLocal > 399) {
-          alert('Weighted product price must be exactly 3 digits (100-399).');
+          notifyError('Weighted product price must be exactly 3 digits (100-399).');
           return;
         }
       } else {
-        if (priceNumLocal <= 0) { alert('Product price must be greater than 0.'); return; }
+        if (priceNumLocal <= 0) { notifyError('Product price must be greater than 0.'); return; }
       }
 
       const price = Number(values?.productPrice) || 0;
@@ -712,7 +719,7 @@ export const CreateOrder = () => {
   const weighingScaleHandler = useCallback(async () => {
     const { weight } = await dispatch(fetchWeightsAction());
     if (weight == null || Number(weight) <= 0) {
-      alert("Weight fetched is zero or invalid. Please ensure the scale is ready.");
+      notifyError("Weight fetched is zero or invalid. Please ensure the scale is ready.");
       return false;
     }
     formik.setFieldValue('quantity', weight);
@@ -729,7 +736,7 @@ export const CreateOrder = () => {
     } catch (e) { /* silent */ }
 
     return true;
-  }, [dispatch, formik]);
+  }, [dispatch, formik, notifyError]);
 
   // Helper: focus main price input, with 2xx tens-digit selection
   const focusMainPriceInput = useCallback(() => {
@@ -857,7 +864,7 @@ export const CreateOrder = () => {
 
       // HARD BLOCK at selection level as well
       if (!allowAddProductName && isAddSpecial) {
-        alert("Product 'add' is disabled. Turn ON the switch to use it.");
+        notifyError("Product 'add' is disabled. Turn ON the switch to use it.");
         formik.resetForm();
         setLocalPriceValue('');
         setSelectedProduct(null);
@@ -1215,14 +1222,14 @@ export const CreateOrder = () => {
 
       // Extra guard for 'add' on manual Add button too
       if (!allowAddProductName && isAddName(formik.values.name)) {
-        alert("Product 'add' is disabled. Turn ON the switch to use it.");
+        notifyError("Product 'add' is disabled. Turn ON the switch to use it.");
         return;
       }
 
       // Block single-digit prices for all products except ADD
       const currentPrice = String(formik.values.productPrice || '').replace(/\D/g, '');
       if (!isAddName(formik.values.name) && currentPrice.length < 2) {
-        alert("Price must be at least 2 digits. Single-digit price not allowed.");
+        notifyError("Price must be at least 2 digits. Single-digit price not allowed.");
         return;
       }
 
@@ -1235,7 +1242,7 @@ export const CreateOrder = () => {
         } else {
           // Need to fetch weight first
           const success = await weighingScaleHandler();
-          if (!success) { alert("Failed to fetch weight. Product not added."); return; }
+          if (!success) { notifyError("Failed to fetch weight. Product not added."); return; }
           await formik.submitForm();
         }
       } else {
@@ -1244,7 +1251,7 @@ export const CreateOrder = () => {
 
       await new Promise(r => setTimeout(r, 40));
 
-      if (!lastAddSucceededRef.current) { alert("Add failed — product was not added. Please try again."); return; }
+      if (!lastAddSucceededRef.current) { notifyError("Add failed — product was not added. Please try again."); return; }
 
       // whenever a product is successfully added, auto-close the high-price modal
       // and reset suppression so it can open again for the next high-price item.
@@ -1252,14 +1259,14 @@ export const CreateOrder = () => {
       setModalSuppress(false);
     } catch (err) {
       console.error('Add product handler failed', err);
-      alert("Add failed due to an unexpected error. See console.");
+      notifyError("Add failed due to an unexpected error. See console.");
     } finally {
       // after adding and resetting form, focus product price so user can quickly add next product
       if (!modalOpen) {
         focusMainPriceInput();
       }
     }
-  }, [weighingScaleHandler, formik, isWeighted, archivedOrderProps, archivedPdfUrl, allowAddProductName, modalOpen, focusMainPriceInput, fetchedViaScale]);
+  }, [weighingScaleHandler, formik, isWeighted, archivedOrderProps, archivedPdfUrl, allowAddProductName, modalOpen, focusMainPriceInput, fetchedViaScale, notifyError]);
 
   // Use ref to always have access to latest formik values in keydown handler
   const formikRef = useRef(formik);
@@ -1300,7 +1307,7 @@ export const CreateOrder = () => {
           // Check if we got a result with weight
           const weight = result?.weight;
           if (weight == null || Number(weight) <= 0) {
-            alert("Weight fetched is zero or invalid. Please ensure the scale is ready.");
+            notifyError("Weight fetched is zero or invalid. Please ensure the scale is ready.");
             return;
           }
           
@@ -1322,7 +1329,7 @@ export const CreateOrder = () => {
           const currentQty = qtyFromDOM > 0 ? qtyFromDOM : (Number(currentFormik.values.quantity) || 0);
           
           if (currentQty <= 0) {
-            alert("Please enter a valid quantity before adding.");
+            notifyError("Please enter a valid quantity before adding.");
             return;
           }
           
@@ -1344,7 +1351,7 @@ export const CreateOrder = () => {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isWeightedPriceInvalid, allowAddProductName, dispatch]);
+  }, [isWeightedPriceInvalid, allowAddProductName, dispatch, notifyError]);
 
   const fetchWeightLatestRef = useRef(weighingScaleHandler);
   useEffect(() => { fetchWeightLatestRef.current = weighingScaleHandler; });
@@ -1432,7 +1439,7 @@ export const CreateOrder = () => {
     
     // Credit sale validation: customer name is mandatory
     if (isCreditSale && !orderProps.customerName?.trim()) {
-      alert("Credit Sale requires a Customer Name to track the due amount.");
+      notifyError("Credit Sale requires a Customer Name to track the due amount.");
       return;
     }
 
@@ -1442,7 +1449,7 @@ export const CreateOrder = () => {
       const whiteVal = toNum(whiteAmountInput);
       const totalVal = toNum(orderProps.total);
       if (Math.abs(greyVal + whiteVal - totalVal) > 0.02) {
-        alert(`Grey (₹${greyVal}) + White (₹${whiteVal}) must equal the Grand Total (₹${totalVal}).`);
+        notifyError(`Grey (₹${greyVal}) + White (₹${whiteVal}) must equal the Grand Total (₹${totalVal}).`);
         return;
       }
     }
@@ -1450,7 +1457,7 @@ export const CreateOrder = () => {
     // Advance deduction validation: requires a customer selected from the database
     const advanceVal = toNum(advanceToApply);
     if (advanceVal > 0 && !orderProps.customer?.id) {
-      alert("Select the customer from the dropdown list to apply their advance balance.");
+      notifyError("Select the customer from the dropdown list to apply their advance balance.");
       return;
     }
 
@@ -1459,7 +1466,7 @@ export const CreateOrder = () => {
       setLastSubmitError(null);
 
       if (!orderProps.orderItems || orderProps.orderItems.length === 0) {
-        alert("Cannot create invoice: no items in the order.");
+        notifyError("Cannot create invoice: no items in the order.");
         setIsSubmitting(false);
         return;
       }
@@ -1477,7 +1484,7 @@ export const CreateOrder = () => {
       if (invalids.length) {
         console.error("createOrder: invalid items", invalids);
         setLastSubmitError({ type: "validation", details: invalids });
-        alert("Cannot create invoice — some items are invalid. See console or debug area for details.");
+        notifyError("Cannot create invoice — some items are invalid. See console or debug area for details.");
         setIsSubmitting(false);
         return;
       }
@@ -1505,7 +1512,7 @@ export const CreateOrder = () => {
               { customerId: s.customerId },
               { headers: { Authorization: `Bearer ${token}` } });
           } catch (e) {
-            alert('Failed to link bill to customer: ' + (e?.response?.data?.message || e.message));
+            notifyError('Failed to link bill to customer: ' + (e?.response?.data?.message || e.message));
           }
         }
       }
@@ -1585,7 +1592,7 @@ export const CreateOrder = () => {
     } catch (err) {
       console.error("createOrder unexpected error:", err);
       setLastSubmitError({ type: "unexpected", message: String(err?.message || err), raw: err });
-      alert("Something went wrong while creating the order. Check console / debug area.");
+      notifyError("Something went wrong while creating the order. Check console / debug area.");
     } finally {
       setIsSubmitting(false);
     }
@@ -2155,7 +2162,7 @@ export const CreateOrder = () => {
                         setHighlightedQuickProduct('dabba');
                         await attemptProductChange(product);
                         await onProductSelect(null, product);
-                      } else { alert("Product '/dabba' not found"); }
+                      } else { notifyError("Product '/dabba' not found"); }
                     }}
                   >
                     {'1. /dabba'}
