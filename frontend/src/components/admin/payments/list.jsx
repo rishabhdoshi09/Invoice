@@ -3,6 +3,7 @@ import { Box, Button, Card, CardContent, Table, TableBody, TableCell, TableConta
 import { listPayments, createPayment } from '../../../services/tally';
 import { listSuppliers } from '../../../services/supplier';
 import { listPurchases } from '../../../services/tally';
+import { TableSkeleton } from '../../common/TableSkeleton';
 import moment from 'moment';
 
 export const ListPayments = () => {
@@ -150,9 +151,7 @@ export const ListPayments = () => {
                             </TableHead>
                             <TableBody>
                                 {loading ? (
-                                    <TableRow>
-                                        <TableCell colSpan={7} align="center">Loading...</TableCell>
-                                    </TableRow>
+                                    <TableSkeleton rows={8} columns={7} />
                                 ) : payments.length === 0 ? (
                                     <TableRow>
                                         <TableCell colSpan={7} align="center">No payments found</TableCell>

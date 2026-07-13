@@ -12,6 +12,7 @@ import {
     KeyboardArrowDown, Save, Edit
 } from '@mui/icons-material';
 import axios from 'axios';
+import { TableSkeleton } from '../../common/TableSkeleton';
 import moment from 'moment';
 
 // ─── Compact inline entry bar ────────────────────────────────────
@@ -940,7 +941,7 @@ export const ListSuppliers = () => {
                         </TableHead>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}><CircularProgress size={24} /></TableCell></TableRow>
+                                <TableSkeleton rows={8} columns={6} />
                             ) : paginatedSuppliers.length === 0 ? (
                                 <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary' }}>No suppliers found</TableCell></TableRow>
                             ) : paginatedSuppliers.map(sup => (

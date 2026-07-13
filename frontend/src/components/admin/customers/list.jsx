@@ -20,6 +20,7 @@ import moment from 'moment';
 import pdfMake from 'pdfmake/build/pdfmake';
 import { generatePdfDefinition } from '../orders/helper';
 import { sendInvoiceViaWhatsApp } from '../../../utils/whatsapp';
+import { TableSkeleton } from '../../common/TableSkeleton';
 
 // Load pdfMake fonts safely
 try {
@@ -1201,11 +1202,7 @@ export const ListCustomers = () => {
                         </TableHead>
                         <TableBody>
                             {loading ? (
-                                <TableRow>
-                                    <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
-                                        <CircularProgress size={28} />
-                                    </TableCell>
-                                </TableRow>
+                                <TableSkeleton rows={8} columns={6} />
                             ) : paginatedCustomers.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
