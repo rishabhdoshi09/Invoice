@@ -8,6 +8,7 @@ import {
 import { Visibility, Warning, Delete, RemoveCircle, HighlightOff, Refresh, Scale, FitnessCenter, Telegram, PersonOff, Payment, DriveFileRenameOutline, Receipt, EditNote, DeleteSweep, AccountBalance } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
+import { toast } from '../../../utils/toast';
 
 const EVENT_LABELS = {
     'ITEM_REMOVED': { label: 'Item Removed', color: 'warning', icon: <RemoveCircle fontSize="small" /> },
@@ -30,7 +31,7 @@ export const BillAuditLogs = () => {
             setSent(true);
             setTimeout(() => setSent(false), 4000);
         } catch (e) {
-            alert('Failed to send: ' + (e.response?.data?.message || e.message));
+            toast('Failed to send: ' + (e.response?.data?.message || e.message));
         } finally {
             setSending(false);
         }

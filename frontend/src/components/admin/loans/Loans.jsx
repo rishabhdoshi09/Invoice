@@ -12,6 +12,7 @@ import {
 } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
+import { toast } from '../../../utils/toast';
 
 const fmt = v => `₹${Math.abs(Number(v) || 0).toLocaleString('en-IN')}`;
 const token = () => localStorage.getItem('token');
@@ -55,7 +56,7 @@ export const Loans = () => {
             setSuccessMsg('Loan deleted.');
             fetchLoans();
         } catch (err) {
-            alert(err?.response?.data?.message || 'Failed to delete.');
+            toast(err?.response?.data?.message || 'Failed to delete.');
         }
     };
 
@@ -66,7 +67,7 @@ export const Loans = () => {
             setSuccessMsg('Repayment deleted.');
             fetchLoans();
         } catch (err) {
-            alert(err?.response?.data?.message || 'Failed to delete repayment.');
+            toast(err?.response?.data?.message || 'Failed to delete repayment.');
         }
     };
 

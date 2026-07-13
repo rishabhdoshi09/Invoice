@@ -14,6 +14,7 @@ import { listSuppliers } from '../../../services/supplier';
 import { createPayment, getOutstandingReceivables, getOutstandingPayables } from '../../../services/tally';
 import moment from 'moment';
 import axios from 'axios';
+import { toast } from '../../../utils/toast';
 
 export const OutstandingReports = () => {
     const [tab, setTab] = useState(0);
@@ -193,7 +194,7 @@ export const OutstandingReports = () => {
     const handleSubmit = async () => {
         const amount = parseFloat(formData.amount);
         if (!amount || amount <= 0) {
-            alert('Please enter a valid amount');
+            toast('Please enter a valid amount');
             return;
         }
 
@@ -225,7 +226,7 @@ export const OutstandingReports = () => {
             } else if (dialogType === 'add_credit_sale') {
                 // Validate customer name
                 if (!formData.customerName?.trim()) {
-                    alert('Please enter customer name');
+                    toast('Please enter customer name');
                     setSubmitting(false);
                     return;
                 }
@@ -261,7 +262,7 @@ export const OutstandingReports = () => {
             } else if (dialogType === 'add_purchase_bill') {
                 // Validate supplier
                 if (!formData.supplierId && !formData.supplierName?.trim()) {
-                    alert('Please select or enter supplier name');
+                    toast('Please select or enter supplier name');
                     setSubmitting(false);
                     return;
                 }
@@ -297,7 +298,7 @@ export const OutstandingReports = () => {
             await fetchAll();
         } catch (error) {
             console.error('Error:', error);
-            alert(error.response?.data?.message || 'Error processing transaction. Please try again.');
+            toast(error.response?.data?.message || 'Error processing transaction. Please try again.');
         } finally {
             setSubmitting(false);
         }

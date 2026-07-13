@@ -12,6 +12,7 @@ import {
 } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
+import { toast } from '../../../utils/toast';
 
 export const StockManagement = () => {
     const [tab, setTab] = useState(0);
@@ -133,7 +134,7 @@ export const StockManagement = () => {
     // Handle form submit
     const handleSubmit = async () => {
         if (!formData.productId) {
-            alert('Please select a product');
+            toast('Please select a product');
             return;
         }
 
@@ -174,7 +175,7 @@ export const StockManagement = () => {
             fetchAll();
         } catch (error) {
             console.error('Error:', error);
-            alert(error.response?.data?.message || 'Error processing request');
+            toast(error.response?.data?.message || 'Error processing request');
         } finally {
             setSubmitting(false);
         }

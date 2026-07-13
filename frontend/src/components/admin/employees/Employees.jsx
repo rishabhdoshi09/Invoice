@@ -12,6 +12,7 @@ import {
 } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
+import { toast } from '../../../utils/toast';
 
 const fmt = v => `₹${Math.abs(Number(v) || 0).toLocaleString('en-IN')}`;
 const token = () => localStorage.getItem('token');
@@ -80,7 +81,7 @@ const EmployeesTab = () => {
         try {
             await axios.delete(`/api/employees/${id}`, { headers: headers() });
             setSuccessMsg('Employee removed.'); fetchEmployees();
-        } catch (err) { alert(err?.response?.data?.message || 'Failed.'); }
+        } catch (err) { toast(err?.response?.data?.message || 'Failed.'); }
     };
 
     const handleDeleteLeave = async (empId, leaveId) => {
@@ -88,7 +89,7 @@ const EmployeesTab = () => {
         try {
             await axios.delete(`/api/employees/${empId}/leaves/${leaveId}`, { headers: headers() });
             fetchLeaves(empId);
-        } catch (err) { alert(err?.response?.data?.message || 'Failed.'); }
+        } catch (err) { toast(err?.response?.data?.message || 'Failed.'); }
     };
 
     const filtered = employees.filter(e => e.name.toLowerCase().includes(search.toLowerCase()));
@@ -384,7 +385,7 @@ const SalaryTab = () => {
         try {
             await axios.delete(`/api/salary/payments/${paymentId}`, { headers: headers() });
             fetchSalary(); fetchDetail(row.id);
-        } catch (err) { alert(err?.response?.data?.message || 'Failed.'); }
+        } catch (err) { toast(err?.response?.data?.message || 'Failed.'); }
     };
 
     const handleDeleteAdvance = async (row, advanceId) => {
@@ -392,7 +393,7 @@ const SalaryTab = () => {
         try {
             await axios.delete(`/api/employees/${row.employeeId}/advances/${advanceId}`, { headers: headers() });
             fetchSalary(); fetchDetail(row.id);
-        } catch (err) { alert(err?.response?.data?.message || 'Failed.'); }
+        } catch (err) { toast(err?.response?.data?.message || 'Failed.'); }
     };
 
     return (

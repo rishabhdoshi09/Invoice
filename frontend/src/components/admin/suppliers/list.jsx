@@ -14,6 +14,7 @@ import {
 import axios from 'axios';
 import { TableSkeleton } from '../../common/TableSkeleton';
 import moment from 'moment';
+import { toast } from '../../../utils/toast';
 
 // ─── Compact inline entry bar ────────────────────────────────────
 const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) => {
@@ -84,14 +85,14 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
             setSName(''); setSMobile(''); setSGstin(''); setSOpening(''); setDupWarn('');
             onDone(`Added: ${sName.trim()}`);
             firstRef.current?.focus();
-        } catch (e) { alert(e.response?.data?.message || e.message); }
+        } catch (e) { toast(e.response?.data?.message || e.message); }
         finally { setSaving(false); }
     };
 
     // ── Payment ──
     const submitPayment = async () => {
-        if (!paySup) return alert('Select a supplier');
-        if (!payAmt || parseFloat(payAmt) <= 0) return alert('Enter valid amount');
+        if (!paySup) return toast('Select a supplier');
+        if (!payAmt || parseFloat(payAmt) <= 0) return toast('Enter valid amount');
         setSaving(true);
         try {
             await axios.post('/api/payments', {
@@ -103,7 +104,7 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
             const name = paySup.name;
             setPayAmt(''); setPayNotes('');
             onDone(`Paid ₹${parseFloat(payAmt).toLocaleString('en-IN')} → ${name}`);
-        } catch (e) { alert(e.response?.data?.message || e.message); }
+        } catch (e) { toast(e.response?.data?.message || e.message); }
         finally { setSaving(false); }
     };
 
@@ -119,9 +120,9 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
     const purTotal = purItems.reduce((s, i) => s + (i.total || 0), 0);
 
     const submitPurchase = async () => {
-        if (!purSup) return alert('Select a supplier');
+        if (!purSup) return toast('Select a supplier');
         const valid = purItems.filter(i => i.name && i.qty && i.price);
-        if (!valid.length) return alert('Add at least one item');
+        if (!valid.length) return toast('Add at least one item');
         setSaving(true);
         try {
             await axios.post('/api/purchases', {
@@ -140,7 +141,7 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
             const name = purSup.name;
             setPurBill(''); setPurItems([{ name: '', qty: '', price: '', total: 0 }]); setPurPaid(false); setPurNotes('');
             onDone(`${purBillType === 'white' ? '⚪ White' : '⚫ Grey'} purchase ₹${purTotal.toLocaleString('en-IN')} from ${name}`);
-        } catch (e) { alert(e.response?.data?.message || e.message); }
+        } catch (e) { toast(e.response?.data?.message || e.message); }
         finally { setSaving(false); }
     };
 
@@ -631,7 +632,7 @@ export const ListSuppliers = () => {
             const token = localStorage.getItem('token');
             const { data } = await axios.get(`/api/suppliers/${supplierId}/transactions`, { headers: { Authorization: `Bearer ${token}` } });
             setDetailsDialog({ open: true, supplier: data.data });
-        } catch (e) { alert('Error fetching details'); }
+        } catch (e) { toast('Error fetching details'); }
     };
 
     const handleEntryDone = (msg) => {
@@ -650,7 +651,7 @@ export const ListSuppliers = () => {
             await axios.put(`/api/suppliers/${id}`, { name: trimmed }, { headers: { Authorization: `Bearer ${token}` } });
             setSuppliers(prev => prev.map(s => s.id === id ? { ...s, name: trimmed } : s));
         } catch (e) {
-            alert('Failed to rename: ' + (e.response?.data?.message || e.message));
+            toast('Failed to rename: ' + (e.response?.data?.message || e.message));
         }
     };
 
@@ -685,7 +686,7 @@ export const ListSuppliers = () => {
                 fetchSupplierDetails(supplier.id);
             }
         } catch (e) {
-            alert('Failed to save: ' + (e.response?.data?.message || e.message));
+            toast('Failed to save: ' + (e.response?.data?.message || e.message));
             setEditDialog(prev => ({ ...prev, saving: false }));
         }
     };
@@ -697,7 +698,7 @@ export const ListSuppliers = () => {
             const token = localStorage.getItem('token');
             await axios.delete(`/api/suppliers/${id}`, { headers: { Authorization: `Bearer ${token}` } });
             handleEntryDone(`Deleted: ${name}`);
-        } catch (e) { alert(e.response?.data?.message || e.message); }
+        } catch (e) { toast(e.response?.data?.message || e.message); }
     };
 
     const handleDeletePurchase = async (purchaseId) => {
@@ -707,7 +708,7 @@ export const ListSuppliers = () => {
             await axios.delete(`/api/purchases/${purchaseId}`, { headers: { Authorization: `Bearer ${token}` } });
             if (detailsDialog.supplier?.id) fetchSupplierDetails(detailsDialog.supplier.id);
             fetchSuppliers();
-        } catch (e) { alert(e.response?.data?.message || e.message); }
+        } catch (e) { toast(e.response?.data?.message || e.message); }
     };
 
     const handleDeletePayment = async (paymentId) => {
@@ -717,7 +718,7 @@ export const ListSuppliers = () => {
             await axios.delete(`/api/payments/${paymentId}`, { headers: { Authorization: `Bearer ${token}` } });
             if (detailsDialog.supplier?.id) fetchSupplierDetails(detailsDialog.supplier.id);
             fetchSuppliers();
-        } catch (e) { alert(e.response?.data?.message || e.message); }
+        } catch (e) { toast(e.response?.data?.message || e.message); }
     };
 
     // Quick actions from table → open entry bar pre-filled

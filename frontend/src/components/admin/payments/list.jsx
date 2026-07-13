@@ -5,6 +5,7 @@ import { listSuppliers } from '../../../services/supplier';
 import { listPurchases } from '../../../services/tally';
 import { TableSkeleton } from '../../common/TableSkeleton';
 import moment from 'moment';
+import { toast } from '../../../utils/toast';
 
 export const ListPayments = () => {
     const [payments, setPayments] = useState([]);
@@ -111,7 +112,7 @@ export const ListPayments = () => {
 
     const handleSubmit = async () => {
         if (!formData.partyId || !formData.amount) {
-            alert('Please fill required fields');
+            toast('Please fill required fields');
             return;
         }
 
@@ -121,7 +122,7 @@ export const ListPayments = () => {
             fetchPayments();
         } catch (error) {
             console.error('Error creating payment:', error);
-            alert('Error creating payment');
+            toast('Error creating payment');
         }
     };
 

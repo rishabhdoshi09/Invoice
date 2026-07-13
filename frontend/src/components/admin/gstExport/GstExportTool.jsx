@@ -10,6 +10,7 @@ import {
   Download, Refresh, Settings, ExpandMore, ExpandLess, Visibility, Calculate
 } from '@mui/icons-material';
 import axios from 'axios';
+import { toast } from '../../../utils/toast';
 
 // Default price rules
 const DEFAULT_PRICE_RULES = [
@@ -251,7 +252,7 @@ export const GstExportTool = () => {
         : allOrders.map(adjustOrder);
 
       if (ordersToExport.length === 0) {
-        alert('No orders to export');
+        toast('No orders to export');
         return;
       }
 
@@ -273,7 +274,7 @@ export const GstExportTool = () => {
       document.body.removeChild(link);
     } catch (error) {
       console.error('Export error:', error);
-      alert('Export failed. Please try again.');
+      toast('Export failed. Please try again.');
     } finally {
       setExporting(false);
     }

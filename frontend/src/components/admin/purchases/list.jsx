@@ -10,6 +10,7 @@ import { listPurchases, deletePurchase } from '../../../services/tally';
 import { listSuppliers } from '../../../services/supplier';
 import moment from 'moment';
 import axios from 'axios';
+import { toast } from '../../../utils/toast';
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
@@ -176,13 +177,13 @@ export const ListPurchases = () => {
 
     const handleQuickSave = async () => {
         if (!selectedSupplier) {
-            alert('Please select a supplier');
+            toast('Please select a supplier');
             return;
         }
         
         const validItems = items.filter(item => item.name && item.quantity && item.price);
         if (validItems.length === 0) {
-            alert('Please add at least one item with name, quantity and price');
+            toast('Please add at least one item with name, quantity and price');
             return;
         }
 
@@ -192,7 +193,7 @@ export const ListPurchases = () => {
             greyAmount = parseFloat(greySplitInput) || 0;
             whiteAmount = parseFloat(whiteSplitInput) || 0;
             if (Math.abs(greyAmount + whiteAmount - grandTotal) > 0.02) {
-                alert(`Grey (₹${greyAmount}) + White (₹${whiteAmount}) must equal the bill total (₹${grandTotal.toLocaleString('en-IN')}).`);
+                toast(`Grey (₹${greyAmount}) + White (₹${whiteAmount}) must equal the bill total (₹${grandTotal.toLocaleString('en-IN')}).`);
                 return;
             }
         } else if (billType === 'grey') {
@@ -242,7 +243,7 @@ export const ListPurchases = () => {
             }
         } catch (error) {
             console.error('Error saving purchase:', error);
-            alert('Error: ' + (error.response?.data?.message || error.message));
+            toast('Error: ' + (error.response?.data?.message || error.message));
         } finally {
             setSaving(false);
         }
@@ -256,7 +257,7 @@ export const ListPurchases = () => {
                 fetchSuppliers();
             } catch (error) {
                 console.error('Error deleting purchase:', error);
-                alert('Error deleting: ' + (error.response?.data?.message || error.message));
+                toast('Error deleting: ' + (error.response?.data?.message || error.message));
             }
         }
     };
@@ -310,7 +311,7 @@ export const ListPurchases = () => {
             a.click();
         } catch (error) {
             console.error('Export error:', error);
-            alert('Error exporting data');
+            toast('Error exporting data');
         }
     };
 

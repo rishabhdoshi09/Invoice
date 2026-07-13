@@ -21,6 +21,7 @@ import pdfMake from 'pdfmake/build/pdfmake';
 import { generatePdfDefinition } from '../orders/helper';
 import { sendInvoiceViaWhatsApp } from '../../../utils/whatsapp';
 import { TableSkeleton } from '../../common/TableSkeleton';
+import { toast } from '../../../utils/toast';
 
 // Load pdfMake fonts safely
 try {
@@ -350,7 +351,7 @@ export const ListCustomers = () => {
             await axios.put(`/api/customers/${id}`, { name: trimmed }, { headers: { Authorization: `Bearer ${token}` } });
             setCustomers(prev => prev.map(c => c.id === id ? { ...c, name: trimmed } : c));
         } catch (e) {
-            alert('Failed to rename: ' + (e.response?.data?.message || e.message));
+            toast('Failed to rename: ' + (e.response?.data?.message || e.message));
         }
     };
 
@@ -386,7 +387,7 @@ export const ListCustomers = () => {
                 refreshDetailsCustomer();
             }
         } catch (e) {
-            alert('Failed to save: ' + (e.response?.data?.message || e.message));
+            toast('Failed to save: ' + (e.response?.data?.message || e.message));
             setEditDialog(prev => ({ ...prev, saving: false }));
         }
     };
@@ -453,7 +454,7 @@ export const ListCustomers = () => {
                 setDetailsDialog({ open: true, customer: data.data, tab: 0 });
             }
         } catch (error) {
-            alert('Error fetching details');
+            toast('Error fetching details');
         }
     };
 
@@ -483,7 +484,7 @@ export const ListCustomers = () => {
             });
             setLedgerDialog(prev => ({ ...prev, customer: data.data }));
         } catch (err) {
-            alert(err?.response?.data?.message || 'Failed to delete receipt.');
+            toast(err?.response?.data?.message || 'Failed to delete receipt.');
         }
     };
 
@@ -506,7 +507,7 @@ export const ListCustomers = () => {
             });
             setLedgerDialog(prev => ({ ...prev, customer: data.data }));
         } catch (err) {
-            alert(err?.response?.data?.message || 'Failed to delete invoice.');
+            toast(err?.response?.data?.message || 'Failed to delete invoice.');
         }
     };
 
@@ -528,7 +529,7 @@ export const ListCustomers = () => {
             pdfMake.createPdf(pdfDefinition).print();
         } catch (error) {
             console.error('Error printing invoice:', error);
-            alert('Failed to print invoice. Please try again.');
+            toast('Failed to print invoice. Please try again.');
         } finally {
             setPrintingInvoice(null);
         }
@@ -547,7 +548,7 @@ export const ListCustomers = () => {
             });
         } catch (error) {
             console.error('Error viewing PDF:', error);
-            alert('Failed to load invoice preview. Please try again.');
+            toast('Failed to load invoice preview. Please try again.');
         } finally {
             setViewingInvoice(null);
         }
@@ -622,7 +623,7 @@ export const ListCustomers = () => {
     // ========== SMART ADD CUSTOMER ==========
     const handleAddCustomer = async () => {
         if (!newCustomer.name.trim()) {
-            alert('Customer name is required');
+            toast('Customer name is required');
             return;
         }
         
@@ -664,7 +665,7 @@ export const ListCustomers = () => {
             fetchCustomers();
             customerNameRef.current?.focus();
         } catch (error) {
-            alert('Error: ' + (error.response?.data?.message || error.message));
+            toast('Error: ' + (error.response?.data?.message || error.message));
         } finally {
             setSaving(false);
         }
@@ -690,17 +691,17 @@ export const ListCustomers = () => {
                 customerId = data.data.id;
                 customerName = newCustomerName.trim();
             } catch (error) {
-                alert('Error creating customer: ' + (error.response?.data?.message || error.message));
+                toast('Error creating customer: ' + (error.response?.data?.message || error.message));
                 return;
             }
         }
         
         if (!customerId && !customerName) {
-            alert('Select or create a customer');
+            toast('Select or create a customer');
             return;
         }
         if (!receiptAmount || parseFloat(receiptAmount) <= 0) {
-            alert('Enter valid amount');
+            toast('Enter valid amount');
             return;
         }
         
@@ -727,7 +728,7 @@ export const ListCustomers = () => {
             fetchCustomers();
             fetchRecentReceipts();
         } catch (error) {
-            alert('Error: ' + (error.response?.data?.message || error.message));
+            toast('Error: ' + (error.response?.data?.message || error.message));
         } finally {
             setSaving(false);
         }
@@ -756,7 +757,7 @@ export const ListCustomers = () => {
             showSuccess(`Deleted: ${name}`);
             fetchCustomers();
         } catch (error) {
-            alert('Error: ' + (error.response?.data?.message || error.message));
+            toast('Error: ' + (error.response?.data?.message || error.message));
         }
     };
 
@@ -768,7 +769,7 @@ export const ListCustomers = () => {
             const cid = detailsDialog.customer?.id;
             if (cid) fetchCustomerDetails(cid);
             fetchCustomers();
-        } catch (e) { alert(e.response?.data?.message || e.message); }
+        } catch (e) { toast(e.response?.data?.message || e.message); }
     };
 
     // Customer ledger download (CSV)
@@ -1700,13 +1701,13 @@ export const ListCustomers = () => {
                                                                                 });
                                                                                 const data = await res.json();
                                                                                 if (data.status === 200) {
-                                                                                    alert('Allocated successfully');
+                                                                                    toast('Allocated successfully');
                                                                                     fetchCustomerDetails(detailsDialog.customer.id);
                                                                                 } else {
-                                                                                    alert(data.message || 'Allocation failed');
+                                                                                    toast(data.message || 'Allocation failed');
                                                                                 }
                                                                             } catch (err) {
-                                                                                alert('Error: ' + err.message);
+                                                                                toast('Error: ' + err.message);
                                                                             }
                                                                         }}
                                                                         sx={{ minWidth: 80, fontSize: 11, py: 0.25 }}
@@ -1819,9 +1820,9 @@ export const ListCustomers = () => {
                                                         ...prev,
                                                         customer: { ...prev.customer, notes: customerNotes }
                                                     }));
-                                                    alert('Notes saved!');
+                                                    toast('Notes saved!');
                                                 } catch (err) {
-                                                    alert('Failed to save notes: ' + (err.response?.data?.message || err.message));
+                                                    toast('Failed to save notes: ' + (err.response?.data?.message || err.message));
                                                 } finally {
                                                     setSavingNotes(false);
                                                 }

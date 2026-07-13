@@ -10,6 +10,7 @@ import { Note, Warning, Clear, Refresh, SwapHoriz, PersonAdd, Person, Print, Vis
 import axios from 'axios';
 import { generatePdfDefinition, generatePdfDefinition2 } from './helper';
 import { sendInvoiceViaWhatsApp } from '../../../utils/whatsapp';
+import { toast } from '../../../utils/toast';
 
 // Lazy-load pdfMake on first print — avoids adding ~4MB to the initial route bundle
 let _pdfMakePromise = null;
@@ -259,7 +260,7 @@ export const ListOrders = () => {
             const [orderData, pdfMake] = await Promise.all([dispatch(getOrderAction(orderId)), getPdfMake()]);
             if (orderData) pdfMake.createPdf(generatePdfDefinition(orderData)).print();
         } catch {
-            alert('Failed to print invoice. Please try again.');
+            toast('Failed to print invoice. Please try again.');
         } finally {
             setPrintingInvoice(null);
         }
@@ -272,7 +273,7 @@ export const ListOrders = () => {
             const [orderData, pdfMake] = await Promise.all([dispatch(getOrderAction(orderId)), getPdfMake()]);
             if (orderData) pdfMake.createPdf(generatePdfDefinition2(orderData)).print();
         } catch {
-            alert('Failed to print receipt. Please try again.');
+            toast('Failed to print receipt. Please try again.');
         } finally {
             setPrintingReceipt(null);
         }
@@ -350,13 +351,13 @@ export const ListOrders = () => {
         
         // Validate changedByName is required for audit trail
         if (!changedByName?.trim()) {
-            alert('Your name is required to record this change');
+            toast('Your name is required to record this change');
             return;
         }
         
         // Validate customer name is required when toggling to unpaid
         if (newStatus === 'unpaid' && !customerInfo.customerName?.trim()) {
-            alert('Customer name is required when marking as Unpaid');
+            toast('Customer name is required when marking as Unpaid');
             return;
         }
         
@@ -395,7 +396,7 @@ export const ListOrders = () => {
             fetchOrders();
         } catch (error) {
             console.error('Failed to toggle payment status:', error);
-            alert(error.response?.data?.message || 'Failed to update payment status');
+            toast(error.response?.data?.message || 'Failed to update payment status');
         } finally {
             setIsTogglingStatus(false);
             setStatusDialogOpen(false);

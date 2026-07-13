@@ -61,6 +61,7 @@ import {
     useDeletePaymentMutation
 } from '../../../store/api';
 import moment from 'moment';
+import { toast } from '../../../utils/toast';
 
 export const DailyPayments = () => {
     const navigate = useNavigate();
@@ -355,11 +356,11 @@ export const DailyPayments = () => {
 
     const handleSimpleSubmit = async () => {
         if (!simpleForm.amount || parseFloat(simpleForm.amount) <= 0) {
-            alert('Please enter a valid amount');
+            toast('Please enter a valid amount');
             return;
         }
         if (!simpleForm.description.trim()) {
-            alert('Please enter a description');
+            toast('Please enter a description');
             return;
         }
 
@@ -379,12 +380,12 @@ export const DailyPayments = () => {
             await createPaymentMutation(payload).unwrap();
             
             // Show success and close
-            alert(`✅ Expense of ₹${parseFloat(simpleForm.amount).toLocaleString('en-IN')} recorded successfully!`);
+            toast(`✅ Expense of ₹${parseFloat(simpleForm.amount).toLocaleString('en-IN')} recorded successfully!`);
             handleCloseDialog();
             // No manual refetch needed - RTK Query handles it!
         } catch (error) {
             console.error('Error recording expense:', error);
-            alert('❌ Error recording expense. Please try again.');
+            toast('❌ Error recording expense. Please try again.');
         }
     };
 
@@ -394,7 +395,7 @@ export const DailyPayments = () => {
         }
         
         if (!formData.partyName || !formData.amount) {
-            alert('Please fill required fields (Party Name and Amount)');
+            toast('Please fill required fields (Party Name and Amount)');
             return;
         }
 
@@ -417,12 +418,12 @@ export const DailyPayments = () => {
             await createPaymentMutation(payload).unwrap();
             
             // Show success and close
-            alert(`✅ Payment of ₹${parseFloat(formData.amount).toLocaleString('en-IN')} to ${formData.partyName} recorded!`);
+            toast(`✅ Payment of ₹${parseFloat(formData.amount).toLocaleString('en-IN')} to ${formData.partyName} recorded!`);
             handleCloseDialog();
             // No manual refetch needed - RTK Query handles it!
         } catch (error) {
             console.error('Error creating payment:', error);
-            alert('❌ Error creating payment. Please try again.');
+            toast('❌ Error creating payment. Please try again.');
         }
     };
 
@@ -448,7 +449,7 @@ export const DailyPayments = () => {
             // No manual refetch needed - RTK Query handles it!
         } catch (error) {
             console.error('Error deleting payment:', error);
-            alert('Error deleting payment. Please try again.');
+            toast('Error deleting payment. Please try again.');
         }
     };
 

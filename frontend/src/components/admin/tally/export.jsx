@@ -7,6 +7,7 @@ import {
 import { Download, Refresh, Receipt, Code } from '@mui/icons-material';
 import axios from 'axios';
 import { listPurchases } from '../../../services/purchase';
+import { toast } from '../../../utils/toast';
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 const DEFAULT_PAGE_SIZE = 50;
@@ -127,11 +128,11 @@ export const TallyExport = () => {
     // Export ALL records by fetching in batches (for full export)
     const handleExportAll = async (type) => {
         if (type === 'sales' && totalSalesCount === 0) {
-            alert('No items to export');
+            toast('No items to export');
             return;
         }
         if (type === 'purchases' && totalPurchasesCount === 0) {
-            alert('No items to export');
+            toast('No items to export');
             return;
         }
 
@@ -180,7 +181,7 @@ export const TallyExport = () => {
             window.URL.revokeObjectURL(url);
         } catch (error) {
             console.error('Error exporting:', error);
-            alert('Error exporting data. Please try again.');
+            toast('Error exporting data. Please try again.');
         } finally {
             setExporting(false);
         }
@@ -190,7 +191,7 @@ export const TallyExport = () => {
         const ids = type === 'sales' ? selectedSales : selectedPurchases;
         
         if (ids.length === 0) {
-            alert('Please select at least one item to export');
+            toast('Please select at least one item to export');
             return;
         }
 
@@ -224,7 +225,7 @@ export const TallyExport = () => {
             }
         } catch (error) {
             console.error('Error exporting:', error);
-            alert('Error exporting data. Please try again.');
+            toast('Error exporting data. Please try again.');
         } finally {
             setExporting(false);
         }
@@ -266,7 +267,7 @@ export const TallyExport = () => {
             window.URL.revokeObjectURL(url);
         } catch (error) {
             console.error('Error exporting XML:', error);
-            alert('Error exporting XML. Please try again.');
+            toast('Error exporting XML. Please try again.');
         } finally {
             setExporting(false);
         }
