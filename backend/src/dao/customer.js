@@ -295,25 +295,69 @@ module.exports = {
     },
 
     /**
-     * Sum of unallocated ("on account") payment amounts for a customer —
-     * i.e. advance credit available to deduct from a new invoice.
-     * Same definition the customer page's "Allocate" tab uses per-payment.
+     * Advance credit available to deduct from a new invoice.
+     *
+     * Two things must BOTH be true for money to count as advance:
+     *   1. LEDGER CREDIT — the customer has actually overpaid overall:
+     *      receipts exceed (openingBalance + total sales). Same formula as
+     *      listCustomersWithBalance, so this always agrees with the balance
+     *      shown on the Customers page.
+     *   2. UNALLOCATED RECEIPTS — payment rows exist whose amount hasn't been
+     *      allocated to invoices, because applying advance consumes those rows
+     *      via receipt_allocations.
+     *
+     * availableAdvance = min(unallocated receipts, ledger credit).
+     *
+     * Without the ledger-credit cap, a receipt taken "on account" against
+     * existing dues (never manually allocated) kept showing as phantom
+     * advance even after the customer's balance reached 0 — and could be
+     * applied to a new invoice, double-counting the same money.
      */
     getAvailableAdvance: async (customerId) => {
         try {
+            const isDeletedFilter = db.payment.rawAttributes.isDeleted
+                ? 'AND (p."isDeleted" = false OR p."isDeleted" IS NULL)' : '';
             const rows = await db.sequelize.query(`
-                SELECT COALESCE(SUM(p.amount - alloc.allocated), 0) AS "availableAdvance"
-                FROM payments p
-                LEFT JOIN LATERAL (
-                    SELECT COALESCE(SUM(amount), 0) AS allocated
-                    FROM receipt_allocations ra
-                    WHERE ra."paymentId" = p.id AND ra."isDeleted" = false
-                ) alloc ON true
-                WHERE p."partyId" = :customerId AND p."partyType" = 'customer'
-                  AND (p."isDeleted" = false OR p."isDeleted" IS NULL)
-                  AND (p.amount - alloc.allocated) > 0.01
+                WITH unalloc AS (
+                    SELECT COALESCE(SUM(p.amount - alloc.allocated), 0) AS unallocated
+                    FROM payments p
+                    LEFT JOIN LATERAL (
+                        SELECT COALESCE(SUM(amount), 0) AS allocated
+                        FROM receipt_allocations ra
+                        WHERE ra."paymentId" = p.id AND ra."isDeleted" = false
+                    ) alloc ON true
+                    WHERE p."partyId" = :customerId AND p."partyType" = 'customer'
+                      AND (p."paymentNumber" IS NULL OR p."paymentNumber" NOT LIKE 'PAY-TOGGLE-%')
+                      ${isDeletedFilter}
+                      AND (p.amount - alloc.allocated) > 0.01
+                ),
+                credit AS (
+                    SELECT GREATEST(0,
+                        COALESCE(pt.total_received, 0)
+                        - COALESCE(c."openingBalance", 0)
+                        - COALESCE(ot.total_sales, 0)
+                    ) AS ledger_credit
+                    FROM customers c
+                    LEFT JOIN LATERAL (
+                        SELECT COALESCE(SUM(total), 0) AS total_sales
+                        FROM orders
+                        WHERE "isDeleted" = false
+                          AND ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
+                    ) ot ON true
+                    LEFT JOIN LATERAL (
+                        SELECT COALESCE(SUM(amount), 0) AS total_received
+                        FROM payments
+                        WHERE "partyType" = 'customer'
+                          AND ("partyId" = c.id OR ("partyName" = c.name AND "partyId" IS NULL))
+                          AND ("paymentNumber" IS NULL OR "paymentNumber" NOT LIKE 'PAY-TOGGLE-%')
+                          ${db.payment.rawAttributes.isDeleted ? 'AND "isDeleted" = false' : ''}
+                    ) pt ON true
+                    WHERE c.id = :customerId
+                )
+                SELECT LEAST(unalloc.unallocated, credit.ledger_credit) AS "availableAdvance"
+                FROM unalloc, credit
             `, { replacements: { customerId }, type: db.Sequelize.QueryTypes.SELECT });
-            return Number(rows?.[0]?.availableAdvance) || 0;
+            return Math.round((Number(rows?.[0]?.availableAdvance) || 0) * 100) / 100;
         } catch (error) {
             console.log(error);
             throw new Error(error);

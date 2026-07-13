@@ -177,6 +177,15 @@ module.exports = {
                     if (!orderObj.customerId) {
                         throw new Error('A linked customer (selected from the database) is required to apply advance balance.');
                     }
+                    // Single source of truth: unallocated receipts capped by the
+                    // customer's real ledger credit (same definition the
+                    // available-advance endpoint returns). Prevents applying
+                    // "advance" that is only an unallocated receipt already
+                    // consumed by existing dues (balance 0 → advance 0).
+                    const trueAvailable = await Services.customer.getAvailableAdvance(orderObj.customerId);
+                    if (requestedAdvance > trueAvailable + 0.01) {
+                        throw new Error(`Insufficient advance balance: requested ₹${requestedAdvance.toFixed(2)}, only ₹${trueAvailable.toFixed(2)} available.`);
+                    }
                     const cap = round2(Math.min(requestedAdvance, orderObj.dueAmount));
                     const { plan, covered } = await lockAdvanceCandidates(orderObj.customerId, cap, transaction);
                     if (covered + 0.01 < cap) {
