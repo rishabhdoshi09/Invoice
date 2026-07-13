@@ -210,21 +210,63 @@ module.exports = {
     
     deleteSupplier: async (req, res) => {
         try {
-            const response = await Services.supplier.deleteSupplier({ id: req.params.supplierId });
-            
-            if (response) {
-                return res.status(200).send({
-                    status: 200,
-                    message: 'supplier deleted successfully',
-                    data: response
+            const db = require('../models');
+            const supplierId = req.params.supplierId;
+            const supplier = await db.supplier.findByPk(supplierId);
+            if (!supplier) {
+                return res.status(400).send({ status: 400, message: "supplier doesn't exist" });
+            }
+
+            // Block deletion while money is still owed either way — deleting
+            // would silently erase a real payable/receivable from the books.
+            const balance = Number(supplier.currentBalance) || 0;
+            if (Math.abs(balance) > 0.009) {
+                return res.status(400).send({
+                    status: 400,
+                    message: `Cannot delete "${supplier.name}" — outstanding balance of ₹${Math.abs(balance).toLocaleString('en-IN')} exists. Settle it first.`
                 });
             }
 
-            return res.status(400).send({
-                status: 400,
-                message: "supplier doesn't exist"
+            const billCount = await db.purchaseBill.count({
+                where: { supplierId, isDeleted: false }
             });
-            
+            if (billCount > 0) {
+                return res.status(400).send({
+                    status: 400,
+                    message: `Cannot delete "${supplier.name}" — ${billCount} purchase bill(s) exist. Delete those bills first.`
+                });
+            }
+
+            await db.sequelize.transaction(async (transaction) => {
+                // Unlink payments instead of leaving them pointing at a deleted
+                // supplier (the INV-12 orphan-payment audit violation).
+                // partyName is preserved so history remains readable.
+                await db.sequelize.query(`
+                    UPDATE payments SET "partyId" = NULL WHERE "partyId" = :id AND "partyType" = 'supplier'
+                `, { replacements: { id: supplierId }, transaction });
+
+                await db.supplier.destroy({ where: { id: supplierId }, transaction });
+            });
+
+            await createAuditLog({
+                userId: req.user?.id,
+                userName: req.user?.name || req.user?.username || 'System',
+                userRole: req.user?.role || 'unknown',
+                action: 'DELETE',
+                entityType: 'SUPPLIER',
+                entityId: supplierId,
+                entityName: supplier.name,
+                oldValues: { name: supplier.name, mobile: supplier.mobile, currentBalance: supplier.currentBalance },
+                description: `Hard deleted supplier "${supplier.name}" (balance: ₹${supplier.currentBalance || 0}). Payments unlinked (partyName preserved).`,
+                ipAddress: getClientIP(req)
+            }).catch(e => console.warn('[AUDIT] Supplier delete log failed:', e.message));
+
+            return res.status(200).send({
+                status: 200,
+                message: `Supplier "${supplier.name}" deleted. Payments unlinked (partyName preserved).`,
+                data: { id: supplierId, name: supplier.name }
+            });
+
         } catch (error) {
             console.log('Delete error caught:', error.name, error.original?.code);
             // Check if it's a foreign key constraint error
