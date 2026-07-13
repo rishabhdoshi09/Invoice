@@ -13,6 +13,7 @@ import {
 import axios from 'axios';
 import moment from 'moment';
 import { toast } from '../../../utils/toast';
+import { PageHeader } from '../../common/PageHeader';
 
 const fmt = v => `₹${Math.abs(Number(v) || 0).toLocaleString('en-IN')}`;
 const token = () => localStorage.getItem('token');
@@ -74,15 +75,15 @@ export const Loans = () => {
     return (
         <Box sx={{ maxWidth: 1100, mx: 'auto', px: 2, py: 3 }}>
             {/* Header */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
-                <Box>
-                    <Typography variant="h5" fontWeight={700}>Loans</Typography>
-                    <Typography variant="body2" color="text.secondary">Track interest-free loans given and received</Typography>
-                </Box>
-                <Button variant="contained" startIcon={<Add />} onClick={() => setAddOpen(true)}>
-                    Add Loan
-                </Button>
-            </Box>
+            <PageHeader
+                title="Loans"
+                subtitle="Track interest-free loans given and received"
+                actions={
+                    <Button variant="contained" disableElevation startIcon={<Add />} onClick={() => setAddOpen(true)}>
+                        Add Loan
+                    </Button>
+                }
+            />
 
             {successMsg && (
                 <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccessMsg('')}>{successMsg}</Alert>

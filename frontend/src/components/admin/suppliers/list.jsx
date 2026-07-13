@@ -15,6 +15,7 @@ import axios from 'axios';
 import { TableSkeleton } from '../../common/TableSkeleton';
 import moment from 'moment';
 import { toast } from '../../../utils/toast';
+import { PageHeader } from '../../common/PageHeader';
 
 // ─── Compact inline entry bar ────────────────────────────────────
 const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) => {
@@ -846,17 +847,16 @@ export const ListSuppliers = () => {
     const totalGreyDue  = suppliers.reduce((s, x) => s + (Number(x.greyDue)  || 0), 0);
 
     return (
-        <Box data-testid="supplier-ledger-page" sx={{ p: 2, bgcolor: '#f8f9fa', minHeight: '100vh' }}>
-            {/* Header row */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                <Typography variant="h5" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1, color: '#1a237e' }}>
-                    <AccountBalance /> Supplier Ledger
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button data-testid="export-btn" size="small" startIcon={<Download />} onClick={handleExport} sx={{ textTransform: 'none' }}>Export</Button>
-                    <Button data-testid="refresh-btn" size="small" startIcon={<Refresh />} onClick={fetchSuppliers} sx={{ textTransform: 'none' }}>Refresh</Button>
-                </Box>
-            </Box>
+        <Box data-testid="supplier-ledger-page">
+            <PageHeader
+                title="Suppliers"
+                subtitle="Purchase dues, payments and ledgers per supplier"
+                icon={<AccountBalance fontSize="small" />}
+                actions={<>
+                    <Button data-testid="export-btn" size="small" startIcon={<Download />} onClick={handleExport} sx={{ color: 'text.secondary' }}>Export</Button>
+                    <Button data-testid="refresh-btn" size="small" startIcon={<Refresh />} onClick={fetchSuppliers} sx={{ color: 'text.secondary' }}>Refresh</Button>
+                </>}
+            />
 
             {/* Summary strip */}
             <Grid container spacing={1.5} sx={{ mb: 1.5 }}>

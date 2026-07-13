@@ -22,6 +22,7 @@ import { generatePdfDefinition } from '../orders/helper';
 import { sendInvoiceViaWhatsApp } from '../../../utils/whatsapp';
 import { TableSkeleton } from '../../common/TableSkeleton';
 import { toast } from '../../../utils/toast';
+import { PageHeader } from '../../common/PageHeader';
 
 // Load pdfMake fonts safely
 try {
@@ -863,20 +864,19 @@ export const ListCustomers = () => {
     };
 
     return (
-        <Box sx={{ p: 2, bgcolor: '#f5f5f5', minHeight: '100vh' }}>
-            {/* Header */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h5" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <People color="primary" /> Customer Ledger
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button size="small" variant="contained" color="success" startIcon={<ShoppingCart />} onClick={() => navigate('/orders/create')}>
+        <Box>
+            <PageHeader
+                title="Customers"
+                subtitle="Balances, receipts and ledgers for every account"
+                icon={<People fontSize="small" />}
+                actions={<>
+                    <Button size="small" startIcon={<Download />} onClick={handleExport} sx={{ color: 'text.secondary' }}>Export</Button>
+                    <Button size="small" startIcon={<Refresh />} onClick={() => { fetchCustomers(); fetchRecentReceipts(); }} sx={{ color: 'text.secondary' }}>Refresh</Button>
+                    <Button size="small" variant="contained" disableElevation color="success" startIcon={<ShoppingCart />} onClick={() => navigate('/orders/create')}>
                         New Sale
                     </Button>
-                    <Button size="small" startIcon={<Download />} onClick={handleExport}>Export</Button>
-                    <Button size="small" startIcon={<Refresh />} onClick={() => { fetchCustomers(); fetchRecentReceipts(); }}>Refresh</Button>
-                </Box>
-            </Box>
+                </>}
+            />
 
             {/* Summary Cards */}
             <Grid container spacing={2} sx={{ mb: 2 }}>

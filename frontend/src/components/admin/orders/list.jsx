@@ -11,6 +11,7 @@ import axios from 'axios';
 import { generatePdfDefinition, generatePdfDefinition2 } from './helper';
 import { sendInvoiceViaWhatsApp } from '../../../utils/whatsapp';
 import { toast } from '../../../utils/toast';
+import { PageHeader } from '../../common/PageHeader';
 
 // Lazy-load pdfMake on first print — avoids adding ~4MB to the initial route bundle
 let _pdfMakePromise = null;
@@ -513,20 +514,21 @@ export const ListOrders = () => {
 
     return (
         <Paper sx={{ width: '100%', overflow: 'hidden', padding: '16px' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h5" fontWeight={700}>Invoices</Typography>
-                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <PageHeader
+                title="Invoices"
+                subtitle="Every bill raised, searchable by customer and date"
+                actions={<>
                     {loading && <CircularProgress size={20} />}
                     <Tooltip title="Refresh list">
                         <IconButton onClick={fetchOrders} disabled={loading}>
                             <Refresh />
                         </IconButton>
                     </Tooltip>
-                    <Button variant="contained" color="primary" onClick={() => navigate('/orders/create')}>
+                    <Button variant="contained" disableElevation color="primary" onClick={() => navigate('/orders/create')}>
                         + New Invoice
                     </Button>
-                </Box>
-            </Box>
+                </>}
+            />
 
             {/* Backdated invoices alert */}
             {(() => {
