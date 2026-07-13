@@ -174,6 +174,25 @@ module.exports = {
                     }
                 }
 
+                // Keep stored balances in sync with receipts/payouts — exact
+                // mirror of the delete path's re-increments below. Without
+                // this, on-account customer receipts and non-purchase supplier
+                // payouts never reduced currentBalance, so the stored columns
+                // drifted upward forever (92/112 customers and 39/48 suppliers
+                // were off when first reconciled).
+                if (value.partyType === 'customer' && value.partyId) {
+                    await db.customer.update(
+                        { currentBalance: db.sequelize.literal(`"currentBalance" - ${Number(value.amount)}`) },
+                        { where: { id: value.partyId }, transaction }
+                    );
+                }
+                if (value.partyType === 'supplier' && value.partyId && value.referenceType !== 'purchase') {
+                    await db.supplier.update(
+                        { currentBalance: db.sequelize.literal(`"currentBalance" - ${Number(value.amount)}`) },
+                        { where: { id: value.partyId }, transaction }
+                    );
+                }
+
                 // Audit log INSIDE transaction — failure rolls back the payment write.
                 await createAuditLog({
                     userId: req.user?.id,
