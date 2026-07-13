@@ -1,13 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
-import { 
-    Box, Button, Card, CardContent, Table, TableBody, TableCell, TableContainer, 
-    TableHead, TableRow, Dialog, DialogTitle, DialogContent, DialogActions, 
-    Typography, TextField, Select, MenuItem, FormControl, InputLabel, Chip, 
-    IconButton, Collapse, Paper, Grid, Divider, TablePagination, Alert,
+import {
+    Box, Button, Table, TableBody, TableCell, TableContainer,
+    TableHead, TableRow, Typography, TextField, Chip,
+    IconButton, Collapse, Paper, Grid, TablePagination, Alert,
     FormControlLabel, Switch, Autocomplete, CircularProgress
 } from '@mui/material';
-import { Delete, ExpandMore, ExpandLess, Download, Visibility, Receipt, Add, Save, Refresh, CheckCircle, KeyboardArrowDown, KeyboardArrowUp } from '@mui/icons-material';
-import { listPurchases, createPurchase, deletePurchase } from '../../../services/tally';
+import { Delete, Download, Receipt, Add, Save, Refresh, CheckCircle, KeyboardArrowDown, KeyboardArrowUp } from '@mui/icons-material';
+import { listPurchases, deletePurchase } from '../../../services/tally';
 import { listSuppliers } from '../../../services/supplier';
 import moment from 'moment';
 import axios from 'axios';
@@ -29,7 +28,10 @@ export const ListPurchases = () => {
     const [billNumber, setBillNumber] = useState('');
     const [billDate, setBillDate] = useState(moment().format('YYYY-MM-DD'));
     const [isPaid, setIsPaid] = useState(false);
+    // 'white' | 'grey' → whole total on that side; 'split' → manual amounts below
     const [billType, setBillType] = useState('white');
+    const [greySplitInput, setGreySplitInput] = useState('');
+    const [whiteSplitInput, setWhiteSplitInput] = useState('');
     const [notes, setNotes] = useState('');
     const [items, setItems] = useState([{ name: '', quantity: '', price: '', totalPrice: 0 }]);
     const [saving, setSaving] = useState(false);
@@ -63,11 +65,21 @@ export const ListPurchases = () => {
             setPurchases(rows || []);
             setTotalCount(count || 0);
 
-            // Grey/White totals across ALL matching purchases (not just the current page)
+            // Grey/White totals across ALL matching purchases (not just the current page).
+            // Uses the per-bill amount split; falls back to the legacy billType flag
+            // for old rows where both amounts are 0.
             const { rows: allRows } = await listPurchases({ ...params, limit: 10000, offset: 0 });
             const totals = (allRows || []).reduce((acc, p) => {
-                const key = p.billType === 'grey' ? 'grey' : 'white';
-                acc[key] += Number(p.total) || 0;
+                const grey = Number(p.greyAmount) || 0;
+                const white = Number(p.whiteAmount) || 0;
+                if (grey > 0 || white > 0) {
+                    acc.grey += grey;
+                    acc.white += white;
+                } else if (p.billType === 'grey') {
+                    acc.grey += Number(p.total) || 0;
+                } else {
+                    acc.white += Number(p.total) || 0;
+                }
                 return acc;
             }, { white: 0, grey: 0 });
             setBillTypeTotals(totals);
@@ -156,6 +168,8 @@ export const ListPurchases = () => {
         setBillDate(moment().format('YYYY-MM-DD'));
         setIsPaid(false);
         setBillType('white');
+        setGreySplitInput('');
+        setWhiteSplitInput('');
         setNotes('');
         setItems([{ name: '', quantity: '', price: '', totalPrice: 0 }]);
     };
@@ -172,6 +186,21 @@ export const ListPurchases = () => {
             return;
         }
 
+        // Resolve the grey/white amount split from the selected mode
+        let greyAmount = 0, whiteAmount = 0;
+        if (billType === 'split') {
+            greyAmount = parseFloat(greySplitInput) || 0;
+            whiteAmount = parseFloat(whiteSplitInput) || 0;
+            if (Math.abs(greyAmount + whiteAmount - grandTotal) > 0.02) {
+                alert(`Grey (₹${greyAmount}) + White (₹${whiteAmount}) must equal the bill total (₹${grandTotal.toLocaleString('en-IN')}).`);
+                return;
+            }
+        } else if (billType === 'grey') {
+            greyAmount = grandTotal;
+        } else {
+            whiteAmount = grandTotal;
+        }
+
         setSaving(true);
         try {
             const token = localStorage.getItem('token');
@@ -185,7 +214,9 @@ export const ListPurchases = () => {
                 tax: 0,
                 taxPercent: 0,
                 total: grandTotal,
-                billType: billType,
+                billType: greyAmount > whiteAmount ? 'grey' : 'white',
+                greyAmount,
+                whiteAmount,
                 notes: notes.trim() || null,
                 purchaseItems: validItems.map(item => ({
                     name: item.name,
@@ -310,7 +341,7 @@ export const ListPurchases = () => {
                         ⚡ Quick Entry
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
-                        {/* White / Grey toggle */}
+                        {/* Grey / White / Split — whole bill on one side, or a manual amount split */}
                         <Box sx={{ display: 'flex', border: '1px solid #e0e0e0', borderRadius: 1, overflow: 'hidden', height: 34 }}>
                             <Button size="small" onClick={() => setBillType('grey')}
                                 sx={{ borderRadius: 0, px: 1.5, minWidth: 0, textTransform: 'none', fontSize: '0.8rem', fontWeight: billType === 'grey' ? 700 : 400,
@@ -319,10 +350,43 @@ export const ListPurchases = () => {
                             </Button>
                             <Button size="small" onClick={() => setBillType('white')}
                                 sx={{ borderRadius: 0, px: 1.5, minWidth: 0, textTransform: 'none', fontSize: '0.8rem', fontWeight: billType === 'white' ? 700 : 400,
-                                    bgcolor: billType === 'white' ? '#e3f2fd' : 'transparent', color: billType === 'white' ? '#1565c0' : '#999' }}>
+                                    bgcolor: billType === 'white' ? '#e3f2fd' : 'transparent', color: billType === 'white' ? '#1565c0' : '#999', borderRight: '1px solid #e0e0e0' }}>
                                 ⚪ White
                             </Button>
+                            <Button size="small"
+                                onClick={() => {
+                                    setBillType('split');
+                                    // Sensible starting point: whole total on white, edit from there
+                                    if (!greySplitInput && !whiteSplitInput) setWhiteSplitInput(grandTotal ? String(grandTotal) : '');
+                                }}
+                                sx={{ borderRadius: 0, px: 1.5, minWidth: 0, textTransform: 'none', fontSize: '0.8rem', fontWeight: billType === 'split' ? 700 : 400,
+                                    bgcolor: billType === 'split' ? '#fff3e0' : 'transparent', color: billType === 'split' ? '#e65100' : '#999' }}>
+                                ⚖ Split
+                            </Button>
                         </Box>
+                        {billType === 'split' && (() => {
+                            const g = parseFloat(greySplitInput) || 0;
+                            const w = parseFloat(whiteSplitInput) || 0;
+                            const diff = Math.round((grandTotal - g - w) * 100) / 100;
+                            const matches = Math.abs(diff) <= 0.02;
+                            return (
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <TextField size="small" label="⚫ Grey ₹" type="number" value={greySplitInput}
+                                        onChange={e => setGreySplitInput(e.target.value)} sx={{ width: 110 }}
+                                        inputProps={{ min: 0, step: '0.01' }} />
+                                    <TextField size="small" label="⚪ White ₹" type="number" value={whiteSplitInput}
+                                        onChange={e => setWhiteSplitInput(e.target.value)} sx={{ width: 110 }}
+                                        inputProps={{ min: 0, step: '0.01' }} />
+                                    <Typography variant="caption" sx={{ fontWeight: 700, color: matches ? 'success.main' : 'error.main', whiteSpace: 'nowrap' }}>
+                                        {matches
+                                            ? `✓ = ₹${grandTotal.toLocaleString('en-IN')}`
+                                            : diff > 0
+                                                ? `₹${diff.toLocaleString('en-IN')} left`
+                                                : `₹${Math.abs(diff).toLocaleString('en-IN')} over`}
+                                    </Typography>
+                                </Box>
+                            );
+                        })()}
                         <TextField size="small" label="Notes" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" sx={{ width: 160 }} />
                         <FormControlLabel
                             control={<Switch checked={isPaid} onChange={(e) => setIsPaid(e.target.checked)} size="small" />}
@@ -586,13 +650,23 @@ export const ListPurchases = () => {
                                                         color={purchase.paymentStatus === 'paid' ? 'success' : 'warning'}
                                                         sx={{ height: 20, fontSize: '0.7rem' }}
                                                     />
-                                                    <Chip
-                                                        label={purchase.billType === 'white' ? '⚪ White' : '⚫ Grey'}
-                                                        size="small"
-                                                        sx={{ height: 16, fontSize: '0.65rem', fontWeight: 600,
-                                                            bgcolor: purchase.billType === 'white' ? '#e3f2fd' : '#f3e5f5',
-                                                            color: purchase.billType === 'white' ? '#1565c0' : '#6a1b9a' }}
-                                                    />
+                                                    {(() => {
+                                                        const g = Number(purchase.greyAmount) || 0;
+                                                        const w = Number(purchase.whiteAmount) || 0;
+                                                        const isSplit = g > 0 && w > 0;
+                                                        const isGrey = isSplit ? false : (g > 0 || purchase.billType === 'grey');
+                                                        return (
+                                                            <Chip
+                                                                label={isSplit
+                                                                    ? `⚪ ₹${w.toLocaleString('en-IN')} / ⚫ ₹${g.toLocaleString('en-IN')}`
+                                                                    : (isGrey ? '⚫ Grey' : '⚪ White')}
+                                                                size="small"
+                                                                sx={{ height: 16, fontSize: '0.65rem', fontWeight: 600,
+                                                                    bgcolor: isSplit ? '#fff3e0' : (isGrey ? '#f3e5f5' : '#e3f2fd'),
+                                                                    color: isSplit ? '#e65100' : (isGrey ? '#6a1b9a' : '#1565c0') }}
+                                                            />
+                                                        );
+                                                    })()}
                                                 </Box>
                                             </TableCell>
                                             <TableCell align="center" onClick={(e) => e.stopPropagation()}>

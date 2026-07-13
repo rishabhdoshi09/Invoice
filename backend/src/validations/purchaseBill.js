@@ -24,6 +24,9 @@ module.exports = {
             dueAmount: Joi.number().greater(-1).optional(),
             paymentStatus: Joi.string().trim().valid('paid', 'partial', 'unpaid').optional(),
             billType: Joi.string().trim().valid('white', 'grey').optional(),
+            // Grey/White split of total — cross-checked against total in the controller
+            greyAmount: Joi.number().min(0).optional().default(0),
+            whiteAmount: Joi.number().min(0).optional().default(0),
             notes: Joi.string().trim().allow('', null).optional(),
             purchaseItems: Joi.array().items(purchaseItems).required()
         });

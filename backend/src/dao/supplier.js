@@ -79,7 +79,7 @@ module.exports = {
             // Sort by createdAt ASC (oldest first for FIFO allocation)
             const purchases = await db.purchaseBill.findAll({
                 where: { supplierId, isDeleted: false },
-                attributes: ['id', 'billNumber', 'billDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus', 'billType', 'notes', 'createdAt'],
+                attributes: ['id', 'billNumber', 'billDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus', 'billType', 'greyAmount', 'whiteAmount', 'notes', 'createdAt'],
                 include: [{
                     model: db.purchaseItem,
                     as: 'purchaseItems',
@@ -189,20 +189,33 @@ module.exports = {
                           AND (COALESCE("isDeleted", false) = false)
                           AND "referenceType" != 'purchase'
                     ), 0) as balance,
+                    -- Due prorated by each bill's grey/white amount split.
+                    -- Falls back to the legacy billType flag for rows where
+                    -- both amounts are 0 (pre-split data never backfilled).
                     COALESCE((
-                        SELECT SUM("dueAmount")
+                        SELECT SUM(
+                            CASE
+                                WHEN COALESCE("greyAmount", 0) + COALESCE("whiteAmount", 0) > 0
+                                    THEN "dueAmount" * COALESCE("whiteAmount", 0) / (COALESCE("greyAmount", 0) + COALESCE("whiteAmount", 0))
+                                WHEN COALESCE("billType", 'white') = 'white' THEN "dueAmount"
+                                ELSE 0
+                            END)
                         FROM "purchaseBills"
                         WHERE "supplierId" = s.id
                           AND (COALESCE("isDeleted", false) = false)
-                          AND COALESCE("billType", 'white') = 'white'
                           AND "dueAmount" > 0
                     ), 0) as "whiteDue",
                     COALESCE((
-                        SELECT SUM("dueAmount")
+                        SELECT SUM(
+                            CASE
+                                WHEN COALESCE("greyAmount", 0) + COALESCE("whiteAmount", 0) > 0
+                                    THEN "dueAmount" * COALESCE("greyAmount", 0) / (COALESCE("greyAmount", 0) + COALESCE("whiteAmount", 0))
+                                WHEN "billType" = 'grey' THEN "dueAmount"
+                                ELSE 0
+                            END)
                         FROM "purchaseBills"
                         WHERE "supplierId" = s.id
                           AND (COALESCE("isDeleted", false) = false)
-                          AND "billType" = 'grey'
                           AND "dueAmount" > 0
                     ), 0) as "greyDue"
                 FROM suppliers s

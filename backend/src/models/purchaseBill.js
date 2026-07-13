@@ -75,10 +75,23 @@ module.exports = (sequelize, Sequelize) => {
                 type: Sequelize.STRING,
                 allowNull: true
             },
-            // WHITE = formal purchase with GST invoice; GREY = informal/cash purchase without GST
+            // WHITE = formal purchase with GST invoice; GREY = informal/cash purchase without GST.
+            // Legacy all-or-nothing flag — kept for display/back-compat; the authoritative
+            // split is greyAmount/whiteAmount below (must sum to total).
             billType: {
                 type: Sequelize.ENUM('white', 'grey'),
                 defaultValue: 'white',
+                allowNull: false
+            },
+            // Grey/White split of `total`, chosen at entry. greyAmount + whiteAmount = total.
+            greyAmount: {
+                type: Sequelize.DECIMAL(15, 2),
+                defaultValue: 0,
+                allowNull: false
+            },
+            whiteAmount: {
+                type: Sequelize.DECIMAL(15, 2),
+                defaultValue: 0,
                 allowNull: false
             },
             notes: {

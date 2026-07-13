@@ -56,6 +56,31 @@ module.exports = {
                 purchaseObj.paymentStatus = 'partial';
             }
 
+            // Grey/White split of the total, chosen at entry.
+            // If the client sends a split it must add up to the server-computed
+            // total. Old clients that send only billType get the whole total on
+            // that side, so nothing silently drops to 0/0.
+            const grey  = round2(Number(purchaseObj.greyAmount)  || 0);
+            const white = round2(Number(purchaseObj.whiteAmount) || 0);
+            if (grey > 0 || white > 0) {
+                if (Math.abs(grey + white - purchaseObj.total) > 0.02) {
+                    return res.status(400).send({
+                        status: 400,
+                        message: `Grey (₹${grey}) + White (₹${white}) must equal the bill total (₹${purchaseObj.total}).`
+                    });
+                }
+                purchaseObj.greyAmount = grey;
+                purchaseObj.whiteAmount = white;
+            } else if (purchaseObj.billType === 'grey') {
+                purchaseObj.greyAmount = purchaseObj.total;
+                purchaseObj.whiteAmount = 0;
+            } else {
+                purchaseObj.greyAmount = 0;
+                purchaseObj.whiteAmount = purchaseObj.total;
+            }
+            // Keep the legacy flag consistent with the authoritative amounts
+            purchaseObj.billType = purchaseObj.greyAmount > purchaseObj.whiteAmount ? 'grey' : 'white';
+
             const result = await db.sequelize.transaction(async (transaction) => {
                 const response = await Services.purchaseBill.createPurchaseBill(purchaseObj, transaction);
                 const purchaseBillId = response.id;
