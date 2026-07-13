@@ -90,110 +90,189 @@ const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, on
     const closingBal = totalDebit - totalCredit;
     const fmt = v => `₹${Math.abs(v || 0).toLocaleString('en-IN')}`;
 
+    // Plain-language verdict on where this account stands
+    const verdict = closingBal > 0.009
+        ? { label: 'To Collect', color: '#FCA5A5', bg: 'rgba(239,68,68,0.18)' }
+        : closingBal < -0.009
+            ? { label: 'Advance Held', color: '#93C5FD', bg: 'rgba(59,130,246,0.18)' }
+            : { label: 'Settled', color: '#86EFAC', bg: 'rgba(34,197,94,0.18)' };
+
+    const invoiceCount = (c.orders || []).length;
+    const receiptCount = (c.payments || []).length;
+    const lastEntry = ledgerEntries[ledgerEntries.length - 1];
+
+    const rowMeta = {
+        opening: { chip: 'Opening',  chipBg: '#FEF9C3', chipColor: '#854D0E' },
+        invoice: { chip: 'Invoice',  chipBg: '#FEE2E2', chipColor: '#991B1B' },
+        receipt: { chip: 'Receipt',  chipBg: '#DCFCE7', chipColor: '#166534' },
+    };
+
+    const statTile = (label, value, valueColor) => (
+        <Box sx={{ flex: 1, minWidth: 130, px: 2, py: 1.25 }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.64rem', fontWeight: 700 }}>
+                {label}
+            </Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: valueColor || 'text.primary', lineHeight: 1.3 }}>
+                {value}
+            </Typography>
+        </Box>
+    );
+
     return (
         <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
-            PaperProps={{ sx: { borderRadius: '4px', overflow: 'hidden', border: '2px solid #1a237e' } }}>
-            <Box sx={{ bgcolor: '#0d1b4a', color: '#fff', px: 2.5, py: 1.2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: 0.5, fontSize: '1.1rem' }}>{c.name}</Typography>
-                    <Typography variant="caption" sx={{ opacity: 0.7, fontSize: '0.72rem' }}>
-                        {[c.mobile, c.gstin && `GSTIN: ${c.gstin}`, 'Customer Ledger'].filter(Boolean).join(' | ')}
-                    </Typography>
+            PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden' } }}>
+
+            {/* ── Identity header ── */}
+            <Box sx={{
+                background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
+                color: '#fff', px: 3, py: 2,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap'
+            }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.75, minWidth: 0 }}>
+                    <Box sx={{
+                        width: 44, height: 44, borderRadius: 2.5, flexShrink: 0,
+                        bgcolor: 'rgba(66,165,245,0.22)', color: '#90CAF9',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontWeight: 800, fontSize: '1.15rem', letterSpacing: '0.02em'
+                    }}>
+                        {(c.name || '?').trim().charAt(0).toUpperCase()}
+                    </Box>
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="h6" noWrap sx={{ fontWeight: 700, fontSize: '1.08rem', lineHeight: 1.25 }}>{c.name}</Typography>
+                        <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 0.25 }}>
+                            {c.mobile && (
+                                <Chip icon={<Phone sx={{ fontSize: 13, color: 'rgba(255,255,255,0.7) !important' }} />} label={c.mobile} size="small"
+                                    sx={{ height: 20, fontSize: '0.68rem', bgcolor: 'rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.85)' }} />
+                            )}
+                            {c.gstin && (
+                                <Chip label={`GSTIN ${c.gstin}`} size="small"
+                                    sx={{ height: 20, fontSize: '0.68rem', bgcolor: 'rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.85)' }} />
+                            )}
+                        </Box>
+                    </Box>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                     <Box sx={{ textAlign: 'right' }}>
-                        <Typography variant="caption" sx={{ opacity: 0.6 }}>Closing Balance</Typography>
-                        <Typography variant="body1" sx={{ fontWeight: 700, fontFamily: 'monospace', fontSize: '1rem' }}>
-                            {fmt(closingBal)} {closingBal >= 0 ? 'Dr' : 'Cr'}
+                        <Chip label={verdict.label} size="small"
+                            sx={{ bgcolor: verdict.bg, color: verdict.color, fontWeight: 700, fontSize: '0.68rem', height: 20, mb: 0.4 }} />
+                        <Typography sx={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', fontSize: '1.35rem', lineHeight: 1, color: verdict.color }}>
+                            {fmt(closingBal)}
                         </Typography>
                     </Box>
-                    <IconButton onClick={onClose} sx={{ color: '#fff' }}><Close /></IconButton>
+                    <IconButton onClick={onClose} sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: '#fff' } }}><Close /></IconButton>
                 </Box>
             </Box>
 
+            {/* ── Summary strip ── */}
+            <Box sx={{
+                display: 'flex', flexWrap: 'wrap', bgcolor: '#F8FAFC',
+                borderBottom: '1px solid #E2E8F0',
+                '& > div + div': { borderLeft: '1px solid #E2E8F0' }
+            }}>
+                {statTile(`Billed · ${invoiceCount} invoice${invoiceCount !== 1 ? 's' : ''}`, fmt(totalDebit), '#B91C1C')}
+                {statTile(`Received · ${receiptCount} receipt${receiptCount !== 1 ? 's' : ''}`, fmt(totalCredit), '#15803D')}
+                {statTile('Balance', `${fmt(closingBal)} ${closingBal >= 0 ? 'Dr' : 'Cr'}`)}
+                {statTile('Last Activity', lastEntry?.date || '—')}
+            </Box>
+
+            {/* ── Transaction timeline ── */}
             <DialogContent sx={{ p: 0 }}>
-                <TableContainer sx={{ maxHeight: 420 }}>
-                    <Table size="small" stickyHeader sx={{
-                        '& td, & th': { borderRight: '1px solid #e0e0e0', py: 0.5, px: 1, fontSize: '0.82rem', fontFamily: "'Roboto Mono', monospace" },
-                        '& th': { bgcolor: '#e8eaf6', fontWeight: 700, color: '#1a237e', borderBottom: '2px solid #1a237e', fontSize: '0.78rem' },
-                        '& td:last-child, & th:last-child': { borderRight: 'none' }
-                    }}>
+                <TableContainer sx={{ maxHeight: 400 }}>
+                    <Table size="small" stickyHeader sx={{ '& td': { fontVariantNumeric: 'tabular-nums' } }}>
                         <TableHead>
                             <TableRow>
-                                <TableCell width={85}>Date</TableCell>
+                                <TableCell width={90}>Date</TableCell>
                                 <TableCell>Particulars</TableCell>
-                                <TableCell width={110}>Vch No.</TableCell>
-                                <TableCell align="right" width={100}>Debit</TableCell>
-                                <TableCell align="right" width={100}>Credit</TableCell>
-                                <TableCell align="right" width={110}>Balance</TableCell>
-                                <TableCell width={40}></TableCell>
+                                <TableCell width={120}>Voucher</TableCell>
+                                <TableCell align="right" width={105}>Debit</TableCell>
+                                <TableCell align="right" width={105}>Credit</TableCell>
+                                <TableCell align="right" width={120}>Balance</TableCell>
+                                <TableCell width={64}></TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {ledgerEntries.length === 0 ? (
-                                <TableRow><TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary', fontFamily: 'Roboto' }}>No transactions yet</TableCell></TableRow>
+                                <TableRow>
+                                    <TableCell colSpan={7} align="center" sx={{ py: 6, border: 0 }}>
+                                        <History sx={{ fontSize: 36, color: '#CBD5E1', mb: 1 }} />
+                                        <Typography color="text.secondary" fontWeight={500}>No transactions yet</Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            Bills and receipts for {c.name} will appear here.
+                                        </Typography>
+                                    </TableCell>
+                                </TableRow>
                             ) : (
-                                ledgerEntries.map(e => (
-                                    <TableRow key={`${e.type}-${e.id}`} hover sx={{
-                                        bgcolor: e.type === 'opening' ? '#fffde7' : e.type === 'receipt' ? '#f1f8e9' : '#fff',
-                                    }}>
-                                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{e.date || ''}</TableCell>
-                                        <TableCell sx={{ fontFamily: 'Roboto' }}>
-                                            <Typography variant="body2" sx={{ fontWeight: e.type === 'opening' ? 700 : 500, fontSize: '0.82rem' }}>
-                                                {e.particulars}
-                                            </Typography>
-                                        </TableCell>
-                                        <TableCell sx={{ color: '#666', fontSize: '0.75rem' }}>{e.refNo}</TableCell>
-                                        <TableCell align="right" sx={{ color: e.debit > 0 ? '#c62828' : 'transparent', fontWeight: 600 }}>
-                                            {e.debit > 0 ? fmt(e.debit) : ''}
-                                        </TableCell>
-                                        <TableCell align="right" sx={{ color: e.credit > 0 ? '#2e7d32' : 'transparent', fontWeight: 600 }}>
-                                            {e.credit > 0 ? fmt(e.credit) : ''}
-                                        </TableCell>
-                                        <TableCell align="right" sx={{ fontWeight: 700 }}>
-                                            {fmt(e.balance)} {e.balance >= 0 ? 'Dr' : 'Cr'}
-                                        </TableCell>
-                                        <TableCell align="center" sx={{ p: 0, whiteSpace: 'nowrap' }}>
-                                            {e.type === 'receipt' && onDeleteReceipt && (
-                                                <Tooltip title="Delete receipt">
-                                                    <IconButton size="small" onClick={() => onDeleteReceipt(e.id)}
-                                                        sx={{ color: '#c62828', opacity: 0.6, '&:hover': { opacity: 1 } }}>
-                                                        <Delete sx={{ fontSize: 15 }} />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            )}
-                                            {e.type === 'invoice' && (
-                                                <>
-                                                    {onEditInvoice && (
-                                                        <Tooltip title="Edit invoice">
-                                                            <IconButton size="small" onClick={() => onEditInvoice(e.id)}
-                                                                sx={{ color: '#1565c0', opacity: 0.6, '&:hover': { opacity: 1 } }}>
-                                                                <Edit sx={{ fontSize: 15 }} />
-                                                            </IconButton>
-                                                        </Tooltip>
+                                ledgerEntries.map(e => {
+                                    const meta = rowMeta[e.type] || rowMeta.invoice;
+                                    return (
+                                        <TableRow key={`${e.type}-${e.id}`} hover>
+                                            <TableCell sx={{ whiteSpace: 'nowrap', color: 'text.secondary', fontSize: '0.8rem' }}>{e.date || ''}</TableCell>
+                                            <TableCell>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <Chip label={meta.chip} size="small"
+                                                        sx={{ height: 18, fontSize: '0.62rem', fontWeight: 700, bgcolor: meta.chipBg, color: meta.chipColor }} />
+                                                    {e.particulars !== meta.chip && (
+                                                        <Typography variant="body2" sx={{ fontSize: '0.82rem', color: 'text.secondary' }} noWrap>
+                                                            {e.particulars.replace(/^(Invoice|Receipt)( — )?/, '') || ''}
+                                                        </Typography>
                                                     )}
-                                                    {onDeleteInvoice && (
-                                                        <Tooltip title="Delete invoice">
-                                                            <IconButton size="small" onClick={() => onDeleteInvoice(e.id)}
-                                                                sx={{ color: '#c62828', opacity: 0.6, '&:hover': { opacity: 1 } }}>
-                                                                <Delete sx={{ fontSize: 15 }} />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    )}
-                                                </>
-                                            )}
-                                        </TableCell>
-                                    </TableRow>
-                                ))
+                                                </Box>
+                                            </TableCell>
+                                            <TableCell sx={{ color: 'text.secondary', fontSize: '0.75rem', fontFamily: 'monospace' }}>{e.refNo}</TableCell>
+                                            <TableCell align="right" sx={{ color: '#B91C1C', fontWeight: 600 }}>
+                                                {e.debit > 0 ? fmt(e.debit) : ''}
+                                            </TableCell>
+                                            <TableCell align="right" sx={{ color: '#15803D', fontWeight: 600 }}>
+                                                {e.credit > 0 ? fmt(e.credit) : ''}
+                                            </TableCell>
+                                            <TableCell align="right" sx={{ fontWeight: 700 }}>
+                                                {fmt(e.balance)}
+                                                <Typography component="span" variant="caption" sx={{ color: 'text.secondary', ml: 0.4 }}>
+                                                    {e.balance >= 0 ? 'Dr' : 'Cr'}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell align="center" sx={{ p: 0, whiteSpace: 'nowrap' }}>
+                                                {e.type === 'receipt' && onDeleteReceipt && (
+                                                    <Tooltip title="Delete receipt">
+                                                        <IconButton size="small" onClick={() => onDeleteReceipt(e.id)}
+                                                            sx={{ color: '#B91C1C', opacity: 0.55, '&:hover': { opacity: 1 } }}>
+                                                            <Delete sx={{ fontSize: 15 }} />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                )}
+                                                {e.type === 'invoice' && (
+                                                    <>
+                                                        {onEditInvoice && (
+                                                            <Tooltip title="Edit invoice">
+                                                                <IconButton size="small" onClick={() => onEditInvoice(e.id)}
+                                                                    sx={{ color: '#1565C0', opacity: 0.55, '&:hover': { opacity: 1 } }}>
+                                                                    <Edit sx={{ fontSize: 15 }} />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        )}
+                                                        {onDeleteInvoice && (
+                                                            <Tooltip title="Delete invoice">
+                                                                <IconButton size="small" onClick={() => onDeleteInvoice(e.id)}
+                                                                    sx={{ color: '#B91C1C', opacity: 0.55, '&:hover': { opacity: 1 } }}>
+                                                                    <Delete sx={{ fontSize: 15 }} />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })
                             )}
                         </TableBody>
                         {ledgerEntries.length > 0 && (
                             <TableBody>
-                                <TableRow sx={{ '& td': { borderTop: '2px solid #1a237e', bgcolor: '#e8eaf6', fontWeight: 700, py: 0.8 } }}>
-                                    <TableCell colSpan={3} sx={{ color: '#1a237e', fontSize: '0.82rem' }}>TOTAL</TableCell>
-                                    <TableCell align="right" sx={{ color: '#c62828' }}>{fmt(totalDebit)}</TableCell>
-                                    <TableCell align="right" sx={{ color: '#2e7d32' }}>{fmt(totalCredit)}</TableCell>
-                                    <TableCell align="right" sx={{ color: '#1a237e' }}>{fmt(closingBal)} {closingBal >= 0 ? 'Dr' : 'Cr'}</TableCell>
+                                <TableRow sx={{ '& td': { borderTop: '2px solid #E2E8F0', bgcolor: '#F8FAFC', fontWeight: 700, py: 1 } }}>
+                                    <TableCell colSpan={3} sx={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#475569' }}>Total</TableCell>
+                                    <TableCell align="right" sx={{ color: '#B91C1C' }}>{fmt(totalDebit)}</TableCell>
+                                    <TableCell align="right" sx={{ color: '#15803D' }}>{fmt(totalCredit)}</TableCell>
+                                    <TableCell align="right">{fmt(closingBal)} {closingBal >= 0 ? 'Dr' : 'Cr'}</TableCell>
                                     <TableCell />
                                 </TableRow>
                             </TableBody>
@@ -202,17 +281,18 @@ const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, on
                 </TableContainer>
             </DialogContent>
 
-            <DialogActions sx={{ bgcolor: '#f5f5f5', borderTop: '1px solid #ddd', px: 2, py: 0.8, gap: 1 }}>
-                <Button onClick={() => onDownload(c, ledgerEntries, totalDebit, totalCredit, closingBal)} startIcon={<Download />} variant="outlined" size="small" sx={{ textTransform: 'none' }}>
+            {/* ── Actions ── */}
+            <DialogActions sx={{ bgcolor: '#F8FAFC', borderTop: '1px solid #E2E8F0', px: 2.5, py: 1.25, gap: 1 }}>
+                <Button onClick={() => onDownload(c, ledgerEntries, totalDebit, totalCredit, closingBal)} startIcon={<Download />} variant="text" size="small" sx={{ color: 'text.secondary' }}>
                     Download
                 </Button>
-                <Button onClick={() => onPrint(c, ledgerEntries, totalDebit, totalCredit, closingBal)} startIcon={<Print />} variant="outlined" size="small" sx={{ textTransform: 'none', mr: 'auto' }}>
+                <Button onClick={() => onPrint(c, ledgerEntries, totalDebit, totalCredit, closingBal)} startIcon={<Print />} variant="text" size="small" sx={{ color: 'text.secondary', mr: 'auto' }}>
                     Print
                 </Button>
-                <Button onClick={() => onReceipt(c)} startIcon={<Receipt />} variant="contained" color="success" size="small" sx={{ textTransform: 'none' }}>
+                <Button onClick={() => onReceipt(c)} startIcon={<Receipt />} variant="outlined" color="success" size="small">
                     Receive Payment
                 </Button>
-                <Button onClick={() => onSale(c)} startIcon={<ShoppingCart />} variant="contained" size="small" sx={{ textTransform: 'none' }}>
+                <Button onClick={() => onSale(c)} startIcon={<ShoppingCart />} variant="contained" size="small" disableElevation>
                     New Sale
                 </Button>
             </DialogActions>
