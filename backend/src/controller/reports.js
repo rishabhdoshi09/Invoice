@@ -1,44 +1,20 @@
 const Services = require('../services');
 const db = require('../models');
 const { Op } = require('sequelize');
+const moment = require('moment');
+const { computeCustomerOutstandings, computeSupplierOutstandings } = require('../services/partyBalance');
 
 module.exports = {
-    // Get outstanding receivables - calculated from orders (single source of truth)
+    // Outstanding receivables — derived from the canonical party-balance
+    // service (opening + sales − ALL receipts). The old formula here summed
+    // order dueAmounts only, so on-account receipts (the exact thing the
+    // /reports "Receive Payment" button records) never reduced the numbers.
     getOutstandingReceivables: async (req, res) => {
         try {
-            // Use the same calculation as listCustomersWithBalance for consistency
-            // This calculates balance as: openingBalance + SUM(dueAmount from orders)
-            const customersWithBalance = await db.sequelize.query(`
-                SELECT 
-                    c.id as "customerId",
-                    c.name as "customerName",
-                    c.mobile as "customerMobile",
-                    COALESCE(c."openingBalance", 0) as "openingBalance",
-                    COALESCE(c."openingBalance", 0) + COALESCE((
-                        SELECT SUM("dueAmount") 
-                        FROM orders 
-                        WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
-                        AND "isDeleted" = false
-                    ), 0) as "totalOutstanding",
-                    COALESCE((
-                        SELECT COUNT(*) 
-                        FROM orders 
-                        WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
-                        AND "isDeleted" = false
-                        AND "dueAmount" > 0
-                    ), 0) as "orderCount"
-                FROM customers c
-                WHERE COALESCE(c."openingBalance", 0) + COALESCE((
-                    SELECT SUM("dueAmount") 
-                    FROM orders 
-                    WHERE ("customerId" = c.id OR ("customerName" = c.name AND "customerId" IS NULL))
-                    AND "isDeleted" = false
-                ), 0) > 0
-                ORDER BY "totalOutstanding" DESC
-            `, { type: db.Sequelize.QueryTypes.SELECT });
+            const all = await computeCustomerOutstandings();
+            const owing = all.filter(c => c.balance > 0.009);
 
-            // Get order details for each customer
-            const receivables = await Promise.all(customersWithBalance.map(async (customer) => {
+            const receivables = await Promise.all(owing.map(async (customer) => {
                 const orders = await db.order.findAll({
                     where: {
                         [Op.or]: [
@@ -55,11 +31,10 @@ module.exports = {
                 return {
                     ...customer,
                     name: customer.customerName,
-                    outstanding: Number(customer.totalOutstanding),
-                    totalOutstanding: Number(customer.totalOutstanding),
-                    count: Number(customer.orderCount),
-                    orderCount: Number(customer.orderCount),
-                    openingBalance: Number(customer.openingBalance),
+                    outstanding: customer.balance,
+                    totalOutstanding: customer.balance,
+                    count: customer.openOrderCount,
+                    orderCount: customer.openOrderCount,
                     orders: orders.map(o => ({
                         id: o.id,
                         orderNumber: o.orderNumber,
@@ -72,59 +47,34 @@ module.exports = {
                 };
             }));
 
-            const totalReceivable = receivables.reduce((sum, c) => sum + c.totalOutstanding, 0);
+            const totalReceivable = receivables.reduce((sum, c) => sum + c.balance, 0);
 
             return res.status(200).send({
                 status: 200,
                 message: 'outstanding receivables fetched successfully',
                 data: receivables,
-                totalReceivable: totalReceivable
+                totalReceivable: Math.round(totalReceivable * 100) / 100
             });
 
         } catch (error) {
             console.log(error);
-            return res.status(500).send({
-                status: 500,
-                message: error.message
-            });
+            return res.status(500).send({ status: 500, message: error.message });
         }
     },
 
-    // Get outstanding payables - calculated from purchase bills (single source of truth)
+    // Outstanding payables — canonical formula (opening + bills − paid on
+    // bills − other payments). The old formula counted deleted bills and
+    // ignored on-account supplier payouts entirely.
     getOutstandingPayables: async (req, res) => {
         try {
-            // Use the same calculation as listSuppliersWithBalance for consistency
-            const suppliersWithBalance = await db.sequelize.query(`
-                SELECT 
-                    s.id as "supplierId",
-                    s.name as "supplierName",
-                    s.mobile as "supplierMobile",
-                    COALESCE(s."openingBalance", 0) as "openingBalance",
-                    COALESCE(s."openingBalance", 0) + COALESCE((
-                        SELECT SUM("dueAmount") 
-                        FROM "purchaseBills" 
-                        WHERE "supplierId" = s.id
-                    ), 0) as "totalOutstanding",
-                    COALESCE((
-                        SELECT COUNT(*) 
-                        FROM "purchaseBills" 
-                        WHERE "supplierId" = s.id
-                        AND "dueAmount" > 0
-                    ), 0) as "billCount"
-                FROM suppliers s
-                WHERE COALESCE(s."openingBalance", 0) + COALESCE((
-                    SELECT SUM("dueAmount") 
-                    FROM "purchaseBills" 
-                    WHERE "supplierId" = s.id
-                ), 0) > 0
-                ORDER BY "totalOutstanding" DESC
-            `, { type: db.Sequelize.QueryTypes.SELECT });
+            const all = await computeSupplierOutstandings();
+            const owed = all.filter(s => s.balance > 0.009);
 
-            // Get purchase details for each supplier
-            const payables = await Promise.all(suppliersWithBalance.map(async (supplier) => {
+            const payables = await Promise.all(owed.map(async (supplier) => {
                 const purchases = await db.purchaseBill.findAll({
                     where: {
                         supplierId: supplier.supplierId,
+                        isDeleted: false,
                         dueAmount: { [Op.gt]: 0 }
                     },
                     attributes: ['id', 'billNumber', 'billDate', 'total', 'paidAmount', 'dueAmount', 'paymentStatus'],
@@ -134,11 +84,10 @@ module.exports = {
                 return {
                     ...supplier,
                     name: supplier.supplierName,
-                    outstanding: Number(supplier.totalOutstanding),
-                    totalOutstanding: Number(supplier.totalOutstanding),
-                    count: Number(supplier.billCount),
-                    billCount: Number(supplier.billCount),
-                    openingBalance: Number(supplier.openingBalance),
+                    outstanding: supplier.balance,
+                    totalOutstanding: supplier.balance,
+                    count: supplier.openBillCount,
+                    billCount: supplier.openBillCount,
                     purchases: purchases.map(p => ({
                         id: p.id,
                         billNumber: p.billNumber,
@@ -151,21 +100,18 @@ module.exports = {
                 };
             }));
 
-            const totalPayable = payables.reduce((sum, s) => sum + s.totalOutstanding, 0);
+            const totalPayable = payables.reduce((sum, s) => sum + s.balance, 0);
 
             return res.status(200).send({
                 status: 200,
                 message: 'outstanding payables fetched successfully',
                 data: payables,
-                totalPayable: totalPayable
+                totalPayable: Math.round(totalPayable * 100) / 100
             });
 
         } catch (error) {
             console.log(error);
-            return res.status(500).send({
-                status: 500,
-                message: error.message
-            });
+            return res.status(500).send({ status: 500, message: error.message });
         }
     },
 
@@ -174,144 +120,139 @@ module.exports = {
             const { partyId, partyType } = req.params;
 
             if (!partyId || !partyType || !['customer', 'supplier'].includes(partyType)) {
-                return res.status(400).send({
-                    status: 400,
-                    message: 'Invalid party ID or type'
-                });
+                return res.status(400).send({ status: 400, message: 'Invalid party ID or type' });
             }
 
-            let partyInfo, transactions = [];
+            const parseDate = (s) => {
+                const m = moment(s, ['DD-MM-YYYY', 'YYYY-MM-DD', 'DD/MM/YYYY'], true);
+                return m.isValid() ? m : moment(s);
+            };
+
+            let partyInfo;
+            const transactions = [];
+            let openingBalance = 0;
 
             if (partyType === 'supplier') {
-                // Get supplier info
                 partyInfo = await Services.supplier.getSupplier({ id: partyId });
-                
                 if (!partyInfo) {
-                    return res.status(400).send({
-                        status: 400,
-                        message: 'Supplier not found'
-                    });
+                    return res.status(400).send({ status: 400, message: 'Supplier not found' });
                 }
+                openingBalance = Number(partyInfo.openingBalance) || 0;
 
-                // Get purchase bills
                 const purchases = await db.purchaseBill.findAll({
-                    where: { supplierId: partyId },
-                    order: [['billDate', 'DESC']]
+                    where: { supplierId: partyId, isDeleted: false }
                 });
-
-                purchases.forEach(purchase => {
+                purchases.forEach(p => {
                     transactions.push({
-                        date: purchase.billDate,
+                        date: p.billDate,
                         type: 'Purchase',
-                        referenceNumber: purchase.billNumber,
+                        referenceNumber: p.billNumber,
                         debit: 0,
-                        credit: purchase.total,
-                        balance: 0 // Will calculate below
+                        credit: Number(p.total) || 0
                     });
+                    // POS/linked payments live on the bill's paidAmount —
+                    // purchase-linked payment rows are excluded below to
+                    // avoid double counting.
+                    if (Number(p.paidAmount) > 0) {
+                        transactions.push({
+                            date: p.billDate,
+                            type: 'Payment (against bill)',
+                            referenceNumber: p.billNumber,
+                            debit: Number(p.paidAmount) || 0,
+                            credit: 0
+                        });
+                    }
                 });
 
-                // Get payments
-                const payments = await db.payment.findAll({
-                    where: { 
-                        partyId: partyId,
-                        partyType: 'supplier'
-                    },
-                    order: [['paymentDate', 'DESC']]
-                });
-
-                payments.forEach(payment => {
+                const paymentWhere = {
+                    partyType: 'supplier',
+                    referenceType: { [Op.ne]: 'purchase' },
+                    [Op.or]: [{ partyId }, { partyName: partyInfo.name, partyId: null }]
+                };
+                if (db.payment.rawAttributes.isDeleted) paymentWhere.isDeleted = false;
+                const payments = await db.payment.findAll({ where: paymentWhere });
+                payments.forEach(p => {
                     transactions.push({
-                        date: payment.paymentDate,
+                        date: p.paymentDate,
                         type: 'Payment',
-                        referenceNumber: payment.paymentNumber,
-                        debit: payment.amount,
-                        credit: 0,
-                        balance: 0
+                        referenceNumber: p.paymentNumber,
+                        debit: Number(p.amount) || 0,
+                        credit: 0
                     });
                 });
 
             } else {
-                // For customers, we'll use order data with customerMobile or customerName
-                // This is a simplified version - you might want to create a separate customer table
-                const orders = await db.order.findAll({
-                    where: db.Sequelize.or(
-                        { customerMobile: partyId },
-                        { id: partyId }
-                    ),
-                    order: [['orderDate', 'DESC']]
-                });
-
-                if (!orders || orders.length === 0) {
-                    return res.status(400).send({
-                        status: 400,
-                        message: 'Customer not found'
-                    });
+                // Customer statement — lookup by real customer id, orders by
+                // id-or-legacy-name, receipts as CREDIT (the old code booked
+                // customer receipts as debit, INCREASING their balance).
+                const customer = await db.customer.findByPk(partyId);
+                if (!customer) {
+                    return res.status(400).send({ status: 400, message: 'Customer not found' });
                 }
+                partyInfo = { name: customer.name, mobile: customer.mobile };
+                openingBalance = Number(customer.openingBalance) || 0;
 
-                partyInfo = {
-                    name: orders[0].customerName,
-                    mobile: orders[0].customerMobile
-                };
-
-                orders.forEach(order => {
+                const orders = await db.order.findAll({
+                    where: {
+                        isDeleted: false,
+                        [Op.or]: [
+                            { customerId: customer.id },
+                            { customerName: customer.name, customerId: null }
+                        ]
+                    }
+                });
+                orders.forEach(o => {
                     transactions.push({
-                        date: order.orderDate,
+                        date: o.orderDate,
                         type: 'Sale',
-                        referenceNumber: order.orderNumber,
-                        debit: order.total,
-                        credit: 0,
-                        balance: 0
+                        referenceNumber: o.orderNumber,
+                        debit: Number(o.total) || 0,
+                        credit: 0
                     });
                 });
 
-                // Get payments
-                const payments = await db.payment.findAll({
-                    where: { 
-                        partyId: partyId,
-                        partyType: 'customer'
-                    },
-                    order: [['paymentDate', 'DESC']]
-                });
-
-                payments.forEach(payment => {
+                const paymentWhere = {
+                    partyType: 'customer',
+                    [Op.or]: [{ partyId: customer.id }, { partyName: customer.name, partyId: null }],
+                    paymentNumber: { [Op.notLike]: 'PAY-TOGGLE-%' }
+                };
+                if (db.payment.rawAttributes.isDeleted) paymentWhere.isDeleted = false;
+                const payments = await db.payment.findAll({ where: paymentWhere });
+                payments.forEach(p => {
                     transactions.push({
-                        date: payment.paymentDate,
-                        type: 'Payment',
-                        referenceNumber: payment.paymentNumber,
-                        debit: payment.amount,
-                        credit: 0,
-                        balance: 0
+                        date: p.paymentDate,
+                        type: 'Receipt',
+                        referenceNumber: p.paymentNumber,
+                        debit: 0,
+                        credit: Number(p.amount) || 0
                     });
                 });
             }
 
-            // Sort all transactions by date
-            transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
+            // Chronological sort with real date parsing (dates are stored as
+            // DD-MM-YYYY strings; new Date() cannot parse them).
+            transactions.sort((a, b) => parseDate(a.date).valueOf() - parseDate(b.date).valueOf());
 
-            // Calculate running balance
-            let balance = partyType === 'supplier' ? (partyInfo.openingBalance || 0) : 0;
+            // Running balance from the opening balance. Both party types:
+            // what-they-owe(-us)/what-we-owe(-them) grows with debit for
+            // customers and credit for suppliers.
+            let balance = openingBalance;
             transactions.forEach(txn => {
-                balance = (partyType === 'supplier') ? balance + txn.credit - txn.debit : balance + txn.debit - txn.credit;
-                txn.balance = balance;
+                balance = partyType === 'supplier'
+                    ? balance + txn.credit - txn.debit
+                    : balance + txn.debit - txn.credit;
+                txn.balance = Math.round(balance * 100) / 100;
             });
 
             return res.status(200).send({
                 status: 200,
                 message: 'party statement fetched successfully',
-                data: {
-                    partyInfo,
-                    partyType,
-                    transactions,
-                    currentBalance: balance
-                }
+                data: { partyInfo, partyType, openingBalance, transactions, currentBalance: Math.round(balance * 100) / 100 }
             });
 
         } catch (error) {
             console.log(error);
-            return res.status(500).send({
-                status: 500,
-                message: error.message
-            });
+            return res.status(500).send({ status: 500, message: error.message });
         }
     }
 };
