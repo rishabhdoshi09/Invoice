@@ -10,10 +10,10 @@ import { Box, Typography } from '@mui/material';
  *     actions={<Button …>Add Customer</Button>}
  *   />
  */
-export const PageHeader = ({ title, subtitle, icon, actions }) => (
+export const PageHeader = ({ title, subtitle, icon, actions, sx }) => (
     <Box sx={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        flexWrap: 'wrap', gap: 1.5, mb: 2.5,
+        flexWrap: 'wrap', gap: 1.5, mb: 2.5, ...sx,
     }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
             {icon && (

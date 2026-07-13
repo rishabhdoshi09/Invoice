@@ -13,6 +13,7 @@ import {
 import axios from 'axios';
 import moment from 'moment';
 import { toast } from '../../../utils/toast';
+import { PageHeader } from '../../common/PageHeader';
 
 export const StockManagement = () => {
     const [tab, setTab] = useState(0);
@@ -201,9 +202,12 @@ export const StockManagement = () => {
         <Box sx={{ p: 3 }}>
             {/* Header */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Inventory /> Stock Management
-                </Typography>
+                <PageHeader
+                    sx={{ mb: 0 }}
+                    title="Stock"
+                    subtitle="Live quantities, movements and valuation"
+                    icon={<Inventory fontSize="small" />}
+                />
                 <Box sx={{ display: 'flex', gap: 1 }}>
                     <Tooltip title="Refresh">
                         <IconButton onClick={fetchAll} disabled={loading}>

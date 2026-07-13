@@ -62,6 +62,7 @@ import {
 } from '../../../store/api';
 import moment from 'moment';
 import { toast } from '../../../utils/toast';
+import { PageHeader } from '../../common/PageHeader';
 
 export const DailyPayments = () => {
     const navigate = useNavigate();
@@ -482,9 +483,12 @@ export const DailyPayments = () => {
         <Box sx={{ p: 3 }}>
             {/* Header with date navigation */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <CalendarToday /> Daily Payments
-                </Typography>
+                <PageHeader
+                    sx={{ mb: 0 }}
+                    title="Daily Payments"
+                    subtitle="Cash in and out, day by day"
+                    icon={<CalendarToday fontSize="small" />}
+                />
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Tooltip title="Previous Day">
                         <IconButton onClick={goToPreviousDay}>

@@ -15,6 +15,7 @@ import { createPayment, getOutstandingReceivables, getOutstandingPayables } from
 import moment from 'moment';
 import axios from 'axios';
 import { toast } from '../../../utils/toast';
+import { PageHeader } from '../../common/PageHeader';
 
 export const OutstandingReports = () => {
     const [tab, setTab] = useState(0);
@@ -318,9 +319,12 @@ export const OutstandingReports = () => {
         <Box sx={{ p: 3 }}>
             {/* Header */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <AccountBalance /> Outstanding Reports
-                </Typography>
+                <PageHeader
+                    sx={{ mb: 0 }}
+                    title="Outstanding Reports"
+                    subtitle="Who owes you and whom you owe, in one place"
+                    icon={<AccountBalance fontSize="small" />}
+                />
                 <Box sx={{ display: 'flex', gap: 1 }}>
                     <Tooltip title="Refresh Data">
                         <IconButton onClick={fetchAll} disabled={loading}>
