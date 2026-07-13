@@ -33,6 +33,7 @@ const postPaymentStatusToggleToLedger = (order, oldStatus, newStatus, changedBy,
 
 // ── Reversals ────────────────────────────────────────────────────────────
 const reverseInvoiceLedger  = (order, tx)   => ae.reverseInvoice(order, tx);
+const reverseInvoiceCashLedger = (order, reason, tx) => ae.reverseInvoiceCashBatches(order, reason, tx);
 const reversePaymentLedger  = (payment, tx) => ae.reversePayment(payment, tx);
 const reversePurchaseLedger = (purchase, tx) => ae.reversePurchase(purchase, tx);
 
@@ -44,6 +45,7 @@ module.exports = {
     postSupplierPaymentToLedger,
     postPaymentStatusToggleToLedger,
     reverseInvoiceLedger,
+    reverseInvoiceCashLedger,
     reversePaymentLedger,
     reversePurchaseLedger
 };

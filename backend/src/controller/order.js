@@ -4,7 +4,7 @@ const Services = require('../services');
 const Validations = require('../validations');
 const db = require('../models');
 const { createAuditLog } = require('../middleware/auditLogger');
-const { postInvoiceToLedger, reverseInvoiceLedger, postPaymentStatusToggleToLedger, postInvoiceCashReceiptToLedger } = require('../services/realTimeLedger');
+const { postInvoiceToLedger, reverseInvoiceLedger, reverseInvoiceCashLedger, postPaymentStatusToggleToLedger, postInvoiceCashReceiptToLedger } = require('../services/realTimeLedger');
 const { assertOrderInvariants } = require('../services/orderInvariants');
 const { updateStock } = require('../services/accountingEngine');
 const telegram = require('../services/telegramAlert');
@@ -1097,6 +1097,21 @@ module.exports = {
                             transaction,
                             toggleSeq   // <-- unique per toggle event
                         );
+
+                        // paid→unpaid on a bill that had POS cash recorded at
+                        // creation: paidAmount is being zeroed, so the cash
+                        // claim itself is retracted. The toggle JV above only
+                        // reverses the toggle-induced portion (total − POS
+                        // cash); the INVOICE_CASH batch must be reversed too,
+                        // or the ledger keeps claiming cash the invoice no
+                        // longer shows (self-audit INV-11).
+                        if (newStatus === 'unpaid' && Number(lockedOrder.originalPaidAmount) > 0) {
+                            await reverseInvoiceCashLedger(
+                                { id: orderId, orderNumber: order.orderNumber },
+                                `POS cash retracted by paid→unpaid toggle [${changedByTrimmed}]`,
+                                transaction
+                            );
+                        }
                     } else {
                         console.warn(`[LEDGER] SKIP: Chart of Accounts not initialized — toggle for ${order.orderNumber} not posted to ledger`);
                     }

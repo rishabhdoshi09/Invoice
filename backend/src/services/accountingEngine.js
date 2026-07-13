@@ -544,6 +544,39 @@ async function reverseInvoice(order, transaction) {
     return reverseAllBatchesForReference(order.id, `Invoice ${order.orderNumber || ''} deleted`, transaction);
 }
 
+// Targeted reversal of ONLY the INVOICE_CASH batches for an order — used when
+// a bill's POS-cash claim is retracted (paid→unpaid toggle on a bill that had
+// cash recorded at creation). The INVOICE sales batch must stay standing, so
+// the generic reverseAllBatchesForReference is deliberately not used here.
+async function reverseInvoiceCashBatches(order, reason, transaction) {
+    const activeBatches = await db.journalBatch.findAll({
+        where: { referenceType: 'INVOICE_CASH', referenceId: order.id, isReversed: false, isPosted: true },
+        transaction
+    });
+    if (!activeBatches.length) return [];
+
+    const results = [];
+    for (const batch of activeBatches) {
+        const entries = await db.ledgerEntry.findAll({ where: { batchId: batch.id }, transaction });
+        const result = await ledgerService.createJournalBatch({
+            referenceType: 'REVERSAL',
+            referenceId: order.id,
+            description: `Reversal of ${batch.batchNumber}: ${reason}`,
+            transactionDate: new Date(),
+            entries: entries.map(e => ({
+                accountId: e.accountId,
+                debit:     Number(e.credit) || 0,
+                credit:    Number(e.debit)  || 0,
+                narration: `Reversal: ${e.narration || ''}`
+            }))
+        }, transaction);
+        await batch.update({ isReversed: true, reversedBatchId: result.batch.id }, { transaction });
+        console.log(`[AE] REVERSED INVOICE_CASH ${batch.batchNumber} → ${result.batch.batchNumber} (${reason})`);
+        results.push({ reversed: true, originalBatchNumber: batch.batchNumber, reversalBatchNumber: result.batch.batchNumber });
+    }
+    return results;
+}
+
 async function reversePayment(payment, transaction) {
     return reverseAllBatchesForReference(payment.id, `Payment ${payment.paymentNumber || ''} deleted`, transaction);
 }
@@ -701,6 +734,7 @@ module.exports = {
 
     // Reversals
     reverseInvoice,
+    reverseInvoiceCashBatches,
     reversePayment,
     reversePurchase,
     reverseExpense,
