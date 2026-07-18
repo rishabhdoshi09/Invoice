@@ -9,9 +9,14 @@ export const listOrders = async (filters) => {
         );
         
         const { data: { data: { count, rows }}} = await axios.get('/api/orders', {
-            params: cleanFilters,
+            // _t cache-buster + no-store headers: the browser was serving a
+            // stale cached copy of this GET, so invoices created after the
+            // list first loaded never appeared until a hard refresh.
+            params: { ...cleanFilters, _t: Date.now() },
             headers: {
-              'Content-Type': 'application/json'
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache'
             }
         });
         // Keep rows as array to preserve order from backend (sorted by createdAt DESC)

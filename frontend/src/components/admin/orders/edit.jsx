@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import axios from 'axios';
+import moment from 'moment';
 import {
   Box,
   Button,
@@ -492,19 +493,28 @@ export const EditOrder = () => {
               <Typography variant="h6" color="primary.main">{orderData.orderNumber}</Typography>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Typography variant="subtitle2" color="text.secondary">Invoice Date</Typography>
-              <Typography variant="h6">
-                {(() => {
+              <TextField
+                fullWidth
+                size="small"
+                type="date"
+                label="Invoice Date"
+                InputLabelProps={{ shrink: true }}
+                // Allow backdating (accounts work) but not future dates
+                inputProps={{ max: moment().format('YYYY-MM-DD') }}
+                value={(() => {
                   const d = orderData.orderDate;
-                  if (!d) return '-';
-                  if (typeof d === 'string' && d.match(/^\d{2}-\d{2}-\d{4}$/)) {
-                    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                    const [day, month, year] = d.split('-');
-                    return `${day} ${months[parseInt(month) - 1]} ${year}`;
-                  }
-                  return d;
+                  if (!d) return '';
+                  const m = moment(d, ['DD-MM-YYYY', 'YYYY-MM-DD'], true);
+                  return m.isValid() ? m.format('YYYY-MM-DD') : '';
                 })()}
-              </Typography>
+                onChange={(e) => {
+                  const v = e.target.value; // YYYY-MM-DD from the picker
+                  const m = moment(v, 'YYYY-MM-DD', true);
+                  // Store back in the app's canonical DD-MM-YYYY string format
+                  setOrderData(prev => ({ ...prev, orderDate: m.isValid() ? m.format('DD-MM-YYYY') : prev.orderDate }));
+                }}
+                helperText="Change to backdate this bill"
+              />
             </Grid>
             <Grid item xs={12} md={6}>
               <TextField
