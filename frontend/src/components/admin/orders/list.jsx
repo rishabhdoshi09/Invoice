@@ -280,16 +280,28 @@ export const ListOrders = () => {
         }
     }, [dispatch]);
 
-    // Fetch customers for autocomplete
+    // Fetch customers for the paid→unpaid picker.
+    // Uses /customers/with-balance (ALL customers + canonical computed
+    // balance), not /customers — that endpoint caps at the newest 100, so
+    // older accounts (the ones most likely to already carry credit) were
+    // invisible here, and it only exposed the drift-prone currentBalance column.
     const fetchCustomers = useCallback(async () => {
         try {
             setLoadingCustomers(true);
             const token = localStorage.getItem('token');
-            const { data } = await axios.get('/api/customers', {
-                headers: { Authorization: `Bearer ${token}` }
+            const { data } = await axios.get(`/api/customers/with-balance?_t=${Date.now()}`, {
+                headers: { Authorization: `Bearer ${token}`, 'Cache-Control': 'no-cache' }
             });
             const customerList = data.data?.rows || data.rows || [];
-            setCustomers(Array.isArray(customerList) ? customerList : Object.values(customerList));
+            const arr = Array.isArray(customerList) ? customerList : Object.values(customerList);
+            // Customers who already carry a balance first, then alphabetical —
+            // so the running-khata accounts the user is looking for sit on top.
+            arr.sort((a, b) => {
+                const ba = Math.abs(Number(a.balance) || 0), bb = Math.abs(Number(b.balance) || 0);
+                if ((bb > 0.009) !== (ba > 0.009)) return bb > 0.009 ? 1 : -1;
+                return String(a.name || '').localeCompare(String(b.name || ''));
+            });
+            setCustomers(arr);
         } catch (error) {
             console.error('Error fetching customers:', error);
         } finally {
@@ -744,16 +756,37 @@ export const ListOrders = () => {
                                     }
                                 }}
                                 getOptionLabel={(option) => option?.name || ''}
-                                renderOption={(props, option) => (
-                                    <li {...props} key={option.id}>
-                                        <Box>
-                                            <Typography variant="body2" fontWeight="bold">{option.name}</Typography>
-                                            <Typography variant="caption" color="text.secondary">
-                                                {option.mobile || 'No mobile'} • Balance: ₹{(option.currentBalance || 0).toLocaleString('en-IN')}
-                                            </Typography>
-                                        </Box>
-                                    </li>
-                                )}
+                                renderOption={(props, option) => {
+                                    const bal = Number(option.balance) || 0;
+                                    const fmtBal = `₹${Math.abs(bal).toLocaleString('en-IN')}`;
+                                    return (
+                                        <li {...props} key={option.id}>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: 1 }}>
+                                                <Box sx={{ minWidth: 0 }}>
+                                                    <Typography variant="body2" fontWeight="bold" noWrap>{option.name}</Typography>
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        {option.mobile || 'No mobile'}
+                                                    </Typography>
+                                                </Box>
+                                                {bal > 0.009 ? (
+                                                    <Chip size="small" label={`Due ${fmtBal}`} color="error" variant="outlined" sx={{ height: 20, fontSize: '0.68rem', flexShrink: 0 }} />
+                                                ) : bal < -0.009 ? (
+                                                    <Chip size="small" label={`Advance ${fmtBal}`} color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.68rem', flexShrink: 0 }} />
+                                                ) : (
+                                                    <Chip size="small" label="Settled" variant="outlined" sx={{ height: 20, fontSize: '0.68rem', flexShrink: 0 }} />
+                                                )}
+                                            </Box>
+                                        </li>
+                                    );
+                                }}
+                                filterOptions={(opts, { inputValue }) => {
+                                    const q = inputValue.trim().toLowerCase();
+                                    if (!q) return opts;
+                                    return opts.filter(o =>
+                                        String(o.name || '').toLowerCase().includes(q) ||
+                                        String(o.mobile || '').toLowerCase().includes(q)
+                                    );
+                                }}
                                 renderInput={(params) => (
                                     <TextField 
                                         {...params} 
