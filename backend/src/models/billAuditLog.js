@@ -36,6 +36,12 @@ module.exports = (sequelize, Sequelize) => {
                 type: Sequelize.STRING,
                 allowNull: true
             },
+            // Alternate/display name the operator typed for this line, if any —
+            // captured so the deletion log shows exactly what was on the bill.
+            altName: {
+                type: Sequelize.STRING,
+                allowNull: true
+            },
             quantity: {
                 type: Sequelize.DECIMAL(10, 3),
                 allowNull: true

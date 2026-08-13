@@ -92,10 +92,12 @@ const DeletionLogs = () => {
     const [summary, setSummary] = useState({});
     const [count, setCount] = useState(0);
     const [loading, setLoading] = useState(true);
+    // Default to ALL history (blank dates) so nothing is hidden; the operator
+    // narrows to a date range when they want to.
     const [filters, setFilters] = useState({
         eventType: '',
-        startDate: moment().format('YYYY-MM-DD'),
-        endDate: moment().format('YYYY-MM-DD')
+        startDate: '',
+        endDate: ''
     });
     const [detailDialog, setDetailDialog] = useState({ open: false, log: null });
 
@@ -103,7 +105,7 @@ const DeletionLogs = () => {
         setLoading(true);
         try {
             const token = localStorage.getItem('token');
-            const params = new URLSearchParams({ limit: '200' });
+            const params = new URLSearchParams({ limit: '1000' });
             if (filters.eventType) params.append('eventType', filters.eventType);
             if (filters.startDate) params.append('startDate', filters.startDate);
             if (filters.endDate) params.append('endDate', filters.endDate);
@@ -294,8 +296,13 @@ const DeletionLogs = () => {
                                         </TableCell>
                                         <TableCell>
                                             <Typography variant="body2" fontWeight={600}>{log.productName}</Typography>
+                                            {log.altName && (
+                                                <Typography variant="caption" sx={{ display: 'block', color: '#6a1b9a', fontStyle: 'italic' }}>
+                                                    Printed as: {log.altName}
+                                                </Typography>
+                                            )}
                                             {log.customerName && (
-                                                <Typography variant="caption" color="text.secondary">
+                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                                                     Customer: {log.customerName}
                                                 </Typography>
                                             )}
@@ -360,6 +367,11 @@ const DeletionLogs = () => {
                                 <Grid item xs={6}>
                                     <Typography variant="caption" color="text.secondary">Deleted Product</Typography>
                                     <Typography fontWeight={600} color="error.main">{detailDialog.log.productName}</Typography>
+                                    {detailDialog.log.altName && (
+                                        <Typography variant="caption" sx={{ color: '#6a1b9a', fontStyle: 'italic' }}>
+                                            Printed as: {detailDialog.log.altName}
+                                        </Typography>
+                                    )}
                                 </Grid>
                                 <Grid item xs={6}>
                                     <Typography variant="caption" color="text.secondary">Deleted Value</Typography>
@@ -425,17 +437,18 @@ const WeightLogs = () => {
     const [summary, setSummary] = useState({});
     const [count, setCount] = useState(0);
     const [loading, setLoading] = useState(true);
+    // All weight fetches by default (blank dates), newest first — narrow by date on demand.
     const [filters, setFilters] = useState({
         consumed: '',
-        startDate: moment().format('YYYY-MM-DD'),
-        endDate: moment().format('YYYY-MM-DD')
+        startDate: '',
+        endDate: ''
     });
 
     const fetchLogs = useCallback(async () => {
         setLoading(true);
         try {
             const token = localStorage.getItem('token');
-            const params = new URLSearchParams({ limit: '200' });
+            const params = new URLSearchParams({ limit: '1000' });
             if (filters.consumed !== '') params.append('consumed', filters.consumed);
             if (filters.startDate) params.append('startDate', filters.startDate);
             if (filters.endDate) params.append('endDate', filters.endDate);

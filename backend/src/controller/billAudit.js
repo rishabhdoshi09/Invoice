@@ -7,7 +7,7 @@ module.exports = {
     logItemRemoved: async (req, res) => {
         try {
             const {
-                productName, quantity, price, totalPrice,
+                productName, altName, quantity, price, totalPrice,
                 billSnapshot, billTotal, customerName,
                 invoiceContext, deviceInfo
             } = req.body;
@@ -33,6 +33,7 @@ module.exports = {
                 userName: req.user?.name || req.user?.username || 'unknown',
                 invoiceContext: nextInvoiceHint,
                 productName,
+                altName: (altName && String(altName).trim()) || null,
                 quantity: quantity || 0,
                 price: price || 0,
                 totalPrice: totalPrice || 0,

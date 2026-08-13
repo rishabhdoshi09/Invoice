@@ -1412,6 +1412,7 @@ export const CreateOrder = () => {
           const token = localStorage.getItem('token');
           axios.post('/api/audit/item-deleted', {
             productName: item.name || item.productName || 'Unknown',
+            altName: (item.altName || '').trim() || null,
             quantity: item.quantity || item.netWeight || 0,
             price: item.pricePerKg || item.productPrice || item.price || 0,
             totalPrice: item.totalPrice || 0,
