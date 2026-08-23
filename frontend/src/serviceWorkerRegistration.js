@@ -79,10 +79,19 @@ function checkValidServiceWorker(swUrl, config) {
         .catch(() => console.log('[SW] No internet connection — app running in offline mode.'));
 }
 
+// Aggressively remove ANY service worker (even one left over from an older
+// production build) and purge its caches. A stale SW kept serving an old app
+// bundle over fresh `npm start` code, so code fixes never reached the browser.
+// For a local, always-online app the SW offers no benefit and only causes this.
 export function unregister() {
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.ready
-            .then(reg => reg.unregister())
+        navigator.serviceWorker.getRegistrations()
+            .then(regs => regs.forEach(reg => reg.unregister()))
             .catch(err => console.error('[SW] Unregister error:', err.message));
+    }
+    if ('caches' in window) {
+        caches.keys()
+            .then(keys => keys.forEach(k => caches.delete(k)))
+            .catch(() => {});
     }
 }
