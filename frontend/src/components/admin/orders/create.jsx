@@ -1496,6 +1496,18 @@ export const CreateOrder = () => {
       // ONLINE SAVE (Server)
       const savedOrder = await dispatch(createOrderAction(sanitized));
 
+      // MONEY-SAFETY GUARD: a failed save must NEVER look like success.
+      // createOrderAction returns null on failure (error toast already shown).
+      // Without this guard the code fell through to the success path — it
+      // generated a PDF from client totals (a "fake" grand total), archived an
+      // empty order, popped the WhatsApp/print dialog, and WIPED the in-progress
+      // bill — so the operator could hand over a PDF for a bill that was never
+      // saved. Abort here and keep the operator's work intact so they can retry.
+      if (!savedOrder || !savedOrder.id) {
+        setIsSubmitting(false);
+        return;
+      }
+
       // Backend matched an existing customer by typed name but did NOT link the
       // order (needs explicit confirmation). Without linking, a credit sale's
       // due never reaches the customer's balance — so ask right here.
@@ -1527,11 +1539,21 @@ export const CreateOrder = () => {
 
       // Note: Daily totals are now tracked server-side only to prevent duplicates
 
-      // Generate and archive PDF with the SAVED order's real invoice number
-      // Keep orderProps (has all computed totals/items) — only override orderNumber from savedOrder
+      // Generate the PDF from the SERVER'S authoritative order — its totals and
+      // line items are the ones actually saved and charged. Previously the PDF
+      // was built from client-side orderProps totals, so any divergence (e.g.
+      // rounding) meant the customer's printed total differed from the recorded
+      // total. The printed number must always equal the saved number.
       let newPdfUrl = '';
+      const serverItems = (savedOrder.orderItems && savedOrder.orderItems.length)
+        ? savedOrder.orderItems
+        : orderProps.orderItems;
       const pdfData = {
         ...orderProps,
+        orderItems: serverItems,
+        subTotal: savedOrder.subTotal,
+        tax: savedOrder.tax,
+        total: savedOrder.total,
         orderNumber: savedOrder.orderNumber || orderProps.orderNumber,
         id: savedOrder.id
       };

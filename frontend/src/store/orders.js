@@ -67,8 +67,18 @@ export const createOrderAction = (payload) => {
         catch(error){
             console.log(error);
             dispatch(stopLoading());
-            dispatch(setNotification({ open: true, severity: 'error', message: 'Something went wrong, please try again!'}));
-            return {};
+            // Surface the REAL server error (e.g. a validation limit) instead of
+            // a generic message, so the operator knows exactly what to fix.
+            const serverMsg = error?.response?.data?.message;
+            dispatch(setNotification({
+                open: true,
+                severity: 'error',
+                message: serverMsg ? `Invoice NOT saved: ${serverMsg}` : 'Invoice NOT saved — something went wrong. Please try again.'
+            }));
+            // Return null (NOT {}) so the caller can detect failure. Returning an
+            // empty object made a failed save look like success — the UI then
+            // showed a fake total / PDF and wiped the in-progress bill.
+            return null;
         }
     }
 }
