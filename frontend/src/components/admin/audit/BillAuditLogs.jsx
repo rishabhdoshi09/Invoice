@@ -105,13 +105,13 @@ const DeletionLogs = () => {
         setLoading(true);
         try {
             const token = localStorage.getItem('token');
-            const params = new URLSearchParams({ limit: '1000' });
+            const params = new URLSearchParams({ limit: '1000', _t: Date.now() });
             if (filters.eventType) params.append('eventType', filters.eventType);
             if (filters.startDate) params.append('startDate', filters.startDate);
             if (filters.endDate) params.append('endDate', filters.endDate);
 
             const res = await axios.get(`/api/audit/tampering-logs?${params}`, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}`, 'Cache-Control': 'no-cache' }
             });
             if (res.data?.data) {
                 setLogs(res.data.data.rows || []);
@@ -448,13 +448,13 @@ const WeightLogs = () => {
         setLoading(true);
         try {
             const token = localStorage.getItem('token');
-            const params = new URLSearchParams({ limit: '1000' });
+            const params = new URLSearchParams({ limit: '1000', _t: Date.now() });
             if (filters.consumed !== '') params.append('consumed', filters.consumed);
             if (filters.startDate) params.append('startDate', filters.startDate);
             if (filters.endDate) params.append('endDate', filters.endDate);
 
             const res = await axios.get(`/api/audit/weight-logs?${params}`, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}`, 'Cache-Control': 'no-cache' }
             });
             if (res.data?.data) {
                 setLogs(res.data.data.rows || []);
