@@ -35,7 +35,7 @@ import {
 } from '@mui/material';
 import { CreateProduct } from '../products/create';
 import pdfMake from 'pdfmake/build/pdfmake';
-import { generatePdfDefinition, generatePdfDefinition2 } from './helper';
+import { generatePdfDefinition, generatePdfDefinition2, generatePdfDefinition3 } from './helper';
 import { Delete, Edit as EditIcon, Sync, Info, WhatsApp } from '@mui/icons-material';
 import { fetchWeightsAction, createOrderAction } from '../../../store/orders';
 import { setNotification } from '../../../store/application';
@@ -305,8 +305,18 @@ export const CreateOrder = () => {
   const [highlightedQuickProduct, setHighlightedQuickProduct] = useState(null);
   const quickVariant = (tag) => (selectedQuick === tag || highlightedQuickProduct === tag ? 'contained' : 'outlined');
 
-  const [template, setTemplate] = useState(1);
-  const TEMPLATE_MAP = useMemo(() => ({ 1: 2, 2: 1 }), []);
+  // Template choice is remembered across sessions so the operator never has to
+  // re-pick it. 3 = Blank (only the invoice, no shop header).
+  const [template, setTemplate] = useState(() => {
+    const saved = Number(localStorage.getItem('invoice_pdf_template'));
+    return (saved === 1 || saved === 2 || saved === 3) ? saved : 1;
+  });
+  useEffect(() => {
+    try { localStorage.setItem('invoice_pdf_template', String(template)); } catch {}
+  }, [template]);
+  // When Blank is active the other formats are hidden; this reveals them on demand.
+  const [showAllTemplates, setShowAllTemplates] = useState(false);
+  const TEMPLATE_MAP = useMemo(() => ({ 1: 2, 2: 1, 3: 3 }), []);
 
   const [archivedOrderProps, setArchivedOrderProps] = useState(null);
   const [archivedPdfUrl, setArchivedPdfUrl] = useState('');
@@ -405,7 +415,11 @@ export const CreateOrder = () => {
         totalPrice: item.totalPrice
       })) ?? [];
       const chosen = TEMPLATE_MAP[template] ?? template;
-      const pdfObject = chosen === 1 ? generatePdfDefinition(updatedProps) : generatePdfDefinition2(updatedProps);
+      const pdfObject = chosen === 3
+        ? generatePdfDefinition3(updatedProps)
+        : chosen === 1
+          ? generatePdfDefinition(updatedProps)
+          : generatePdfDefinition2(updatedProps);
       pdfMake.createPdf(pdfObject).getBlob((blob) => { 
         const url = URL.createObjectURL(blob); 
         setPdfUrl(url);
@@ -2194,10 +2208,25 @@ export const CreateOrder = () => {
               </Grid>
 
               <Grid item xs={12} md={6} mt={2}>
-                <Select size="small" id="template" name="template" value={template} label="Select Template" onChange={(e) => setTemplate(e.target.value)} required fullWidth>
-                  <MenuItem value={2}>PDF Template 2</MenuItem>
-                  <MenuItem value={1}>PDF Template 1</MenuItem>
+                <Select size="small" id="template" name="template" value={template} label="Select Template"
+                  onChange={(e) => { setTemplate(e.target.value); if (e.target.value === 3) setShowAllTemplates(false); }}
+                  required fullWidth>
+                  {/* Blank — only the invoice, no shop name/address */}
+                  <MenuItem value={3}>Blank — Only Invoice</MenuItem>
+                  {/* Letterhead formats: hidden once Blank is chosen (unless the
+                      operator taps "more formats" below) to keep the picker clean */}
+                  {(template !== 3 || showAllTemplates) && <MenuItem value={2}>Letterhead — Format A</MenuItem>}
+                  {(template !== 3 || showAllTemplates) && <MenuItem value={1}>Letterhead — Format B</MenuItem>}
                 </Select>
+                {template === 3 && !showAllTemplates && (
+                  <Typography
+                    variant="caption"
+                    onClick={() => setShowAllTemplates(true)}
+                    sx={{ display: 'inline-block', mt: 0.5, color: 'primary.main', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Show letterhead formats
+                  </Typography>
+                )}
               </Grid>
 
               <Grid item xs={12} md={6} mt={2}>

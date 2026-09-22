@@ -501,3 +501,82 @@ export const generatePdfDefinition2 = (data) => {
         }
     };
 };
+
+
+// ── Template 3: BLANK — only the invoice ─────────────────────────────────────
+// No shop name, no address, no contact, no footer. Just invoice no / date /
+// customer (shown only if present), the items table, and the grand total.
+export const generatePdfDefinition3 = (data) => {
+    const sortedItems = [...(data.orderItems || [])]
+        .filter(item => item && (item.name || item.altName))
+        .sort((a, b) => {
+            const sa = a.sortOrder !== undefined ? a.sortOrder : 999;
+            const sb = b.sortOrder !== undefined ? b.sortOrder : 999;
+            return sa - sb;
+        });
+
+    // Header lines are added only when the field actually has a value, so a
+    // walk-in bill with no customer stays truly bare. Invoice number is
+    // intentionally NOT shown on the Blank template.
+    const header = [];
+    if (data.orderDate)   header.push({ text: `Date: ${formatPdfDate(data.orderDate)}`, style: 'hdr' });
+    if (data.customerName && String(data.customerName).trim())
+        header.push({ text: `Customer: ${String(data.customerName).trim()}`, style: 'hdr' });
+    if (data.customerMobile && String(data.customerMobile).trim())
+        header.push({ text: `Mobile: ${String(data.customerMobile).trim()}`, style: 'hdrSmall' });
+
+    return {
+        content: [
+            ...header,
+            {
+                style: 'tbl',
+                table: {
+                    headerRows: 1,
+                    widths: ['10%', '42%', '18%', '12%', '18%'],
+                    body: [
+                        [
+                            { text: 'Sr', style: 'th' },
+                            { text: 'Name', style: 'th' },
+                            { text: 'Rate', style: 'th' },
+                            { text: 'Qty', style: 'th' },
+                            { text: 'Amount', style: 'th' }
+                        ],
+                        ...sortedItems.map((item, index) => [
+                            `${index + 1}.`,
+                            (item.altName && item.altName.trim()) ? item.altName.trim() : (item.name || ''),
+                            `₹ ${item.productPrice ?? 0}`,
+                            item.type === 'weighted'
+                                ? { text: `${item.quantity ?? 0} kg`, fontSize: 9 }
+                                : `${item.quantity ?? 0}`,
+                            `₹ ${item.totalPrice ?? 0}`
+                        ]),
+                        [
+                            { text: 'Total', colSpan: 4, bold: true, alignment: 'right' },
+                            {}, {}, {},
+                            { text: `₹ ${data.total}`, bold: true }
+                        ]
+                    ]
+                },
+                layout: {
+                    hLineWidth: () => 1,
+                    vLineWidth: () => 1,
+                    hLineColor: () => 'black',
+                    vLineColor: () => 'black',
+                    paddingLeft: () => 5,
+                    paddingRight: () => 5,
+                    paddingTop: () => 5,
+                    paddingBottom: () => 5
+                }
+            }
+        ],
+        styles: {
+            hdr:      { fontSize: 13, bold: true, margin: [0, 2, 0, 2] },
+            hdrSmall: { fontSize: 12, margin: [0, 0, 0, 2] },
+            tbl:      { fontSize: 13, margin: [0, 12, 0, 0] },
+            th:       { bold: true, alignment: 'left' }
+        },
+        pageSize: 'A4',
+        pageMargins: [40, 40, 40, 40]
+    };
+};
+
