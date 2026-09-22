@@ -75,10 +75,15 @@ module.exports = (sequelize, Sequelize) => {
                 { fields: ['batchNumber'] },
                 { fields: ['isPosted'] },
                 {
+                    // Only ONE ACTIVE (non-reversed) batch per (type, ref).
+                    // isReversed must be in the condition — otherwise a reversed
+                    // old INVOICE batch blocks re-posting a new one after an edit,
+                    // crashing every order edit that touches the ledger.
                     unique: true,
                     fields: ['referenceType', 'referenceId'],
                     where: {
-                        referenceType: ['INVOICE', 'PAYMENT', 'PURCHASE', 'EXPENSE', 'INVOICE_CASH']
+                        referenceType: ['INVOICE', 'PAYMENT', 'PURCHASE', 'EXPENSE', 'INVOICE_CASH'],
+                        isReversed: false
                     },
                     name: 'journal_batches_ref_unique'
                 }

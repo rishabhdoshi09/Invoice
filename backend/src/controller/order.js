@@ -557,7 +557,12 @@ module.exports = {
                         ? updateFields.taxPercent
                         : (typeof originalOrder.taxPercent === 'number' ? originalOrder.taxPercent : 0);
                     const computedTax = round2(computedSubTotal * taxPercent / 100);
-                    const computedTotal = round2(computedSubTotal + computedTax);
+                    // Round the grand total to the nearest rupee — IDENTICAL to the
+                    // create path (Math.round). Using round2 here made an edit
+                    // recompute a paise-different total from the whole-rupee total
+                    // stored at creation, so even a date-only edit looked like a
+                    // total change and triggered a needless ledger reverse/repost.
+                    const computedTotal = Math.round(computedSubTotal + computedTax);
 
                     updateFields.subTotal = computedSubTotal;
                     updateFields.tax = computedTax;
