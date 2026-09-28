@@ -175,10 +175,14 @@ const isNoPriceProduct = (name) => {
   return n === 'y' || n === 'product x';
 };
 
-/* Helper: check if price is in restricted ranges (200-209 or 301-309) for weighted products */
+/* Helper: check if price is in a restricted/blocked pattern (weighted products).
+ * Blocked: 200-209, 301-309, and any price whose LAST TWO digits are 56/57/59
+ * (e.g. 156, 256, 356, 157, 259 …) — these are treated as mis-entries. */
 const isRestrictedPrice = (price) => {
   const numPrice = Number(price);
   if (!Number.isFinite(numPrice)) return false;
+  const lastTwo = numPrice % 100;
+  if (lastTwo === 56 || lastTwo === 57 || lastTwo === 59) return true;
   return (numPrice >= 200 && numPrice <= 209) || (numPrice >= 301 && numPrice <= 309);
 };
 
@@ -565,7 +569,7 @@ export const CreateOrder = () => {
           const numeric = Number(valStr);
           if (numeric < 100 || numeric > 399) { notifyError('Bowl price must be between 100 and 399.'); return; }
           // Block restricted ranges (200-209, 301-309) for weighted/bowl
-          if (isRestrictedPrice(numeric)) { notifyError('Price cannot be in ranges 200-209 or 301-309 for weighted products.'); return; }
+          if (isRestrictedPrice(numeric)) { notifyError('Price not allowed: 200-209, 301-309, or ending in 56/57/59.'); return; }
           values.productPrice = valStr;
         }
       } catch {}
@@ -583,7 +587,7 @@ export const CreateOrder = () => {
         const priceStr = String(priceNumLocal);
         // Block restricted ranges (200-209, 301-309)
         if (isRestrictedPrice(priceNumLocal)) {
-          notifyError('Price cannot be in ranges 200-209 or 301-309 for weighted products.');
+          notifyError('Price not allowed: 200-209, 301-309, or ending in 56/57/59.');
           return;
         }
         if (priceStr.length !== 3 || priceNumLocal < 100 || priceNumLocal > 399) {
