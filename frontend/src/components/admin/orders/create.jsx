@@ -763,7 +763,7 @@ export const CreateOrder = () => {
         const len = val.length;
         if (typeof el.setSelectionRange === 'function') {
           const num = Number(val);
-          if (Number.isFinite(num) && num >= 200 && num <= 299 && len >= 3) {
+          if (Number.isFinite(num) && num >= 200 && num <= 399 && len >= 3) {
             // Select only the TENS digit so keypad/physical typing goes digit-by-digit
             // Phase ref drives keypad placement; physical keyboard auto-advances in onPriceChange
             twoXXPhaseRef.current = 'tens';
@@ -790,7 +790,7 @@ export const CreateOrder = () => {
 
       // 2xx range: place digit at the correct position (tens or units) using phase ref,
       // without relying on DOM selection timing. Then advance selection for next digit.
-      if (!modalOpen && Number.isFinite(num) && num >= 200 && num <= 299 && val.length === 3) {
+      if (!modalOpen && Number.isFinite(num) && num >= 200 && num <= 399 && val.length === 3) {
         const phase = twoXXPhaseRef.current || 'tens';
         const chars = val.split('');
         chars[phase === 'tens' ? 1 : 2] = dStr;
@@ -1002,7 +1002,7 @@ export const CreateOrder = () => {
     // For 200-299: select only the TENS digit and init phase for keypad digit-by-digit editing.
     // Physical typing auto-advances selection to units in onPriceChange.
     const num = Number(val);
-    if (Number.isFinite(num) && num >= 200 && num <= 299 && val.length >= 3) {
+    if (Number.isFinite(num) && num >= 200 && num <= 399 && val.length >= 3) {
       twoXXPhaseRef.current = 'tens';
       const selStart = val.length - 2; // tens position
       const selEnd = val.length - 1;   // just tens, not units
@@ -1127,7 +1127,7 @@ export const CreateOrder = () => {
       // skipPhaseAdvanceRef is set by applyDigitToPrice (keypad) so we don't double-advance.
       if (!skipPhaseAdvanceRef.current) {
         const newNum = Number(rawInput);
-        if (Number.isFinite(newNum) && newNum >= 200 && newNum <= 299 && rawInput.length === 3) {
+        if (Number.isFinite(newNum) && newNum >= 200 && newNum <= 399 && rawInput.length === 3) {
           if (twoXXPhaseRef.current === 'tens') {
             twoXXPhaseRef.current = 'units';
             setTimeout(() => {
