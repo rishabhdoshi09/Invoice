@@ -546,6 +546,23 @@ export const CreateOrder = () => {
     onSubmit: async (values) => {
       lastAddSucceededRef.current = false;
 
+      // RACE FIX: the price field is an uncontrolled input synced to formik on a
+      // 150ms debounce. If the operator hits Add/Enter within that window,
+      // values.productPrice is STALE (the previous price — for a "300" product
+      // that meant it billed at 300 even when the screen showed 315). Flush the
+      // pending debounce and use the LIVE displayed price so the item is always
+      // added at exactly the price shown on screen.
+      try {
+        if (priceUpdateTimeoutRef.current) { clearTimeout(priceUpdateTimeoutRef.current); priceUpdateTimeoutRef.current = null; }
+        const liveEl = modalOpen ? modalPriceRef.current : priceInputRef.current;
+        let liveStr = (liveEl && liveEl.value != null && String(liveEl.value) !== '')
+          ? String(liveEl.value)
+          : (localPriceValue !== '' && localPriceValue != null ? String(localPriceValue) : null);
+        if (liveStr != null && String(liveStr).trim() !== '') {
+          values.productPrice = liveStr.trim();
+        }
+      } catch {}
+
       // HARD BLOCK: do not allow product "add" if switch is OFF
       if (!allowAddProductName && isAddName(values?.name)) {
         notifyError("Product 'add' is disabled. Turn ON the switch to use it.");
@@ -1244,8 +1261,14 @@ export const CreateOrder = () => {
         return;
       }
 
-      // Block single-digit prices for all products except ADD
-      const currentPrice = String(formik.values.productPrice || '').replace(/\D/g, '');
+      // Block single-digit prices for all products except ADD.
+      // Read the LIVE displayed price (not the debounced formik value) so this
+      // check matches exactly what will be billed.
+      const liveEl = modalOpen ? modalPriceRef.current : priceInputRef.current;
+      const livePriceStr = (liveEl && liveEl.value != null && String(liveEl.value) !== '')
+        ? String(liveEl.value)
+        : String(formik.values.productPrice || '');
+      const currentPrice = livePriceStr.replace(/\D/g, '');
       if (!isAddName(formik.values.name) && currentPrice.length < 2) {
         notifyError("Price must be at least 2 digits. Single-digit price not allowed.");
         return;
