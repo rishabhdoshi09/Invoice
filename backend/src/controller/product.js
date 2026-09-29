@@ -74,14 +74,14 @@ function initSerial() {
             console.log("Serial port closed — reconnecting in 5s...");
             connectionStatus = 'disconnected';
             port = null; parser = null;
-            scheduleReconnect(5);
+            scheduleReconnect(2);
         });
 
     } catch (err) {
         console.log("Failed to open serial port:", err.message);
         connectionStatus = 'error';
         port = null; parser = null;
-        scheduleReconnect(5);
+        scheduleReconnect(2);
     }
 }
 

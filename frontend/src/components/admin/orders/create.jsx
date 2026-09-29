@@ -751,26 +751,38 @@ export const CreateOrder = () => {
   
   const isWeightReadOnly = Boolean((isWeighted && fetchedViaScale));
 
+  // Guards so the scale is never read twice at once and can't be flooded by
+  // rapid triggers (frequent "/" presses). Overlapping serial reads are what
+  // was breaking the connection ("Serial port closed — reconnecting").
+  const weightFetchBusyRef = useRef(false);
+  const lastWeightFetchAtRef = useRef(0);
+
   const weighingScaleHandler = useCallback(async () => {
-    const { weight } = await dispatch(fetchWeightsAction());
-    if (weight == null || Number(weight) <= 0) {
-      notifyError("Weight fetched is zero or invalid. Please ensure the scale is ready.");
-      return false;
-    }
-    formik.setFieldValue('quantity', weight);
-    setFetchedViaScale(true);
-    const price = Number(formik.values.productPrice) || 0;
-    formik.setFieldValue('totalPrice', Number((price * weight).toFixed(2)));
-
-    // Silent audit: log this explicit weight capture
+    weightFetchBusyRef.current = true;
+    lastWeightFetchAtRef.current = Date.now();
     try {
-      const token = localStorage.getItem('token');
-      axios.post('/api/audit/weight-captured', { weight }, {
-        headers: { Authorization: `Bearer ${token}` }
-      }).catch(() => {});
-    } catch (e) { /* silent */ }
+      const { weight } = await dispatch(fetchWeightsAction());
+      if (weight == null || Number(weight) <= 0) {
+        notifyError("Weight fetched is zero or invalid. Please ensure the scale is ready.");
+        return false;
+      }
+      formik.setFieldValue('quantity', weight);
+      setFetchedViaScale(true);
+      const price = Number(formik.values.productPrice) || 0;
+      formik.setFieldValue('totalPrice', Number((price * weight).toFixed(2)));
 
-    return true;
+      // Silent audit: log this explicit weight capture
+      try {
+        const token = localStorage.getItem('token');
+        axios.post('/api/audit/weight-captured', { weight }, {
+          headers: { Authorization: `Bearer ${token}` }
+        }).catch(() => {});
+      } catch (e) { /* silent */ }
+
+      return true;
+    } finally {
+      weightFetchBusyRef.current = false;
+    }
   }, [dispatch, formik, notifyError]);
 
   // Helper: focus main price input, with 2xx tens-digit selection
@@ -1400,7 +1412,17 @@ export const CreateOrder = () => {
   useEffect(() => {
     const onKeyDown = (e) => {
       const key=(e.key||'').toLowerCase(); const code=e.code||'';
-      if (key==='/' || code==='Slash') { e.preventDefault(); try{ fetchWeightLatestRef.current && fetchWeightLatestRef.current(); } catch{} }
+      if (key==='/' || code==='Slash') {
+        e.preventDefault();
+        // Don't let frequent "/" presses flood the scale and break the serial:
+        //  - ignore auto-repeat from a held key
+        //  - skip if a read is already running
+        //  - throttle to at most one read every 500ms
+        if (e.repeat) return;
+        if (weightFetchBusyRef.current) return;
+        if (Date.now() - lastWeightFetchAtRef.current < 500) return;
+        try{ fetchWeightLatestRef.current && fetchWeightLatestRef.current(); } catch{}
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
