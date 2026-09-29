@@ -756,19 +756,49 @@ export const CreateOrder = () => {
   // was breaking the connection ("Serial port closed — reconnecting").
   const weightFetchBusyRef = useRef(false);
   const lastWeightFetchAtRef = useRef(0);
+  // Monotonic counter so an older, slower-resolving fetch can't overwrite the
+  // weight a newer fetch already applied (last-writer-wins race).
+  const fetchSeqRef = useRef(0);
 
   const weighingScaleHandler = useCallback(async () => {
+    // Reentrancy guard: never read the scale twice at once. This is THE single
+    // enforcement point for every caller ('/', both Sync buttons, the '='
+    // quick-add, and Add) — overlapping reads both broke the serial link and
+    // let a stale response clobber a fresh weight.
+    if (weightFetchBusyRef.current) return false;
     weightFetchBusyRef.current = true;
     lastWeightFetchAtRef.current = Date.now();
+    const seq = ++fetchSeqRef.current;
     try {
-      const { weight } = await dispatch(fetchWeightsAction());
+      const data = await dispatch(fetchWeightsAction());
+      // A newer fetch superseded us while awaiting — discard this result.
+      if (seq !== fetchSeqRef.current) return false;
+      // Refuse a reading the scale isn't sure about: disconnected/stale, or a
+      // weight that hasn't SETTLED on the pan. fetchWeightsAction already told
+      // the operator why, so we just decline to fill the form. This is what
+      // makes the backend isConnected/isStable flags actually bite — without
+      // it a bouncing or previous-item weight silently reached the bill.
+      if (!data || !data.isConnected || !data.isStable) return false;
+      const weight = data.weight;
       if (weight == null || Number(weight) <= 0) {
         notifyError("Weight fetched is zero or invalid. Please ensure the scale is ready.");
         return false;
       }
       formik.setFieldValue('quantity', weight);
       setFetchedViaScale(true);
-      const price = Number(formik.values.productPrice) || 0;
+      // Use the LIVE displayed price (flush the 150ms debounce) so the Total
+      // shown right after the fetch matches the price on screen — mirrors the
+      // flush in onSubmit. The debounced formik value can lag by a keystroke.
+      let price = Number(formik.values.productPrice) || 0;
+      try {
+        if (priceUpdateTimeoutRef.current) { clearTimeout(priceUpdateTimeoutRef.current); priceUpdateTimeoutRef.current = null; }
+        const liveEl = modalOpen ? modalPriceRef.current : priceInputRef.current;
+        const liveStr = (liveEl && liveEl.value != null && String(liveEl.value) !== '')
+          ? String(liveEl.value)
+          : (localPriceValue !== '' && localPriceValue != null ? String(localPriceValue) : '');
+        const liveNum = Number(String(liveStr).trim());
+        if (Number.isFinite(liveNum) && liveNum > 0) price = liveNum;
+      } catch {}
       formik.setFieldValue('totalPrice', Number((price * weight).toFixed(2)));
 
       // Silent audit: log this explicit weight capture
@@ -783,7 +813,7 @@ export const CreateOrder = () => {
     } finally {
       weightFetchBusyRef.current = false;
     }
-  }, [dispatch, formik, notifyError]);
+  }, [dispatch, formik, notifyError, modalOpen, localPriceValue]);
 
   // Helper: focus main price input, with 2xx tens-digit selection
   const focusMainPriceInput = useCallback(() => {
@@ -1337,39 +1367,36 @@ export const CreateOrder = () => {
         if (!allowAddProductName && isAddName(currentFormik.values.name)) return;
         
         e.preventDefault();
-        
+        // Ignore OS key auto-repeat from a held '=' — otherwise a held key
+        // fires ~30x/sec, each scheduling a fetch+submit.
+        if (e.repeat) return;
+
         // Get quantity from DOM input directly (more reliable than formik state)
         const qtyInput = document.getElementById('quantity');
         const qtyFromDOM = qtyInput ? Number(qtyInput.value) || 0 : 0;
-        
-        const productIsWeighted = currentFormik.values.type === 'weighted' || 
+
+        const productIsWeighted = currentFormik.values.type === 'weighted' ||
           String(currentFormik.values.type || '').toLowerCase() === 'weighted';
-        
+
         if (productIsWeighted) {
           // For weighted products: fetch weight from scale
           // Validate price (3-digit, not in restricted ranges, etc.)
           const priceVal = Number(currentFormik.values.productPrice) || 0;
           const priceString = String(priceVal);
           const isPriceInvalid = priceString.length !== 3 || priceVal < 100 || priceVal > 399;
-          
+
           if (!currentFormik.values.productPrice || isPriceInvalid) return;
-          
-          // Fetch weight
-          const result = await dispatch(fetchWeightsAction());
-          
-          // Check if we got a result with weight
-          const weight = result?.weight;
-          if (weight == null || Number(weight) <= 0) {
-            notifyError("Weight fetched is zero or invalid. Please ensure the scale is ready.");
-            return;
-          }
-          
-          // Set the weight and calculate total
-          currentFormik.setFieldValue('quantity', weight);
-          setFetchedViaScale(true);
-          const price = Number(currentFormik.values.productPrice) || 0;
-          currentFormik.setFieldValue('totalPrice', Number((price * weight).toFixed(2)));
-          
+
+          // Route through the SAME serialized, stability-gated fetch as '/'
+          // (weighingScaleHandler via the latest-callback ref). It inherits the
+          // busy/sequence guards, the isConnected/isStable refusal, and the
+          // live-price total, so '=' can no longer AUTO-SUBMIT a bouncing or
+          // stale weight. Only submit once a fresh, settled weight is in the form.
+          if (weightFetchBusyRef.current) return;
+          if (Date.now() - lastWeightFetchAtRef.current < 500) return;
+          const ok = await (fetchWeightLatestRef.current && fetchWeightLatestRef.current());
+          if (!ok) return; // handler already warned; nothing filled, nothing submitted
+
           // Small delay to ensure state is updated, then submit
           setTimeout(async () => {
             await currentFormik.submitForm();
