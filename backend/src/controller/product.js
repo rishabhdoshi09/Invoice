@@ -5,6 +5,38 @@ let weight = 0;
 let connectionStatus = 'disconnected';
 let lastDataReceived = null;
 
+// Rolling buffer of the most recent raw samples so we can tell a SETTLED
+// reading from a mid-settling one. Grabbing the single last streamed number
+// (old behaviour) meant pressing '/' while the item was still bouncing on the
+// pan, or while the scale had briefly paused, silently returned a wrong weight.
+const samples = []; // [{ value, at }]
+const SAMPLE_WINDOW_MS = 1200;   // only samples this recent count toward stability
+const STABLE_MIN_SAMPLES = 2;    // need at least this many recent samples
+const STABLE_TOLERANCE = 0.03;   // max spread (same unit as scale) to call it settled
+const FRESH_MS = 2500;           // data older than this ⇒ stale (was silently 30s)
+
+function pushSample(value) {
+    const now = Date.now();
+    samples.push({ value, at: now });
+    while (samples.length && now - samples[0].at > SAMPLE_WINDOW_MS) samples.shift();
+    lastDataReceived = now;
+}
+
+// Returns the reading to serve plus whether it has settled.
+function computeReading() {
+    const now = Date.now();
+    const recent = samples.filter((s) => now - s.at <= SAMPLE_WINDOW_MS);
+    if (!recent.length) {
+        return { value: weight, isStable: false };
+    }
+    const values = recent.map((s) => s.value);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const latest = recent[recent.length - 1].value;
+    const isStable = recent.length >= STABLE_MIN_SAMPLES && (max - min) <= STABLE_TOLERANCE;
+    return { value: latest, isStable };
+}
+
 const fs = require('fs');
 const { SerialPort } = require('serialport');
 const { ReadlineParser } = require('@serialport/parser-readline');
@@ -59,7 +91,7 @@ function initSerial() {
             const data = Number(line.trim());
             if (!isNaN(data)) {
                 weight = data;
-                lastDataReceived = Date.now();
+                pushSample(data);
                 connectionStatus = 'connected';
             }
         });
@@ -71,9 +103,10 @@ function initSerial() {
         });
 
         port.on('close', () => {
-            console.log("Serial port closed — reconnecting in 5s...");
+            console.log("Serial port closed — reconnecting in 2s...");
             connectionStatus = 'disconnected';
             port = null; parser = null;
+            samples.length = 0; // don't let pre-disconnect samples look "fresh" after reopen
             scheduleReconnect(2);
         });
 
@@ -228,16 +261,22 @@ module.exports = {
 
     getWeights: async (req, res) => {
         try {
-            // Check if connection seems stale (no data in last 30 seconds while expecting continuous data)
-            const isStale = lastDataReceived && (Date.now() - lastDataReceived > 30000);
+            // A live scale streams several samples/sec, so anything older than a
+            // couple of seconds is a stale cached value — not the current item.
+            const isStale = !lastDataReceived || (Date.now() - lastDataReceived > FRESH_MS);
             const effectiveStatus = isStale ? 'stale' : connectionStatus;
+            const reading = computeReading();
 
             res.set('Cache-Control', 'no-store');
             return res.status(200).send({
                 status: 200,
                 message: 'weights fetched successfully',
-                data: { 
-                    weight: weight,
+                data: {
+                    weight: reading.value,
+                    // True only when the reading has settled AND is fresh — the
+                    // frontend uses this to grab the stable weight, not a
+                    // mid-settling or stale one.
+                    isStable: reading.isStable && !isStale,
                     connectionStatus: effectiveStatus,
                     lastDataReceived: lastDataReceived,
                     isConnected: connectionStatus === 'connected' && !isStale

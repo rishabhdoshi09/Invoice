@@ -124,26 +124,46 @@ export const getOrderAction = (orderId) => {
 
 export const fetchWeightsAction = () => {
     return async(dispatch) => {
+        const delay = (ms) => new Promise((r) => setTimeout(r, ms));
         try{
             dispatch(startLoading());
-            const { data: { data }} = await fetchWeights();
+
+            // Poll briefly for a SETTLED reading instead of taking the first
+            // (possibly mid-settling) value the scale happens to be streaming.
+            // Returns as soon as it's stable; bounded so fast billing isn't slowed.
+            const MAX_ATTEMPTS = 4;
+            const GAP_MS = 120;
+            let data = null;
+            for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+                ({ data: { data } } = await fetchWeights());
+                // Stop early once we have a fresh, settled reading.
+                if (data && data.isConnected && data.isStable) break;
+                // No point retrying if the scale isn't connected at all.
+                if (data && !data.isConnected) break;
+                if (attempt < MAX_ATTEMPTS - 1) await delay(GAP_MS);
+            }
+
             dispatch(stopLoading());
-            
+
             // Check connection status
-            if (!data.isConnected) {
-                const statusMsg = data.connectionStatus === 'disconnected' 
+            if (!data || !data.isConnected) {
+                const statusMsg = (data && data.connectionStatus === 'disconnected')
                     ? '⚠️ Scale disconnected! Check RS232 connection.'
-                    : data.connectionStatus === 'error'
+                    : (data && data.connectionStatus === 'error')
                     ? '❌ Scale connection error! Check cable and restart.'
-                    : data.connectionStatus === 'stale'
+                    : (data && data.connectionStatus === 'stale')
                     ? '⚠️ Scale not responding! No data received recently. Check connection.'
                     : '⚠️ Scale connection issue!';
                 dispatch(setNotification({ open: true, severity: 'warning', message: statusMsg }));
+            } else if (!data.isStable) {
+                // Connected & fresh, but the weight hasn't settled — warn so a
+                // bouncing/half-placed item isn't billed at the wrong weight.
+                dispatch(setNotification({ open: true, severity: 'warning', message: '⚠️ Weight not settled — let the item rest on the scale and fetch again.' }));
             } else {
                 dispatch(setNotification({ open: true, severity: 'success', message: 'Weight fetched successfully'}));
             }
-            
-            return data;
+
+            return data || {};
         }
         catch(error){
             console.log(error);
