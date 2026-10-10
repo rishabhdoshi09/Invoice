@@ -9,6 +9,12 @@ const { createScaleReader } = require('../utils/scaleReader');
 // Settling/freshness logic lives in the pure, unit-tested scale reader.
 const reader = createScaleReader();
 
+// Scale log lines carry the time, so USB drop-outs can be matched against what
+// was happening (sleep, unlock, cable bumped) and how often they occur.
+function scaleLog(...parts) {
+    console.log(`[SCALE ${new Date().toLocaleTimeString("en-GB", { hour12: false })}]`, ...parts);
+}
+
 let connectionStatus = 'disconnected';
 let port = null;
 let parser = null;
@@ -68,17 +74,17 @@ function initSerial() {
         connectionStatus = 'disconnected';
         if (!deviceMissingSince) {
             deviceMissingSince = Date.now();
-            console.log("Scale USB device not found — will reconnect automatically as soon as it is back");
+            scaleLog("Scale USB device not found — will reconnect automatically as soon as it is back");
         }
         scheduleReconnect(DEVICE_POLL_SEC);
         return;
     }
     if (deviceMissingSince) {
-        console.log(`Scale USB device back after ${Math.round((Date.now() - deviceMissingSince) / 1000)}s`);
+        scaleLog(`Scale USB device back after ${Math.round((Date.now() - deviceMissingSince) / 1000)}s`);
         deviceMissingSince = 0;
     }
 
-    console.log("Serial device found → opening:", devPath);
+    scaleLog("Serial device found → opening:", devPath);
     try {
         const p = new SerialPort({ path: devPath, baudRate: 9600 });
         const lineParser = p.pipe(new ReadlineParser({ delimiter: '\n' }));
@@ -90,7 +96,7 @@ function initSerial() {
 
         p.on('open', () => {
             if (!isCurrent()) return;
-            console.log("Serial port opened successfully");
+            scaleLog("Serial port opened successfully");
             connectionStatus = 'connected';
             openedAt = Date.now();
         });
@@ -101,17 +107,17 @@ function initSerial() {
             if (!result) return; // blank/non-numeric line — see parseLine
             connectionStatus = 'connected';
             if (result.becameContinuous) {
-                console.log("Scale streams continuously");
+                scaleLog("Scale streams continuously");
             }
             if (silentSince) {
-                console.log(`Scale data resumed after ${Math.round((Date.now() - silentSince) / 1000)}s of silence`);
+                scaleLog(`Scale data resumed after ${Math.round((Date.now() - silentSince) / 1000)}s of silence`);
                 silentSince = 0;
             }
         });
 
         p.on('error', (e) => {
             if (!isCurrent()) return;
-            console.log("SerialPort Error:", e.message);
+            scaleLog("SerialPort Error:", e.message);
             connectionStatus = 'error';
             // A 'close' normally follows on unplug and reconnects there. Some
             // errors (transient I/O, or a failed async open) fire WITHOUT a
@@ -132,14 +138,14 @@ function initSerial() {
             const why = err && err.disconnected
                 ? `USB device disconnected (${err.message})`
                 : 'closed';
-            console.log(`Serial port ${why} — reconnecting in ${delay}s...`);
+            scaleLog(`Serial port ${why} — reconnecting in ${delay}s...`);
             connectionStatus = 'disconnected';
             teardown();
             scheduleReconnect(delay);
         });
 
     } catch (err) {
-        console.log("Failed to open serial port:", err.message);
+        scaleLog("Failed to open serial port:", err.message);
         connectionStatus = 'error';
         teardown();
         scheduleReconnect(2);
@@ -152,7 +158,7 @@ setInterval(() => {
     const since = reader.lastAt() || openedAt;
     if (!since || Date.now() - since <= SILENCE_LOG_MS) return;
     silentSince = since;
-    console.log(`Scale port is open but has sent no data for ${Math.round((Date.now() - since) / 1000)}s — if weight fetch keeps failing, replug the scale's USB`);
+    scaleLog(`Scale port is open but has sent no data for ${Math.round((Date.now() - since) / 1000)}s — if weight fetch keeps failing, replug the scale's USB`);
 }, 1000).unref();
 
 initSerial();

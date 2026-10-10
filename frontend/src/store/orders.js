@@ -153,7 +153,7 @@ export const fetchWeightsAction = () => {
             // Check connection status
             if (!data || !data.isConnected) {
                 const statusMsg = (data && data.devicePresent === false)
-                    ? '⚠️ Scale not detected! Check the USB cable.'
+                    ? '⚠️ The Mac cannot see the scale right now (USB dropped). It reconnects automatically — re-seat the cable/adapter if this continues.'
                     : (data && data.recovering)
                     ? '⚠️ Scale reconnecting — fetch again in a moment.'
                     : (data && data.connectionStatus === 'error')
