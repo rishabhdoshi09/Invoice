@@ -14,15 +14,16 @@ let port = null;
 let parser = null;
 let reconnectTimer = null;
 
-// Stall watchdog. Some scale + USB-serial setups silently stop delivering data
-// while the port stays open (no 'error', no 'close'); only a replug brought it
-// back. For a scale that streams continuously, prolonged silence is abnormal,
-// so the watchdog reopens the port itself — a software replug.
-const WATCHDOG_INTERVAL_MS = 500;
-const STALL_REOPEN_DELAY_SEC = 0.3;
-let stallAttempts = 0;      // consecutive automatic reopens without data since
-let reopeningForStall = false;
-let lastOpenAt = 0;
+// Silence diagnostic — LOG ONLY, it never touches the port. A stall watchdog
+// that reopened silent ports was removed: it looped forever on scales sending
+// more than ~1.2 s apart, could leave the port dead after a failed close, and
+// misfired when the event loop was busy. Field logs only ever showed the USB
+// device itself disconnecting, which the close/reconnect path handles. This
+// records whether a port ever goes silent while open, so that can be judged
+// on evidence.
+const SILENCE_LOG_MS = 3000;
+let openedAt = 0;
+let silentSince = 0;
 
 // While the scale's USB device is missing from /dev, look for it every second
 // so a replugged scale works again almost immediately (was every 10 s).
@@ -58,6 +59,7 @@ function scheduleReconnect(delaySec = 5) {
 function teardown() {
     port = null; parser = null;
     reader.reset();
+    silentSince = 0;
 }
 
 function initSerial() {
@@ -90,7 +92,7 @@ function initSerial() {
             if (!isCurrent()) return;
             console.log("Serial port opened successfully");
             connectionStatus = 'connected';
-            lastOpenAt = Date.now();
+            openedAt = Date.now();
         });
 
         lineParser.on('data', (line) => {
@@ -99,12 +101,11 @@ function initSerial() {
             if (!result) return; // blank/non-numeric line — see parseLine
             connectionStatus = 'connected';
             if (result.becameContinuous) {
-                const gap = reader.typicalGapMs();
-                console.log(`Scale streams continuously${gap ? ` (~${Math.round(1000 / gap)} readings/s)` : ''} — stall watchdog armed`);
+                console.log("Scale streams continuously");
             }
-            if (stallAttempts > 0) {
-                console.log("Scale stream recovered after automatic reopen");
-                stallAttempts = 0;
+            if (silentSince) {
+                console.log(`Scale data resumed after ${Math.round((Date.now() - silentSince) / 1000)}s of silence`);
+                silentSince = 0;
             }
         });
 
@@ -125,8 +126,7 @@ function initSerial() {
 
         p.on('close', (err) => {
             if (!isCurrent()) return;
-            const delay = reopeningForStall ? STALL_REOPEN_DELAY_SEC : 1;
-            reopeningForStall = false;
+            const delay = 1;
             // serialport passes a DisconnectedError when the USB device itself
             // vanished (cable, port, power or driver) — distinct from a close.
             const why = err && err.disconnected
@@ -147,19 +147,13 @@ function initSerial() {
 }
 
 setInterval(() => {
-    if (!port || !port.isOpen || reconnectTimer || reopeningForStall) return;
-    const now = Date.now();
-    if (!reader.shouldReopen(now, lastOpenAt, stallAttempts)) return;
-    const last = reader.lastAt();
-    stallAttempts += 1;
-    console.log(`Scale stream stalled (no data for ${now - Math.max(last || 0, lastOpenAt)} ms) — reopening port automatically (attempt ${stallAttempts})`);
-    reopeningForStall = true;
-    port.close((err) => {
-        if (!err) return; // 'close' handler takes it from here
-        console.log("Automatic reopen failed to close port:", err.message);
-        reopeningForStall = false; // next tick retries, backed off by stallAttempts
-    });
-}, WATCHDOG_INTERVAL_MS).unref();
+    // Silence is only abnormal for a scale known to stream continuously.
+    if (silentSince || !port || !port.isOpen || !reader.isContinuous()) return;
+    const since = reader.lastAt() || openedAt;
+    if (!since || Date.now() - since <= SILENCE_LOG_MS) return;
+    silentSince = since;
+    console.log(`Scale port is open but has sent no data for ${Math.round((Date.now() - since) / 1000)}s — if weight fetch keeps failing, replug the scale's USB`);
+}, 1000).unref();
 
 initSerial();
 
@@ -332,7 +326,7 @@ module.exports = {
                     // Lets the frontend fail fast when the cable is unplugged
                     // instead of waiting for a recovery that can't happen.
                     devicePresent: Boolean(devPath && fs.existsSync(devPath)),
-                    recovering: Boolean(reconnectTimer) || reopeningForStall,
+                    recovering: Boolean(reconnectTimer),
                     streamMode: reader.isContinuous() ? 'continuous' : 'unknown'
                 }
             });

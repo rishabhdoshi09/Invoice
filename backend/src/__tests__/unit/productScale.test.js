@@ -97,34 +97,50 @@ test('the next item settles after an addition without a replug', () => {
     expect(instances).toHaveLength(1); // no reopen was needed
 });
 
-test('a silently stalled stream is reopened automatically and the old weight is never served', () => {
-    const first = instances[0];
-    first.simulateOpen();
-    stream(first, repeat('2.500', 20)); // continuous: watchdog armed
+test('a silent port is never closed by the app: reported stale, logged once, recovers on data', () => {
+    const logs = () => console.log.mock.calls.map((c) => c.join(' '));
+    const p = instances[0];
+    p.simulateOpen();
+    stream(p, repeat('2.500', 20)); // continuous
     expect(readWeights().weight).toBe(2.5);
 
-    // Stream stalls: port stays open, no data, no error, no close.
-    jest.advanceTimersByTime(700);
+    // Port stays open but sends nothing for 10 s.
+    jest.advanceTimersByTime(10000);
     expect(readWeights()).toMatchObject({ weight: 0, isConnected: false, isStable: false });
+    expect(p.isOpen).toBe(true);
+    expect(instances).toHaveLength(1); // no automatic reopen
+    expect(logs().filter((l) => l.includes('sent no data'))).toHaveLength(1);
 
-    jest.advanceTimersByTime(1000); // watchdog fires (~1.2 s of silence)
-    expect(first.isOpen).toBe(false);
-
-    jest.advanceTimersByTime(400); // fast reconnect (0.3 s)
-    expect(instances).toHaveLength(2);
-    const second = instances[1];
-    second.simulateOpen();
-    expect(readWeights()).toMatchObject({ weight: 0, isStable: false }); // nothing from before the stall
-
-    stream(second, repeat('1.200', 6));
+    // Data resumes: the new item settles; the resumption is logged.
+    stream(p, repeat('1.200', 6));
     expect(readWeights()).toMatchObject({ weight: 1.2, isStable: true, isConnected: true });
+    expect(logs().some((l) => l.includes('resumed after'))).toBe(true);
+});
+
+test('a slow, bursty scale (3 lines every ~1.65 s) is never reopened and still settles', () => {
+    const p = instances[0];
+    p.simulateOpen();
+    let stablePolls = 0;
+    for (let k = 0; k < 20; k++) { // ~33 s; period not a multiple of any timer tick
+        jest.advanceTimersByTime(1647);
+        ['2.000', '2.000', '2.000'].forEach((l) => { jest.advanceTimersByTime(1); p.simulateLine(l); });
+        if (readWeights().isStable) stablePolls++;
+    }
+    expect(instances).toHaveLength(1);
+    expect(stablePolls).toBeGreaterThan(15);
 });
 
 test('events from the previous port instance cannot affect the new one', () => {
     const first = instances[0];
     first.simulateOpen();
     stream(first, repeat('2.500', 20));
-    jest.advanceTimersByTime(1800); // stall -> watchdog close -> reconnect
+    // Unplug and replug creates a second port instance.
+    global.__scalePresent = false;
+    first.simulateUnplug();
+    jest.advanceTimersByTime(2000);
+    global.__scalePresent = true;
+    jest.advanceTimersByTime(1100);
+    expect(instances).toHaveLength(2);
     const second = instances[1];
     second.simulateOpen();
     stream(second, repeat('1.200', 6));
@@ -133,8 +149,8 @@ test('events from the previous port instance cannot affect the new one', () => {
     first.simulateLine('9.999');
     first.emit('close');
     expect(readWeights()).toMatchObject({ weight: 1.2, isStable: true, isConnected: true });
-    // Keep the live port streaming past the 2 s reconnect a stale close would
-    // have scheduled (silence here would legitimately trip the watchdog).
+    // Keep the live port streaming past the reconnect a stale close would
+    // have scheduled.
     stream(second, repeat('1.200', 30));
     expect(instances).toHaveLength(2); // the stale close did not trigger a reconnect
     expect(readWeights()).toMatchObject({ weight: 1.2, isStable: true, isConnected: true });

@@ -108,12 +108,43 @@ describe('scaleReader — freshness and stalls', () => {
     test('reset drops readings but keeps what was learned about the scale', () => {
         const r = createScaleReader();
         feed(r, repeat('2.000', 12), 0);
-        const gap = r.typicalGapMs();
+        const gap = r.regularGapMs();
         r.reset();
         expect(r.read(5000, true)).toMatchObject({ value: 0, isStable: false, isFresh: false });
         expect(r.lastAt()).toBeNull();
         expect(r.isContinuous()).toBe(true);
-        expect(r.typicalGapMs()).toBe(gap);
+        expect(r.regularGapMs()).toBe(gap);
+    });
+
+    test('a buffered pre-stall reading on resume is not served as settled', () => {
+        const r = createScaleReader();
+        const t = feed(r, repeat('2.500', 25), 0); // item A, fast continuous stream
+        // Stream stalls for 1 s; the first line delivered on resume is a
+        // leftover reading of A, while the pan now holds B.
+        r.ingest('2.500', t + 1000);
+        expect(r.read(t + 1040, true)).toMatchObject({ value: 2.5, isFresh: true, isStable: false });
+        // Live readings of B take over and settle on their own.
+        const tB = feed(r, repeat('1.200', 5), t + 1100);
+        expect(r.read(tB, true)).toMatchObject({ value: 1.2, isStable: true });
+    });
+
+    test('bursty delivery is not mistaken for a stalled stream', () => {
+        const r = createScaleReader();
+        // The driver hands over 3 lines at once, once a second.
+        let last = 0;
+        for (let k = 0; k < 10; k++) {
+            for (let j = 0; j < 3; j++) { last = k * 1000 + j; r.ingest('2.000', last); }
+        }
+        expect(r.isContinuous()).toBe(true);
+        // 900 ms after the last burst the reading is still current.
+        expect(r.read(last + 900, true)).toMatchObject({ isFresh: true, isStable: true, value: 2 });
+    });
+
+    test('a slow continuous scale never gets a looser limit than the 2.5 s default', () => {
+        const r = createScaleReader();
+        feed(r, repeat('1.000', 8), 0, 1000); // 1 Hz
+        expect(r.isContinuous()).toBe(true);
+        expect(r.staleAfterMs()).toBe(2500);
     });
 });
 
@@ -141,43 +172,3 @@ describe('scaleReader — line parsing', () => {
     });
 });
 
-describe('scaleReader — stall watchdog', () => {
-    function continuousReader() {
-        const r = createScaleReader();
-        const t = feed(r, repeat('0.000', 20), 0); // 100 ms gaps
-        return { r, t };
-    }
-
-    test('is not armed until the scale has shown it streams continuously', () => {
-        const r = createScaleReader();
-        // Every reading differs: looks like a send-on-change scale.
-        const t = feed(r, ['1.0', '1.1', '1.2', '1.3', '1.4', '1.5'], 0);
-        expect(r.isContinuous()).toBe(false);
-        expect(r.shouldReopen(t + 60000, 0, 0)).toBe(false);
-    });
-
-    test('reopens a continuous stream after ~1.2 s of silence', () => {
-        const { r, t } = continuousReader();
-        expect(r.shouldReopen(t + 1100, 0, 0)).toBe(false);
-        expect(r.shouldReopen(t + 1300, 0, 0)).toBe(true);
-    });
-
-    test('backs off after failed reopens, measured from the last open', () => {
-        const { r, t } = continuousReader();
-        r.reset(); // port reopened at `openedAt`, no data yet
-        const openedAt = t + 1300;
-        expect(r.shouldReopen(openedAt + 2000, openedAt, 1)).toBe(false); // threshold 2400
-        expect(r.shouldReopen(openedAt + 2500, openedAt, 1)).toBe(true);
-        // Capped at 16x.
-        expect(r.shouldReopen(openedAt + 19000, openedAt, 10)).toBe(false);
-        expect(r.shouldReopen(openedAt + 19300, openedAt, 10)).toBe(true);
-    });
-
-    test('a slow continuous scale gets a proportionally longer stall limit', () => {
-        const r = createScaleReader();
-        const t = feed(r, repeat('1.000', 8), 0, 1000); // 1 Hz
-        expect(r.isContinuous()).toBe(true);
-        expect(r.shouldReopen(t + 3500, 0, 0)).toBe(false); // 4 x 1000 ms
-        expect(r.shouldReopen(t + 4100, 0, 0)).toBe(true);
-    });
-});

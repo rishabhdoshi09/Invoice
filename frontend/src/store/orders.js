@@ -140,7 +140,9 @@ export const fetchWeightsAction = () => {
             let data = null;
             for (;;) {
                 ({ data: { data } } = await fetchWeights());
-                if (data && data.isConnected && data.isStable) break;
+                // A settled 0 is the empty pan: '/' pressed while the item is
+                // still being placed. Keep waiting for the item to land.
+                if (data && data.isConnected && data.isStable && Number(data.weight) > 0) break;
                 if (data && data.devicePresent === false) break;
                 if (Date.now() - startedAt + GAP_MS > DEADLINE_MS) break;
                 await delay(GAP_MS);
@@ -162,6 +164,8 @@ export const fetchWeightsAction = () => {
                 // Connected & fresh, but still moving after the wait — refuse so
                 // a bouncing/half-placed item isn't billed at the wrong weight.
                 dispatch(setNotification({ open: true, severity: 'warning', message: '⚠️ Weight not settled — hold the item still and fetch again.' }));
+            } else if (!(Number(data.weight) > 0)) {
+                dispatch(setNotification({ open: true, severity: 'warning', message: '⚠️ Scale reads 0 — place the item on the scale and fetch again.' }));
             } else {
                 dispatch(setNotification({ open: true, severity: 'success', message: 'Weight fetched successfully'}));
             }

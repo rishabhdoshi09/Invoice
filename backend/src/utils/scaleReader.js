@@ -16,13 +16,16 @@
  *     window, so after each addition the PREVIOUS item's readings kept the next
  *     item "unsettled" for seconds — only replugging (which cleared the buffer)
  *     made it work again.
+ *     The run also stops at any silence longer than the staleness limit: when a
+ *     stalled stream resumes, the first line delivered is often a buffered
+ *     pre-stall reading of the previous item, which says nothing about the pan
+ *     now.
  *
  *  2. Is it FRESH?  A continuously-streaming scale repeats an unchanged weight
  *     several times a second, so silence means the stream has stalled and the
  *     cached value must not be billed. Once the scale is known to stream
- *     continuously, the staleness limit tightens to a few typical sample gaps,
- *     which keeps the window for billing a stalled (previous-item) value far
- *     shorter than it takes to swap and settle an item.
+ *     continuously, the staleness limit tightens to a few of its longest regular
+ *     gaps — never looser than the 2.5 s default.
  */
 
 const DEFAULTS = {
@@ -30,18 +33,14 @@ const DEFAULTS = {
     stableTolerance: 0.03,   // max spread within a run (scale units, kg)
     stableMinSamples: 2,     // a run needs at least this many readings
     settleMs: 400,           // ...spanning at least this long, to count as settled
-    freshMs: 2500,           // staleness limit while the stream rate is unknown
+    freshMs: 2500,           // staleness limit while the rate is unknown, and the ceiling
     minFreshMs: 600,         // tightest staleness limit for a fast continuous stream
-    maxFreshMs: 3000,        // loosest staleness limit for a slow continuous stream
-    freshGapMultiple: 3,     // continuous: stale after this many typical gaps of silence
-    stallMs: 1200,           // watchdog: minimum silence before reopening the port
-    stallGapMultiple: 4,     // ...or this many typical gaps, whichever is longer
-    maxStallBackoff: 4,      // failed reopens back off up to 2^4 = 16x
+    freshGapMultiple: 3,     // continuous: stale after this many regular gaps of silence
     repeatGapMs: 1000,       // identical readings closer than this count as a repeat
     continuousRepeats: 3,    // this many back-to-back identical readings => continuous
-    gapCapMs: 5000,          // ignore longer gaps when learning the sample rate
-    maxGaps: 15,             // learn the rate from this many recent gaps
-    minGaps: 5,              // need this many gaps before trusting the learned rate
+    gapCapMs: 5000,          // ignore longer gaps when learning the stream's rhythm
+    maxGaps: 15,             // learn the rhythm from this many recent gaps
+    minGaps: 5,              // need this many gaps before trusting it
 };
 
 // Strict parse: the whole trimmed line must be a finite number. Blank lines are
@@ -57,20 +56,23 @@ function parseLine(line) {
 function createScaleReader(options = {}) {
     const cfg = { ...DEFAULTS, ...options };
     const samples = []; // { value, at }
-    const gaps = [];    // recent inter-sample gaps (ms) — a property of the scale
+    const gaps = [];    // recent inter-reading gaps (ms) — a property of the scale
     let continuous = false; // sticky: the scale has shown it streams continuously
     let identicalRun = 0;
 
-    function typicalGapMs() {
+    // The 90th-percentile gap, not the median: when the driver delivers lines
+    // in bursts (gaps of ~0 ms, then one long gap), the long gap is the
+    // stream's real rhythm and must not read as a stall.
+    function regularGapMs() {
         if (gaps.length < cfg.minGaps) return null;
         const sorted = [...gaps].sort((a, b) => a - b);
-        return sorted[Math.floor(sorted.length / 2)]; // median: robust to hiccups
+        return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))];
     }
 
     function staleAfterMs() {
-        const g = typicalGapMs();
+        const g = regularGapMs();
         if (!continuous || g == null) return cfg.freshMs;
-        return Math.min(cfg.maxFreshMs, Math.max(cfg.minFreshMs, cfg.freshGapMultiple * g));
+        return Math.min(cfg.freshMs, Math.max(cfg.minFreshMs, cfg.freshGapMultiple * g));
     }
 
     /**
@@ -110,8 +112,9 @@ function createScaleReader(options = {}) {
         if (!latest) {
             return { value: 0, isStable: false, isFresh: false, msSinceData: null, runSpanMs: 0 };
         }
+        const staleAfter = staleAfterMs();
         const msSinceData = now - latest.at;
-        const isFresh = Boolean(connected) && msSinceData <= staleAfterMs();
+        const isFresh = Boolean(connected) && msSinceData <= staleAfter;
 
         // Current settled run — see the module comment.
         let lo = latest.value;
@@ -120,6 +123,7 @@ function createScaleReader(options = {}) {
         let count = 1;
         for (let i = samples.length - 2; i >= 0; i--) {
             const s = samples[i];
+            if (start.at - s.at > staleAfter) break; // the stream stalled between these
             const nlo = Math.min(lo, s.value);
             const nhi = Math.max(hi, s.value);
             if (nhi - nlo > cfg.stableTolerance) break;
@@ -131,25 +135,8 @@ function createScaleReader(options = {}) {
         return { value: latest.value, isStable: settled && isFresh, isFresh, msSinceData, runSpanMs };
     }
 
-    /**
-     * Watchdog decision: has a continuous stream gone silent long enough that
-     * the port should be reopened (the software equivalent of replugging)?
-     * Silence is measured from the later of the last reading and the last
-     * (re)open; each consecutive failed reopen doubles the wait.
-     */
-    function shouldReopen(now, openedAt, attempts) {
-        if (!continuous) return false; // silence is only abnormal for a continuous stream
-        const last = samples.length ? samples[samples.length - 1].at : 0;
-        const ref = Math.max(last, openedAt || 0);
-        if (!ref) return false;
-        const g = typicalGapMs();
-        const base = Math.max(cfg.stallMs, g == null ? 0 : cfg.stallGapMultiple * g);
-        const threshold = base * Math.pow(2, Math.min(attempts || 0, cfg.maxStallBackoff));
-        return now - ref > threshold;
-    }
-
     // Drop buffered readings (port closed/reopened). The scale's learned traits
-    // — continuous streaming and its sample rate — are kept.
+    // — continuous streaming and its rhythm — are kept.
     function reset() {
         samples.length = 0;
         identicalRun = 0;
@@ -158,11 +145,10 @@ function createScaleReader(options = {}) {
     return {
         ingest,
         read,
-        shouldReopen,
         reset,
         lastAt: () => (samples.length ? samples[samples.length - 1].at : null),
         isContinuous: () => continuous,
-        typicalGapMs,
+        regularGapMs,
         staleAfterMs,
     };
 }
