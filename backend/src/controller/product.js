@@ -24,6 +24,11 @@ let stallAttempts = 0;      // consecutive automatic reopens without data since
 let reopeningForStall = false;
 let lastOpenAt = 0;
 
+// While the scale's USB device is missing from /dev, look for it every second
+// so a replugged scale works again almost immediately (was every 10 s).
+const DEVICE_POLL_SEC = 1;
+let deviceMissingSince = 0;
+
 // Auto-detect serial device: prefer env var, then scan /dev for usbserial/wchusbserial
 function detectSerialPort() {
     if (process.env.SERIAL_PORT) return process.env.SERIAL_PORT;
@@ -59,8 +64,16 @@ function initSerial() {
     const devPath = detectSerialPort();
     if (!devPath || !fs.existsSync(devPath)) {
         connectionStatus = 'disconnected';
-        scheduleReconnect(10); // device not plugged in — check again in 10s
+        if (!deviceMissingSince) {
+            deviceMissingSince = Date.now();
+            console.log("Scale USB device not found — will reconnect automatically as soon as it is back");
+        }
+        scheduleReconnect(DEVICE_POLL_SEC);
         return;
+    }
+    if (deviceMissingSince) {
+        console.log(`Scale USB device back after ${Math.round((Date.now() - deviceMissingSince) / 1000)}s`);
+        deviceMissingSince = 0;
     }
 
     console.log("Serial device found → opening:", devPath);
@@ -110,11 +123,16 @@ function initSerial() {
             }
         });
 
-        p.on('close', () => {
+        p.on('close', (err) => {
             if (!isCurrent()) return;
-            const delay = reopeningForStall ? STALL_REOPEN_DELAY_SEC : 2;
+            const delay = reopeningForStall ? STALL_REOPEN_DELAY_SEC : 1;
             reopeningForStall = false;
-            console.log(`Serial port closed — reconnecting in ${delay}s...`);
+            // serialport passes a DisconnectedError when the USB device itself
+            // vanished (cable, port, power or driver) — distinct from a close.
+            const why = err && err.disconnected
+                ? `USB device disconnected (${err.message})`
+                : 'closed';
+            console.log(`Serial port ${why} — reconnecting in ${delay}s...`);
             connectionStatus = 'disconnected';
             teardown();
             scheduleReconnect(delay);

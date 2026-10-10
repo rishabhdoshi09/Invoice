@@ -27,6 +27,12 @@ jest.mock('serialport', () => {
         // test helpers
         simulateOpen() { this.isOpen = true; this.emit('open'); }
         simulateLine(line) { this.dest.emit('data', line); }
+        // Real serialport v12 emits 'close' with a DisconnectedError when the
+        // USB device vanishes.
+        simulateUnplug() {
+            this.isOpen = false;
+            this.emit('close', Object.assign(new Error('Port is not open'), { disconnected: true }));
+        }
     }
     return { SerialPort, __instances: instances };
 });
@@ -139,6 +145,30 @@ test('reports the device as absent when the cable is unplugged', () => {
     p.simulateOpen();
     stream(p, repeat('2.500', 8));
     global.__scalePresent = false;
-    p.close();
+    p.simulateUnplug();
     expect(readWeights()).toMatchObject({ weight: 0, isConnected: false, devicePresent: false });
+});
+
+test('a replugged scale reconnects within about a second, and the logs say why', () => {
+    const logs = () => console.log.mock.calls.map((c) => c.join(' '));
+    const p = instances[0];
+    p.simulateOpen();
+    stream(p, repeat('2.500', 8));
+
+    global.__scalePresent = false;
+    p.simulateUnplug();
+    expect(logs().some((l) => l.includes('USB device disconnected'))).toBe(true);
+
+    jest.advanceTimersByTime(5000); // unplugged for 5 s
+    expect(instances).toHaveLength(1);
+    expect(logs().filter((l) => l.includes('USB device not found'))).toHaveLength(1); // logged once, not every poll
+
+    global.__scalePresent = true; // plugged back in
+    jest.advanceTimersByTime(1100);
+    expect(instances).toHaveLength(2);
+    expect(logs().some((l) => l.includes('USB device back after'))).toBe(true);
+
+    instances[1].simulateOpen();
+    stream(instances[1], repeat('3.100', 6));
+    expect(readWeights()).toMatchObject({ weight: 3.1, isStable: true, isConnected: true, devicePresent: true });
 });
