@@ -37,6 +37,11 @@ jest.mock('serialport', () => {
     return { SerialPort, __instances: instances };
 });
 
+// The USB-bus check shells out to macOS `ioreg`; drive it from the test.
+jest.mock('../../utils/usbDiagnostics', () => ({
+    checkSerialChip: jest.fn((cb) => cb(global.__chipPresent === undefined ? null : global.__chipPresent)),
+}));
+
 jest.mock('@serialport/parser-readline', () => {
     const { EventEmitter } = require('events');
     return { ReadlineParser: class extends EventEmitter {} };
@@ -75,6 +80,28 @@ afterEach(() => {
     jest.useRealTimers();
     console.log.mockRestore();
     delete process.env.SERIAL_PORT;
+    delete global.__chipPresent;
+});
+
+test('when the port goes missing, the log says which layer dropped it', () => {
+    const logs = () => console.log.mock.calls.map((c) => c.join(' '));
+    const p = instances[0];
+    p.simulateOpen();
+    stream(p, repeat('2.500', 8));
+
+    // Driver drops the port while the cable's chip stays on the USB bus.
+    global.__scalePresent = false;
+    global.__chipPresent = true;
+    p.simulateUnplug();
+    jest.advanceTimersByTime(3000);
+    expect(logs().filter((l) => l.includes('driver dropped the port'))).toHaveLength(1);
+
+    // Later the chip vanishes too: reported on the next ~10 s recheck, once.
+    global.__chipPresent = false;
+    jest.advanceTimersByTime(25000);
+    expect(logs().filter((l) => l.includes("NOT on the Mac's USB bus"))).toHaveLength(1);
+    expect(logs().filter((l) => l.includes('driver dropped the port'))).toHaveLength(1);
+    expect(logs().every((l) => l.startsWith('[SCALE '))).toBe(true);
 });
 
 test('serves a settled weight, and refuses it while the item is moving', () => {

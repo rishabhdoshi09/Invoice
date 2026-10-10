@@ -5,6 +5,7 @@ const fs = require('fs');
 const { SerialPort } = require('serialport');
 const { ReadlineParser } = require('@serialport/parser-readline');
 const { createScaleReader } = require('../utils/scaleReader');
+const { checkSerialChip } = require('../utils/usbDiagnostics');
 
 // Settling/freshness logic lives in the pure, unit-tested scale reader.
 const reader = createScaleReader();
@@ -34,7 +35,22 @@ let silentSince = 0;
 // While the scale's USB device is missing from /dev, look for it every second
 // so a replugged scale works again almost immediately (was every 10 s).
 const DEVICE_POLL_SEC = 1;
+const CHIP_RECHECK_POLLS = 10; // while missing, recheck the USB bus every ~10 s
 let deviceMissingSince = 0;
+let missingPolls = 0;
+let lastChipState = null;
+
+// While the port is missing, log which layer dropped it — but only when the
+// answer changes, so a long outage doesn't flood the log.
+function reportChipState() {
+    checkSerialChip((present) => {
+        if (present === null || !deviceMissingSince || present === lastChipState) return;
+        lastChipState = present;
+        scaleLog(present
+            ? "…the cable's USB chip IS still connected to the Mac, so the CH340 driver dropped the port (driver problem, not the cable)"
+            : "…the cable's USB chip is NOT on the Mac's USB bus either (cable/USB connection problem)");
+    });
+}
 
 // Auto-detect serial device: prefer env var, then scan /dev for usbserial/wchusbserial
 function detectSerialPort() {
@@ -74,8 +90,11 @@ function initSerial() {
         connectionStatus = 'disconnected';
         if (!deviceMissingSince) {
             deviceMissingSince = Date.now();
+            missingPolls = 0;
+            lastChipState = null;
             scaleLog("Scale USB device not found — will reconnect automatically as soon as it is back");
         }
+        if (missingPolls++ % CHIP_RECHECK_POLLS === 0) reportChipState();
         scheduleReconnect(DEVICE_POLL_SEC);
         return;
     }
