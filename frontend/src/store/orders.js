@@ -128,37 +128,40 @@ export const fetchWeightsAction = () => {
         try{
             dispatch(startLoading());
 
-            // Poll briefly for a SETTLED reading instead of taking the first
-            // (possibly mid-settling) value the scale happens to be streaming.
-            // Returns as soon as it's stable; bounded so fast billing isn't slowed.
-            const MAX_ATTEMPTS = 4;
-            const GAP_MS = 120;
+            // Poll until the current item's weight has SETTLED and return the
+            // instant it has — a settled item fills on the first poll. Keep
+            // waiting through a slow settle or a brief automatic reconnect (the
+            // backend reopens a stalled scale itself) instead of failing at once:
+            // failing within ~0.5 s is what forced a USB replug after each item.
+            // Fail fast only when the scale is physically absent.
+            const DEADLINE_MS = 3000;
+            const GAP_MS = 150;
+            const startedAt = Date.now();
             let data = null;
-            for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+            for (;;) {
                 ({ data: { data } } = await fetchWeights());
-                // Stop early once we have a fresh, settled reading.
                 if (data && data.isConnected && data.isStable) break;
-                // No point retrying if the scale isn't connected at all.
-                if (data && !data.isConnected) break;
-                if (attempt < MAX_ATTEMPTS - 1) await delay(GAP_MS);
+                if (data && data.devicePresent === false) break;
+                if (Date.now() - startedAt + GAP_MS > DEADLINE_MS) break;
+                await delay(GAP_MS);
             }
 
             dispatch(stopLoading());
 
             // Check connection status
             if (!data || !data.isConnected) {
-                const statusMsg = (data && data.connectionStatus === 'disconnected')
-                    ? '⚠️ Scale disconnected! Check RS232 connection.'
+                const statusMsg = (data && data.devicePresent === false)
+                    ? '⚠️ Scale not detected! Check the USB cable.'
+                    : (data && data.recovering)
+                    ? '⚠️ Scale reconnecting — fetch again in a moment.'
                     : (data && data.connectionStatus === 'error')
-                    ? '❌ Scale connection error! Check cable and restart.'
-                    : (data && data.connectionStatus === 'stale')
-                    ? '⚠️ Scale not responding! No data received recently. Check connection.'
-                    : '⚠️ Scale connection issue!';
+                    ? '❌ Scale connection error! Check the cable.'
+                    : '⚠️ Scale not responding — no fresh reading. Fetch again in a moment.';
                 dispatch(setNotification({ open: true, severity: 'warning', message: statusMsg }));
             } else if (!data.isStable) {
-                // Connected & fresh, but the weight hasn't settled — warn so a
-                // bouncing/half-placed item isn't billed at the wrong weight.
-                dispatch(setNotification({ open: true, severity: 'warning', message: '⚠️ Weight not settled — let the item rest on the scale and fetch again.' }));
+                // Connected & fresh, but still moving after the wait — refuse so
+                // a bouncing/half-placed item isn't billed at the wrong weight.
+                dispatch(setNotification({ open: true, severity: 'warning', message: '⚠️ Weight not settled — hold the item still and fetch again.' }));
             } else {
                 dispatch(setNotification({ open: true, severity: 'success', message: 'Weight fetched successfully'}));
             }
