@@ -30,7 +30,6 @@ const router     = express.Router();
 const logger     = require('morgan');
 const cors       = require('cors');
 const helmet     = require('helmet');
-const rateLimit  = require('express-rate-limit');
 const db         = require('./src/models');
 const compression  = require('compression');
 const cookieParser = require('cookie-parser');
@@ -92,24 +91,8 @@ const trustProxyHops = parseInt(process.env.TRUST_PROXY_HOPS || '1', 10);
 app.set('trust proxy', trustProxyHops);
 
 // ─── Rate limiting ────────────────────────────────────────────────────────────
-// Strict limit on authentication endpoints to block brute-force and credential
-// stuffing attacks. 10 attempts per 15 minutes per IP.
-const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,  // 15 minutes
-    max: 10,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { status: 429, message: 'Too many login attempts. Please try again after 15 minutes.' }
-});
-
-// Broad API rate limit — 300 requests per minute per IP to prevent DoS.
-const apiLimiter = rateLimit({
-    windowMs: 60 * 1000,        // 1 minute
-    max: 300,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { status: 429, message: 'Too many requests. Please slow down.' }
-});
+// Limiters live in src/middleware/rateLimits.js (applied below, before routes).
+const { authLimiter, apiLimiter } = require('./src/middleware/rateLimits');
 
 // ─── Request logging ───────────────────────────────────────────────────────────
 // Use 'combined' format in production for Apache-compatible access logs.

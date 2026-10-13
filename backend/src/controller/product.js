@@ -352,6 +352,9 @@ module.exports = {
                     // instead of waiting for a recovery that can't happen.
                     devicePresent: Boolean(devPath && fs.existsSync(devPath)),
                     recovering: Boolean(reconnectTimer),
+                    // Changes when the pan is emptied or the scale reconnects;
+                    // a waiting fetch refuses its result if this moved.
+                    itemEpoch: reader.itemEpoch(),
                     streamMode: reader.isContinuous() ? 'continuous' : 'unknown'
                 }
             });

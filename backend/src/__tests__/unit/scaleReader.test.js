@@ -172,3 +172,33 @@ describe('scaleReader — line parsing', () => {
     });
 });
 
+
+describe('scaleReader — item changes', () => {
+    test('lifting an item off the pan counts as an item change', () => {
+        const r = createScaleReader();
+        const t = feed(r, repeat('1.200', 6), 0);
+        const before = r.itemEpoch();
+        feed(r, ['0.600', '0.000'], t + 100);
+        expect(r.itemEpoch()).toBe(before + 1);
+    });
+
+    test('bouncing, jitter and adding more to the pan are not item changes', () => {
+        const r = createScaleReader();
+        feed(r, ['1.0', '1.4', '1.1', '1.35', '1.2', '1.21', '1.2', '2.4', '2.4'], 0);
+        expect(r.itemEpoch()).toBe(0);
+    });
+
+    test('an empty pan drifting near zero does not count repeatedly', () => {
+        const r = createScaleReader();
+        feed(r, ['1.5', '0.0', '0.03', '0.01', '0.04', '0.0'], 0);
+        expect(r.itemEpoch()).toBe(1);
+    });
+
+    test('a reconnect (reset) counts as an item change', () => {
+        const r = createScaleReader();
+        feed(r, repeat('1.200', 4), 0);
+        const before = r.itemEpoch();
+        r.reset();
+        expect(r.itemEpoch()).toBe(before + 1);
+    });
+});

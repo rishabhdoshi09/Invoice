@@ -41,6 +41,8 @@ const DEFAULTS = {
     gapCapMs: 5000,          // ignore longer gaps when learning the stream's rhythm
     maxGaps: 15,             // learn the rhythm from this many recent gaps
     minGaps: 5,              // need this many gaps before trusting it
+    loadedKg: 0.05,          // above this, something is on the pan
+    emptyKg: 0.02,           // at or below this (after being loaded), the pan was emptied
 };
 
 // Strict parse: the whole trimmed line must be a finite number. Blank lines are
@@ -59,6 +61,14 @@ function createScaleReader(options = {}) {
     const gaps = [];    // recent inter-reading gaps (ms) — a property of the scale
     let continuous = false; // sticky: the scale has shown it streams continuously
     let identicalRun = 0;
+    // Counts "the item on the pan may have changed" events: a loaded pan being
+    // emptied, or the stream being reset. A fetch that waits for the weight to
+    // settle records this when the key is pressed and refuses the result if it
+    // moved — otherwise lifting B and placing C mid-wait billed C on B's line.
+    // Tracked here, not by the client, because client polls can miss a brief
+    // empty pan between two reads.
+    let loaded = false;
+    let itemEpoch = 0;
 
     // The 90th-percentile gap, not the median: when the driver delivers lines
     // in bursts (gaps of ~0 ms, then one long gap), the long gap is the
@@ -95,6 +105,13 @@ function createScaleReader(options = {}) {
         }
         samples.push({ value, at: now });
         if (samples.length > cfg.maxSamples) samples.shift();
+
+        if (value > cfg.loadedKg) {
+            loaded = true;
+        } else if (value <= cfg.emptyKg && loaded) {
+            loaded = false;
+            itemEpoch++;
+        }
 
         let becameContinuous = false;
         if (!continuous && identicalRun >= cfg.continuousRepeats) {
@@ -140,6 +157,9 @@ function createScaleReader(options = {}) {
     function reset() {
         samples.length = 0;
         identicalRun = 0;
+        // Nothing is known about the pan across a reconnect: void pending presses.
+        loaded = false;
+        itemEpoch++;
     }
 
     return {
@@ -148,6 +168,7 @@ function createScaleReader(options = {}) {
         reset,
         lastAt: () => (samples.length ? samples[samples.length - 1].at : null),
         isContinuous: () => continuous,
+        itemEpoch: () => itemEpoch,
         regularGapMs,
         staleAfterMs,
     };

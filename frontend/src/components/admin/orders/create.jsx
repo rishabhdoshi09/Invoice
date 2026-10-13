@@ -759,17 +759,23 @@ export const CreateOrder = () => {
   // Monotonic counter so an older, slower-resolving fetch can't overwrite the
   // weight a newer fetch already applied (last-writer-wins race).
   const fetchSeqRef = useRef(0);
+  // The scale read currently in flight, shared by every caller.
+  const inflightReadRef = useRef(null);
+  // True while an add ('=' or the Add button) is waiting to put an item on the
+  // bill. Saving the bill or deleting the last line then would act on a bill
+  // that is about to change — see createOrder and Shift+D.
+  const addPendingRef = useRef(false);
 
-  const weighingScaleHandler = useCallback(async () => {
-    // Reentrancy guard: never read the scale twice at once. This is THE single
-    // enforcement point for every caller ('/', both Sync buttons, the '='
-    // quick-add, and Add) — overlapping reads both broke the serial link and
-    // let a stale response clobber a fresh weight.
-    if (weightFetchBusyRef.current) return false;
+  const weighingScaleHandler = useCallback(() => {
+    // One scale read at a time, for every caller ('/', both Sync buttons, the
+    // '=' quick-add, and Add). A caller arriving while a read is in flight
+    // JOINS it and gets the same result. Refusing instead silently dropped an
+    // '=' pressed during a '/' wait, and made Add report "Product not added".
+    if (inflightReadRef.current) return inflightReadRef.current;
     weightFetchBusyRef.current = true;
     lastWeightFetchAtRef.current = Date.now();
     const seq = ++fetchSeqRef.current;
-    try {
+    const read = (async () => {
       const data = await dispatch(fetchWeightsAction());
       // A newer fetch superseded us while awaiting — discard this result.
       if (seq !== fetchSeqRef.current) return false;
@@ -810,9 +816,13 @@ export const CreateOrder = () => {
       } catch (e) { /* silent */ }
 
       return true;
-    } finally {
+    })().catch(() => false);
+    inflightReadRef.current = read;
+    read.then(() => {
+      if (inflightReadRef.current === read) inflightReadRef.current = null;
       weightFetchBusyRef.current = false;
-    }
+    });
+    return read;
   }, [dispatch, formik, notifyError, modalOpen, localPriceValue]);
 
   // Helper: focus main price input, with 2xx tens-digit selection
@@ -1323,10 +1333,18 @@ export const CreateOrder = () => {
           // Weight already fetched, just submit
           await formik.submitForm();
         } else {
-          // Need to fetch weight first
-          const success = await weighingScaleHandler();
-          if (!success) { notifyError("Failed to fetch weight. Product not added."); return; }
-          await formik.submitForm();
+          // Need to fetch weight first (joins a '/' read that is already waiting).
+          if (addPendingRef.current) return; // a double click can't add twice
+          addPendingRef.current = true;
+          try {
+            const success = await weighingScaleHandler();
+            // On failure fetchWeightsAction already showed the exact reason (not
+            // settled / item changed / scale not visible) — don't overwrite it.
+            if (!success) return;
+            await formik.submitForm();
+          } finally {
+            addPendingRef.current = false;
+          }
         }
       } else {
         await formik.submitForm();
@@ -1387,22 +1405,25 @@ export const CreateOrder = () => {
 
           if (!currentFormik.values.productPrice || isPriceInvalid) return;
 
-          // Route through the SAME serialized, stability-gated fetch as '/'
-          // (weighingScaleHandler via the latest-callback ref). It inherits the
-          // busy/sequence guards, the isConnected/isStable refusal, and the
-          // live-price total, so '=' can no longer AUTO-SUBMIT a bouncing or
-          // stale weight. Only submit once a fresh, settled weight is in the form.
-          if (weightFetchBusyRef.current) return;
-          if (Date.now() - lastWeightFetchAtRef.current < 500) return;
-          const ok = await (fetchWeightLatestRef.current && fetchWeightLatestRef.current());
-          if (!ok) return; // handler already warned; nothing filled, nothing submitted
-
-          // Small delay to ensure state is updated, then submit
-          setTimeout(async () => {
+          // Route through the SAME stability-gated read as '/' (weighingScaleHandler
+          // via the latest-callback ref): it inherits the isConnected/isStable
+          // refusal, the item-changed guard and the live-price total, so '=' can
+          // never AUTO-SUBMIT a bouncing, stale or swapped weight. If a '/' read is
+          // already waiting, this JOINS it rather than being dropped.
+          // One quick-add at a time: an impatient second '=' can't double-add.
+          if (addPendingRef.current) return;
+          addPendingRef.current = true;
+          try {
+            const ok = await (fetchWeightLatestRef.current && fetchWeightLatestRef.current());
+            if (!ok) return; // handler already warned; nothing filled, nothing submitted
+            // Small delay to ensure state is updated, then submit
+            await new Promise((r) => setTimeout(r, 100));
             await currentFormik.submitForm();
             setModalOpen(false);
             setModalSuppress(false);
-          }, 100);
+          } finally {
+            addPendingRef.current = false;
+          }
         } else {
           // For non-weighted products: validate quantity and add directly
           // Use DOM value as it's more up-to-date than formik state
@@ -1421,11 +1442,16 @@ export const CreateOrder = () => {
           }
           
           // Longer delay to ensure state is fully updated, then submit
-          setTimeout(async () => {
+          if (addPendingRef.current) return;
+          addPendingRef.current = true;
+          try {
+            await new Promise((r) => setTimeout(r, 150));
             await currentFormik.submitForm();
             setModalOpen(false);
             setModalSuppress(false);
-          }, 150);
+          } finally {
+            addPendingRef.current = false;
+          }
         }
       }
     };
@@ -1527,7 +1553,13 @@ export const CreateOrder = () => {
   // MAIN createOrder — now ONLINE-first (server)
   const createOrder = async () => {
     if (isSubmitting) return;
-    
+    // An '='/Add is still waiting for the weight to settle: saving now would
+    // save the bill WITHOUT that item (under-billing).
+    if (addPendingRef.current || weightFetchBusyRef.current) {
+      notifyError("Still adding the last item — wait a moment, then create the invoice.");
+      return;
+    }
+
     // Credit sale validation: customer name is mandatory
     if (isCreditSale && !orderProps.customerName?.trim()) {
       notifyError("Credit Sale requires a Customer Name to track the due amount.");
@@ -1768,12 +1800,18 @@ export const CreateOrder = () => {
       const key=(e.key||'').toLowerCase();
       if (key==='d' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
+        // While an add is pending, the "last item" is about to change: deleting
+        // now would remove the PREVIOUS item instead of the one being added.
+        if (addPendingRef.current || weightFetchBusyRef.current) {
+          notifyError("Still adding the last item — wait a moment, then delete.");
+          return;
+        }
         try { const len=(orderProps?.orderItems?.length)||0; if(len>0) removeItem(len-1); } catch {}
       }
     };
     window.addEventListener('keydown', handleShiftD);
     return () => window.removeEventListener('keydown', handleShiftD);
-  }, [removeItem, orderProps?.orderItems?.length]);
+  }, [removeItem, orderProps?.orderItems?.length, notifyError]);
 
   // Ensure today's localStorage total record exists; auto-reset at midnight
   useEffect(() => {

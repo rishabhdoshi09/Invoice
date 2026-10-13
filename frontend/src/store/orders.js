@@ -129,17 +129,29 @@ export const fetchWeightsAction = () => {
             dispatch(startLoading());
 
             // Poll until the current item's weight has SETTLED and return the
-            // instant it has — a settled item fills on the first poll. Keep
-            // waiting through a slow settle or a brief automatic reconnect (the
-            // backend reopens a stalled scale itself) instead of failing at once:
+            // instant it has — a settled item fills on the first poll. Waiting
+            // briefly covers a press made while the item is still bouncing;
             // failing within ~0.5 s is what forced a USB replug after each item.
-            // Fail fast only when the scale is physically absent.
-            const DEADLINE_MS = 3000;
-            const GAP_MS = 150;
+            // Fail fast when the scale is physically absent.
+            const DEADLINE_MS = 2000;
+            const GAP_MS = 200;
             const startedAt = Date.now();
             let data = null;
+            let epochAtPress = null;
+            let itemChanged = false;
             for (;;) {
                 ({ data: { data } } = await fetchWeights());
+                if (data && data.itemEpoch != null) {
+                    if (epochAtPress === null) {
+                        epochAtPress = data.itemEpoch;
+                    } else if (data.itemEpoch !== epochAtPress) {
+                        // The pan was emptied (or the scale reconnected) after
+                        // the press: whatever settles now is a different item
+                        // from the one this press was for. Never bill it here.
+                        itemChanged = true;
+                        break;
+                    }
+                }
                 // A settled 0 is the empty pan: '/' pressed while the item is
                 // still being placed. Keep waiting for the item to land.
                 if (data && data.isConnected && data.isStable && Number(data.weight) > 0) break;
@@ -149,6 +161,12 @@ export const fetchWeightsAction = () => {
             }
 
             dispatch(stopLoading());
+
+            if (itemChanged) {
+                dispatch(setNotification({ open: true, severity: 'warning', message: '⚠️ The item on the scale changed while weighing — check the item and fetch again.' }));
+                // Every consumer fills only on isConnected && isStable.
+                return { ...data, isStable: false };
+            }
 
             // Check connection status
             if (!data || !data.isConnected) {
