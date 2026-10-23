@@ -5,6 +5,7 @@ const db = require('../models');
 const { postPurchaseToLedger, reversePurchaseLedger } = require('../services/realTimeLedger');
 const { updateStock } = require('../services/accountingEngine');
 const { createAuditLog } = require('../middleware/auditLogger');
+const { changeDocumentDate } = require('../services/documentDate');
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -198,6 +199,24 @@ module.exports = {
         }
     },
     
+    // Move a purchase to another date (bill + journal + stock movements + audit).
+    changePurchaseDate: async (req, res) => {
+        try {
+            const result = await changeDocumentDate({
+                kind: 'purchase',
+                id: req.params.purchaseId,
+                newDate: req.body && req.body.date,
+                user: req.user,
+                request: { ipAddress: getClientIP(req), userAgent: req.headers['user-agent'] },
+            });
+            return res.status(200).send({ status: 200, message: result.changed ? 'purchase date changed' : 'date unchanged', data: result });
+        } catch (error) {
+            const status = error.status || 500;
+            if (status === 500) console.error('[PURCHASE] change date failed:', error);
+            return res.status(status).send({ status, message: status === 500 ? 'Could not change the date. Please try again.' : error.message });
+        }
+    },
+
     deletePurchaseBill: async(req, res) => {
         try{
             const purchase = await Services.purchaseBill.getPurchaseBill({ id: req.params.purchaseId });

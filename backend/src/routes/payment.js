@@ -38,4 +38,13 @@ module.exports = (router) => {
             financialWriteGuard,    // Deletion reverses ledger entries — block during HALT
             Controller.payment.deletePayment
         );
+
+    router
+        .route('/payments/:paymentId/date')
+        .patch(
+            authenticate,
+            canModify,              // admin only, like delete
+            financialWriteGuard,    // moves journal dates — block during HALT
+            Controller.payment.changePaymentDate
+        );
 };

@@ -4,6 +4,7 @@ const Validations = require('../validations');
 const db = require('../models');
 const { postPaymentToLedger, reversePaymentLedger, postSupplierPaymentToLedger } = require('../services/realTimeLedger');
 const { createAuditLog } = require('../middleware/auditLogger');
+const { changeDocumentDate } = require('../services/documentDate');
 
 const getClientIP = (req) => req.headers['x-forwarded-for'] || req.connection?.remoteAddress || '';
 
@@ -425,6 +426,24 @@ module.exports = {
                 status: 500,
                 message: error.message
             });            
+        }
+    },
+
+    // Move a payment to another date (document + journal + audit, together).
+    changePaymentDate: async (req, res) => {
+        try {
+            const result = await changeDocumentDate({
+                kind: 'payment',
+                id: req.params.paymentId,
+                newDate: req.body && req.body.date,
+                user: req.user,
+                request: { ipAddress: getClientIP(req), userAgent: req.headers['user-agent'] },
+            });
+            return res.status(200).send({ status: 200, message: result.changed ? 'payment date changed' : 'date unchanged', data: result });
+        } catch (error) {
+            const status = error.status || 500;
+            if (status === 500) console.error('[PAYMENT] change date failed:', error);
+            return res.status(status).send({ status, message: status === 500 ? 'Could not change the date. Please try again.' : error.message });
         }
     },
 

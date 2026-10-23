@@ -38,6 +38,7 @@
 
 const db = require('../models');
 const LedgerService = require('./ledgerService');
+const { firstIsoDate, localIso } = require('../utils/docDate');
 
 const ledgerService = new LedgerService(db);
 
@@ -106,11 +107,13 @@ async function _alreadyPosted(referenceType, referenceId, transaction) {
 }
 
 // ─── helper: resolve transactionDate safely ───────────────────────────────
-function _txDate(dateish) {
-    if (!dateish) return new Date();
-    if (dateish instanceof Date) return dateish;
-    const d = new Date(dateish);
-    return isNaN(d.getTime()) ? new Date() : d;
+// The document's calendar day as 'YYYY-MM-DD', parsed explicitly
+// (utils/docDate) from the first candidate that parses. The old
+// new Date(text) read the DD-MM-YYYY dates used by invoices and ledger
+// entries as American month-day: 04-09-2026 (4 Sep) was posted as 9 Apr,
+// 11-09-2026 as 9 Nov, and 25-09-2026 (invalid that way) as "now".
+function _txDate(...candidates) {
+    return firstIsoDate(...candidates) || localIso(new Date());
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -162,7 +165,7 @@ async function postSalesInvoice(order, transaction) {
         referenceType: 'INVOICE',
         referenceId:   order.id,
         description:   `Invoice ${order.orderNumber} — ${order.customerName || 'Walk-in'}`,
-        transactionDate: _txDate(order.orderDate || order.createdAt),
+        transactionDate: _txDate(order.orderDate, order.createdAt),
         entries
     }, transaction);
 
@@ -226,7 +229,7 @@ async function postCashReceiptForInvoice(order, transaction) {
         referenceType:   'INVOICE_CASH',
         referenceId:     order.id,
         description:     `Cash received for Invoice ${order.orderNumber}`,
-        transactionDate: _txDate(order.orderDate || order.createdAt),
+        transactionDate: _txDate(order.orderDate, order.createdAt),
         entries
     }, transaction);
 
@@ -261,7 +264,7 @@ async function postCustomerReceipt(payment, transaction) {
         referenceType: 'PAYMENT',
         referenceId:   payment.id,
         description:   `Receipt ${payment.paymentNumber} — ${payment.partyName}`,
-        transactionDate: _txDate(payment.paymentDate || payment.createdAt),
+        transactionDate: _txDate(payment.paymentDate, payment.createdAt),
         entries: [
             { accountId: cashAcct.id,     debit: amount, credit: 0,      narration: `Receipt ${payment.paymentNumber}` },
             { accountId: customerAcct.id, debit: 0,      credit: amount, narration: `Receipt ${payment.paymentNumber}` }
@@ -324,7 +327,7 @@ async function postPurchaseBill(purchase, transaction) {
         referenceType: 'PURCHASE',
         referenceId:   purchase.id,
         description:   `Purchase ${purchase.billNumber} — ${purchase.supplierName}`,
-        transactionDate: _txDate(purchase.billDate || purchase.createdAt),
+        transactionDate: _txDate(purchase.billDate, purchase.createdAt),
         entries
     }, transaction);
 
@@ -357,7 +360,7 @@ async function postSupplierPayment(payment, supplierId, supplierName, transactio
         referenceType: 'PAYMENT',
         referenceId:   payment.id,
         description:   `Payment to ${supplierName} — ${payment.paymentNumber}`,
-        transactionDate: _txDate(payment.paymentDate || payment.createdAt),
+        transactionDate: _txDate(payment.paymentDate, payment.createdAt),
         entries: [
             { accountId: supplierAcct.id, debit: amount, credit: 0,      narration: `Payment ${payment.paymentNumber}` },
             { accountId: cashAcct.id,     debit: 0,      credit: amount, narration: `Payment ${payment.paymentNumber}` }
@@ -398,7 +401,7 @@ async function postExpense(expense, transaction) {
         referenceType: 'EXPENSE',
         referenceId:   expense.id,
         description:   `Expense: ${expense.category} — ${expense.description || ''}`.trim().replace(/—\s*$/, ''),
-        transactionDate: _txDate(expense.expenseDate || expense.date || expense.createdAt),
+        transactionDate: _txDate(expense.expenseDate, expense.date, expense.createdAt),
         entries: [
             { accountId: expenseAcct.id, debit: amount, credit: 0,      narration: expense.category || 'Expense' },
             { accountId: cashAcct.id,    debit: 0,      credit: amount, narration: expense.category || 'Expense' }

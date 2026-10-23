@@ -1,0 +1,271 @@
+/**
+ * Integration tests for moving a payment / purchase to another date, against a
+ * REAL Postgres built from the app's migrations, using the real accounting
+ * engine to post the journal entries being moved.
+ *
+ * Skipped unless RUN_DB_TESTS=1, and refuses any database whose name does not
+ * end in "_test" — it truncates the tables it uses.
+ *
+ * Run against a scratch database that has had `npx sequelize db:migrate` (plus
+ * the startup column bootstrap in index.js) applied:
+ *   RUN_DB_TESTS=1 DB_PORT=55432 npx jest --testPathPattern=documentDate.int
+ */
+
+const enabled = process.env.RUN_DB_TESTS === '1';
+const suite = enabled ? describe : describe.skip;
+
+suite('changing a document date (real Postgres)', () => {
+    let db, engine, changeDocumentDate, uuid;
+    let supplierId, productId, otherProductId;
+    const admin = { id: null, name: 'Owner', role: 'admin' };
+
+    const q = async (sql, replacements = {}) =>
+        db.sequelize.query(sql, { replacements, type: db.sequelize.QueryTypes.SELECT });
+    const day = (col) => `to_char(("${col}" AT TIME ZONE 'UTC'), 'YYYY-MM-DD')`;
+
+    async function batchDates(referenceId) {
+        return q(`SELECT "referenceType", "isReversed", ${day('transactionDate')} AS d
+                    FROM journal_batches WHERE "referenceId" = :referenceId ORDER BY "createdAt"`, { referenceId });
+    }
+    async function lineDates(referenceId) {
+        const rows = await q(`SELECT to_char(le."transactionDate", 'YYYY-MM-DD') AS d
+                                FROM ledger_entries le JOIN journal_batches jb ON jb.id = le."batchId"
+                               WHERE jb."referenceId" = :referenceId AND jb."isReversed" = false`, { referenceId });
+        return rows.map((r) => r.d);
+    }
+    async function trialBalance() {
+        return q(`SELECT "accountId", SUM(debit) - SUM(credit) AS net FROM ledger_entries GROUP BY "accountId" ORDER BY "accountId"`);
+    }
+    async function auditCount(entityId) {
+        const [r] = await q(`SELECT COUNT(*)::int AS n FROM audit_logs WHERE "entityId" = :entityId`, { entityId });
+        return r.n;
+    }
+
+    async function insertSupplierPayment(paymentDate, amount) {
+        const id = uuid();
+        await db.sequelize.query(
+            `INSERT INTO payments (id, "paymentNumber", "paymentDate", "partyId", "partyName", "partyType", amount, "referenceType", "isDeleted", "createdAt", "updatedAt")
+             VALUES (:id, :num, :paymentDate, :supplierId, 'ramu vatii', 'supplier', :amount, 'advance', false, now(), now())`,
+            { replacements: { id, num: `PAY-${id.slice(0, 8).toUpperCase()}`, paymentDate, supplierId, amount } });
+        const payment = await db.payment.findByPk(id);
+        await db.sequelize.transaction((t) => engine.postSupplierPayment(payment, supplierId, 'ramu vatii', t));
+        return payment;
+    }
+
+    async function insertPurchase(billDate, total) {
+        const id = uuid();
+        await db.sequelize.query(
+            `INSERT INTO "purchaseBills" (id, "billNumber", "billDate", "supplierId", total, "subTotal", "isDeleted", "createdAt", "updatedAt")
+             VALUES (:id, :num, :billDate, :supplierId, :total, :total, false, now(), now())`,
+            { replacements: { id, num: `PUR-${id.slice(0, 8).toUpperCase()}`, billDate, supplierId, total } });
+        const purchase = await db.purchaseBill.findByPk(id);
+        await db.sequelize.transaction(async (t) => {
+            await engine.postPurchaseBill({ ...purchase.get({ plain: true }), supplierName: 'ramu vatii' }, t);
+            await engine.updateStock(productId, 10, 'IN', id, 'purchase', t, billDate);
+        });
+        return purchase;
+    }
+
+    beforeAll(async () => {
+        if (!/_test$/.test(process.env.DATABASE_NAME || '')) {
+            throw new Error(`Refusing to run: DATABASE_NAME "${process.env.DATABASE_NAME}" does not end in _test`);
+        }
+        db = require('../../models');
+        engine = require('../../services/accountingEngine');
+        ({ changeDocumentDate } = require('../../services/documentDate'));
+        uuid = require('uuid').v4;
+
+        await db.sequelize.query(`TRUNCATE ledger_entries, journal_batches, stock_transactions, audit_logs,
+                                  payments, "purchaseBills", accounts, suppliers, products CASCADE`);
+        const LedgerService = require('../../services/ledgerService');
+        await new LedgerService(db).initializeChartOfAccounts();
+        await engine.ensureGSTAccounts();
+
+        supplierId = uuid();
+        await db.sequelize.query(`INSERT INTO suppliers (id, name, "createdAt", "updatedAt") VALUES (:id, 'ramu vatii', now(), now())`,
+            { replacements: { id: supplierId } });
+        // products.id's migration default is a single fixed UUID, so supply ids.
+        productId = uuid();
+        otherProductId = uuid();
+        await db.sequelize.query(
+            `INSERT INTO products (id, name, "createdAt", "updatedAt") VALUES (:a, 'Steel bowl', now(), now()), (:b, 'Steel plate', now(), now())`,
+            { replacements: { a: productId, b: otherProductId } });
+    });
+
+    afterAll(async () => { if (db) await db.sequelize.close(); });
+
+    test('a DD-MM-YYYY payment is posted to the journal on the right day (was 9 Apr)', async () => {
+        const p = await insertSupplierPayment('04-09-2026', 25000);
+        const [batch] = await batchDates(p.id);
+        expect(batch).toMatchObject({ referenceType: 'PAYMENT', d: '2026-09-04' });
+        expect(await lineDates(p.id)).toEqual(['2026-09-04', '2026-09-04']);
+    });
+
+    test('moving a payment moves its journal batch and lines, and is audited', async () => {
+        const p = await insertSupplierPayment('06-09-2026', 21200);
+        const tbBefore = await trialBalance();
+
+        const result = await changeDocumentDate({ kind: 'payment', id: p.id, newDate: '2026-09-11', user: admin });
+
+        expect(result).toMatchObject({ changed: true, oldDate: '06-09-2026', newDate: '11-09-2026', journalBatches: 1, ledgerLines: 2 });
+        expect((await db.payment.findByPk(p.id)).paymentDate).toBe('11-09-2026');
+        expect((await batchDates(p.id))[0].d).toBe('2026-09-11');
+        expect(await lineDates(p.id)).toEqual(['2026-09-11', '2026-09-11']);
+        expect(await trialBalance()).toEqual(tbBefore); // no balance anywhere changes
+
+        const [log] = await q(`SELECT action, "entityType", "oldValues", "newValues", "userName" FROM audit_logs WHERE "entityId" = :id`, { id: p.id });
+        expect(log).toMatchObject({
+            action: 'UPDATE', entityType: 'PAYMENT', userName: 'Owner',
+            oldValues: { paymentDate: '06-09-2026' }, newValues: { paymentDate: '11-09-2026' },
+        });
+    });
+
+    test("only the payment's ACTIVE batch moves — reversed history and other payments stay put", async () => {
+        const a = await insertSupplierPayment('10-09-2026', 24000);
+        const b = await insertSupplierPayment('10-09-2026', 2655);
+        // Give A a reversed historical batch plus a fresh active one.
+        await db.sequelize.transaction(async (t) => {
+            await engine.reversePayment(a, t);
+            await engine.postSupplierPayment(a, supplierId, 'ramu vatii', t);
+        });
+
+        await changeDocumentDate({ kind: 'payment', id: a.id, newDate: '2026-09-01', user: admin });
+
+        const rows = await batchDates(a.id);
+        expect(rows.find((r) => r.referenceType === 'PAYMENT' && !r.isReversed).d).toBe('2026-09-01');
+        expect(rows.find((r) => r.referenceType === 'PAYMENT' && r.isReversed).d).toBe('2026-09-10');
+        expect((await batchDates(b.id))[0].d).toBe('2026-09-10');
+    });
+
+    test('moving a purchase also moves its stock movements, and nothing else', async () => {
+        const pur = await insertPurchase('02-09-2026', 68610);
+        await db.sequelize.transaction((t) => engine.updateStock(otherProductId, 5, 'IN', uuid(), 'purchase', t, '02-09-2026'));
+        const tbBefore = await trialBalance();
+
+        const result = await changeDocumentDate({ kind: 'purchase', id: pur.id, newDate: '05-09-2026', user: admin });
+
+        expect(result).toMatchObject({ changed: true, newDate: '05-09-2026', journalBatches: 1, stockMovements: 1 });
+        expect((await db.purchaseBill.findByPk(pur.id)).billDate).toBe('05-09-2026');
+        expect((await batchDates(pur.id))[0]).toMatchObject({ referenceType: 'PURCHASE', d: '2026-09-05' });
+        const stock = await q(`SELECT "productId", to_char("transactionDate", 'YYYY-MM-DD') AS d FROM stock_transactions WHERE "transactionDate" IS NOT NULL ORDER BY "createdAt"`);
+        expect(stock.find((s) => s.productId === productId).d).toBe('2026-09-05');
+        expect(stock.find((s) => s.productId === otherProductId).d).toBe('2026-09-02');
+        expect(await trialBalance()).toEqual(tbBefore);
+    });
+
+    test('the new date is stored in the canonical DD-MM-YYYY, whatever the old format', async () => {
+        const p = await insertSupplierPayment('2026-09-04', 2535);
+        await changeDocumentDate({ kind: 'payment', id: p.id, newDate: '2026-09-08', user: admin });
+        expect((await db.payment.findByPk(p.id)).paymentDate).toBe('08-09-2026');
+    });
+
+    test("legacy MIGRATION entries of the same payment move with it", async () => {
+        const p = await insertSupplierPayment('04-09-2026', 3100);
+        const LedgerService = require('../../services/ledgerService');
+        const [cash, other] = await q(`SELECT id FROM accounts ORDER BY code LIMIT 2`);
+        await new LedgerService(db).createJournalBatch({
+            referenceType: 'MIGRATION', referenceId: p.id, description: `Migration: Payment ${p.paymentNumber}`,
+            transactionDate: '2026-09-04',
+            entries: [{ accountId: cash.id, debit: 50, credit: 0 }, { accountId: other.id, debit: 0, credit: 50 }],
+        });
+        const result = await changeDocumentDate({ kind: 'payment', id: p.id, newDate: '2026-09-09', user: admin });
+        expect(result.journalBatches).toBe(2);
+        expect((await batchDates(p.id)).map((b) => [b.referenceType, b.d]).sort())
+            .toEqual([['MIGRATION', '2026-09-09'], ['PAYMENT', '2026-09-09']]);
+    });
+
+    test("refuses a date before the supplier's opening balance date", async () => {
+        const p = await insertSupplierPayment('10-09-2026', 1500);
+        await db.sequelize.query(`UPDATE suppliers SET "openingBalanceDate" = '2026-09-05' WHERE id = :id`, { replacements: { id: supplierId } });
+        try {
+            await expect(changeDocumentDate({ kind: 'payment', id: p.id, newDate: '2026-09-03', user: admin }))
+                .rejects.toMatchObject({ status: 400, message: expect.stringMatching(/opening balance date \(05\/09\/2026\)/) });
+            // On or after the opening balance date is fine.
+            await expect(changeDocumentDate({ kind: 'payment', id: p.id, newDate: '2026-09-05', user: admin }))
+                .resolves.toMatchObject({ changed: true });
+        } finally {
+            await db.sequelize.query(`UPDATE suppliers SET "openingBalanceDate" = NULL WHERE id = :id`, { replacements: { id: supplierId } });
+        }
+        expect((await db.payment.findByPk(p.id)).paymentDate).toBe('05-09-2026');
+    });
+
+    test('the same date is a no-op and is not audited', async () => {
+        const p = await insertSupplierPayment('04-09-2026', 4290);
+        const result = await changeDocumentDate({ kind: 'payment', id: p.id, newDate: '2026-09-04', user: admin });
+        expect(result.changed).toBe(false);
+        expect(await auditCount(p.id)).toBe(0);
+    });
+
+    test.each([
+        ['a future date', '2099-01-01', 400, /future/],
+        ['an impossible date', '31-02-2026', 400, /valid date/],
+        ['no date', undefined, 400, /valid date/],
+    ])('rejects %s and changes nothing', async (_label, newDate, status, message) => {
+        const p = await insertSupplierPayment('04-09-2026', 1000);
+        await expect(changeDocumentDate({ kind: 'payment', id: p.id, newDate, user: admin }))
+            .rejects.toMatchObject({ status, message: expect.stringMatching(message) });
+        expect((await db.payment.findByPk(p.id)).paymentDate).toBe('04-09-2026');
+        expect((await batchDates(p.id))[0].d).toBe('2026-09-04');
+        expect(await auditCount(p.id)).toBe(0);
+    });
+
+    test('rejects deleted and unknown documents', async () => {
+        const p = await insertSupplierPayment('04-09-2026', 1000);
+        await db.sequelize.query(`UPDATE payments SET "isDeleted" = true WHERE id = :id`, { replacements: { id: p.id } });
+        await expect(changeDocumentDate({ kind: 'payment', id: p.id, newDate: '2026-09-05' })).rejects.toMatchObject({ status: 400 });
+        await expect(changeDocumentDate({ kind: 'payment', id: uuid(), newDate: '2026-09-05' })).rejects.toMatchObject({ status: 404 });
+        await expect(changeDocumentDate({ kind: 'purchase', id: 'not-a-uuid', newDate: '2026-09-05' })).rejects.toMatchObject({ status: 404 });
+    });
+
+    describe('invoice date edits (real controllers)', () => {
+        let orderController;
+        const call = async (handler, req) => {
+            const res = { statusCode: 200, body: null };
+            res.status = (c) => { res.statusCode = c; return res; };
+            res.send = res.json = (b) => { res.body = b; return res; };
+            res.set = () => res;
+            await handler({ user: { id: uuid(), name: 'Owner', role: 'admin' }, headers: {}, params: {}, query: {}, ...req }, res);
+            return res;
+        };
+        const item = { name: 'Steel bowl', quantity: 2, productPrice: 300, totalPrice: 600, type: 'weighted' };
+
+        beforeAll(() => { orderController = require('../../controller/order'); });
+
+        async function createCashInvoice(orderDate) {
+            const res = await call(orderController.createOrder, { body: {
+                orderDate, customerName: 'Walk-in', subTotal: 600, total: 600, tax: 0,
+                paidAmount: 600, paymentStatus: 'paid', paymentMode: 'CASH', orderItems: [item],
+            } });
+            expect(res.statusCode).toBe(200);
+            return res.body.data;
+        }
+
+        test('a date-only invoice edit moves its journal entries (they used to stay on the old date)', async () => {
+            const order = await createCashInvoice('04-09-2026');
+            expect((await batchDates(order.id)).map((b) => b.d)).toEqual(['2026-09-04', '2026-09-04']); // INVOICE + INVOICE_CASH
+
+            const res = await call(orderController.updateOrder, { params: { orderId: order.id }, body: { orderDate: '01-09-2026' } });
+
+            expect(res.statusCode).toBe(200);
+            const rows = await batchDates(order.id);
+            expect(rows.filter((r) => !r.isReversed).map((r) => [r.referenceType, r.d]).sort())
+                .toEqual([['INVOICE', '2026-09-01'], ['INVOICE_CASH', '2026-09-01']]);
+            expect(await lineDates(order.id)).toEqual(expect.arrayContaining(['2026-09-01']));
+            expect(new Set(await lineDates(order.id))).toEqual(new Set(['2026-09-01']));
+        });
+    });
+
+    test('all or nothing: if any step fails, the document, journal and audit are untouched', async () => {
+        const pur = await insertPurchase('02-09-2026', 5000);
+        const spy = jest.spyOn(db.stockTransaction, 'update').mockRejectedValueOnce(new Error('disk full'));
+        try {
+            await expect(changeDocumentDate({ kind: 'purchase', id: pur.id, newDate: '2026-09-07', user: admin }))
+                .rejects.toThrow('disk full');
+        } finally {
+            spy.mockRestore();
+        }
+        expect((await db.purchaseBill.findByPk(pur.id)).billDate).toBe('02-09-2026');
+        expect((await batchDates(pur.id))[0].d).toBe('2026-09-02');
+        expect(await auditCount(pur.id)).toBe(0);
+    });
+});

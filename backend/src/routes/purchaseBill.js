@@ -31,4 +31,13 @@ module.exports = (router) => {
             financialWriteGuard,    // Deletion reverses ledger entries — block during HALT
             Controller.purchaseBill.deletePurchaseBill
         );
+
+    router
+        .route('/purchases/:purchaseId/date')
+        .patch(
+            authenticate,
+            canModify,              // admin only, like delete
+            financialWriteGuard,    // moves journal dates — block during HALT
+            Controller.purchaseBill.changePurchaseDate
+        );
 };

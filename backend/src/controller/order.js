@@ -7,6 +7,8 @@ const { createAuditLog } = require('../middleware/auditLogger');
 const { postInvoiceToLedger, reverseInvoiceLedger, reverseInvoiceCashLedger, postPaymentStatusToggleToLedger, postInvoiceCashReceiptToLedger } = require('../services/realTimeLedger');
 const { assertOrderInvariants } = require('../services/orderInvariants');
 const { updateStock } = require('../services/accountingEngine');
+const { moveLinkedDates } = require('../services/documentDate');
+const { toIsoDate } = require('../utils/docDate');
 const telegram = require('../services/telegramAlert');
 const { lockAdvanceCandidates, applyDerivedPaymentFields } = require('./receiptAllocation');
 
@@ -633,6 +635,23 @@ module.exports = {
                         console.error(`[LEDGER] Edit reversal/repost failed for ${orderId}: ${ledgerErr.message}`);
                         throw ledgerErr; // block the edit if ledger is misconfigured
                     }
+                }
+
+                // === DATE CHANGE: move the journal and stock movements with the invoice ===
+                // The reverse/repost above runs only when the TOTAL changes, so a
+                // date-only edit used to leave the invoice's journal entries (and
+                // its stock movements) on the OLD date. Reposted batches already
+                // carry the new date, so in that case only stock needs moving.
+                const newOrderIso = toIsoDate(updateFields.orderDate);
+                if (newOrderIso && newOrderIso !== toIsoDate(originalOrder.orderDate)) {
+                    await moveLinkedDates({
+                        // MIGRATION = the same invoice's legacy-migrated entries.
+                        referenceTypes: financialFieldsChanged ? [] : ['INVOICE', 'INVOICE_CASH', 'MIGRATION'],
+                        referenceId: orderId,
+                        stockReferenceType: 'sale',
+                        iso: newOrderIso,
+                        transaction,
+                    });
                 }
 
                 // === PRE-COMMIT INVARIANT CHECK (Phase 4) ===
