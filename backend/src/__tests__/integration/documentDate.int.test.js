@@ -308,6 +308,63 @@ suite('changing a document date (real Postgres)', () => {
             await expect(changeDocumentDate({ kind: 'payment', id: later.id, newDate: '2026-09-08', user: admin }))
                 .resolves.toMatchObject({ changed: true });
         });
+
+        test('the repair script fixes wrong journal dates, leaves history and oddities alone, and is idempotent', async () => {
+            const { planRepair, applyRepair } = require('../../../scripts/repair-journal-dates');
+            const LedgerService = require('../../services/ledgerService');
+            const ledger = new LedgerService(db);
+            const [a1, a2] = await q(`SELECT id FROM accounts ORDER BY code LIMIT 2`);
+            const post = (referenceType, referenceId, transactionDate) => ledger.createJournalBatch({
+                referenceType, referenceId, transactionDate, description: `seed ${referenceType}`,
+                entries: [{ accountId: a1.id, debit: 10, credit: 0 }, { accountId: a2.id, debit: 0, credit: 10 }],
+            });
+            // The bugs, as they landed in real books:
+            const swapped = await insertRawPayment({ paymentDate: '04-09-2026' });
+            await post('PAYMENT', swapped.id, '2026-04-09');             // 4 Sep read as 9 Apr
+            const entryDay = await insertRawPayment({ paymentDate: '25-09-2026' });
+            await post('PAYMENT', entryDay.id, '2026-10-01');            // invalid -> the day it was entered
+            const invoice = await createCashInvoice('04-09-2026');
+            await db.sequelize.query(`UPDATE orders SET "orderDate" = '01-09-2026' WHERE id = :id`, { replacements: { id: invoice.id } }); // old date-only edit
+            // Must be left alone:
+            const history = await insertRawPayment({ paymentDate: '04-09-2026' });
+            const { batch: reversed } = await post('PAYMENT', history.id, '2026-04-09');
+            await db.sequelize.query(`UPDATE journal_batches SET "isReversed" = true WHERE id = :id`, { replacements: { id: reversed.id } });
+            const deleted = await insertRawPayment({ paymentDate: '04-09-2026' });
+            await post('PAYMENT', deleted.id, '2026-04-09');
+            await db.sequelize.query(`UPDATE payments SET "isDeleted" = true WHERE id = :id`, { replacements: { id: deleted.id } });
+            const unreadable = await insertRawPayment({ paymentDate: 'someday' });
+            await post('PAYMENT', unreadable.id, '2026-09-04');
+
+            const tbBefore = await trialBalance();
+            const plan = await planRepair();
+            const fixedFor = (id) => plan.fixes.filter((f) => f.batchId && rowsFor(id).includes(f.batchId));
+            const batchIdsOf = await q(`SELECT id, "referenceId" FROM journal_batches`);
+            const rowsFor = (id) => batchIdsOf.filter((b) => b.referenceId === id).map((b) => b.id);
+
+            expect(fixedFor(swapped.id)).toEqual([expect.objectContaining({ journalDate: '2026-04-09', correctDate: '2026-09-04' })]);
+            expect(fixedFor(entryDay.id)).toEqual([expect.objectContaining({ journalDate: '2026-10-01', correctDate: '2026-09-25' })]);
+            expect(fixedFor(invoice.id).map((f) => [f.referenceType, f.correctDate]).sort())
+                .toEqual([['INVOICE', '2026-09-01'], ['INVOICE_CASH', '2026-09-01']]);
+            expect(fixedFor(history.id)).toEqual([]);
+            expect(plan.skipped.deletedDocument.map((r) => r.batchId)).toEqual(expect.arrayContaining(rowsFor(deleted.id)));
+            expect(plan.skipped.unreadableDate.map((r) => r.batchId)).toEqual(rowsFor(unreadable.id));
+
+            const result = await applyRepair(plan);
+            expect(result.batches).toBe(plan.fixes.length);
+
+            expect((await batchDates(swapped.id))[0].d).toBe('2026-09-04');
+            expect(await lineDates(swapped.id)).toEqual(['2026-09-04', '2026-09-04']);
+            expect((await batchDates(entryDay.id))[0].d).toBe('2026-09-25');
+            expect(new Set((await batchDates(invoice.id)).filter((b) => !b.isReversed).map((b) => b.d))).toEqual(new Set(['2026-09-01']));
+            expect((await batchDates(history.id))[0]).toMatchObject({ isReversed: true, d: '2026-04-09' });
+            expect((await batchDates(deleted.id))[0].d).toBe('2026-04-09');
+            expect(await trialBalance()).toEqual(tbBefore); // only days moved, never amounts
+
+            const [log] = await q(`SELECT description FROM audit_logs WHERE "entityType" = 'JOURNAL_BATCH' ORDER BY "createdAt" DESC LIMIT 1`);
+            expect(log.description).toMatch(new RegExp(`Repaired the date of ${result.batches} journal batches`));
+
+            expect((await planRepair()).fixes).toEqual([]); // a second run has nothing to do
+        });
     });
 
     test('all or nothing: if any step fails, the document, journal and audit are untouched', async () => {
