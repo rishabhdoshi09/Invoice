@@ -9,12 +9,13 @@ import {
 import {
     Delete, Visibility, Refresh, Add, Payment, Close,
     Search, Download, Print, AccountBalance, ShoppingBag, CheckCircle,
-    KeyboardArrowDown, Save, Edit
+    KeyboardArrowDown, Save, Edit, Event
 } from '@mui/icons-material';
 import axios from 'axios';
 import { TableSkeleton } from '../../common/TableSkeleton';
+import { ChangeDateDialog } from '../../common/ChangeDateDialog';
 import moment from 'moment';
-import { toast } from '../../../utils/toast';
+import { toast, toastSuccess } from '../../../utils/toast';
 import { PageHeader } from '../../common/PageHeader';
 
 // ─── Compact inline entry bar ────────────────────────────────────
@@ -356,7 +357,7 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
 };
 
 // ─── Supplier Ledger Dialog (Tally-style) ──────────────────────────
-const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDeletePayment, onPayment, onPurchase, onDownload, onPrint }) => {
+const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDeletePayment, onChangeDate, onPayment, onPurchase, onDownload, onPrint }) => {
     const [expandedId, setExpandedId] = useState(null);
     
     if (!supplier) return null;
@@ -483,7 +484,7 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
                                 <TableCell align="right" width={90} sx={{ color: '#1565c0 !important' }}>⚪ White Dr</TableCell>
                                 <TableCell align="right" width={100}>Credit</TableCell>
                                 <TableCell align="right" width={110}>Balance</TableCell>
-                                <TableCell align="center" width={40} sx={{ fontFamily: 'inherit' }}></TableCell>
+                                <TableCell align="center" width={64} sx={{ fontFamily: 'inherit' }}></TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
@@ -531,7 +532,12 @@ const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDel
                                             <TableCell align="right" sx={{ fontWeight: 700 }}>
                                                 {fmt(e.balance)} {e.balance >= 0 ? 'Dr' : 'Cr'}
                                             </TableCell>
-                                            <TableCell align="center" onClick={ev => ev.stopPropagation()}>
+                                            <TableCell align="center" onClick={ev => ev.stopPropagation()} sx={{ whiteSpace: 'nowrap' }}>
+                                                {(e.type === 'purchase' || e.type === 'payment') && (
+                                                    <Tooltip title="Change date"><IconButton data-testid={`change-date-${e.type}-${e.id}`} size="small" onClick={() => onChangeDate(e)} sx={{ p: 0.2 }}>
+                                                        <Event sx={{ fontSize: 15, color: '#5c6bc0' }} />
+                                                    </IconButton></Tooltip>
+                                                )}
                                                 {e.type === 'purchase' && (
                                                     <Tooltip title="Delete purchase"><IconButton data-testid={`delete-purchase-${e.id}`} size="small" onClick={() => onDeletePurchase(e.id)} sx={{ p: 0.2 }}>
                                                         <Delete sx={{ fontSize: 15, color: '#e57373' }} />
@@ -720,6 +726,25 @@ export const ListSuppliers = () => {
             if (detailsDialog.supplier?.id) fetchSupplierDetails(detailsDialog.supplier.id);
             fetchSuppliers();
         } catch (e) { toast(e.response?.data?.message || e.message); }
+    };
+
+    // ── Change the date of a purchase or payment from the ledger ──
+    const [dateDialog, setDateDialog] = useState({ open: false, entry: null });
+
+    const handleChangeDate = (e) => {
+        const label = `${e.type === 'purchase' ? 'Purchase' : 'Payment'} ${e.refNo && e.refNo !== '-' ? e.refNo : ''}`.trim();
+        setDateDialog({ open: true, entry: { type: e.type, id: e.id, label, date: e.date } });
+    };
+
+    const handleSaveDate = async (isoDate) => {
+        const { type, id } = dateDialog.entry;
+        const token = localStorage.getItem('token');
+        const path = type === 'purchase' ? 'purchases' : 'payments';
+        await axios.patch(`/api/${path}/${id}/date`, { date: isoDate }, { headers: { Authorization: `Bearer ${token}` } });
+        setDateDialog({ open: false, entry: null });
+        toastSuccess(`Date changed to ${moment(isoDate).format('DD/MM/YYYY')}`);
+        if (detailsDialog.supplier?.id) fetchSupplierDetails(detailsDialog.supplier.id);
+        fetchSuppliers();
     };
 
     // Quick actions from table → open entry bar pre-filled
@@ -1054,10 +1079,18 @@ export const ListSuppliers = () => {
                 onClose={() => setDetailsDialog({ open: false, supplier: null })}
                 onDeletePurchase={handleDeletePurchase}
                 onDeletePayment={handleDeletePayment}
+                onChangeDate={handleChangeDate}
                 onPayment={(s) => { setDetailsDialog({ open: false, supplier: null }); setPrefilledSupplier(s); setEntryMode('payment'); }}
                 onPurchase={(s) => { setDetailsDialog({ open: false, supplier: null }); setPrefilledSupplier(s); setEntryMode('purchase'); }}
                 onDownload={handleLedgerDownload}
                 onPrint={handleLedgerPrint}
+            />
+
+            <ChangeDateDialog
+                open={dateDialog.open}
+                entry={dateDialog.entry}
+                onClose={() => setDateDialog({ open: false, entry: null })}
+                onSave={handleSaveDate}
             />
 
             {/* Supplier Edit Dialog */}

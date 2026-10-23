@@ -35,8 +35,9 @@ const KINDS = {
         // The party whose opening balance date bounds this document.
         party: (doc) => {
             const model = { supplier: db.supplier, customer: db.customer }[doc.partyType];
-            return model ? { model, id: doc.partyId } : null; // expense/employee: no opening balance
+            return model ? { model, id: doc.partyId } : null;
         },
+        guard: guardPayment,
     },
     purchase: {
         model: () => db.purchaseBill,
@@ -51,6 +52,46 @@ const KINDS = {
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const dmySlash = (iso) => isoToDmy(iso).replace(/-/g, '/');
+
+// Payments that must not be re-dated on their own.
+async function guardPayment(doc, { iso, oldIso, transaction }) {
+    // Only what the ledgers show. A salary payout is tied to its salary month
+    // (salary_payments.month/year would not move), and expenses are not ledger rows.
+    if (doc.partyType !== 'customer' && doc.partyType !== 'supplier') {
+        throw new DateChangeError(400, 'Only customer receipts and supplier payments can be re-dated here.');
+    }
+    // Legacy markers that mirror an invoice's payment status.
+    if (String(doc.paymentNumber || '').startsWith('PAY-TOGGLE-')) {
+        throw new DateChangeError(400, "This entry mirrors an invoice's payment status. Change the invoice instead.");
+    }
+    // Day Start counts a paid CASH invoice's money as Cash Sales and skips a
+    // receipt for that invoice dated the same day (services/dailySummary.js).
+    // Moving such a receipt off the invoice's day would count the cash twice;
+    // moving a receipt onto it would hide the receipt.
+    if (doc.referenceType === 'order' && doc.referenceId) {
+        const order = await db.order.findByPk(doc.referenceId, {
+            attributes: ['orderNumber', 'orderDate', 'paymentMode', 'paymentStatus'], transaction,
+        });
+        const orderIso = order && toIsoDate(order.orderDate);
+        if (order && order.paymentMode === 'CASH' && order.paymentStatus === 'paid' && orderIso
+            && (oldIso === orderIso || iso === orderIso)) {
+            throw new DateChangeError(400,
+                `This receipt is linked to cash invoice ${order.orderNumber} (${dmySlash(orderIso)}), whose cash is ` +
+                "counted once in Day Start. It can't be moved onto or off that day — change the invoice's date instead.");
+        }
+    }
+}
+
+// The only period lock in the app: a day an admin has closed.
+async function refuseClosedDays(isoDates, transaction) {
+    const closed = await db.dailySummary.findAll({
+        where: { date: isoDates.filter(Boolean), isClosed: true }, attributes: ['date'], transaction,
+    });
+    if (closed.length) {
+        throw new DateChangeError(400, `${dmySlash(toIsoDate(closed[0].date))} is a closed day. Reopen it first.`);
+    }
+}
 
 class DateChangeError extends Error {
     constructor(status, message) {
@@ -116,9 +157,12 @@ async function changeDocumentDate({ kind, id, newDate, user = null, request = {}
 
         const oldStored = doc[cfg.dateField];
         const number = doc[cfg.numberField];
-        if (toIsoDate(oldStored) === iso) {
+        const oldIso = toIsoDate(oldStored);
+        if (oldIso === iso) {
             return { id, number, changed: false, oldDate: oldStored, newDate: oldStored };
         }
+        if (cfg.guard) await cfg.guard(doc, { iso, oldIso, transaction });
+        await refuseClosedDays([oldIso, iso], transaction);
 
         // An opening balance already sums up everything before its date, so a
         // document moved before it would be counted twice.
@@ -128,7 +172,7 @@ async function changeDocumentDate({ kind, id, newDate, user = null, request = {}
             const obIso = p && toIsoDate(p.openingBalanceDate);
             if (obIso && iso < obIso) {
                 throw new DateChangeError(400,
-                    `This date is before ${p.name}'s opening balance date (${isoToDmy(obIso).replace(/-/g, '/')}). ` +
+                    `This date is before ${p.name}'s opening balance date (${dmySlash(obIso)}). ` +
                     'Entries before that date are already included in the opening balance.');
             }
         }

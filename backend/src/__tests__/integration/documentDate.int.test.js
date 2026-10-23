@@ -217,6 +217,47 @@ suite('changing a document date (real Postgres)', () => {
         await expect(changeDocumentDate({ kind: 'purchase', id: 'not-a-uuid', newDate: '2026-09-05' })).rejects.toMatchObject({ status: 404 });
     });
 
+    async function insertRawPayment(fields) {
+        const id = uuid();
+        const row = {
+            id, paymentNumber: `PAY-${id.slice(0, 8).toUpperCase()}`, paymentDate: '04-09-2026', partyId: null,
+            partyName: 'someone', partyType: 'customer', amount: 500, referenceType: 'advance', referenceId: null, ...fields,
+        };
+        await db.sequelize.query(
+            `INSERT INTO payments (id, "paymentNumber", "paymentDate", "partyId", "partyName", "partyType", amount, "referenceType", "referenceId", "isDeleted", "createdAt", "updatedAt")
+             VALUES (:id, :paymentNumber, :paymentDate, :partyId, :partyName, :partyType, :amount, :referenceType, :referenceId, false, now(), now())`,
+            { replacements: row });
+        return row;
+    }
+
+    test('only customer receipts and supplier payments can be re-dated', async () => {
+        const salary = await insertRawPayment({ partyType: 'employee', referenceType: 'salary' });
+        await expect(changeDocumentDate({ kind: 'payment', id: salary.id, newDate: '2026-09-05' }))
+            .rejects.toMatchObject({ status: 400, message: expect.stringMatching(/Only customer receipts and supplier payments/) });
+        const toggle = await insertRawPayment({ paymentNumber: `PAY-TOGGLE-${uuid().slice(0, 6)}` });
+        await expect(changeDocumentDate({ kind: 'payment', id: toggle.id, newDate: '2026-09-05' }))
+            .rejects.toMatchObject({ status: 400, message: expect.stringMatching(/mirrors an invoice/) });
+        const receipt = await insertRawPayment({});
+        await expect(changeDocumentDate({ kind: 'payment', id: receipt.id, newDate: '2026-09-05', user: admin }))
+            .resolves.toMatchObject({ changed: true, newDate: '05-09-2026' });
+    });
+
+    test('refuses moving an entry into or out of a closed day', async () => {
+        await db.sequelize.query(`INSERT INTO daily_summaries (id, date, "isClosed", "createdAt", "updatedAt") VALUES (:id, '2026-09-07', true, now(), now())`,
+            { replacements: { id: uuid() } });
+        try {
+            const p = await insertSupplierPayment('04-09-2026', 700);
+            await expect(changeDocumentDate({ kind: 'payment', id: p.id, newDate: '2026-09-07', user: admin }))
+                .rejects.toMatchObject({ status: 400, message: '07/09/2026 is a closed day. Reopen it first.' });
+            const q2 = await insertSupplierPayment('07-09-2026', 800);
+            await expect(changeDocumentDate({ kind: 'payment', id: q2.id, newDate: '2026-09-08', user: admin }))
+                .rejects.toMatchObject({ status: 400, message: expect.stringMatching(/closed day/) });
+            expect((await db.payment.findByPk(q2.id)).paymentDate).toBe('07-09-2026');
+        } finally {
+            await db.sequelize.query(`DELETE FROM daily_summaries WHERE date = '2026-09-07'`);
+        }
+    });
+
     describe('invoice date edits (real controllers)', () => {
         let orderController;
         const call = async (handler, req) => {
@@ -252,6 +293,20 @@ suite('changing a document date (real Postgres)', () => {
                 .toEqual([['INVOICE', '2026-09-01'], ['INVOICE_CASH', '2026-09-01']]);
             expect(await lineDates(order.id)).toEqual(expect.arrayContaining(['2026-09-01']));
             expect(new Set(await lineDates(order.id))).toEqual(new Set(['2026-09-01']));
+        });
+
+        test("a receipt that is a cash invoice's money can't move onto or off that invoice's day", async () => {
+            const order = await createCashInvoice('04-09-2026');
+            // Same-day receipt for the cash invoice: Day Start skips it, so moving it off would double count.
+            const sameDay = await insertRawPayment({ referenceType: 'order', referenceId: order.id, paymentDate: '04-09-2026' });
+            await expect(changeDocumentDate({ kind: 'payment', id: sameDay.id, newDate: '2026-09-06' }))
+                .rejects.toMatchObject({ status: 400, message: expect.stringMatching(/linked to cash invoice .* \(04\/09\/2026\)/) });
+            // A later receipt for it: moving onto the invoice's day would hide it; elsewhere is fine.
+            const later = await insertRawPayment({ referenceType: 'order', referenceId: order.id, paymentDate: '06-09-2026' });
+            await expect(changeDocumentDate({ kind: 'payment', id: later.id, newDate: '2026-09-04' }))
+                .rejects.toMatchObject({ status: 400 });
+            await expect(changeDocumentDate({ kind: 'payment', id: later.id, newDate: '2026-09-08', user: admin }))
+                .resolves.toMatchObject({ changed: true });
         });
     });
 

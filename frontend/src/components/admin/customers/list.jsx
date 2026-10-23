@@ -13,7 +13,7 @@ import {
     Delete, Visibility, Refresh, Add, Receipt, People, Close,
     ShoppingCart, Search, Download, CheckCircle, Edit,
     KeyboardArrowDown, KeyboardArrowUp, PersonAdd, Warning,
-    History, Phone, Email, AccountBalance, TipsAndUpdates, Print, WhatsApp
+    History, Phone, Email, AccountBalance, TipsAndUpdates, Print, WhatsApp, Event
 } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
@@ -21,7 +21,8 @@ import pdfMake from 'pdfmake/build/pdfmake';
 import { generatePdfDefinition } from '../orders/helper';
 import { sendInvoiceViaWhatsApp } from '../../../utils/whatsapp';
 import { TableSkeleton } from '../../common/TableSkeleton';
-import { toast } from '../../../utils/toast';
+import { toast, toastSuccess } from '../../../utils/toast';
+import { ChangeDateDialog } from '../../common/ChangeDateDialog';
 import { PageHeader } from '../../common/PageHeader';
 
 // Load pdfMake fonts safely
@@ -37,7 +38,7 @@ try {
 }
 
 // ─── Customer Ledger Dialog (Tally-style) ─────────────────────────
-const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, onReceipt, onSale, onDeleteReceipt, onEditInvoice, onDeleteInvoice }) => {
+const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, onReceipt, onSale, onDeleteReceipt, onChangeReceiptDate, onEditInvoice, onDeleteInvoice }) => {
     if (!customer) return null;
     const c = customer;
 
@@ -234,6 +235,14 @@ const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, on
                                                 </Typography>
                                             </TableCell>
                                             <TableCell align="center" sx={{ p: 0, whiteSpace: 'nowrap' }}>
+                                                {e.type === 'receipt' && onChangeReceiptDate && (
+                                                    <Tooltip title="Change date">
+                                                        <IconButton size="small" data-testid={`change-date-receipt-${e.id}`} onClick={() => onChangeReceiptDate(e)}
+                                                            sx={{ color: '#3949AB', opacity: 0.55, '&:hover': { opacity: 1 } }}>
+                                                            <Event sx={{ fontSize: 15 }} />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                )}
                                                 {e.type === 'receipt' && onDeleteReceipt && (
                                                     <Tooltip title="Delete receipt">
                                                         <IconButton size="small" onClick={() => onDeleteReceipt(e.id)}
@@ -487,6 +496,32 @@ export const ListCustomers = () => {
         } catch (err) {
             toast(err?.response?.data?.message || 'Failed to delete receipt.');
         }
+    };
+
+    // ── Change the date of a receipt from the ledger ──
+    const [dateDialog, setDateDialog] = useState({ open: false, entry: null });
+
+    const handleChangeReceiptDate = (e) => {
+        const label = `Receipt ${e.refNo && e.refNo !== '-' ? e.refNo : ''}`.trim();
+        setDateDialog({ open: true, entry: { id: e.id, label, date: e.date } });
+    };
+
+    const handleSaveReceiptDate = async (isoDate) => {
+        const token = localStorage.getItem('token');
+        const headers = { Authorization: `Bearer ${token}` };
+        await axios.patch(`/api/payments/${dateDialog.entry.id}/date`, { date: isoDate }, { headers });
+        setDateDialog({ open: false, entry: null });
+        toastSuccess(`Date changed to ${moment(isoDate).format('DD/MM/YYYY')}`);
+        const customerId = ledgerDialog.customer?.id;
+        if (customerId) {
+            try {
+                const { data } = await axios.get(`/api/customers/${customerId}/transactions`, { headers });
+                setLedgerDialog(prev => ({ ...prev, customer: data.data }));
+            } catch (_) { /* the change is saved; the ledger refreshes on reopen */ }
+        }
+        if (detailsDialog.open && detailsDialog.customer?.id === customerId) refreshDetailsCustomer();
+        fetchCustomers();
+        fetchRecentReceipts();
     };
 
     const handleEditInvoice = (orderId) => {
@@ -2007,8 +2042,16 @@ export const ListCustomers = () => {
                 onReceipt={(c) => { setLedgerDialog({ open: false, customer: null }); handleQuickReceiptFromTable(c); }}
                 onSale={(c) => { setLedgerDialog({ open: false, customer: null }); handleCreateSale(c); }}
                 onDeleteReceipt={handleDeleteReceipt}
+                onChangeReceiptDate={handleChangeReceiptDate}
                 onEditInvoice={handleEditInvoice}
                 onDeleteInvoice={handleDeleteInvoice}
+            />
+
+            <ChangeDateDialog
+                open={dateDialog.open}
+                entry={dateDialog.entry}
+                onClose={() => setDateDialog({ open: false, entry: null })}
+                onSave={handleSaveReceiptDate}
             />
 
             {/* Customer Ledger Statement (date-range PDF) */}
