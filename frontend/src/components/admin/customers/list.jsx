@@ -23,6 +23,8 @@ import { sendInvoiceViaWhatsApp } from '../../../utils/whatsapp';
 import { TableSkeleton } from '../../common/TableSkeleton';
 import { toast, toastSuccess } from '../../../utils/toast';
 import { ChangeDateDialog } from '../../common/ChangeDateDialog';
+import { useDispatch } from 'react-redux';
+import { api } from '../../../store/api';
 import { PageHeader } from '../../common/PageHeader';
 
 // Load pdfMake fonts safely
@@ -38,7 +40,7 @@ try {
 }
 
 // ─── Customer Ledger Dialog (Tally-style) ─────────────────────────
-const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, onReceipt, onSale, onDeleteReceipt, onChangeReceiptDate, onEditInvoice, onDeleteInvoice }) => {
+export const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, onReceipt, onSale, onDeleteReceipt, onChangeReceiptDate, onEditInvoice, onDeleteInvoice }) => {
     if (!customer) return null;
     const c = customer;
 
@@ -235,7 +237,7 @@ const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, on
                                                 </Typography>
                                             </TableCell>
                                             <TableCell align="center" sx={{ p: 0, whiteSpace: 'nowrap' }}>
-                                                {e.type === 'receipt' && onChangeReceiptDate && (
+                                                {e.type === 'receipt' && onChangeReceiptDate && !String(e.raw?.paymentNumber || '').startsWith('PAY-TOGGLE-') && (
                                                     <Tooltip title="Change date">
                                                         <IconButton size="small" data-testid={`change-date-receipt-${e.id}`} onClick={() => onChangeReceiptDate(e)}
                                                             sx={{ color: '#3949AB', opacity: 0.55, '&:hover': { opacity: 1 } }}>
@@ -500,6 +502,7 @@ export const ListCustomers = () => {
 
     // ── Change the date of a receipt from the ledger ──
     const [dateDialog, setDateDialog] = useState({ open: false, entry: null });
+    const dispatch = useDispatch();
 
     const handleChangeReceiptDate = (e) => {
         const label = `Receipt ${e.refNo && e.refNo !== '-' ? e.refNo : ''}`.trim();
@@ -510,6 +513,9 @@ export const ListCustomers = () => {
         const token = localStorage.getItem('token');
         const headers = { Authorization: `Bearer ${token}` };
         await axios.patch(`/api/payments/${dateDialog.entry.id}/date`, { date: isoDate }, { headers });
+        // The entry moved to another day: drop cached daily figures (Daily Payments,
+        // Day Start), which are loaded through RTK Query and would otherwise go stale.
+        dispatch(api.util.invalidateTags([{ type: 'Payments', id: 'LIST' }, 'Dashboard']));
         setDateDialog({ open: false, entry: null });
         toastSuccess(`Date changed to ${moment(isoDate).format('DD/MM/YYYY')}`);
         const customerId = ledgerDialog.customer?.id;

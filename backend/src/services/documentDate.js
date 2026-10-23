@@ -18,7 +18,7 @@
 
 const db = require('../models');
 const { createAuditLog } = require('../middleware/auditLogger');
-const { toIsoDate, isoToDmy, localIso } = require('../utils/docDate');
+const { toIsoDate, isoToDmy, shopToday } = require('../utils/docDate');
 
 // MIGRATION batches are the same document's entries from the legacy ledger
 // migration (keyed by the document's own id, e.g. a purchase and its
@@ -35,7 +35,12 @@ const KINDS = {
         // The party whose opening balance date bounds this document.
         party: (doc) => {
             const model = { supplier: db.supplier, customer: db.customer }[doc.partyType];
-            return model ? { model, id: doc.partyId } : null;
+            if (!model) return null;
+            if (doc.partyId) return { model, where: { id: doc.partyId } };
+            // The customer ledger also shows a receipt with no customer id under
+            // every customer with exactly that name (dao/customer.js).
+            if (doc.partyType === 'customer' && doc.partyName) return { model, where: { name: doc.partyName } };
+            return null;
         },
         guard: guardPayment,
     },
@@ -47,7 +52,7 @@ const KINDS = {
         stockReferenceType: 'purchase',
         entityType: 'PURCHASE',
         label: 'Purchase',
-        party: (doc) => ({ model: db.supplier, id: doc.supplierId }),
+        party: (doc) => (doc.supplierId ? { model: db.supplier, where: { id: doc.supplierId } } : null),
     },
 };
 
@@ -74,11 +79,17 @@ async function guardPayment(doc, { iso, oldIso, transaction }) {
             attributes: ['orderNumber', 'orderDate', 'paymentMode', 'paymentStatus'], transaction,
         });
         const orderIso = order && toIsoDate(order.orderDate);
-        if (order && order.paymentMode === 'CASH' && order.paymentStatus === 'paid' && orderIso
-            && (oldIso === orderIso || iso === orderIso)) {
+        const paidCash = order && order.paymentMode === 'CASH' && order.paymentStatus === 'paid' && orderIso;
+        if (paidCash && oldIso === orderIso) {
+            // updateOrder moves this same-day receipt along when the invoice's date changes.
             throw new DateChangeError(400,
-                `This receipt is linked to cash invoice ${order.orderNumber} (${dmySlash(orderIso)}), whose cash is ` +
-                "counted once in Day Start. It can't be moved onto or off that day — change the invoice's date instead.");
+                `This receipt is the cash taken with invoice ${order.orderNumber} (${dmySlash(orderIso)}). ` +
+                "Change the invoice's date instead — this receipt moves with it.");
+        }
+        if (paidCash && iso === orderIso) {
+            throw new DateChangeError(400,
+                `Invoice ${order.orderNumber} was paid in cash on ${dmySlash(orderIso)}, and Day Start counts that ` +
+                "cash once. A receipt for it moved onto that day would be hidden, so choose another date.");
         }
     }
 }
@@ -147,7 +158,7 @@ async function changeDocumentDate({ kind, id, newDate, user = null, request = {}
 
     const iso = toIsoDate(newDate);
     if (!iso) throw new DateChangeError(400, 'Please choose a valid date.');
-    if (iso > localIso(new Date())) throw new DateChangeError(400, 'The date cannot be in the future.');
+    if (iso > shopToday()) throw new DateChangeError(400, 'The date cannot be in the future.');
     if (iso < '2000-01-01') throw new DateChangeError(400, 'Please choose a valid date.');
 
     return db.sequelize.transaction(async (transaction) => {
@@ -167,12 +178,17 @@ async function changeDocumentDate({ kind, id, newDate, user = null, request = {}
         // An opening balance already sums up everything before its date, so a
         // document moved before it would be counted twice.
         const party = cfg.party(doc);
-        if (party && party.id) {
-            const p = await party.model.findByPk(party.id, { attributes: ['name', 'openingBalanceDate'], transaction });
-            const obIso = p && toIsoDate(p.openingBalanceDate);
-            if (obIso && iso < obIso) {
+        if (party) {
+            const rows = await party.model.findAll({ where: party.where, attributes: ['name', 'openingBalanceDate'], transaction });
+            // A name-matched receipt sits in every same-named ledger: use the latest bound.
+            let bound = null;
+            for (const r of rows) {
+                const obIso = toIsoDate(r.openingBalanceDate);
+                if (obIso && (!bound || obIso > bound.iso)) bound = { iso: obIso, name: r.name };
+            }
+            if (bound && iso < bound.iso) {
                 throw new DateChangeError(400,
-                    `This date is before ${p.name}'s opening balance date (${dmySlash(obIso)}). ` +
+                    `This date is before ${bound.name}'s opening balance date (${dmySlash(bound.iso)}). ` +
                     'Entries before that date are already included in the opening balance.');
             }
         }

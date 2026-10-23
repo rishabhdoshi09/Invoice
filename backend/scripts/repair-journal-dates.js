@@ -21,7 +21,9 @@
  * Batches whose document is missing, deleted, or has an unreadable date are
  * reported and left alone.
  *
- * Usage (from Invoice/backend/) — take a backup first:
+ * Usage (from Invoice/backend/) — take a backup first, and run --apply while the
+ * app is stopped (if a date is changed in the app meanwhile, the repair notices,
+ * rolls back and asks you to run it again):
  *   node scripts/repair-journal-dates.js           # DRY RUN: report only (default)
  *   node scripts/repair-journal-dates.js --apply   # fix, in one transaction
  */
@@ -76,27 +78,39 @@ async function planRepair() {
 async function applyRepair(plan) {
     if (!plan.fixes.length) return { batches: 0, ledgerLines: 0 };
     return db.sequelize.transaction(async (transaction) => {
-        const byDate = new Map();
+        // Group by (planned from-date, to-date). Each UPDATE only touches a batch
+        // still on the date it had when the plan was made: if a date was changed
+        // in the app since (or is being changed now — the UPDATE waits for that
+        // row and re-checks), the batch is not matched, the count check below
+        // fails, and the whole repair rolls back instead of writing a stale date.
+        const groups = new Map();
         for (const f of plan.fixes) {
-            if (!byDate.has(f.correctDate)) byDate.set(f.correctDate, []);
-            byDate.get(f.correctDate).push(f.batchId);
+            const key = `${f.journalDate}|${f.correctDate}`;
+            if (!groups.has(key)) groups.set(key, { from: f.journalDate, to: f.correctDate, ids: [] });
+            groups.get(key).ids.push(f.batchId);
         }
         let batches = 0;
         let ledgerLines = 0;
-        for (const [d, ids] of byDate) {
-            const [, b] = await db.sequelize.query(
+        for (const { from, to, ids } of groups.values()) {
+            const [rows] = await db.sequelize.query(
                 `UPDATE journal_batches
-                    SET "transactionDate" = CAST(:d AS date)::timestamp AT TIME ZONE 'UTC', "updatedAt" = now()
-                  WHERE id IN (:ids) AND "isReversed" = false`,
-                { replacements: { d, ids }, transaction });
-            const [, l] = await db.sequelize.query(
-                `UPDATE ledger_entries SET "transactionDate" = CAST(:d AS date), "updatedAt" = now() WHERE "batchId" IN (:ids)`,
-                { replacements: { d, ids }, transaction });
-            batches += b.rowCount;
-            ledgerLines += l.rowCount;
+                    SET "transactionDate" = CAST(:to AS date)::timestamp AT TIME ZONE 'UTC', "updatedAt" = now()
+                  WHERE id IN (:ids) AND "isReversed" = false
+                    AND to_char("transactionDate" AT TIME ZONE 'UTC', 'YYYY-MM-DD') = :from
+              RETURNING id`,
+                { replacements: { to, from, ids }, transaction });
+            const hit = rows.map((r) => r.id);
+            batches += hit.length;
+            if (hit.length) {
+                const [, l] = await db.sequelize.query(
+                    `UPDATE ledger_entries SET "transactionDate" = CAST(:to AS date), "updatedAt" = now() WHERE "batchId" IN (:hit)`,
+                    { replacements: { to, hit }, transaction });
+                ledgerLines += l.rowCount;
+            }
         }
         if (batches !== plan.fixes.length) {
-            throw new Error(`Expected to fix ${plan.fixes.length} batches but matched ${batches} — rolled back, nothing changed.`);
+            throw new Error(`${plan.fixes.length - batches} of the planned entries changed since the report was made. ` +
+                'Rolled back — nothing changed. Run the script again.');
         }
         const byType = {};
         for (const f of plan.fixes) byType[f.referenceType] = (byType[f.referenceType] || 0) + 1;

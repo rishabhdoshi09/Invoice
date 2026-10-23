@@ -38,7 +38,7 @@
 
 const db = require('../models');
 const LedgerService = require('./ledgerService');
-const { firstIsoDate, localIso } = require('../utils/docDate');
+const { firstIsoDate, localIso, toIsoDate } = require('../utils/docDate');
 
 const ledgerService = new LedgerService(db);
 
@@ -113,7 +113,14 @@ async function _alreadyPosted(referenceType, referenceId, transaction) {
 // entries as American month-day: 04-09-2026 (4 Sep) was posted as 9 Apr,
 // 11-09-2026 as 9 Nov, and 25-09-2026 (invalid that way) as "now".
 function _txDate(...candidates) {
-    return firstIsoDate(...candidates) || localIso(new Date());
+    const iso = firstIsoDate(...candidates) || localIso(new Date());
+    // The first candidate is the document's own date. If it was given but can't
+    // be read, the entry falls back to the creation day — say so, never silently.
+    const own = candidates[0];
+    if (own != null && own !== '' && !toIsoDate(own)) {
+        console.warn(`[AE] Unreadable document date "${own}" — journal entry posted on ${iso} instead`);
+    }
+    return iso;
 }
 
 // ══════════════════════════════════════════════════════════════════════════

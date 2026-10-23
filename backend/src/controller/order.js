@@ -8,7 +8,7 @@ const { postInvoiceToLedger, reverseInvoiceLedger, reverseInvoiceCashLedger, pos
 const { assertOrderInvariants } = require('../services/orderInvariants');
 const { updateStock } = require('../services/accountingEngine');
 const { moveLinkedDates } = require('../services/documentDate');
-const { toIsoDate } = require('../utils/docDate');
+const { toIsoDate, isoToDmy } = require('../utils/docDate');
 const telegram = require('../services/telegramAlert');
 const { lockAdvanceCandidates, applyDerivedPaymentFields } = require('./receiptAllocation');
 
@@ -652,6 +652,42 @@ module.exports = {
                         iso: newOrderIso,
                         transaction,
                     });
+
+                    // A paid CASH invoice's same-day receipt is that invoice's cash:
+                    // Day Start counts it once, as Cash Sales, and skips the receipt
+                    // only while both share a day (services/dailySummary.js). Left
+                    // behind, it would count again as a receipt on the old day — so it
+                    // moves with the invoice. A later receipt keeps its own day.
+                    const oldOrderIso = toIsoDate(originalOrder.orderDate);
+                    if (originalOrder.paymentMode === 'CASH' && originalOrder.paymentStatus === 'paid' && oldOrderIso) {
+                        const receipts = await db.payment.findAll({
+                            where: { referenceType: 'order', referenceId: orderId, isDeleted: false },
+                            transaction, lock: transaction.LOCK.UPDATE,
+                        });
+                        for (const p of receipts) {
+                            if (toIsoDate(p.paymentDate) !== oldOrderIso) continue;
+                            if (String(p.paymentNumber || '').startsWith('PAY-TOGGLE-')) continue; // legacy status marker
+                            const oldPaymentDate = p.paymentDate;
+                            await p.update({ paymentDate: isoToDmy(newOrderIso) }, { transaction });
+                            await moveLinkedDates({
+                                referenceTypes: ['PAYMENT', 'MIGRATION'], referenceId: p.id,
+                                stockReferenceType: null, iso: newOrderIso, transaction,
+                            });
+                            await createAuditLog({
+                                userId: req.user && req.user.id,
+                                userName: req.user && (req.user.name || req.user.username),
+                                userRole: req.user && req.user.role,
+                                action: 'UPDATE',
+                                entityType: 'PAYMENT',
+                                entityId: p.id,
+                                entityName: p.paymentNumber,
+                                oldValues: { paymentDate: oldPaymentDate },
+                                newValues: { paymentDate: p.paymentDate },
+                                description: `Receipt ${p.paymentNumber} moved with cash invoice ${originalOrder.orderNumber}: ${oldPaymentDate} to ${p.paymentDate}`,
+                                transaction,
+                            });
+                        }
+                    }
                 }
 
                 // === PRE-COMMIT INVARIANT CHECK (Phase 4) ===

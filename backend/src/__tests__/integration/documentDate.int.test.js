@@ -76,7 +76,8 @@ suite('changing a document date (real Postgres)', () => {
         uuid = require('uuid').v4;
 
         await db.sequelize.query(`TRUNCATE ledger_entries, journal_batches, stock_transactions, audit_logs,
-                                  payments, "purchaseBills", accounts, suppliers, products CASCADE`);
+                                  payments, "purchaseBills", accounts, suppliers, products, customers,
+                                  orders, "orderItems", receipt_allocations, daily_summaries CASCADE`);
         const LedgerService = require('../../services/ledgerService');
         await new LedgerService(db).initializeChartOfAccounts();
         await engine.ensureGSTAccounts();
@@ -99,6 +100,17 @@ suite('changing a document date (real Postgres)', () => {
         const [batch] = await batchDates(p.id);
         expect(batch).toMatchObject({ referenceType: 'PAYMENT', d: '2026-09-04' });
         expect(await lineDates(p.id)).toEqual(['2026-09-04', '2026-09-04']);
+    });
+
+    test('a document date that cannot be read is reported, not silently replaced', async () => {
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const p = await insertSupplierPayment('4th Sept', 900);
+            expect((await batchDates(p.id))[0].d).toMatch(/^\d{4}-\d{2}-\d{2}$/); // posted on the creation day
+            expect(warn.mock.calls.map((c) => c.join(' ')).join('\n')).toMatch(/Unreadable document date "4th Sept"/);
+        } finally {
+            warn.mockRestore();
+        }
     });
 
     test('moving a payment moves its journal batch and lines, and is audited', async () => {
@@ -242,6 +254,19 @@ suite('changing a document date (real Postgres)', () => {
             .resolves.toMatchObject({ changed: true, newDate: '05-09-2026' });
     });
 
+    test('a receipt matched to customers by name only is held to their opening balance date (the latest one)', async () => {
+        for (const [id, ob] of [[uuid(), '2026-09-01'], [uuid(), '2026-09-05']]) {
+            await db.sequelize.query(
+                `INSERT INTO customers (id, name, "openingBalanceDate", "createdAt", "updatedAt") VALUES (:id, 'Walk-in Ramesh', :ob, now(), now())`,
+                { replacements: { id, ob } });
+        }
+        const r = await insertRawPayment({ partyId: null, partyName: 'Walk-in Ramesh', partyType: 'customer', paymentDate: '10-09-2026' });
+        await expect(changeDocumentDate({ kind: 'payment', id: r.id, newDate: '2026-09-03' }))
+            .rejects.toMatchObject({ status: 400, message: expect.stringMatching(/Walk-in Ramesh's opening balance date \(05\/09\/2026\)/) });
+        await expect(changeDocumentDate({ kind: 'payment', id: r.id, newDate: '2026-09-06', user: admin }))
+            .resolves.toMatchObject({ changed: true });
+    });
+
     test('refuses moving an entry into or out of a closed day', async () => {
         await db.sequelize.query(`INSERT INTO daily_summaries (id, date, "isClosed", "createdAt", "updatedAt") VALUES (:id, '2026-09-07', true, now(), now())`,
             { replacements: { id: uuid() } });
@@ -300,13 +325,44 @@ suite('changing a document date (real Postgres)', () => {
             // Same-day receipt for the cash invoice: Day Start skips it, so moving it off would double count.
             const sameDay = await insertRawPayment({ referenceType: 'order', referenceId: order.id, paymentDate: '04-09-2026' });
             await expect(changeDocumentDate({ kind: 'payment', id: sameDay.id, newDate: '2026-09-06' }))
-                .rejects.toMatchObject({ status: 400, message: expect.stringMatching(/linked to cash invoice .* \(04\/09\/2026\)/) });
+                .rejects.toMatchObject({ status: 400, message: expect.stringMatching(/cash taken with invoice .* \(04\/09\/2026\)\. Change the invoice's date instead/) });
             // A later receipt for it: moving onto the invoice's day would hide it; elsewhere is fine.
             const later = await insertRawPayment({ referenceType: 'order', referenceId: order.id, paymentDate: '06-09-2026' });
             await expect(changeDocumentDate({ kind: 'payment', id: later.id, newDate: '2026-09-04' }))
-                .rejects.toMatchObject({ status: 400 });
+                .rejects.toMatchObject({ status: 400, message: expect.stringMatching(/paid in cash on 04\/09\/2026/) });
             await expect(changeDocumentDate({ kind: 'payment', id: later.id, newDate: '2026-09-08', user: admin }))
                 .resolves.toMatchObject({ changed: true });
+        });
+
+        test("following that advice works: the invoice's same-day receipt moves with it, so Day Start counts the cash once", async () => {
+            const dailySummary = require('../../services/dailySummary');
+            const day = async (iso) => {
+                const s = await dailySummary.getRealTimeSummary(iso);
+                return { cashSales: Number(s.cashSales), receipts: Number(s.customerReceipts) };
+            };
+            const LedgerService = require('../../services/ledgerService');
+            const [a1, a2] = await q(`SELECT id FROM accounts ORDER BY code LIMIT 2`);
+
+            const order = await createCashInvoice('16-06-2026');
+            const sameDay = await insertRawPayment({ referenceType: 'order', referenceId: order.id, paymentDate: '16-06-2026', amount: 600 });
+            await new LedgerService(db).createJournalBatch({
+                referenceType: 'PAYMENT', referenceId: sameDay.id, transactionDate: '2026-06-16', description: 'same-day receipt',
+                entries: [{ accountId: a1.id, debit: 600, credit: 0 }, { accountId: a2.id, debit: 0, credit: 600 }],
+            });
+            const later = await insertRawPayment({ referenceType: 'order', referenceId: order.id, paymentDate: '18-06-2026', amount: 50 });
+            expect(await day('2026-06-16')).toEqual({ cashSales: 600, receipts: 0 });
+
+            const res = await call(orderController.updateOrder, { params: { orderId: order.id }, body: { orderDate: '13-06-2026' } });
+
+            expect(res.statusCode).toBe(200);
+            expect((await db.payment.findByPk(sameDay.id)).paymentDate).toBe('13-06-2026');
+            expect((await batchDates(sameDay.id))[0].d).toBe('2026-06-13');
+            expect((await db.payment.findByPk(later.id)).paymentDate).toBe('18-06-2026'); // a later receipt keeps its day
+            // The cash is counted once, on the new day, and not left behind as a receipt.
+            expect(await day('2026-06-13')).toEqual({ cashSales: 600, receipts: 0 });
+            expect(await day('2026-06-16')).toEqual({ cashSales: 0, receipts: 0 });
+            const [log] = await q(`SELECT "oldValues", "newValues" FROM audit_logs WHERE "entityId" = :id`, { id: sameDay.id });
+            expect(log).toMatchObject({ oldValues: { paymentDate: '16-06-2026' }, newValues: { paymentDate: '13-06-2026' } });
         });
 
         test('the repair script fixes wrong journal dates, leaves history and oddities alone, and is idempotent', async () => {
@@ -347,7 +403,7 @@ suite('changing a document date (real Postgres)', () => {
                 .toEqual([['INVOICE', '2026-09-01'], ['INVOICE_CASH', '2026-09-01']]);
             expect(fixedFor(history.id)).toEqual([]);
             expect(plan.skipped.deletedDocument.map((r) => r.batchId)).toEqual(expect.arrayContaining(rowsFor(deleted.id)));
-            expect(plan.skipped.unreadableDate.map((r) => r.batchId)).toEqual(rowsFor(unreadable.id));
+            expect(plan.skipped.unreadableDate.map((r) => r.batchId)).toEqual(expect.arrayContaining(rowsFor(unreadable.id)));
 
             const result = await applyRepair(plan);
             expect(result.batches).toBe(plan.fixes.length);
@@ -364,6 +420,36 @@ suite('changing a document date (real Postgres)', () => {
             expect(log.description).toMatch(new RegExp(`Repaired the date of ${result.batches} journal batches`));
 
             expect((await planRepair()).fixes).toEqual([]); // a second run has nothing to do
+        });
+
+        test('the repair refuses to write a stale date over a change made after its report', async () => {
+            const { planRepair, applyRepair } = require('../../../scripts/repair-journal-dates');
+            const LedgerService = require('../../services/ledgerService');
+            const [a1, a2] = await q(`SELECT id FROM accounts ORDER BY code LIMIT 2`);
+            const wrong = async (paymentDate, journalDate) => {
+                const p = await insertRawPayment({ paymentDate });
+                await new LedgerService(db).createJournalBatch({
+                    referenceType: 'PAYMENT', referenceId: p.id, transactionDate: journalDate, description: 'seed',
+                    entries: [{ accountId: a1.id, debit: 10, credit: 0 }, { accountId: a2.id, debit: 0, credit: 10 }],
+                });
+                return p;
+            };
+            const movedMeanwhile = await wrong('04-09-2026', '2026-04-09');
+            const untouched = await wrong('11-09-2026', '2026-11-09');
+
+            const plan = await planRepair();
+            expect(plan.fixes.length).toBeGreaterThanOrEqual(2);
+            // An admin changes one of them in the app after the report was printed.
+            await changeDocumentDate({ kind: 'payment', id: movedMeanwhile.id, newDate: '2026-09-02', user: admin });
+
+            await expect(applyRepair(plan)).rejects.toThrow(/changed since the report was made.*nothing changed/s);
+            expect((await batchDates(movedMeanwhile.id))[0].d).toBe('2026-09-02'); // the app's change stands
+            expect((await batchDates(untouched.id))[0].d).toBe('2026-11-09');      // rolled back as a whole
+
+            // Running again plans from the current state and succeeds.
+            await applyRepair(await planRepair());
+            expect((await batchDates(untouched.id))[0].d).toBe('2026-09-11');
+            expect((await batchDates(movedMeanwhile.id))[0].d).toBe('2026-09-02');
         });
     });
 

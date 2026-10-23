@@ -1,5 +1,7 @@
 'use strict';
 
+const moment = require('moment-timezone');
+
 /**
  * Document dates (orders.orderDate, payments.paymentDate, purchaseBills.billDate)
  * are stored as text in whatever format the screen that created them used:
@@ -15,6 +17,7 @@
 
 const FORMATS = [
     { re: /^(\d{4})-(\d{1,2})-(\d{1,2})$/,   y: 1, m: 2, d: 3 },
+    { re: /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/, y: 1, m: 2, d: 3 },
     { re: /^(\d{1,2})-(\d{1,2})-(\d{4})$/,   y: 3, m: 2, d: 1 },
     { re: /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, y: 3, m: 2, d: 1 },
 ];
@@ -48,9 +51,10 @@ function toIsoDate(value) {
         const d = Number(m[f.d]);
         return isRealDate(y, mo, d) ? `${y}-${pad(mo)}-${pad(d)}` : null;
     }
-    // Full timestamps ('2026-09-04T10:00:00.000Z'): the local day of that instant.
-    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
-        const dt = new Date(s);
+    // Full timestamps ('2026-09-04T10:00:00.000Z', or with a space instead of
+    // the T as databases print them): the local day of that instant.
+    if (/^\d{4}-\d{2}-\d{2}[T ]\d/.test(s)) {
+        const dt = new Date(s.replace(' ', 'T'));
         return isNaN(dt.getTime()) ? null : localIso(dt);
     }
     return null;
@@ -65,10 +69,19 @@ function firstIsoDate(...candidates) {
     return null;
 }
 
+/**
+ * Today's date where the shop is ('YYYY-MM-DD'), whatever time zone the server
+ * runs in. A server on UTC (e.g. in Docker) is still on yesterday between
+ * midnight and 5:30 am IST.
+ */
+function shopToday(now = new Date()) {
+    return moment(now).tz(process.env.SHOP_TZ || 'Asia/Kolkata').format('YYYY-MM-DD');
+}
+
 /** 'YYYY-MM-DD' -> 'DD-MM-YYYY', the canonical stored format for documents. */
 function isoToDmy(iso) {
     const [y, m, d] = iso.split('-');
     return `${d}-${m}-${y}`;
 }
 
-module.exports = { toIsoDate, firstIsoDate, isoToDmy, localIso };
+module.exports = { toIsoDate, firstIsoDate, isoToDmy, localIso, shopToday };

@@ -14,6 +14,8 @@ import {
 import axios from 'axios';
 import { TableSkeleton } from '../../common/TableSkeleton';
 import { ChangeDateDialog } from '../../common/ChangeDateDialog';
+import { useDispatch } from 'react-redux';
+import { api } from '../../../store/api';
 import moment from 'moment';
 import { toast, toastSuccess } from '../../../utils/toast';
 import { PageHeader } from '../../common/PageHeader';
@@ -357,7 +359,7 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
 };
 
 // ─── Supplier Ledger Dialog (Tally-style) ──────────────────────────
-const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDeletePayment, onChangeDate, onPayment, onPurchase, onDownload, onPrint }) => {
+export const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDeletePayment, onChangeDate, onPayment, onPurchase, onDownload, onPrint }) => {
     const [expandedId, setExpandedId] = useState(null);
     
     if (!supplier) return null;
@@ -730,6 +732,7 @@ export const ListSuppliers = () => {
 
     // ── Change the date of a purchase or payment from the ledger ──
     const [dateDialog, setDateDialog] = useState({ open: false, entry: null });
+    const dispatch = useDispatch();
 
     const handleChangeDate = (e) => {
         const label = `${e.type === 'purchase' ? 'Purchase' : 'Payment'} ${e.refNo && e.refNo !== '-' ? e.refNo : ''}`.trim();
@@ -741,6 +744,9 @@ export const ListSuppliers = () => {
         const token = localStorage.getItem('token');
         const path = type === 'purchase' ? 'purchases' : 'payments';
         await axios.patch(`/api/${path}/${id}/date`, { date: isoDate }, { headers: { Authorization: `Bearer ${token}` } });
+        // The entry moved to another day: drop cached daily figures (Daily Payments,
+        // Day Start), which are loaded through RTK Query and would otherwise go stale.
+        dispatch(api.util.invalidateTags([{ type: 'Payments', id: 'LIST' }, 'Dashboard']));
         setDateDialog({ open: false, entry: null });
         toastSuccess(`Date changed to ${moment(isoDate).format('DD/MM/YYYY')}`);
         if (detailsDialog.supplier?.id) fetchSupplierDetails(detailsDialog.supplier.id);
