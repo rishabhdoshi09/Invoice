@@ -40,4 +40,13 @@ module.exports = (router) => {
             financialWriteGuard,    // moves journal dates — block during HALT
             Controller.purchaseBill.changePurchaseDate
         );
+
+    // Notes are descriptive only (not in the journal), so no HALT guard.
+    router
+        .route('/purchases/:purchaseId/notes')
+        .patch(
+            authenticate,
+            canModify,              // admin only, like the other ledger edits
+            Controller.purchaseBill.changePurchaseNotes
+        );
 };

@@ -6,6 +6,7 @@ const { postPurchaseToLedger, reversePurchaseLedger } = require('../services/rea
 const { updateStock } = require('../services/accountingEngine');
 const { createAuditLog } = require('../middleware/auditLogger');
 const { changeDocumentDate } = require('../services/documentDate');
+const { changeDocumentNotes } = require('../services/documentNotes');
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -199,6 +200,24 @@ module.exports = {
         }
     },
     
+    // Edit a purchase's notes (descriptive only; audited).
+    changePurchaseNotes: async (req, res) => {
+        try {
+            const result = await changeDocumentNotes({
+                kind: 'purchase',
+                id: req.params.purchaseId,
+                notes: req.body && req.body.notes,
+                user: req.user,
+                request: { ipAddress: getClientIP(req), userAgent: req.headers['user-agent'] },
+            });
+            return res.status(200).send({ status: 200, message: result.changed ? 'purchase notes changed' : 'notes unchanged', data: result });
+        } catch (error) {
+            const status = error.status || 500;
+            if (status === 500) console.error('[PURCHASE] change notes failed:', error);
+            return res.status(status).send({ status, message: status === 500 ? 'Could not save the notes. Please try again.' : error.message });
+        }
+    },
+
     // Move a purchase to another date (bill + journal + stock movements + audit).
     changePurchaseDate: async (req, res) => {
         try {

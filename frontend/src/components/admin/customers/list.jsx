@@ -13,7 +13,7 @@ import {
     Delete, Visibility, Refresh, Add, Receipt, People, Close,
     ShoppingCart, Search, Download, CheckCircle, Edit,
     KeyboardArrowDown, KeyboardArrowUp, PersonAdd, Warning,
-    History, Phone, Email, AccountBalance, TipsAndUpdates, Print, WhatsApp, Event
+    History, Phone, Email, AccountBalance, TipsAndUpdates, Print, WhatsApp, Event, EditNote
 } from '@mui/icons-material';
 import axios from 'axios';
 import moment from 'moment';
@@ -23,6 +23,7 @@ import { sendInvoiceViaWhatsApp } from '../../../utils/whatsapp';
 import { TableSkeleton } from '../../common/TableSkeleton';
 import { toast, toastSuccess } from '../../../utils/toast';
 import { ChangeDateDialog } from '../../common/ChangeDateDialog';
+import { EditNotesDialog } from '../../common/EditNotesDialog';
 import { useDispatch } from 'react-redux';
 import { api } from '../../../store/api';
 import { PageHeader } from '../../common/PageHeader';
@@ -40,7 +41,7 @@ try {
 }
 
 // ─── Customer Ledger Dialog (Tally-style) ─────────────────────────
-export const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, onReceipt, onSale, onDeleteReceipt, onChangeReceiptDate, onEditInvoice, onDeleteInvoice }) => {
+export const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPrint, onReceipt, onSale, onDeleteReceipt, onChangeReceiptDate, onEditReceiptNotes, onEditInvoice, onDeleteInvoice }) => {
     if (!customer) return null;
     const c = customer;
 
@@ -237,6 +238,14 @@ export const CustomerLedgerDialog = ({ open, customer, onClose, onDownload, onPr
                                                 </Typography>
                                             </TableCell>
                                             <TableCell align="center" sx={{ p: 0, whiteSpace: 'nowrap' }}>
+                                                {e.type === 'receipt' && onEditReceiptNotes && !String(e.raw?.paymentNumber || '').startsWith('PAY-TOGGLE-') && (
+                                                    <Tooltip title="Edit notes">
+                                                        <IconButton size="small" data-testid={`edit-notes-receipt-${e.id}`} onClick={() => onEditReceiptNotes(e)}
+                                                            sx={{ color: '#00897B', opacity: 0.55, '&:hover': { opacity: 1 } }}>
+                                                            <EditNote sx={{ fontSize: 16 }} />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                )}
                                                 {e.type === 'receipt' && onChangeReceiptDate && !String(e.raw?.paymentNumber || '').startsWith('PAY-TOGGLE-') && (
                                                     <Tooltip title="Change date">
                                                         <IconButton size="small" data-testid={`change-date-receipt-${e.id}`} onClick={() => onChangeReceiptDate(e)}
@@ -504,29 +513,52 @@ export const ListCustomers = () => {
     const [dateDialog, setDateDialog] = useState({ open: false, entry: null });
     const dispatch = useDispatch();
 
+    // e.g. "Receipt PAY-464782EE" — names the ledger row in the edit dialogs.
+    const receiptLabel = (e) => `Receipt ${e.refNo && e.refNo !== '-' ? e.refNo : ''}`.trim();
+    const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
+
+    // After editing a receipt: reload the open ledger (and the details view of
+    // the same customer, if open) so rows, notes and running balances update.
+    const reloadLedger = async () => {
+        const customerId = ledgerDialog.customer?.id;
+        if (!customerId) return;
+        try {
+            const { data } = await axios.get(`/api/customers/${customerId}/transactions`, { headers: authHeaders() });
+            setLedgerDialog(prev => ({ ...prev, customer: data.data }));
+        } catch (_) { /* the change is saved; the ledger refreshes on reopen */ }
+        if (detailsDialog.open && detailsDialog.customer?.id === customerId) refreshDetailsCustomer();
+    };
+
     const handleChangeReceiptDate = (e) => {
-        const label = `Receipt ${e.refNo && e.refNo !== '-' ? e.refNo : ''}`.trim();
-        setDateDialog({ open: true, entry: { id: e.id, label, date: e.date } });
+        setDateDialog({ open: true, entry: { id: e.id, label: receiptLabel(e), date: e.date } });
     };
 
     const handleSaveReceiptDate = async (isoDate) => {
-        const token = localStorage.getItem('token');
-        const headers = { Authorization: `Bearer ${token}` };
-        await axios.patch(`/api/payments/${dateDialog.entry.id}/date`, { date: isoDate }, { headers });
+        await axios.patch(`/api/payments/${dateDialog.entry.id}/date`, { date: isoDate }, { headers: authHeaders() });
         // The entry moved to another day: drop cached daily figures (Daily Payments,
         // Day Start), which are loaded through RTK Query and would otherwise go stale.
         dispatch(api.util.invalidateTags([{ type: 'Payments', id: 'LIST' }, 'Dashboard']));
         setDateDialog({ open: false, entry: null });
         toastSuccess(`Date changed to ${moment(isoDate).format('DD/MM/YYYY')}`);
-        const customerId = ledgerDialog.customer?.id;
-        if (customerId) {
-            try {
-                const { data } = await axios.get(`/api/customers/${customerId}/transactions`, { headers });
-                setLedgerDialog(prev => ({ ...prev, customer: data.data }));
-            } catch (_) { /* the change is saved; the ledger refreshes on reopen */ }
-        }
-        if (detailsDialog.open && detailsDialog.customer?.id === customerId) refreshDetailsCustomer();
+        await reloadLedger();
         fetchCustomers();
+        fetchRecentReceipts();
+    };
+
+    // ── Edit the notes of a receipt from the ledger ──
+    const [notesDialog, setNotesDialog] = useState({ open: false, entry: null });
+
+    const handleEditReceiptNotes = (e) => {
+        setNotesDialog({ open: true, entry: { id: e.id, label: receiptLabel(e), notes: e.raw?.notes || '' } });
+    };
+
+    const handleSaveReceiptNotes = async (notes) => {
+        await axios.patch(`/api/payments/${notesDialog.entry.id}/notes`, { notes }, { headers: authHeaders() });
+        // Daily Payments lists payments with their notes (RTK Query cache).
+        dispatch(api.util.invalidateTags([{ type: 'Payments', id: 'LIST' }]));
+        setNotesDialog({ open: false, entry: null });
+        toastSuccess(notes ? 'Notes saved' : 'Notes removed');
+        await reloadLedger();
         fetchRecentReceipts();
     };
 
@@ -2049,6 +2081,7 @@ export const ListCustomers = () => {
                 onSale={(c) => { setLedgerDialog({ open: false, customer: null }); handleCreateSale(c); }}
                 onDeleteReceipt={handleDeleteReceipt}
                 onChangeReceiptDate={handleChangeReceiptDate}
+                onEditReceiptNotes={handleEditReceiptNotes}
                 onEditInvoice={handleEditInvoice}
                 onDeleteInvoice={handleDeleteInvoice}
             />
@@ -2058,6 +2091,13 @@ export const ListCustomers = () => {
                 entry={dateDialog.entry}
                 onClose={() => setDateDialog({ open: false, entry: null })}
                 onSave={handleSaveReceiptDate}
+            />
+
+            <EditNotesDialog
+                open={notesDialog.open}
+                entry={notesDialog.entry}
+                onClose={() => setNotesDialog({ open: false, entry: null })}
+                onSave={handleSaveReceiptNotes}
             />
 
             {/* Customer Ledger Statement (date-range PDF) */}

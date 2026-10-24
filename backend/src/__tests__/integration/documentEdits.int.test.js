@@ -1,5 +1,5 @@
 /**
- * Integration tests for moving a payment / purchase to another date, against a
+ * Integration tests for editing a payment / purchase (date and notes), against a
  * REAL Postgres built from the app's migrations, using the real accounting
  * engine to post the journal entries being moved.
  *
@@ -8,14 +8,14 @@
  *
  * Run against a scratch database that has had `npx sequelize db:migrate` (plus
  * the startup column bootstrap in index.js) applied:
- *   RUN_DB_TESTS=1 DB_PORT=55432 npx jest --testPathPattern=documentDate.int
+ *   RUN_DB_TESTS=1 DB_PORT=55432 npx jest --testPathPattern=documentEdits.int
  */
 
 const enabled = process.env.RUN_DB_TESTS === '1';
 const suite = enabled ? describe : describe.skip;
 
 suite('changing a document date (real Postgres)', () => {
-    let db, engine, changeDocumentDate, uuid;
+    let db, engine, changeDocumentDate, changeDocumentNotes, uuid;
     let supplierId, productId, otherProductId;
     const admin = { id: null, name: 'Owner', role: 'admin' };
 
@@ -73,6 +73,7 @@ suite('changing a document date (real Postgres)', () => {
         db = require('../../models');
         engine = require('../../services/accountingEngine');
         ({ changeDocumentDate } = require('../../services/documentDate'));
+        ({ changeDocumentNotes } = require('../../services/documentNotes'));
         uuid = require('uuid').v4;
 
         await db.sequelize.query(`TRUNCATE ledger_entries, journal_batches, stock_transactions, audit_logs,
@@ -281,6 +282,57 @@ suite('changing a document date (real Postgres)', () => {
         } finally {
             await db.sequelize.query(`DELETE FROM daily_summaries WHERE date = '2026-09-07'`);
         }
+    });
+
+    describe('notes', () => {
+        const notesOf = async (model, id) => (await model.findByPk(id)).notes;
+
+        test('saves trimmed notes on a payment and a purchase, audited, without touching the journal', async () => {
+            const p = await insertSupplierPayment('04-09-2026', 1000);
+            const pur = await insertPurchase('02-09-2026', 2000);
+            const tbBefore = await trialBalance();
+            const datesBefore = [await batchDates(p.id), await batchDates(pur.id)];
+
+            await expect(changeDocumentNotes({ kind: 'payment', id: p.id, notes: '  paid via suhas  ', user: admin }))
+                .resolves.toMatchObject({ changed: true, notes: 'paid via suhas' });
+            await expect(changeDocumentNotes({ kind: 'purchase', id: pur.id, notes: 'bill no 4471', user: admin }))
+                .resolves.toMatchObject({ changed: true, notes: 'bill no 4471' });
+
+            expect(await notesOf(db.payment, p.id)).toBe('paid via suhas');
+            expect(await notesOf(db.purchaseBill, pur.id)).toBe('bill no 4471');
+            expect(await trialBalance()).toEqual(tbBefore);
+            expect([await batchDates(p.id), await batchDates(pur.id)]).toEqual(datesBefore);
+            const [log] = await q(`SELECT action, "entityType", "oldValues", "newValues", "userName" FROM audit_logs WHERE "entityId" = :id`, { id: p.id });
+            expect(log).toMatchObject({
+                action: 'UPDATE', entityType: 'PAYMENT', userName: 'Owner',
+                oldValues: { notes: null }, newValues: { notes: 'paid via suhas' },
+            });
+        });
+
+        test('clearing stores no notes; saving the same text is a no-op and not audited', async () => {
+            const p = await insertRawPayment({});
+            await changeDocumentNotes({ kind: 'payment', id: p.id, notes: 'customer', user: admin });
+            await expect(changeDocumentNotes({ kind: 'payment', id: p.id, notes: '   ', user: admin }))
+                .resolves.toMatchObject({ changed: true, notes: null });
+            expect(await notesOf(db.payment, p.id)).toBeNull();
+            await expect(changeDocumentNotes({ kind: 'payment', id: p.id, notes: '', user: admin }))
+                .resolves.toMatchObject({ changed: false });
+            expect(await auditCount(p.id)).toBe(2);
+        });
+
+        test('rejects over-long or non-text notes, and deleted or unknown entries', async () => {
+            const p = await insertRawPayment({});
+            await expect(changeDocumentNotes({ kind: 'payment', id: p.id, notes: 'x'.repeat(501) }))
+                .rejects.toMatchObject({ status: 400, message: expect.stringMatching(/at most 500/) });
+            await expect(changeDocumentNotes({ kind: 'payment', id: p.id, notes: 123 }))
+                .rejects.toMatchObject({ status: 400 });
+            await db.sequelize.query(`UPDATE payments SET "isDeleted" = true WHERE id = :id`, { replacements: { id: p.id } });
+            await expect(changeDocumentNotes({ kind: 'payment', id: p.id, notes: 'late' }))
+                .rejects.toMatchObject({ status: 400, message: expect.stringMatching(/deleted/) });
+            await expect(changeDocumentNotes({ kind: 'purchase', id: uuid(), notes: 'x' })).rejects.toMatchObject({ status: 404 });
+            await expect(changeDocumentNotes({ kind: 'payment', id: 'nope', notes: 'x' })).rejects.toMatchObject({ status: 404 });
+            expect(await auditCount(p.id)).toBe(0);
+        });
     });
 
     describe('invoice date edits (real controllers)', () => {

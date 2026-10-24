@@ -9,11 +9,12 @@ import {
 import {
     Delete, Visibility, Refresh, Add, Payment, Close,
     Search, Download, Print, AccountBalance, ShoppingBag, CheckCircle,
-    KeyboardArrowDown, Save, Edit, Event
+    KeyboardArrowDown, Save, Edit, Event, EditNote
 } from '@mui/icons-material';
 import axios from 'axios';
 import { TableSkeleton } from '../../common/TableSkeleton';
 import { ChangeDateDialog } from '../../common/ChangeDateDialog';
+import { EditNotesDialog } from '../../common/EditNotesDialog';
 import { useDispatch } from 'react-redux';
 import { api } from '../../../store/api';
 import moment from 'moment';
@@ -359,7 +360,7 @@ const QuickEntryBar = ({ mode, setMode, suppliers, onDone, prefilledSupplier }) 
 };
 
 // ─── Supplier Ledger Dialog (Tally-style) ──────────────────────────
-export const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDeletePayment, onChangeDate, onPayment, onPurchase, onDownload, onPrint }) => {
+export const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase, onDeletePayment, onChangeDate, onEditNotes, onPayment, onPurchase, onDownload, onPrint }) => {
     const [expandedId, setExpandedId] = useState(null);
     
     if (!supplier) return null;
@@ -486,7 +487,7 @@ export const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase
                                 <TableCell align="right" width={90} sx={{ color: '#1565c0 !important' }}>⚪ White Dr</TableCell>
                                 <TableCell align="right" width={100}>Credit</TableCell>
                                 <TableCell align="right" width={110}>Balance</TableCell>
-                                <TableCell align="center" width={64} sx={{ fontFamily: 'inherit' }}></TableCell>
+                                <TableCell align="center" width={88} sx={{ fontFamily: 'inherit' }}></TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
@@ -535,6 +536,11 @@ export const SupplierLedgerDialog = ({ open, supplier, onClose, onDeletePurchase
                                                 {fmt(e.balance)} {e.balance >= 0 ? 'Dr' : 'Cr'}
                                             </TableCell>
                                             <TableCell align="center" onClick={ev => ev.stopPropagation()} sx={{ whiteSpace: 'nowrap' }}>
+                                                {(e.type === 'purchase' || e.type === 'payment') && (
+                                                    <Tooltip title="Edit notes"><IconButton data-testid={`edit-notes-${e.type}-${e.id}`} size="small" onClick={() => onEditNotes(e)} sx={{ p: 0.2 }}>
+                                                        <EditNote sx={{ fontSize: 16, color: '#00897b' }} />
+                                                    </IconButton></Tooltip>
+                                                )}
                                                 {(e.type === 'purchase' || e.type === 'payment') && (
                                                     <Tooltip title="Change date"><IconButton data-testid={`change-date-${e.type}-${e.id}`} size="small" onClick={() => onChangeDate(e)} sx={{ p: 0.2 }}>
                                                         <Event sx={{ fontSize: 15, color: '#5c6bc0' }} />
@@ -734,9 +740,11 @@ export const ListSuppliers = () => {
     const [dateDialog, setDateDialog] = useState({ open: false, entry: null });
     const dispatch = useDispatch();
 
+    // e.g. "Payment PAY-ED3BD99E" — names the ledger row in the edit dialogs.
+    const entryLabel = (e) => `${e.type === 'purchase' ? 'Purchase' : 'Payment'} ${e.refNo && e.refNo !== '-' ? e.refNo : ''}`.trim();
+
     const handleChangeDate = (e) => {
-        const label = `${e.type === 'purchase' ? 'Purchase' : 'Payment'} ${e.refNo && e.refNo !== '-' ? e.refNo : ''}`.trim();
-        setDateDialog({ open: true, entry: { type: e.type, id: e.id, label, date: e.date } });
+        setDateDialog({ open: true, entry: { type: e.type, id: e.id, label: entryLabel(e), date: e.date } });
     };
 
     const handleSaveDate = async (isoDate) => {
@@ -751,6 +759,25 @@ export const ListSuppliers = () => {
         toastSuccess(`Date changed to ${moment(isoDate).format('DD/MM/YYYY')}`);
         if (detailsDialog.supplier?.id) fetchSupplierDetails(detailsDialog.supplier.id);
         fetchSuppliers();
+    };
+
+    // ── Edit the notes of a purchase or payment from the ledger ──
+    const [notesDialog, setNotesDialog] = useState({ open: false, entry: null });
+
+    const handleEditNotes = (e) => {
+        setNotesDialog({ open: true, entry: { type: e.type, id: e.id, label: entryLabel(e), notes: e.raw?.notes || '' } });
+    };
+
+    const handleSaveNotes = async (notes) => {
+        const { type, id } = notesDialog.entry;
+        const token = localStorage.getItem('token');
+        const path = type === 'purchase' ? 'purchases' : 'payments';
+        await axios.patch(`/api/${path}/${id}/notes`, { notes }, { headers: { Authorization: `Bearer ${token}` } });
+        // Daily Payments lists payments with their notes (RTK Query cache).
+        if (type === 'payment') dispatch(api.util.invalidateTags([{ type: 'Payments', id: 'LIST' }]));
+        setNotesDialog({ open: false, entry: null });
+        toastSuccess(notes ? 'Notes saved' : 'Notes removed');
+        if (detailsDialog.supplier?.id) fetchSupplierDetails(detailsDialog.supplier.id);
     };
 
     // Quick actions from table → open entry bar pre-filled
@@ -1086,6 +1113,7 @@ export const ListSuppliers = () => {
                 onDeletePurchase={handleDeletePurchase}
                 onDeletePayment={handleDeletePayment}
                 onChangeDate={handleChangeDate}
+                onEditNotes={handleEditNotes}
                 onPayment={(s) => { setDetailsDialog({ open: false, supplier: null }); setPrefilledSupplier(s); setEntryMode('payment'); }}
                 onPurchase={(s) => { setDetailsDialog({ open: false, supplier: null }); setPrefilledSupplier(s); setEntryMode('purchase'); }}
                 onDownload={handleLedgerDownload}
@@ -1097,6 +1125,13 @@ export const ListSuppliers = () => {
                 entry={dateDialog.entry}
                 onClose={() => setDateDialog({ open: false, entry: null })}
                 onSave={handleSaveDate}
+            />
+
+            <EditNotesDialog
+                open={notesDialog.open}
+                entry={notesDialog.entry}
+                onClose={() => setNotesDialog({ open: false, entry: null })}
+                onSave={handleSaveNotes}
             />
 
             {/* Supplier Edit Dialog */}
